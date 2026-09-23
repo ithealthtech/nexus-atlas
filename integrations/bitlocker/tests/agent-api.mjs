@@ -1,0 +1,51 @@
+import assert from "node:assert/strict";
+import {localPost} from "./http.mjs";
+import {generateAgentKeys,decrypt} from "../lib/crypto.ts";
+const base=process.env.TEST_URL||"http://127.0.0.1:4188";
+assert.ok(["127.0.0.1","localhost"].includes(new URL(base).hostname),"Tests are restricted to a local worker");
+const owner="collector-test-"+crypto.randomUUID(),other="other-"+crypto.randomUUID();
+async function request(path,data,user=owner,token){
+ return localPost(base+path,{"content-type":"application/json",...(user?{"oai-authenticated-user-id":user,"oai-authenticated-user-email":user+"@example.test"}:{}),...(token?{authorization:"Bearer "+token}:{})},data);
+}
+const pass="synthetic-enrollment-passphrase",secret=Array(8).fill("123453").join("-");
+const keys=await generateAgentKeys(pass);
+const enrollment=await request("/api/agents",{action:"create",tenant:"Client A",name:"Test workstation",...keys});
+assert.equal(enrollment.status,200,JSON.stringify(enrollment.body));
+const config=enrollment.body.config;
+const pub=await crypto.subtle.importKey("spki",Uint8Array.from(atob(config.publicKey),c=>c.charCodeAt(0)),{name:"RSA-OAEP",hash:"SHA-256"},false,["encrypt"]);
+const cipher=btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.encrypt({name:"RSA-OAEP"},pub,new TextEncoder().encode(secret)))));
+const report={version:1,reportId:crypto.randomUUID(),agentId:config.agentId,collectedAt:new Date().toISOString(),machineId:crypto.randomUUID(),hostname:"TEST-PC",os:"Windows 11 synthetic",serialNumber:"TEST-ONLY",volumes:[{volumeId:"test-volume",mountPoint:"C:",protection:"On",encryptionMethod:"XTS-AES-256",encryptionPercentage:100,conversionStatus:"Fully encrypted",protectors:[{keyId:crypto.randomUUID(),cipher}]}]};
+assert.equal((await request("/api/agent-ingest",report,null)).status,401);
+assert.equal((await request("/api/agent-ingest",report,null,"f".repeat(64))).status,401);
+assert.equal((await request("/api/agents",{action:"import",report},other)).status,404);
+assert.equal((await request("/api/agent-ingest",{...report,tenant:"attacker"},null,config.uploadToken)).status,400);
+assert.equal((await request("/api/agent-ingest",{...report,agentId:crypto.randomUUID()},null,config.uploadToken)).status,403);
+const results=await Promise.all([request("/api/agent-ingest",report,null,config.uploadToken),request("/api/agent-ingest",report,null,config.uploadToken)]);
+assert.deepEqual(results.map(r=>r.body.accepted).sort(),[false,true]);
+assert.ok(results.some(r=>r.body.duplicate));
+assert.equal((await request("/api/agent-ingest",{...report,reportId:crypto.randomUUID(),machineId:crypto.randomUUID()},null,config.uploadToken)).status,403);
+const stale=await request("/api/agent-ingest",{...report,reportId:crypto.randomUUID(),collectedAt:"2020-01-01T00:00:00.000Z"},null,config.uploadToken);
+assert.equal(stale.body.stale,true);
+const vault=await request("/api/vault",{action:"list"});
+assert.equal(vault.body.devices.length,1);
+assert.equal(vault.body.devices[0].tenant,"Client A");
+assert.ok(!JSON.stringify(vault.body).includes(cipher));
+const reveal=await request("/api/vault",{action:"reveal",id:vault.body.devices[0].id});
+assert.equal(await decrypt(reveal.body.cipher,pass,reveal.body.privateKey),secret);
+const list=await request("/api/agents",{action:"list"});
+assert.equal(list.body.agents[0].machineId,report.machineId);
+const serialized=JSON.stringify(list.body);
+for(const sensitive of [config.uploadToken,cipher,keys.privateKey,secret])assert.ok(!serialized.includes(sensitive));
+assert.equal((await request("/api/agents",{action:"list"},other)).body.agents.length,0);
+// New protector ID preserves the old escrowed password, rather than deleting it.
+const rotated={...report,reportId:crypto.randomUUID(),collectedAt:new Date(Date.now()+1000).toISOString(),volumes:[{...report.volumes[0],protectors:[{keyId:crypto.randomUUID(),cipher}]}]};
+assert.equal((await request("/api/agents",{action:"import",report:rotated})).body.accepted,true);
+assert.equal((await request("/api/vault",{action:"list"})).body.devices.length,2);
+assert.equal((await request("/api/agents",{action:"revoke",id:config.agentId},other)).status,404);
+assert.equal((await request("/api/agents",{action:"revoke",id:config.agentId})).status,200);
+assert.equal((await request("/api/agent-ingest",report,null,config.uploadToken)).status,401);
+assert.equal((await request("/api/agents",{action:"import",report})).status,403);
+const retained=await request("/api/vault",{action:"reveal",id:vault.body.devices[0].id});
+assert.equal(await decrypt(retained.body.cipher,pass,retained.body.privateKey),secret);
+console.log("PASS: agent authentication, tenant isolation, machine binding, concurrent deduplication, stale report rejection, encrypted import, browser recovery, rotation history, revocation, secret-free inventory.");
+

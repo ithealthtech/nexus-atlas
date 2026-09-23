@@ -1,0 +1,6 @@
+{$ATLAS_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:4318
+	# Atlas sets its own security headers; Caddy only removes its banner.
+	header -Server
+}

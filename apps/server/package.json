@@ -1,0 +1,21 @@
+{
+  "name": "@atlas/server",
+  "version": "1.0.0-dev",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@atlas/db": "1.0.0-dev",
+    "@atlas/shared": "1.0.0-dev",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/static": "^10.1.4",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
+    "zod": "^4.6.5"
+  }
+}
