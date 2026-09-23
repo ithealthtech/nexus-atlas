@@ -1,33 +1,40 @@
-# Architecture and trust boundaries
+# Architecture
 
-## Current implementation
+## Components
 
-The first slice is deliberately a local, synthetic-data application. Native Node HTTP and SQLite keep setup reproducible without Docker or database services on this machine. There is no bundler, framework compilation, dependency installation, or implied production readiness. Browser code is served from an explicit four-file allowlist.
+- **API (`apps/server`):** Fastify 5 and TypeScript.
+  - Each request passes host and origin checks, then session resolution, then CSRF and stage checks, then the route handler, which calls the authorization functions.
+  - The server also serves the built web app, with client-side routes falling back to `index.html`.
+- **Web app (`apps/web`):** React 19, TanStack Router and Query, and Tailwind 4. It is built into static files, with no inline scripts or styles, so the CSP stays at `script-src 'self'; style-src 'self'`. Dialogs are native `<dialog>` elements rather than libraries that inject style tags.
+- **Database (`packages/db`):** PostgreSQL 16 through Drizzle ORM. SQL migrations live in `packages/db/drizzle` and are generated with `npm run db:generate`. On start, migrations run under an advisory lock.
+- **Shared code (`packages/shared`):** zod schemas, roles and access levels, and API types. The same validation runs in the browser (for messages) and on the server (for enforcement).
 
-`server/app.mjs` owns requests, Origin/Host checks, CSRF verification, sign-in stage gating, and the static allowlist. `server/identity.mjs` owns accounts, password hashing, MFA, sessions, role and client grants, and security events; see [identity and permissions](IDENTITY.md). `server/store.mjs` owns data validation and authorization and derives access from a server-created actor. Every client lookup requires MSP ownership and, for a restricted actor, client membership. Record access delegates to that client check. Relationships authorize both endpoints and require matching clients. Exports, activity, and search honor the same scope.
+## Authorization
 
-All data-modifying record operations and revision snapshots run in transactions. Updates require the current version. Restore creates a new revision instead of erasing history. Actor and tenant fields cannot be supplied through record request bodies. Prepared statements bind values.
+The code is in `apps/server/src/authz.ts`.
 
-The browser escapes record values before rendering, does not render arbitrary HTML/Markdown, and uses a restrictive CSP without inline scripts. Documents currently support text and heading lines, not a full rich-text editor. Credential-like values in free text cannot be reliably recognized; this is one reason the preview must contain synthetic information only.
+- **Effective access:** a user's access to a client is the highest of three things: their baseline for every client, a direct grant for that client, and any group grants. The result is capped by their role; for example, a read-only technician is always capped at `read`. Owners and admins always have `edit_passwords`.
+- **Access checks:** every client-scoped operation calls `requireClient(actor, clientId, level)`.
+  - No access returns **404**, the same as a missing client, so you can't probe which clients exist.
+  - Read-only access to an operation that needs edit returns **403**.
+  - Client IDs are validated as UUIDs before any query runs.
+- **Fresh on every request:** the actor is rebuilt from the database for each request, so role and grant changes and disabled accounts take effect without waiting for a sign-out.
+- **No trusted identity from the request:** tenant (`org_id`) and identity never come from request bodies or headers.
 
-## Identity
+## Encryption
 
-The demonstration personas are gone. Every request resolves a database-backed session to a user, and the actor (role and client grants) is rebuilt from the database on each request, so access changes apply immediately. Details and remaining gaps are in [IDENTITY.md](IDENTITY.md).
+The code is in `apps/server/src/crypto/keys.ts`.
 
-The server binds to 127.0.0.1. Host is restricted to loopback names with the actual port. Production mode throws. Those are development safeguards; an administrator could still expose a loopback service with a proxy. Never deploy this slice or enter real client data.
+- **Format:** AES-256-GCM, written as `v2:<keyId>:<iv>:<tag>:<ciphertext>`.
+- **Associated data:** each value is bound to where it belongs, for example `user|<id>|mfa`, so a value copied into another row fails to decrypt.
+- **Keys:** a `KeyProvider` supplies master keys from the environment or a key file and supports several keys for rotation. Cloud key managers (Azure Key Vault, AWS KMS) can implement the same interface.
+- **M2 vault:** the vault adds per-organization data keys, encrypted under the master key (envelope encryption), for password fields.
 
-## Vault and BitLocker gate
+## Request security
 
-No vault schema, real recovery-key store, decryption UI, or active agent token system exists in Atlas. Vault operations return 501. BitLocker enrollment/import/reveal/sharing return 501, and machine ingress returns 503 before reading a report body. No report is acknowledged as accepted. The imported BitLocker Cloudflare source is not executable through Atlas's static paths or HTTP routes.
-
-The synthetic BitLocker inventory derives its client from an authorized asset. It contains no secret, ciphertext, passphrase, private key, or enrollment credential. Collector/crypto tests use synthetic keys and mocked WMI only.
-
-## Production design still required
-
-1. Add an external identity provider (Entra ID/OIDC), passkeys, and a documented administrator break-glass procedure on top of the local accounts now in place.
-2. Move persistence behind an explicit repository adapter to PostgreSQL; version migrations and test row policies using actual app/worker database roles.
-3. Specify the vault key hierarchy and protocol for devices, collections, sharing, membership changes, recovery, and encrypted attachments. Obtain cryptographic review before implementing production secret flows.
-4. Define BitLocker device enrollment, revocable machine-token ingestion, first-device binding, idempotency, stale-report handling, rotation history, rate limits, and least-privilege ingress independently from interactive technician sessions.
-5. Implement encrypted backups, full restore exercises, protected audit exports, operational monitoring, upgrades, packaging, and an independent security assessment.
-
-The copied BitLocker prototype's per-record/enrollment passphrases are reference behavior, not an approved organization-wide vault key hierarchy. Importing its source does not establish production interoperability, security approval, or successful end-to-end RMM ingestion.
+- **Host and Origin:** the Host header must match `PUBLIC_URL`, which protects against DNS rebinding; loopback is also allowed outside production. Origin must match when present, and cross-site `Sec-Fetch-Site` requests are refused.
+- **Cookies:** `__Host-atlas_session`, set as `HttpOnly; Secure; SameSite=Strict` when served over https. The database stores only a SHA-256 of the session token.
+- **CSRF:** each session has its own token, sent in the `X-CSRF-Token` header on every state-changing request.
+- **Headers:** CSP, HSTS (over https), `X-Frame-Options: DENY`, COOP/CORP, `nosniff`, `no-referrer`, and `Cache-Control: no-store` on API responses.
+- **Rate limits:** each client address gets 10 failed sign-in, setup, or MFA attempts per 15 minutes, on top of the per-account lockout.
+- **Error handling:** validation errors return field-level messages, and unexpected errors are logged and returned as a generic 500.

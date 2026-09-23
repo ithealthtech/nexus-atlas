@@ -1,93 +1,72 @@
-# Nexus Atlas
+# MSP Atlas
 
-A self-hosted MSP documentation and password-platform project. **Version 0.2 (in progress) is a local development foundation with real sign-in and permissions. It is not a production credential manager.** Atlas is a working name.
+Self-hosted IT documentation and password manager for MSPs: client workspaces, assets, runbooks, and encrypted credentials, with per-client access for your technicians and the clients you support.
 
-![Atlas main page with synthetic sample data](docs/screenshots/main-page.png)
+> **Status: v1.0 in development (milestone M0 of 5 complete).** Sign-in, MFA, roles, per-client permissions, and client workspaces work today. Documentation (M1) and the password vault (M2) are next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
 
-## Run locally
+![Atlas dashboard](docs/screenshots/dashboard.png)
 
-Requires Node.js 24.18 or later in the 24.x line. No package installation or external service is required for this first development slice.
+## What works now
 
-```powershell
-cd C:\dev\nexus-atlas
-npm start
+- **First-run setup:** a one-time code printed in the server console lets you create the owner account and your company.
+- **Sign-in:**
+  - Passwords are hashed with scrypt.
+  - Two-step verification uses an authenticator app with a QR code, and is required for all staff roles.
+  - Accounts lock after repeated failures.
+  - Sessions are stored in the database; an administrator can revoke them, and changing a password signs out other sessions.
+- **People & access:**
+  - Six roles: Owner, Admin, Technician, Read-only technician, Client editor, and Client viewer.
+  - Each client can be set to *none / read / edit / edit + passwords*, with an "every client" baseline for staff. Group grants are in the data model, with a UI coming in M3.
+  - Changes apply to live sessions immediately.
+- **Clients:** create, edit, search, and filter. Clients a user can't access look exactly like missing ones.
+- **Security log:** sign-ins, failures, lockouts, MFA changes, and account administration.
+- **Interface:** light and dark themes, mobile layout, keyboard support, and WCAG 2.2 AA checks in end-to-end tests.
+
+## Run it
+
+**Production (Docker, Linux):** see [Deployment](docs/DEPLOYMENT.md). The short version:
+
+```bash
+cp .env.example .env    # set PUBLIC_URL, ATLAS_DOMAIN, POSTGRES_PASSWORD, ATLAS_MASTER_KEY
+docker compose -f deploy/docker-compose.yml --env-file .env up -d
+docker compose -f deploy/docker-compose.yml logs app | grep "setup code"
 ```
 
-Open http://127.0.0.1:4318. The process listens only on loopback. `npm run dev` restarts the server when server files change; reload the browser after frontend changes. `PORT` changes the local port; `ATLAS_DATABASE` selects a development SQLite file.
+**Development** (Node 22+, PostgreSQL 16):
 
-### First run
-
-On first start, the server console prints a one-time **setup code**. Enter it in the browser to create the first administrator, then add the account to an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password, and similar). Only someone who can read the server console can create that first account. Existing 0.1 databases upgrade in place; their sample data is kept.
-
-After that, administrators add people from **Users**:
-
-| Role | Can do | Client access | MFA |
-|---|---|---|---|
-| Administrator | Everything, plus users and security events | All clients | Required |
-| Technician | Create and edit documentation, add clients (when unrestricted), export | All clients, or only selected clients | Required |
-| Client viewer | Read documentation | Selected clients only | Optional |
-
-New users get a temporary password and must replace it at first sign-in. See [identity and permissions](docs/IDENTITY.md).
-
-The data file and the MFA key file (`data/atlas.sqlite`, `data/atlas.key`) belong together; back up both and keep the key private. Do not expose this server through a proxy, tunnel, or network binding yet.
-
-## Working features
-
-- Portfolio overview and client workspaces; create clients with contact details.
-- Asset and document creation, editing, review dates, status, and simple heading formatting.
-- Persistent SQLite records with transactional revision history and restoration as a new version.
-- Optimistic concurrency: stale edits are rejected rather than overwriting newer changes.
-- Bidirectional links between records in the same client workspace.
-- Search across authorized documentation, assets, and client names; status filtering.
-- Activity records for creation, changes, links, and exports.
-- Client documentation JSON export, including revisions and relationships.
-- Sign-in with scrypt-hashed passwords, authenticator-app MFA, account lockout, and database-backed sessions.
-- Administrator, technician, and client-viewer roles with per-client grants, enforced on every request.
-- User management: add users, change roles and client access, disable accounts, issue temporary passwords, reset MFA.
-- Security event log for sign-ins, failures, lockouts, and account changes.
-- BitLocker module with asset-linked synthetic metadata and an imported RMM collector reference.
-- Responsive interface, keyboard search shortcut, semantic forms, and accessible names.
-
-## Explicit limits
-
-- Password vault, BitLocker recovery, sharing, enrollment, ingestion, and encrypted import are disabled at the API layer.
-- No Entra ID/SSO, passkeys, self-service password recovery, attachments, automated discovery, or external integrations yet.
-- Documentation is ordinary plaintext in a local database; never put passwords or sensitive client data into this development release.
-- SQLite is a development persistence adapter. The planned production target is PostgreSQL with independently tested tenant isolation, production identity, and operational controls.
-- JSON exports are documentation exports, not complete system backups. There is no restore/import UI or production backup system yet.
-- Activity events are local database records, not an immutable compliance audit trail.
-- No production build/deployment package is provided. `NODE_ENV=production` deliberately refuses startup.
-
-## BitLocker consolidation
-
-The former standalone BitLocker project is preserved under `integrations/bitlocker` as source/reference. Atlas is now the owning application; no separate vault service is launched. The navigation and synthetic inventory use Atlas's own asset authorization. Copied Cloudflare routes and identity headers are not mounted or trusted.
-
-See [BitLocker integration status](docs/BITLOCKER.md). The user's intended deployment method is an RMM-run Windows agent. Production collection remains gated; no endpoints were enrolled or queried.
-
-## Verification
-
-```powershell
-npm run check
-# Optional Windows-only mocked collector and crypto interoperability check:
-Push-Location integrations/bitlocker
-node tests/collector.mjs
-Pop-Location
+```bash
+npm install
+echo "DATABASE_URL=postgres://postgres@127.0.0.1:5432/atlas" > .env
+npm run build            # builds the shared packages once
+npm run dev              # API on :4318, web app with hot reload on :5173
 ```
 
-The main suite verifies client/MSP boundaries, read-only restrictions, relationships, concurrency, revisions, persistence across reopening, sign-in, MFA, lockout, roles and client grants, session revocation, CSRF/origin/Host protections, production refusal, and secret-storage gates. Tests use isolated synthetic databases. The collector tests mock Windows inventory and never query real BitLocker recovery keys.
+## Project layout
 
-See [security and architecture](docs/ARCHITECTURE.md) and [next milestones](docs/ROADMAP.md).
+| Path | What it is |
+|---|---|
+| `apps/server` | Fastify + TypeScript API: identity, authorization, clients. Serves the built web app. |
+| `apps/web` | React + Vite + TanStack Router/Query + Tailwind. |
+| `packages/shared` | zod schemas, roles and access levels, and API types shared by server and web. |
+| `packages/db` | Drizzle schema and SQL migrations (PostgreSQL). |
+| `e2e` | Playwright end-to-end tests with axe accessibility checks. |
+| `deploy` | Docker Compose (Atlas + PostgreSQL + Caddy HTTPS). |
+| `legacy` | The 0.2 prototype (Node + SQLite), kept for reference and for the M3 data migration. |
+| `integrations/bitlocker` | BitLocker collector prototype, the reference for the post-v1 RMM collector. |
 
-## Source layout
+## Checks
 
-`server/` — local HTTP boundary, data store, identity (accounts, sessions, MFA), and gated BitLocker inventory.
+```bash
+npm run lint && npm run typecheck && npm test   # unit and integration tests (needs PostgreSQL; set TEST_DATABASE_URL)
+npm run build && npm run test:e2e               # browser tests (needs E2E_DATABASE_URL pointing at an atlas_e2e database)
+```
 
-`public/` — dependency-free browser application and styling.
+CI runs all of these on every pull request, plus a Windows build and a Docker image build.
 
-`tests/` — isolated application and HTTP tests.
+## Docs
 
-`integrations/bitlocker/` — imported collector/crypto/prototype reference and original validation history.
-
-`data/` — local generated database, excluded from source control.
-
-`artifacts/` — preview logs and visual verification, excluded from source control.
+- [Deployment](docs/DEPLOYMENT.md): Docker, configuration, the master key, backups, and upgrades.
+- [Architecture](docs/ARCHITECTURE.md): how requests, authorization, and encryption work.
+- [Identity and permissions](docs/IDENTITY.md)
+- [BitLocker integration status](docs/BITLOCKER.md)
+- [Roadmap](docs/ROADMAP.md) and [verification log](docs/VERIFICATION.md)

@@ -1,62 +1,39 @@
 # Identity and permissions
 
-This is the first slice of the 0.2 identity foundation. It replaces the 0.1 demonstration personas with real accounts. It is still a local development release. Keep to synthetic data until deployment, backup, and review work is done.
+## Roles
 
-## Accounts and roles
-
-| Role | Documentation | Clients | Users and security events |
+| Role | Staff | Maximum access per client | Admin (people, security log) |
 |---|---|---|---|
-| `admin` | Read and write | Always all clients | Manage |
-| `technician` | Read and write | All clients, or only granted clients | — |
-| `client` | Read only | Granted clients only (at least one) | — |
+| Owner | ✓ | Edit + passwords (always, every client) | ✓ (only owners can manage owners) |
+| Admin | ✓ | Edit + passwords (always, every client) | ✓ |
+| Technician | ✓ | Edit + passwords | — |
+| Read-only technician | ✓ | Read | — |
+| Client editor | — | Edit (granted clients only) | — |
+| Client viewer | — | Read (granted clients only) | — |
 
-- Only an unrestricted account (admin, or technician with all-client access) can create client workspaces.
-- A restricted technician can edit only granted clients. Every other client returns 404, the same as a missing record.
-- The server rebuilds each request's role and grants from the database. Promoting, demoting, re-scoping, or disabling someone takes effect on their next request without signing them out.
-- Safeguards: administrators cannot demote or disable themselves, the last active administrator cannot be removed, and administrators change their own password on the Account page, not through a reset.
+- **Access levels:** `none`, `read`, `edit`, `edit_passwords`. Staff can also have a baseline level that applies to every client, including new ones; per-client grants can raise it.
+- **Adding clients** needs edit access to every client.
+- **Safeguards:** you can't change your own role or disable yourself. Admins can't create, change, or reset owners. At least one active owner must remain. A role change clamps grants to that role's maximum.
 
-## First-run setup
+## Sign-in
 
-When the database has no users, `server/index.mjs` generates a random setup code and prints it only to the server console. `POST /api/setup` needs that code, runs in one transaction, and stops working once any user exists. Wrong codes count toward the per-address rate limit.
+- **First run:** a random setup code is printed on the server console (or set with `ATLAS_SETUP_CODE`). It creates the organization and the owner account in a single transaction, and stops working once any account exists.
+- **Passwords:**
+  - scrypt (N=32768, r=8, p=1) with a 16-byte salt, in the same format as 0.2, so migrated hashes keep working.
+  - 12–256 characters, reasonably varied, and not containing the email name.
+- **Unknown accounts:** they take the same time and get the same response as a wrong password.
+- **MFA:** TOTP (RFC 6238), set up by QR code or by typing the key. Each code works once: the last-used time step is stored, and a database check stops two requests from using the same code. MFA is required for staff and optional for client accounts. Secrets are sealed with the master key.
+- **Lockout:** 5 wrong passwords or codes lock the account for 15 minutes and end its sessions.
+- **Session stages:** a session moves through `mfa` → `password` (temporary password) → `mfa-setup` (staff without MFA) → `active`. The server allows only that stage's own endpoints until the session is `active`.
+- **Sessions:** 2 hours idle or 12 hours total, and at most 10 per user. Changing a password or enrolling MFA signs out other sessions. Disabling an account or resetting it signs out all of its sessions.
 
-## Passwords
+## Administration
 
-- scrypt (N=32768, r=8, p=1) with a per-password 16-byte salt. The parameters are stored in each hash so they can be raised later.
-- Passwords must be 12–256 characters, reasonably varied, and must not contain the email name.
-- Unknown emails still run a full scrypt check, so response time doesn't reveal whether an account exists. Unknown, disabled, and wrong-password sign-ins all return the same error.
-- Administrator-issued passwords are temporary. The user must replace one before using the workspace.
-- Changing a password signs out the account's other sessions. An administrator reset signs out every session.
+- **Adding people:** administrators add people with a generated temporary passphrase. The person must replace it at first sign-in.
+- **Reset sign-in:** issues a new temporary password, optionally resets MFA for a lost authenticator, unlocks the account, and signs the person out everywhere.
+- **Security log:** records setup, sign-ins (successful, failed, and blocked), lockouts, MFA enrollment and failures, password changes, and user creation, updates, and resets, with IP addresses. Only administrators can see it.
 
-## MFA
+## Coming later
 
-- Uses authenticator-app codes (TOTP, RFC 6238: SHA-1, 30-second steps, 6 digits), checked against the published test vector.
-- Required for administrators and technicians before they can use the workspace. Optional for client viewers, who can turn it on from the Account page.
-- One step of clock drift is accepted either way. Each code works only once, so a used time step cannot be replayed.
-- Secrets are sealed with AES-256-GCM under a 32-byte key in `data/atlas.key` (or `ATLAS_KEY_FILE`), created with mode 0600 and kept out of the database. Back up the key with the database; losing it means every user must re-enroll MFA.
-- A lost authenticator is handled by an administrator reset with **Also reset two-step verification**.
-
-## Lockout and rate limits
-
-- 5 wrong passwords or MFA codes lock the account for 15 minutes. A lock caused by MFA failures also ends the account's sessions.
-- Each address gets 10 failed sign-in, setup, or MFA attempts per 15 minutes, counted in memory.
-
-## Sessions
-
-- The token is 32 random bytes in an `HttpOnly; SameSite=Strict` cookie. Only its SHA-256 is stored, in the `sessions` table.
-- Sessions expire after 2 hours idle or 12 hours total, with at most 10 per user. Sessions survive a server restart.
-- Every state-changing request needs a per-session CSRF token header. Origin, Host, and `Sec-Fetch-Site` checks from 0.1 still apply.
-- A session moves through stages: `mfa` → `password` → `mfa-setup` → `active`. Before `active`, only that stage's own endpoints are reachable.
-- Forwarded identity headers are ignored.
-
-## Security events
-
-Stored in `security_events` and shown to administrators on the Users page. They cover setup, sign-in success and failure, lockouts, blocked sign-ins, MFA enrollment and failures, password changes, user creation and updates, and resets. Like documentation activity, this is a local table, not a tamper-evident audit trail.
-
-## Not yet done
-
-- Entra ID / OIDC single sign-on, passkeys (WebAuthn), and SCIM provisioning.
-- Self-service password recovery. It needs email delivery; today recovery goes through an administrator.
-- One-time MFA recovery codes, and a documented break-glass procedure if the last administrator loses both password and authenticator.
-- A `Secure` cookie flag and HSTS. Both come with HTTPS in the deployment work. The server is loopback-only for now.
-- Groups, per-record-type permissions, a separate export right, and time-limited access.
-- Moving the in-memory address rate limit into shared storage once more than one server process runs.
+- **M3:** passkeys (WebAuthn), MFA recovery codes, "remember this device", re-authentication before sensitive actions, a session list with remote sign-out, email password reset over SMTP, and a UI for groups.
+- **After v1:** Entra ID / Microsoft 365 single sign-on (the provider interface and `user_identities` table land in M3).

@@ -1,0 +1,5 @@
+legacy/
+integrations/
+packages/db/drizzle/
+dist/
+*.md

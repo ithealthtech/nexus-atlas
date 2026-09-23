@@ -1,0 +1,156 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic colour tokens. Components use these names, so light and dark themes only change values here. */
+:root {
+  --bg: #f5f7f6;
+  --surface: #ffffff;
+  --surface-2: #f8faf9;
+  --surface-3: #eef3f0;
+  --border: #e3e9e5;
+  --border-strong: #cfdad3;
+  --text: #1e3129;
+  --text-2: #4d6358;
+  --muted: #5f7168;
+  --primary: #205843;
+  --primary-hover: #17442f;
+  --primary-fg: #ffffff;
+  --primary-soft: #e6f0ea;
+  --accent: #c4e99a;
+  --accent-fg: #173e32;
+  --sidebar: #132b24;
+  --sidebar-2: #1c3a30;
+  --sidebar-text: #cfdcd3;
+  --sidebar-muted: #8ea597;
+  --danger: #a3301f;
+  --danger-soft: #fdeeeb;
+  --warning: #7f5b0e;
+  --warning-soft: #fcf3de;
+  --success: #2e6643;
+  --success-soft: #e8f3eb;
+  --info: #2f5a93;
+  --info-soft: #e9f0fb;
+  --ring: #6ba28b;
+  --shadow: 0 1px 2px rgb(20 50 38 / 0.05), 0 4px 16px rgb(20 50 38 / 0.04);
+}
+.dark {
+  --bg: #0e1714;
+  --surface: #14201c;
+  --surface-2: #182622;
+  --surface-3: #1e2f29;
+  --border: #253830;
+  --border-strong: #33493f;
+  --text: #e4ede7;
+  --text-2: #b4c4bb;
+  --muted: #869a8f;
+  --primary: #6fb68f;
+  --primary-hover: #86c7a3;
+  --primary-fg: #0c1a14;
+  --primary-soft: #1d3329;
+  --accent: #c4e99a;
+  --accent-fg: #173e32;
+  --sidebar: #0b1411;
+  --sidebar-2: #15241f;
+  --danger: #ef8a7c;
+  --danger-soft: #3a1d19;
+  --warning: #e3b95a;
+  --warning-soft: #33290f;
+  --success: #7fc59a;
+  --success-soft: #16301f;
+  --info: #8db4ea;
+  --info-soft: #182942;
+  --ring: #86c7a3;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.25);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-2: var(--sidebar-2);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-ring: var(--ring);
+  --shadow-card: var(--shadow);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  dialog::backdrop {
+    background: rgb(8 24 18 / 0.45);
+    backdrop-filter: blur(2px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@utility animate-toast {
+  animation: toast-in 180ms ease-out;
+}
+@utility animate-dialog {
+  animation: dialog-in 160ms ease-out;
+}

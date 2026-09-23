@@ -6,6 +6,9 @@ publish*/
 data/
 artifacts/
 tmp/
+test-results/
+playwright-report/
+*.tsbuildinfo
 .env
 .env.*
 !.env.example
@@ -13,3 +16,4 @@ tmp/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+atlas.key

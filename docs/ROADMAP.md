@@ -1,27 +1,17 @@
-# Delivery roadmap
+# Roadmap to v1.0
 
-## 0.1 — local foundation (this slice)
+v1.0 is a production-ready, self-hosted documentation and password manager for an MSP and its clients. Decisions made so far:
 
-Working documentation/asset workflows, local persistence, client boundaries, demo identities, search, revisions, relationships, audit events, exports, and the synthetic BitLocker module. Password and recovery-key storage remain disabled.
+- **Vault:** the server encrypts secrets, with a separate data key per organization protected by a master key (envelope encryption).
+- **Stack:** TypeScript on PostgreSQL.
+- **Hosting:** Docker on Linux, plus a Windows Server service.
 
-## 0.2 — real deployment foundation
+| Milestone | Scope | Status |
+|---|---|---|
+| **M0 Foundation** | Monorepo, CI, PostgreSQL schema and migrations, Fastify API, identity (setup, scrypt, TOTP MFA, lockout, sessions), roles and per-client access, clients, React app shell with light and dark themes, Docker image and Compose stack | ✅ Done |
+| **M1 Documentation** | Contacts and locations, asset layouts (flexible assets) with built-in templates, knowledge base with a rich-text editor, revisions and diffs, relationships, attachments, full-text search, Ctrl+K command palette | Next |
+| **M2 Vault** | Envelope encryption, password items with TOTP, a generator, audited reveals and copies, history, per-item restrictions, one-time share links, rotation reminders, BitLocker key type | |
+| **M3 Admin and scale** | Groups UI, passkeys, recovery codes, SMTP notifications, expirations dashboard, tamper-evident audit log, REST API with API keys, CSV and IT Glue import, exports, migration from 0.2, branding, client portal | |
+| **M4 Release** | Windows service installer, scheduled encrypted backups and restore, status page, performance and accessibility pass, security review, admin and user guides, v1.0 | |
 
-- ✅ Local accounts with MFA, administrator bootstrap, roles, per-client grants, session lifecycle, and a security event log (first slice).
-- Entra ID/OIDC sign-in, passkeys, groups, and finer-grained permissions (per record type, export rights).
-- Choose the self-hosted Linux target.
-- PostgreSQL repository/migrations and tenant isolation checks.
-- Production configuration, HTTPS, health checks, backups and a restore drill.
-- Import/export round trip and attachment authorization.
-
-## 0.3 — reviewed vault and BitLocker pilot
-
-- Approved vault threat model and key hierarchy.
-- Encrypted collections, device enrollment, recovery, membership revocation, and audit.
-- Port the imported RMM collector enrollment/ingress and browser recovery experience.
-- Independent security review before real client credentials or recovery keys.
-
-## Subsequent releases
-
-Client portal publishing, SOP/checklist executions, asset templates, network/IPAM/racks, renewal alerts, PSA/RMM/Microsoft integrations, discovery/reconciliation, browser autofill, mobile/desktop clients, passkeys, offline synchronization, sharing, commercial cloud administration, and expanded vendor parity.
-
-Full IT Glue/ITBoost/Hudu/Bitwarden parity is a longer product program. A capability is complete only when its workflow, permissions, failure behavior, recovery behavior, and validation evidence are present.
+**After v1:** Entra ID / Microsoft 365 SSO and tenant sync; PSA/RMM integrations (ConnectWise, Autotask, HaloPSA, NinjaOne, Datto); a browser autofill extension; the BitLocker RMM collector (from `integrations/bitlocker`); network discovery; a Hudu importer; mobile apps; and multi-tenant cloud hosting.
