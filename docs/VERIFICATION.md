@@ -1,5 +1,49 @@
 # Verification log
 
+## M1 Documentation — September 23, 2026
+
+Run on Node 22 and PostgreSQL 16 in a Linux container.
+
+- **Integration tests:** `npm test` passes all **24 tests in 4 files**. The 9 new ones in `docs.test.ts` cover:
+  - **Rich text:** the sanitizer keeps allowed formatting, strips unknown attributes, rejects script-like nodes and `javascript:` or protocol-relative links, and extracts text including checklist state. Prefix queries are built correctly.
+  - **Layouts:** 13 built-ins are seeded. Only admins can create layouts, and choice fields with no options or duplicate keys are rejected.
+  - **Asset fields:** IP, choice, required, and URL fields are validated with field-level errors, and unknown fields are dropped.
+  - **Versions:** stale edits get 409, revisions list and restore work, archiving works.
+  - **Access:**
+    - Client viewers can't see other clients' assets, documents, or contacts, or the MSP knowledge base, and can't edit.
+    - Read-only technicians can't write to the MSP knowledge base.
+    - Restricted technicians can't create documents in other clients.
+    - Activity is scoped per client.
+  - **Documents:** conflicts and restore behave as for assets; folders must belong to the same client; deleting a folder moves its documents to the top level.
+  - **Relationships:** duplicate links are stored once, links are symmetric, cross-client and self links are refused, an MSP article can link to a client asset, a viewer doesn't see the MSP-internal link, and unlinking needs edit access.
+  - **Attachments:**
+    - Path components are stripped from filenames.
+    - HTML is stored as octet-stream and always downloads, with a sandbox CSP.
+    - A real PNG displays inline; oversized (413) and empty files are refused.
+    - Viewers can download but not upload or delete, and other clients get 404.
+  - **Search:** finds assets by name prefix and IP, documents by body text with snippets, contacts, and clients; limits results to the viewer's access; and treats SQL-looking input as plain text.
+- **Browser tests:** `npm run test:e2e` passes all **7 Playwright tests**:
+  - Asset from the Configurations template, including a bad IP rejected in the form, an edit, and a version comparison showing the added serial number.
+  - File upload.
+  - Runbook from a template, edited in the rich-text editor, linked to the firewall, found with Ctrl+K by body text and by IP.
+  - Custom layout with a choice field.
+  - MSP knowledge-base article.
+  - The client viewer sees the asset and the linked runbook read-only; has no upload, edit, or knowledge base; and search hides MSP articles.
+  - axe finds **0 WCAG 2.2 AA violations** on every checked screen, including the editor and the diff dialog, and there are no console or CSP errors.
+
+**Issues found and fixed during M1 verification:**
+
+- Per-field validation errors weren't sent to the browser.
+- An oversized upload was silently cut off and saved; it's now rejected.
+- The global security headers overwrote the sandbox CSP on file downloads.
+- The Postgres array parameter for client IDs was malformed.
+- Checklist state was missing from the text used for search and diffs.
+- The read-only document view was exposed as an unlabelled text box.
+- Checklist checkboxes were below the WCAG 2.2 minimum target size.
+- The diff dialog fetched data during render.
+- The rich-text editor made the initial bundle too large, so it's now code-split (215 KB gzipped initially).
+
+
 ## M0 Foundation — September 23, 2026
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.

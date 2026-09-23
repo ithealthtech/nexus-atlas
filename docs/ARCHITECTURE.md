@@ -9,6 +9,23 @@
 - **Database (`packages/db`):** PostgreSQL 16 through Drizzle ORM. SQL migrations live in `packages/db/drizzle` and are generated with `npm run db:generate`. On start, migrations run under an advisory lock.
 - **Shared code (`packages/shared`):** zod schemas, roles and access levels, and API types. The same validation runs in the browser (for messages) and on the server (for enforcement).
 
+## Documentation model
+
+- **Tables:** `contacts`, `locations`, `asset_layouts` (field definitions as JSON), `assets` (field values as JSON, validated against the layout), `documents` (TipTap/ProseMirror JSON plus extracted plain text), `folders`, `revisions`, `relations`, `attachments`, and `activity`.
+- **Versions:**
+  - Assets and documents carry a `version`. An update must send the version it started from, and the database `UPDATE … WHERE version = ?` returns a 409 conflict if someone saved in between.
+  - Each save writes a snapshot to `revisions`. Restoring saves an old snapshot as a new version, so history is never rewritten.
+- **Rich text:** the server rebuilds each document from an allowlist of node and mark types and attributes (`services/richtext.ts`), and rejects unknown content and unsafe links. The browser renders through the same editor schema, never as raw HTML. The editor loads on demand and runs with CSS injection turned off, so the CSP stays strict.
+- **MSP knowledge base:** documents with no client belong to the MSP. Staff can read them; technicians and admins can edit them; client accounts never see them. They may link to any client's items, but a client viewer never sees a link to MSP-internal content.
+- **Relationships:** a link is stored once, as an unordered pair. Items can link only within the same client, or from an MSP article to a client item. When listed, links are filtered by the viewer's access.
+- **Attachments:** files are streamed to storage (`LocalStorage` under `ATLAS_DATA_DIR/attachments`, with the same interface ready for S3) while being hashed and size-limited. A file cut off at the limit is deleted and refused.
+  - Filenames are cleaned and stored only as text.
+  - Only PNG, JPEG, GIF, and WebP files that pass a first-bytes check get an image content type and can display inline.
+  - Everything else downloads as `application/octet-stream`, with `Content-Disposition: attachment` and `CSP: sandbox`. Access follows the item the file is attached to.
+- **Search:** generated `tsvector` columns with GIN indexes, plus `pg_trgm` indexes on names for fuzzy matching.
+  - Input becomes a prefix query (`'harb':* & 'fire':*`), so results appear as you type, and is always passed as a bound parameter.
+  - One query combines assets, documents (with `ts_headline` snippets), contacts, locations, and clients, limited to the clients the user can read (plus the MSP knowledge base for staff).
+
 ## Authorization
 
 The code is in `apps/server/src/authz.ts`.

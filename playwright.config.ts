@@ -16,6 +16,8 @@ export default defineConfig({
   use: {
     baseURL: E2E.baseURL,
     trace: 'retain-on-failure',
+    // Animations are disabled so accessibility checks measure final colours, not mid-fade ones.
+    contextOptions: { reducedMotion: 'reduce' },
     screenshot: 'only-on-failure',
     // Use a preinstalled Chromium when one is provided (for example, in a container without downloads).
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {},

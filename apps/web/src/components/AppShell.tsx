@@ -2,20 +2,25 @@ import { useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
+  BookOpen,
   Building2,
   ChevronsUpDown,
   LayoutDashboard,
+  LayoutTemplate,
   LogOut,
   Menu as MenuIcon,
   Monitor,
   Moon,
   ScrollText,
+  Search,
+  Server,
   Sun,
   UserCircle,
   Users,
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { CommandPalette } from '@/components/CommandPalette';
 import { useQueryClient } from '@tanstack/react-query';
 import { Avatar } from '@/components/ui';
 import { Logo } from '@/components/Logo';
@@ -131,7 +136,7 @@ function UserMenu() {
   );
 }
 
-function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: () => void }) {
   const actor = useActor();
   return (
     <div className="flex h-full flex-col bg-sidebar px-3 pt-5 pb-3">
@@ -144,18 +149,29 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </span>
         <span className="min-w-0 truncate text-sm font-medium text-white">{actor.organization.name}</span>
       </div>
+      <button
+        onClick={onSearch}
+        className="mb-4 flex w-full items-center gap-2.5 rounded-lg bg-sidebar-2 px-3 py-2.5 text-left text-sm text-sidebar-muted hover:text-white"
+      >
+        <Search className="size-4" aria-hidden />
+        <span className="flex-1">Search…</span>
+        <kbd className="rounded border border-white/10 px-1.5 text-[10px]">Ctrl K</kbd>
+      </button>
       <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto">
         <p className="px-3 pt-1 pb-2 text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase">
           Workspace
         </p>
         <NavLink to="/" exact icon={LayoutDashboard} label="Dashboard" onNavigate={onNavigate} />
         <NavLink to="/clients" icon={Building2} label="Clients" onNavigate={onNavigate} />
+        <NavLink to="/assets" icon={Server} label="Assets" onNavigate={onNavigate} />
+        {actor.isStaff && <NavLink to="/documents" icon={BookOpen} label="Knowledge base" onNavigate={onNavigate} />}
         {actor.isAdmin && (
           <>
             <p className="px-3 pt-5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase">
               Administration
             </p>
             <NavLink to="/admin/users" icon={Users} label="People & access" onNavigate={onNavigate} />
+            <NavLink to="/admin/layouts" icon={LayoutTemplate} label="Asset layouts" onNavigate={onNavigate} />
             <NavLink to="/admin/security" icon={ScrollText} label="Security log" onNavigate={onNavigate} />
           </>
         )}
@@ -169,6 +185,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
   return (
     <div className="min-h-screen lg:pl-64">
       <a
@@ -178,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">
-        <Sidebar />
+        <Sidebar onSearch={() => setSearching(true)} />
       </aside>
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden">
         <button
@@ -189,6 +206,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           <MenuIcon className="size-5" />
         </button>
         <Logo compact />
+        <button
+          onClick={() => setSearching(true)}
+          className="ml-auto rounded-lg p-2 hover:bg-surface-3"
+          aria-label="Search"
+        >
+          <Search className="size-5" />
+        </button>
       </header>
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
@@ -198,7 +222,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-label="Close navigation"
           />
           <div className="relative h-full w-72 max-w-[85vw]">
-            <Sidebar onNavigate={() => setOpen(false)} />
+            <Sidebar
+              onNavigate={() => setOpen(false)}
+              onSearch={() => {
+                setOpen(false);
+                setSearching(true);
+              }}
+            />
             <button
               onClick={() => setOpen(false)}
               className="absolute top-4 right-3 rounded-lg p-2 text-sidebar-muted hover:text-white"
@@ -212,6 +242,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl px-4 py-7 outline-none sm:px-8 sm:py-9">
         {children}
       </main>
+      <CommandPalette open={searching} onOpenChange={setSearching} />
     </div>
   );
 }

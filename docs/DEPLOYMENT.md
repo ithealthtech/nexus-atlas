@@ -38,6 +38,8 @@ The certificate is used only for the install step and is not stored in the image
 | `HOST`, `PORT` | `127.0.0.1`, `4318` | Listen address (the container uses `0.0.0.0`) |
 | `ATLAS_SETUP_CODE` | random | Fixed first-run code, for automated installs |
 | `ATLAS_REQUIRE_STAFF_MFA` | `true` | Require an authenticator app for staff |
+| `ATLAS_MAX_UPLOAD_MB` | `25` | Largest attachment accepted |
+| `ATLAS_DATA_DIR` | `./data` (`/data` in the container) | Holds attachments (`attachments/`) and, in development, the key file |
 | `LOG_LEVEL` | `info` | Logs are JSON; cookies and CSRF tokens are removed from them |
 
 In development, with no key configured, Atlas creates `data/atlas-master.key` on first run.
@@ -56,4 +58,10 @@ docker compose -f deploy/docker-compose.yml exec -T db pg_dump -U atlas -Fc atla
 docker compose -f deploy/docker-compose.yml exec -T db pg_restore -U atlas -d atlas --clean --if-exists < atlas-YYYY-MM-DD.dump
 ```
 
-Keep backups together with a separate, protected copy of the master key.
+Attachments are stored as files in the data volume, not in PostgreSQL, so back them up too:
+
+```bash
+docker run --rm -v atlas_data:/data -v "$PWD":/backup alpine tar czf /backup/atlas-files-$(date +%F).tgz -C /data attachments
+```
+
+Keep the database dump, the attachments archive, and a separate, protected copy of the master key together.
