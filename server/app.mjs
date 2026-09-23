@@ -1,14 +1,10 @@
 import { createServer } from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { Problem } from './store.mjs';
 import { bitlockerInventory } from './bitlocker.mjs';
 
-export const demoActors = Object.freeze({
-  technician: Object.freeze({ id: 'tech-demo', name: 'Demo technician', role: 'editor', mspId: 'msp-demo', clientIds: null }),
-  client: Object.freeze({ id: 'client-demo', name: 'Harbor client viewer', role: 'viewer', mspId: 'msp-demo', clientIds: ['harbor'] })
-});
 const files = new Map([
   ['/', ['../public/index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['../public/app.js', 'text/javascript; charset=utf-8']],
@@ -22,9 +18,26 @@ async function jsonBody(req) {
   try { const body = JSON.parse(Buffer.concat(chunks).toString()); if (!body || Array.isArray(body) || typeof body !== 'object') throw new Error(); return body; }
   catch { throw new Problem(400, 'Invalid JSON object.'); }
 }
-export function createApp(store) {
+const COOKIE = 'atlas_session';
+const cookie = (value, maxAge) => `${COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+// Unauthenticated endpoints (sign-in, setup) are rate limited per client address.
+function limiter(max, windowMs) {
+  const hits = new Map();
+  return {
+    check(key) { const entry = hits.get(key); if (entry && entry.reset > Date.now() && entry.count >= max) throw new Problem(429, 'Too many attempts. Wait a few minutes and try again.'); },
+    fail(key) { const time = Date.now(); if (hits.size > 10000) for (const [k, v] of hits) if (v.reset < time) hits.delete(k); const entry = hits.get(key); if (!entry || entry.reset < time) hits.set(key, { count: 1, reset: time + windowMs }); else entry.count++; }
+  };
+}
+// Paths a signed-in account may use before it finishes MFA, a required password change, or MFA enrollment.
+const stagePaths = {
+  mfa: ['POST /api/session/mfa'],
+  password: ['POST /api/account/password'],
+  'mfa-setup': ['POST /api/account/mfa/setup', 'POST /api/account/mfa/confirm']
+};
+export function createApp(store, identity, { setupCode = '' } = {}) {
   if (process.env.NODE_ENV === 'production') throw new Error('This local development release cannot run in production.');
-  const sessions = new Map();
+  const attempts = limiter(10, 15 * 60000);
+  const sessionView = context => ({ actor: context.actor, csrf: context.session.csrf, stage: context.stage });
   const server = createServer(async (req, res) => {
     const headers = {
       'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
@@ -48,25 +61,47 @@ export function createApp(store) {
       if (path === '/health' && req.method === 'GET') return send(200, { ok: true, mode: 'local-development' });
       // No machine ingress exists until Atlas enrollment and the vault review are complete.
       if (path === '/api/agent-ingest' || path === '/api/bitlocker/ingest') throw new Problem(503, 'BitLocker collection is disabled. No report has been accepted.');
-      const token = /(?:^|;\s*)atlas_session=([a-f0-9]+)/.exec(req.headers.cookie || '')?.[1];
-      let session = sessions.get(token);
-      if (session && session.expires < Date.now()) { sessions.delete(token); session = null; }
-      if (path === '/api/session' && req.method === 'POST') {
+      const ip = req.socket.remoteAddress || '';
+      if (path === '/api/setup' && req.method === 'GET') return send(200, { needed: identity.needsSetup() });
+      if (path === '/api/setup' && req.method === 'POST') {
+        attempts.check(ip);
         const body = await jsonBody(req);
-        if (!Object.hasOwn(demoActors, body.persona)) throw new Problem(400, 'Choose a demo account.');
-        for (const [key, value] of sessions) if (value.expires < Date.now()) sessions.delete(key);
-        if (sessions.size >= 1000) throw new Problem(429, 'Too many demo sessions. Restart the local preview.');
-        if (token) sessions.delete(token);
-        const newToken = randomBytes(32).toString('hex');
-        session = { actor: demoActors[body.persona], csrf: randomBytes(32).toString('hex'), expires: Date.now() + 8 * 3600000 };
-        sessions.set(newToken, session);
-        return send(200, { actor: session.actor, csrf: session.csrf }, { 'Set-Cookie': `atlas_session=${newToken}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800` });
+        if (!identity.needsSetup()) throw new Problem(409, 'Atlas is already set up. Sign in instead.');
+        const code = Buffer.from(String(body.setupCode ?? '')), expected = Buffer.from(setupCode);
+        if (!setupCode || code.length !== expected.length || !timingSafeEqual(code, expected)) { attempts.fail(ip); throw new Problem(403, 'The setup code is incorrect. Copy it from the server console.'); }
+        delete body.setupCode;
+        const user = await identity.bootstrap(body, ip);
+        const created = identity.createSession(user, { ip, userAgent: req.headers['user-agent'] || '' });
+        return send(201, sessionView(identity.resolve(created.token)), { 'Set-Cookie': cookie(created.token, 43200) });
       }
-      if (!session) throw new Problem(401, 'Open a demo workspace to continue.');
-      if (req.method !== 'GET' && req.headers['x-csrf-token'] !== session.csrf) throw new Problem(403, 'Session verification failed. Reload the page.');
-      const { actor } = session;
-      if (path === '/api/session' && req.method === 'GET') return send(200, { actor, csrf: session.csrf });
-      if (path === '/api/session' && req.method === 'DELETE') { sessions.delete(token); return send(200, { ok: true }, { 'Set-Cookie': 'atlas_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' }); }
+      const token = new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]{43})(?:;|$)`).exec(req.headers.cookie || '')?.[1];
+      if (path === '/api/session' && req.method === 'POST') {
+        attempts.check(ip);
+        const body = await jsonBody(req);
+        let user;
+        try { user = await identity.authenticate(body.email, body.password, ip); }
+        catch (error) { if (error.status === 401 || error.status === 429) attempts.fail(ip); throw error; }
+        const previous = identity.resolve(token); if (previous) identity.signOut(previous, ip);
+        const created = identity.createSession(user, { ip, userAgent: req.headers['user-agent'] || '' });
+        return send(200, sessionView(identity.resolve(created.token)), { 'Set-Cookie': cookie(created.token, 43200) });
+      }
+      const context = identity.resolve(token);
+      if (!context) throw new Problem(401, 'Sign in to continue.', token ? { 'Set-Cookie': cookie('', 0) } : undefined);
+      if (req.method !== 'GET' && req.headers['x-csrf-token'] !== context.session.csrf) throw new Problem(403, 'Session verification failed. Reload the page.');
+      if (path === '/api/session' && req.method === 'GET') return send(200, sessionView(context));
+      if (path === '/api/session' && req.method === 'DELETE') { identity.signOut(context, ip); return send(200, { ok: true }, { 'Set-Cookie': cookie('', 0) }); }
+      if (context.stage !== 'active' && !stagePaths[context.stage].includes(`${req.method} ${path}`)) throw new Problem(403, 'Finish signing in to continue.');
+      if (path === '/api/session/mfa' && req.method === 'POST') { identity.verifyMfa(context, (await jsonBody(req)).code, ip); return send(200, sessionView(identity.resolve(token))); }
+      if (path === '/api/account/password' && req.method === 'POST') { const body = await jsonBody(req); await identity.changePassword(context, body.current, body.next, ip); return send(200, sessionView(identity.resolve(token))); }
+      if (path === '/api/account/mfa/setup' && req.method === 'POST') return send(200, identity.beginMfa(context));
+      if (path === '/api/account/mfa/confirm' && req.method === 'POST') { identity.confirmMfa(context, (await jsonBody(req)).code, ip); return send(200, sessionView(identity.resolve(token))); }
+      const { actor } = context;
+      if (path === '/api/users' && req.method === 'GET') return send(200, identity.listUsers(actor));
+      if (path === '/api/users' && req.method === 'POST') return send(201, await identity.createUser(actor, await jsonBody(req), ip));
+      if (path === '/api/security-events' && req.method === 'GET') return send(200, identity.events(actor));
+      let userMatch;
+      if ((userMatch = /^\/api\/users\/([^/]+)$/.exec(path)) && req.method === 'PATCH') return send(200, identity.updateUser(actor, userMatch[1], await jsonBody(req), ip));
+      if ((userMatch = /^\/api\/users\/([^/]+)\/reset$/.exec(path)) && req.method === 'POST') return send(200, await identity.resetUser(actor, userMatch[1], await jsonBody(req), ip));
       if (path.startsWith('/api/vault')) throw new Problem(501, 'Vault storage is disabled in this development release.');
       if (path === '/api/bitlocker' && req.method === 'GET') return send(200, bitlockerInventory(store, actor, url.searchParams.get('client') || ''));
       if (path.startsWith('/api/bitlocker/') || path.startsWith('/api/agents')) throw new Problem(501, 'BitLocker enrollment, recovery, sharing, and imports are disabled in this release.');
@@ -93,7 +128,8 @@ export function createApp(store) {
       }
       throw new Problem(404, 'Not found.');
     } catch (error) {
-      if (!res.headersSent) send(error instanceof Problem ? error.status : 500, { error: error instanceof Problem ? error.message : 'Something went wrong. Please try again.' });
+      if (!(error instanceof Problem)) console.error(error);
+      if (!res.headersSent) send(error instanceof Problem ? error.status : 500, { error: error instanceof Problem ? error.message : 'Something went wrong. Please try again.' }, error.headers);
     }
   });
   server.requestTimeout = 15000;

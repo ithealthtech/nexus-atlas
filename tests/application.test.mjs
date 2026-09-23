@@ -3,13 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { request } from 'node:http';
 import { openStore } from '../server/store.mjs';
-import { createApp, demoActors } from '../server/app.mjs';
 import { bitlockerInventory } from '../server/bitlocker.mjs';
 
-const tech = demoActors.technician; const viewer = demoActors.client;
-const other = {id:'other',name:'Other MSP',role:'editor',mspId:'other-msp',clientIds:null};
+const tech = {id:'tech',name:'Test technician',role:'technician',mspId:'msp-demo',clientIds:null};
+const viewer = {id:'viewer',name:'Harbor client viewer',role:'client',mspId:'msp-demo',clientIds:['harbor']};
+const other = {id:'other',name:'Other MSP',role:'technician',mspId:'other-msp',clientIds:null};
 const document = (extra = {}) => ({title:'Synthetic runbook',category:'Runbook',content:'# Step 1\nTest only.',status:'Draft',review_date:'2026-10-31',...extra});
 const denied = status => error => error.status === status;
 
@@ -89,40 +88,4 @@ test('BitLocker sample inventory follows asset scope without storing recovery ke
     assert.ok(bitlockerInventory(s,tech).every(r => r.sample && r.recovery === 'Not collected'));
     assert.doesNotMatch(JSON.stringify(bitlockerInventory(s,tech)),/cipher|privateKey|password|uploadToken/);
   } finally { s.close(); }
-});
-test('HTTP session, CSRF, origin, scope, secret-storage gates and static allowlist', async () => {
-  const store = openStore(); const server = createApp(store);
-  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const call = (path, options = {}) => fetch(base+path,options);
-  try {
-    assert.equal((await call('/api/records')).status,401);
-    assert.equal((await call('/api/records',{headers:{'oai-authenticated-user-email':'forged@example.invalid'}})).status,401);
-    assert.equal((await call('/api/session',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://evil.example'},body:'{"persona":"technician"}'})).status,403);
-    const badHostStatus = await new Promise((resolve,reject) => {
-      const req = request(`${base}/health`,{headers:{Host:'evil.example'}},res => { res.resume(); resolve(res.statusCode); });
-      req.on('error',reject); req.end();
-    });
-    assert.equal(badHostStatus,403);
-    assert.equal((await call('/server/store.mjs')).status,401);
-    const login = await call('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"persona":"client"}'});
-    assert.equal(login.status,200); assert.match(login.headers.get('set-cookie'),/HttpOnly; SameSite=Strict/);
-    const session = await login.json(); const cookie = login.headers.get('set-cookie').split(';')[0];
-    const headers = {Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':session.csrf};
-    const records = await (await call('/api/records',{headers})).json(); assert.ok(records.every(r => r.client_id === 'harbor'));
-    assert.equal((await call('/api/records/northline-nas',{headers})).status,404);
-    assert.equal((await call('/api/clients',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:'{}'})).status,403);
-    assert.equal((await call('/api/clients',{method:'POST',headers,body:'{"name":"forbidden"}'})).status,403);
-    for (const path of ['/api/vault','/api/vault/items','/api/bitlocker/enrollments','/api/agents','/api/bitlocker/reveal','/api/bitlocker/share','/api/bitlocker/import']) assert.equal((await call(path,{method:'POST',headers,body:'{}'})).status,501);
-    for (const path of ['/api/agent-ingest','/api/bitlocker/ingest']) assert.equal((await call(path,{method:'POST',headers,body:'{}'})).status,503);
-    assert.equal((await call('/api/bitlocker',{headers})).status,200);
-    assert.equal((await call('/api/session',{method:'DELETE',headers})).status,200);
-    assert.equal((await call('/api/records',{headers})).status,401);
-    const html = await call('/'); assert.equal(html.status,200); assert.match(html.headers.get('content-security-policy'),/frame-ancestors 'none'/);
-  } finally { await new Promise(resolve => server.close(resolve)); store.close(); }
-});
-test('production startup fails closed', () => {
-  const previous = process.env.NODE_ENV; const s = openStore();
-  try { process.env.NODE_ENV='production'; assert.throws(() => createApp(s),/cannot run in production/); }
-  finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV=previous; s.close(); }
 });

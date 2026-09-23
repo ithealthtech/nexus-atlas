@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
 const dialog = $('#editor');
 const detail = $('#detail');
-const state = { actor: null, csrf: '', clients: [], records: [], activity: [], bitlocker: [], route: 'overview', client: '', query: '', filter: 'All', opened: null };
+const state = { actor: null, csrf: '', stage: '', setup: false, enrollment: null, users: [], events: [], clients: [], records: [], activity: [], bitlocker: [], route: 'overview', client: '', query: '', filter: 'All', opened: null };
 const icons = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   building: '<path d="M4 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M2 21h20M9 21v-5h4v5M8 7h1m4 0h1M8 11h1m4 0h1"/>',
@@ -20,23 +20,28 @@ const icons = {
   download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
   link: '<path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/>',
   shield: '<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/>',
-  exit: '<path d="M9 4H4v16h5M9 12h12m-5-5 5 5-5 5"/>'
+  exit: '<path d="M9 4H4v16h5M9 12h12m-5-5 5 5-5 5"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9m-4 4 3 3m-5-1 2 2"/>'
 };
 const icon = name => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.book}</svg>`;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials = name => name.split(/\s+/).slice(0,2).map(s => s[0]).join('').toUpperCase();
-const isEditor = () => state.actor?.role === 'editor';
+const isEditor = () => ['admin','technician'].includes(state.actor?.role);
+const isAdmin = () => state.actor?.role === 'admin';
+const roleLabel = role => ({ admin: 'Administrator', technician: 'Technician', client: 'Client viewer' })[role] || role;
 const date = value => value ? new Date(value.length === 10 ? `${value}T12:00:00` : value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not scheduled';
 const pill = status => `<span class="pill ${status === 'Current' ? 'current' : status === 'Needs review' ? 'review' : 'draft'}">${status === 'Current' ? icon('check') : status === 'Needs review' ? icon('clock') : ''}${esc(status)}</span>`;
 function notify(message) { const toast = $('#toast'); toast.textContent = message; toast.hidden = false; clearTimeout(notify.timer); notify.timer = setTimeout(() => toast.hidden = true, 4500); }
 async function api(path, options = {}) {
   const response = await fetch(`/api${path}`, { ...options, headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf, ...options.headers } });
   const data = await response.json();
-  if (!response.ok) { if (response.status === 401) { state.actor = null; welcome(); } throw new Error(data.error || 'Request failed.'); }
+  if (!response.ok) { if (response.status === 401 && !['/session','/session/mfa','/setup'].includes(path)) { signedOut(); } throw new Error(data.error || 'Request failed.'); }
   return data;
 }
 async function refresh() {
   [state.clients, state.records, state.activity, state.bitlocker] = await Promise.all([api('/clients'), api('/records'), api('/activity'), api('/bitlocker')]);
+  if (isAdmin()) [state.users, state.events] = await Promise.all([api('/users'), api('/security-events')]);
   if (state.client && !state.clients.some(c => c.id === state.client)) state.client = '';
 }
 function routeUrl(route, client = '') { return `#${route}${client ? `/${encodeURIComponent(client)}` : ''}`; }
@@ -46,20 +51,39 @@ function go(route, client = '') {
 }
 function readRoute() {
   const [route, client = ''] = location.hash.slice(1).split('/');
-  state.route = ['overview','clients','assets','documents','vault','bitlocker','activity','search'].includes(route) ? route : 'overview';
+  state.route = ['overview','clients','assets','documents','vault','bitlocker','activity','search','account',...(isAdmin() ? ['users'] : [])].includes(route) ? route : 'overview';
   state.client = state.clients.some(c => c.id === client) ? client : '';
   state.filter = 'All'; closeDetail(false);
 }
 function currentRecords() { return state.records.filter(r => !state.client || r.client_id === state.client); }
-function welcome() {
-  app.innerHTML = `<main id="main" class="welcome"><div class="welcome-brand"><span class="brand-mark">A</span> ATLAS <span>FOR MSPs</span></div><div class="welcome-grid"><section><div class="eyebrow">YOUR DOCUMENTATION WORKSPACE</div><h1>A clearer picture.<br>For every client.</h1><p>Bring infrastructure, knowledge, and the people you support into one connected workspace.</p><button class="btn primary large" data-action="login" data-persona="technician">Open sample workspace ${icon('arrow')}</button><button class="text-button" data-action="login" data-persona="client">Explore the client’s read-only view</button><div class="welcome-note">Local development preview · Synthetic data only<br>Sign-in security and the encrypted vault are not available yet.</div></section><section class="welcome-card"><div class="eyebrow">CONNECTED CLIENT KNOWLEDGE</div><div class="sample-company"><span class="avatar blue">HD</span><div><h2>Harbor Dental Group</h2><span>Client workspace</span></div></div><div class="sample-link">${icon('server')} HDG-FW-01 <span>Firewall</span></div><div class="connector-line"></div><div class="sample-link">${icon('book')} Internet outage response <span>Runbook</span></div><div class="welcome-footer">${icon('link')} The right context, one click away.</div></section></div></main>`;
+// Sign-in, first-run setup, MFA and required password changes share one full-page layout.
+function authScreen(notice = '') {
+  const stage = state.actor ? state.stage : state.setup ? 'setup' : 'signin';
+  const forms = {
+    signin: ['Sign in to Atlas', 'Use the account your administrator created for you.', `${authField('Email','email','email','username')}${authField('Password','password','password','current-password')}`, 'Sign in'],
+    setup: ['Create the first administrator', 'Enter the setup code shown in the Atlas server console, then choose your administrator account.', `${authField('Setup code','setupCode','text','off')}${authField('Your name','name','text','name')}${authField('Email','email','email','username')}${authField('Password','password','password','new-password','minlength="12"')}<p class="field-help">At least 12 characters. A long passphrase is best.</p>`, 'Create administrator'],
+    mfa: ['Two-step verification', 'Enter the 6-digit code from your authenticator app.', authField('Authentication code','code','text','one-time-code','inputmode="numeric" pattern="[0-9]{6}" maxlength="6"'), 'Verify'],
+    password: ['Choose a new password', 'Your administrator issued a temporary password. Replace it before continuing.', `${authField('Temporary password','current','password','current-password')}${authField('New password','next','password','new-password','minlength="12"')}<p class="field-help">At least 12 characters. A long passphrase is best.</p>`, 'Save password'],
+    'mfa-setup': ['Protect your account', 'Atlas staff accounts require an authenticator app. Add this key to Microsoft Authenticator, Google Authenticator, 1Password, or a similar app.', state.enrollment ? `<div class="mfa-key"><span class="eyebrow">SETUP KEY</span><code>${esc(state.enrollment.secret.match(/.{1,4}/g).join(' '))}</code><button type="button" class="text-button" data-action="copy-key">Copy key</button><details><summary>Setup link for apps that accept one</summary><code class="mfa-uri">${esc(state.enrollment.uri)}</code></details></div>${authField('Code from your app','code','text','one-time-code','inputmode="numeric" pattern="[0-9]{6}" maxlength="6"')}` : '<p class="muted">Preparing your setup key…</p>', 'Turn on MFA']
+  };
+  const [title, description, fields, submit] = forms[stage];
+  app.innerHTML = `<main id="main" class="welcome auth"><div class="welcome-brand"><span class="brand-mark">A</span> ATLAS <span>FOR MSPs</span></div><div class="welcome-grid"><section><div class="eyebrow">YOUR DOCUMENTATION WORKSPACE</div><h1>A clearer picture.<br>For every client.</h1><p>Bring infrastructure, knowledge, and the people you support into one connected workspace.</p><div class="welcome-note">Local development release · Synthetic data only<br>The encrypted vault is not available yet.</div></section><section class="welcome-card auth-card"><form id="auth-form" data-stage="${stage}"><h2>${esc(title)}</h2><p class="auth-lead">${esc(description)}</p>${fields}<p class="form-error" role="alert" ${notice ? '' : 'hidden'}>${esc(notice)}</p><button type="submit" class="btn primary large">${esc(submit)} ${icon('arrow')}</button>${state.actor ? '<button type="button" class="text-button" data-action="logout">Sign out</button>' : ''}</form></section></div></main>`;
   closeDetail(false);
+  $('#auth-form input')?.focus();
+}
+function authField(label, name, type, autocomplete, extra = '') { return `<label>${label}<input name="${name}" type="${type}" autocomplete="${autocomplete}" required ${extra}></label>`; }
+function signedOut() { if (dialog.open) dialog.close(); dialog.innerHTML = ''; Object.assign(state, { actor: null, csrf: '', stage: '', enrollment: null, managing: null, users: [], events: [] }); authScreen(); }
+async function applySession(session) {
+  state.actor = session.actor; state.csrf = session.csrf; state.stage = session.stage;
+  if (state.stage === 'mfa-setup' && !state.enrollment) { authScreen(); state.enrollment = await api('/account/mfa/setup', { method: 'POST', body: '{}' }); }
+  if (state.stage !== 'active') return authScreen();
+  state.enrollment = null; await refresh(); readRoute(); render();
 }
 function navItem(route, label, image, count) { return `<a class="nav-item ${state.route === route ? 'active' : ''}" href="${routeUrl(route)}">${icon(image)}<span>${label}</span>${count !== undefined ? `<small>${count}</small>` : ''}</a>`; }
 function render() {
-  if (!state.actor) return welcome();
+  if (!state.actor || state.stage !== 'active') return authScreen();
   const company = state.clients.find(c => c.id === state.client);
-  app.innerHTML = `<div class="shell"><aside class="sidebar"><a class="brand" href="#overview"><span class="brand-mark">A</span><span>atlas<small>MSP WORKSPACE</small></span></a><div class="workspace-label"><span class="workspace-avatar">IT</span><div>IT Done Right<small>Documentation workspace</small></div></div><nav aria-label="Main navigation"><div class="nav-label">WORKSPACE</div>${navItem('overview','Overview','grid')}${navItem('clients','Clients','building',state.clients.length)}${navItem('documents','Knowledge base','book')}${navItem('assets','Assets','server')}${navItem('vault','Password vault','lock')}${navItem('bitlocker','BitLocker','shield')}${navItem('activity','Activity','pulse')}</nav><div class="nav-label client-label">CLIENT SHORTCUTS</div><div class="client-shortcuts">${state.clients.slice(0,5).map((c,i) => `<a href="${routeUrl('overview',c.id)}" class="shortcut ${state.client === c.id ? 'selected' : ''}"><span class="client-dot tone-${i % 4}"></span>${esc(c.name)}</a>`).join('')}</div><div class="sidebar-bottom"><div class="local-label">${icon('shield')} Local development</div><p>Sample data only.<br>Vault storage is disabled.</p><div class="profile"><span class="profile-avatar">${isEditor() ? 'DT' : 'HC'}</span><div>${isEditor() ? 'Demo technician' : 'Client viewer'}<small>${isEditor() ? 'MSP workspace access' : 'Harbor Dental only'}</small></div><button class="icon-button" data-action="logout" aria-label="Leave demo">${icon('exit')}</button></div></div></aside><div class="workspace"><header class="topbar"><div class="breadcrumbs"><span>Workspace</span>${icon('chevron')}<strong>${esc(company?.name || 'All clients')}</strong></div><form id="search-form" class="searchbox">${icon('search')}<input name="q" id="global-search" aria-label="Search all accessible documentation" placeholder="Search documentation…" maxlength="200" value="${esc(state.route === 'search' ? state.query : '')}"><kbd>/</kbd></form><span class="preview-badge">LOCAL PREVIEW</span></header><main id="main" tabindex="-1">${company ? clientTabs(company) : ''}${content(company)}</main><footer class="page-footer"><span>Atlas · Development release 0.1</span><button class="text-button" data-action="switch-persona">Switch to ${isEditor() ? 'client view' : 'technician view'} ${icon('arrow')}</button></footer></div></div>`;
+  app.innerHTML = `<div class="shell"><aside class="sidebar"><a class="brand" href="#overview"><span class="brand-mark">A</span><span>atlas<small>MSP WORKSPACE</small></span></a><div class="workspace-label"><span class="workspace-avatar">IT</span><div>IT Done Right<small>Documentation workspace</small></div></div><nav aria-label="Main navigation"><div class="nav-label">WORKSPACE</div>${navItem('overview','Overview','grid')}${navItem('clients','Clients','building',state.clients.length)}${navItem('documents','Knowledge base','book')}${navItem('assets','Assets','server')}${navItem('vault','Password vault','lock')}${navItem('bitlocker','BitLocker','shield')}${navItem('activity','Activity','pulse')}${isAdmin() ? navItem('users','Users','users',state.users.length) : ''}</nav><div class="nav-label client-label">CLIENT SHORTCUTS</div><div class="client-shortcuts">${state.clients.slice(0,5).map((c,i) => `<a href="${routeUrl('overview',c.id)}" class="shortcut ${state.client === c.id ? 'selected' : ''}"><span class="client-dot tone-${i % 4}"></span>${esc(c.name)}</a>`).join('')}</div><div class="sidebar-bottom"><div class="local-label">${icon('shield')} Local development</div><p>Sample data only.<br>Vault storage is disabled.</p><div class="profile"><a class="profile-link" href="#account"><span class="profile-avatar">${esc(initials(state.actor.name))}</span><div>${esc(state.actor.name)}<small>${esc(roleLabel(state.actor.role))}${state.actor.clientIds ? ` · ${state.actor.clientIds.length} client${state.actor.clientIds.length === 1 ? '' : 's'}` : ''}</small></div></a><button class="icon-button" data-action="logout" aria-label="Sign out">${icon('exit')}</button></div></div></aside><div class="workspace"><header class="topbar"><div class="breadcrumbs"><span>Workspace</span>${icon('chevron')}<strong>${esc(company?.name || 'All clients')}</strong></div><form id="search-form" class="searchbox">${icon('search')}<input name="q" id="global-search" aria-label="Search all accessible documentation" placeholder="Search documentation…" maxlength="200" value="${esc(state.route === 'search' ? state.query : '')}"><kbd>/</kbd></form><span class="preview-badge">LOCAL PREVIEW</span></header><main id="main" tabindex="-1">${company ? clientTabs(company) : ''}${content(company)}</main><footer class="page-footer"><span>Atlas · Development release 0.2</span><a class="text-link" href="#account">Signed in as ${esc(state.actor.email)} ${icon('arrow')}</a></footer></div></div>`;
 }
 function heading(kicker, title, description, actions = '') { return `<div class="page-heading"><div><div class="eyebrow">${esc(kicker)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="heading-actions">${actions}</div></div>`; }
 function addButton(kind, label) { return isEditor() ? `<button class="btn primary" data-action="new-${kind}">${icon('plus')}${label}</button>` : ''; }
@@ -93,7 +117,33 @@ function content(company) {
   }
   if (state.route === 'activity') return `${heading(company?.name || 'ALL CLIENTS','Workspace activity','A record of documentation changes, links, and exports.')}<section class="panel">${sectionHeader('Latest events',activities.length)}${activityList(activities)}</section>`;
   if (state.route === 'bitlocker') return bitlockerPage();
+  if (state.route === 'users') return usersPage();
+  if (state.route === 'account') return accountPage();
   if (state.route === 'vault') return `${heading('PASSWORD VAULT','A secure foundation comes first.','Credentials will connect to the systems and procedures they belong to.')}<section class="vault-panel"><div class="vault-illustration">${icon('lock')}</div><div class="eyebrow">NOT AVAILABLE IN THIS RELEASE</div><h2>Your future client vault.</h2><p>Shared collections, linked credentials, and controlled access are part of the product plan. Password storage is disabled while encryption, recovery, and sharing are designed and reviewed.</p><div class="vault-capabilities"><span>${icon('shield')} Client-side encryption</span><span>${icon('building')} Client-scoped collections</span><span>${icon('link')} Linked to documentation</span></div><div class="vault-notice">Do not enter passwords or other secrets in documentation fields.</div><a class="btn" href="#documents">Explore the knowledge base ${icon('arrow')}</a></section>`;
+}
+function accessLabel(user) { return user.allClients ? 'All clients' : user.clientIds.map(id => state.clients.find(c => c.id === id)?.name || 'Unavailable client').join(', '); }
+function usersPage() {
+  const rows = state.users.map(u => `<tr><td><div class="client-cell"><span class="avatar tone-${u.role === 'admin' ? 0 : u.role === 'technician' ? 3 : 1}">${esc(initials(u.name))}</span><span><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></span></div></td><td>${esc(roleLabel(u.role))}</td><td class="access-cell">${esc(accessLabel(u))}</td><td>${u.disabled ? '<span class="pill draft">Disabled</span>' : u.locked ? '<span class="pill review">Locked</span>' : u.mustChangePassword ? '<span class="pill review">Password change pending</span>' : pill('Current').replace('Current','Active')}${u.mfa ? ' <span class="pill current">MFA</span>' : ''}</td><td class="date-cell">${u.lastLoginAt ? date(u.lastLoginAt) : 'Never'}</td><td><button class="btn small" data-action="edit-user" data-id="${esc(u.id)}">Manage</button></td></tr>`).join('');
+  const events = state.events.slice(0, 25).map(e => `<div class="activity-row"><span class="activity-icon">${icon(e.action.includes('fail') || e.action.includes('lock') || e.action.includes('block') ? 'lock' : 'shield')}</span><div><strong>${esc(e.action)} <span class="normal">${esc(e.detail)}</span></strong><small>${esc(e.actor)}${e.ip ? ` <span>·</span> ${esc(e.ip)}` : ''}</small></div><time datetime="${esc(e.created_at)}">${new Date(e.created_at).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</time></div>`).join('');
+  return `${heading('ADMINISTRATION','People and access.','Decide who can see each client, and who can change their documentation.',`<button class="btn primary" data-action="new-user">${icon('plus')}Add user</button>`)}<section class="panel">${sectionHeader('Users',state.users.length)}<div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Client access</th><th>Status</th><th>Last sign-in</th><th><span class="sr-only">Manage</span></th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel-bottom">${icon('shield')}Administrators and technicians must use an authenticator app. Access changes apply immediately.</div></section><section class="panel activity-panel users-events">${sectionHeader('Security events',state.events.length)}${events ? `<div class="activity-list">${events}</div>` : empty('No security events yet','Sign-ins and account changes will appear here.')}</section>`;
+}
+function accountPage() {
+  const a = state.actor;
+  return `${heading('YOUR ACCOUNT',a.name,`${roleLabel(a.role)} · ${a.email}`)}<div class="account-grid"><section class="panel account-panel">${sectionHeader('Sign-in')}<dl class="record-meta"><div><dt>Role</dt><dd>${esc(roleLabel(a.role))}</dd></div><div><dt>Client access</dt><dd>${a.clientIds ? esc(a.clientIds.map(id => state.clients.find(c => c.id === id)?.name).filter(Boolean).join(', ') || 'None') : 'All clients'}</dd></div><div><dt>Two-step verification</dt><dd>${a.mfa ? 'On · authenticator app' : 'Off'}</dd></div><div><dt>Permissions</dt><dd>${isAdmin() ? 'Manage users and all documentation' : isEditor() ? 'Create and edit documentation' : 'Read-only'}</dd></div></dl><div class="account-actions"><button class="btn" data-action="change-password">${icon('key')}Change password</button>${a.mfa ? '' : `<button class="btn" data-action="enable-mfa">${icon('shield')}Turn on two-step verification</button>`}</div><div class="panel-bottom">${icon('lock')}Changing your password signs out your other sessions. Ask an administrator if you lose your authenticator.</div></section></div>`;
+}
+function userForm(user = null) {
+  const role = user?.role || 'technician';
+  const clients = state.clients.map(c => `<label class="check"><input type="checkbox" name="clientIds" value="${esc(c.id)}" ${user?.clientIds.includes(c.id) ? 'checked' : ''}>${esc(c.name)}</label>`).join('');
+  showDialog(user ? `Manage ${esc(user.name)}` : 'Add a user', `${field('Name','name',user?.name,'required maxlength="120"')}${user ? `<p class="field-help user-email">${esc(user.email)}</p>` : field('Email','email','','type="email" required maxlength="254" autocomplete="off"')}<label>Role<select name="role" data-action-change="role">${['admin','technician','client'].map(r => `<option value="${r}" ${r === role ? 'selected' : ''}>${roleLabel(r)}</option>`).join('')}</select></label><p class="field-help role-help"></p><fieldset class="client-access"><legend>Client access</legend><label class="check all-clients-option"><input type="checkbox" name="allClients" ${user ? (user.allClients ? 'checked' : '') : 'checked'}>All current and future clients</label><div class="client-checks">${clients}</div></fieldset>${user ? `<label class="check"><input type="checkbox" name="disabled" ${user.disabled ? 'checked' : ''}>Disable this account and sign it out everywhere</label>${user.id !== state.actor.id ? '<button type="button" class="text-button" data-action="reset-user">'+icon('key')+'Issue a temporary password</button>' : ''}` : `${field('Temporary password','password','','type="text" required minlength="12" maxlength="256" autocomplete="off"')}<p class="field-help">Share this privately. The user must replace it at first sign-in, and staff must set up an authenticator app.</p>`}`, user ? 'Save changes' : 'Create user', 'user');
+  state.managing = user; syncRoleFields();
+}
+function syncRoleFields() {
+  const form = $('#edit-form'); const role = form?.elements.role?.value; if (!role) return;
+  const all = form.elements.allClients; const help = $('.role-help', form);
+  help.textContent = { admin: 'Full access to every client, plus user management and security events.', technician: 'Creates and edits documentation for the clients selected below.', client: 'Read-only access to the clients selected below. Cannot edit or export.' }[role];
+  $('.all-clients-option', form).hidden = role !== 'technician'; $('.client-access', form).hidden = role === 'admin';
+  if (role === 'client') all.checked = false;
+  $('.client-checks', form).hidden = role === 'technician' && all.checked;
 }
 function bitlockerPage() {
   const rows = state.bitlocker.filter(r => !state.client || r.clientId === state.client);
@@ -134,18 +184,18 @@ function linkRecord() {
   if (!candidates.length) return notify('Create another record in this client workspace to link it.');
   showDialog('Link a related record', `<p class="field-help">Connect an asset or procedure within ${esc(state.clients.find(c => c.id === record.client_id)?.name)}.</p><label>Related record<select name="targetId">${candidates.map(r => `<option value="${esc(r.id)}">${esc(r.title)} · ${esc(r.category)}</option>`).join('')}</select></label>`, 'Add relationship','link');
 }
-async function login(persona) {
-  const session = await api('/session', { method: 'POST', body: JSON.stringify({persona}) });
-  state.actor = session.actor; state.csrf = session.csrf; await refresh(); location.hash = '#overview'; readRoute(); render();
-}
 document.addEventListener('click', async event => {
   if (event.target.closest('.skip-link')) { event.preventDefault(); $('#main')?.focus(); return; }
   const button = event.target.closest('[data-action]'); if (!button || button.disabled) return;
   const action = button.dataset.action;
   try {
-    if (action === 'login') { button.disabled = true; await login(button.dataset.persona); }
-    else if (action === 'logout') { await api('/session',{method:'DELETE'}); state.actor = null; state.csrf = ''; welcome(); }
-    else if (action === 'switch-persona') await login(isEditor() ? 'client' : 'technician');
+    if (action === 'logout') { await api('/session',{method:'DELETE'}).catch(() => {}); signedOut(); }
+    else if (action === 'copy-key') { await navigator.clipboard.writeText(state.enrollment.secret); notify('Setup key copied.'); }
+    else if (action === 'new-user') userForm();
+    else if (action === 'edit-user') userForm(state.users.find(u => u.id === button.dataset.id));
+    else if (action === 'reset-user') { const user = state.managing; showDialog(`Reset ${esc(user.name)}`,`<p class="field-help">${esc(user.name)} will be signed out everywhere and must choose a new password at next sign-in.</p>${field('Temporary password','password','','type="text" required minlength="12" maxlength="256" autocomplete="off"')}<label class="check"><input type="checkbox" name="resetMfa">Also reset two-step verification (lost authenticator)</label>`,'Reset access','reset'); }
+    else if (action === 'change-password') showDialog('Change password',`${field('Current password','current','','type="password" required autocomplete="current-password"')}${field('New password','next','','type="password" required minlength="12" autocomplete="new-password"')}<p class="field-help">Your other sessions will be signed out.</p>`,'Save password','password');
+    else if (action === 'enable-mfa') { state.enrollment = await api('/account/mfa/setup',{method:'POST',body:'{}'}); showDialog('Turn on two-step verification',`<div class="mfa-key"><span class="eyebrow">SETUP KEY</span><code>${esc(state.enrollment.secret.match(/.{1,4}/g).join(' '))}</code><button type="button" class="text-button" data-action="copy-key">Copy key</button></div>${field('Code from your app','code','','required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"')}`,'Turn on MFA','mfa'); }
     else if (action === 'new-client') newClient();
     else if (action === 'new-asset') editRecord('asset');
     else if (action === 'new-document') editRecord('document');
@@ -171,11 +221,13 @@ document.addEventListener('click', async event => {
 });
 document.addEventListener('submit', async event => {
   if (event.target.id === 'search-form') { event.preventDefault(); state.query = new FormData(event.target).get('q').trim(); if (state.query) go('search'); return; }
+  if (event.target.id === 'auth-form') return submitAuth(event);
   if (event.target.id !== 'edit-form') return;
   event.preventDefault(); const form = event.target; const type = form.dataset.type; const values = Object.fromEntries(new FormData(form));
   const submit = $('button[type="submit"]',form); const errorBox = $('.form-error',form); submit.disabled = true; errorBox.hidden = true;
   try {
     let result;
+    if (['user','reset','password','mfa'].includes(type)) return await submitAccount(form, type, values);
     if (type === 'client') result = await api('/clients',{method:'POST',body:JSON.stringify(values)});
     else if (type === 'link') result = await api(`/records/${state.opened.id}/links`,{method:'POST',body:JSON.stringify(values)});
     else {
@@ -190,10 +242,37 @@ document.addEventListener('submit', async event => {
   } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
   finally { submit.disabled = false; }
 });
-window.addEventListener('hashchange',() => { if (state.actor) { readRoute(); render(); } });
+async function submitAuth(event) {
+  event.preventDefault(); const form = event.target; const values = Object.fromEntries(new FormData(form));
+  const submit = $('button[type="submit"]',form); const errorBox = $('.form-error',form); submit.disabled = true; errorBox.hidden = true;
+  const paths = { signin: '/session', setup: '/setup', mfa: '/session/mfa', password: '/account/password', 'mfa-setup': '/account/mfa/confirm' };
+  try {
+    const session = await api(paths[form.dataset.stage],{method:'POST',body:JSON.stringify(values)});
+    if (form.dataset.stage === 'setup') state.setup = false;
+    if (['signin','setup'].includes(form.dataset.stage)) history.replaceState(null,'','#overview');
+    await applySession(session);
+  } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; submit.disabled = false; $('input[name="code"], input[name="password"]',form)?.select(); }
+}
+async function submitAccount(form, type, values) {
+  if (type === 'user') {
+    const role = values.role; const body = { name: values.name, role, allClients: role === 'technician' && form.elements.allClients.checked, clientIds: role === 'admin' ? [] : [...form.querySelectorAll('input[name="clientIds"]:checked')].map(i => i.value) };
+    if (state.managing) { body.disabled = form.elements.disabled.checked; await api(`/users/${state.managing.id}`,{method:'PATCH',body:JSON.stringify(body)}); }
+    else await api('/users',{method:'POST',body:JSON.stringify({ ...body, email: values.email, password: values.password })});
+  } else if (type === 'reset') await api(`/users/${state.managing.id}/reset`,{method:'POST',body:JSON.stringify({ password: values.password, resetMfa: form.elements.resetMfa.checked })});
+  else if (type === 'password') await applyQuietly(await api('/account/password',{method:'POST',body:JSON.stringify(values)}));
+  else if (type === 'mfa') await applyQuietly(await api('/account/mfa/confirm',{method:'POST',body:JSON.stringify(values)}));
+  dialog.close(); await refresh(); render();
+  notify({ user: state.managing ? 'User updated.' : 'User created. Share the temporary password privately.', reset: 'Temporary password issued. The user was signed out.', password: 'Password changed. Other sessions were signed out.', mfa: 'Two-step verification is on.' }[type]);
+}
+function applyQuietly(session) { state.actor = session.actor; state.csrf = session.csrf; state.stage = session.stage; state.enrollment = null; }
+document.addEventListener('change', event => { if (event.target.closest('#edit-form') && ['role','allClients'].includes(event.target.name)) syncRoleFields(); });
+window.addEventListener('hashchange',() => { if (state.actor && state.stage === 'active') { readRoute(); render(); } });
 document.addEventListener('keydown',event => {
   if (event.key === 'Escape' && !dialog.open) closeDetail();
   if (event.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName) && !dialog.open) { event.preventDefault(); $('#global-search')?.focus(); }
 });
-try { const response = await fetch('/api/session'); if (response.ok) { const session = await response.json(); state.actor = session.actor; state.csrf = session.csrf; await refresh(); readRoute(); render(); } else welcome(); }
-catch { welcome(); notify('Could not connect to the local application. Check that it is running.'); }
+try {
+  const response = await fetch('/api/session');
+  if (response.ok) await applySession(await response.json());
+  else { state.setup = (await (await fetch('/api/setup')).json()).needed; authScreen(); }
+} catch (error) { authScreen(); notify(error.message || 'Could not connect to the local application. Check that it is running.'); }

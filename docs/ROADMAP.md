@@ -6,8 +6,9 @@ Working documentation/asset workflows, local persistence, client boundaries, dem
 
 ## 0.2 — real deployment foundation
 
-- Choose self-hosted Linux target and identity provider; provision actual identities with MFA.
-- Tenant/client memberships, groups, granular permissions, administrator bootstrap and session lifecycle.
+- ✅ Local accounts with MFA, administrator bootstrap, roles, per-client grants, session lifecycle, and a security event log (first slice).
+- Entra ID/OIDC sign-in, passkeys, groups, and finer-grained permissions (per record type, export rights).
+- Choose the self-hosted Linux target.
 - PostgreSQL repository/migrations and tenant isolation checks.
 - Production configuration, HTTPS, health checks, backups and a restore drill.
 - Import/export round trip and attachment authorization.

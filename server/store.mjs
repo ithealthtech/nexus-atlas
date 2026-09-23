@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export class Problem extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, headers) { super(message); this.status = status; this.headers = headers; }
 }
 const fail = (status, message) => { throw new Problem(status, message); };
 function text(value, label, max = 200, required = true) {
@@ -72,7 +72,7 @@ export function openStore(filename = ':memory:') {
     client(actor, row.client_id);
     return row;
   }
-  function writer(actor) { if (actor.role !== 'editor') fail(403, 'This account has read-only access.'); }
+  function writer(actor) { if (actor.role !== 'admin' && actor.role !== 'technician') fail(403, 'This account has read-only access.'); }
   function listClients(actor) {
     return all(`SELECT c.*, (SELECT COUNT(*) FROM records r WHERE r.client_id=c.id AND r.kind='asset') AS assets,
       (SELECT COUNT(*) FROM records r WHERE r.client_id=c.id AND r.kind='document') AS documents
@@ -149,7 +149,7 @@ export function openStore(filename = ':memory:') {
   }
   seed();
   return {
-    close: () => db.close(), listClients, listRecords,
+    close: () => db.close(), db, transaction, listClients, listRecords,
     client,
     detail(actor, id) {
       const value = record(actor, id);
