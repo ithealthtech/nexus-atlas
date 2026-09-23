@@ -16,6 +16,7 @@ let onSessionLost: () => void = () => undefined;
 export const setCsrf = (token: string) => {
   csrf = token;
 };
+export const getCsrf = () => csrf;
 export const onUnauthenticated = (handler: () => void) => {
   onSessionLost = handler;
 };

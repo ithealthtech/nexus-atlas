@@ -2,9 +2,13 @@
 
 Self-hosted IT documentation and password manager for MSPs: client workspaces, assets, runbooks, and encrypted credentials, with per-client access for your technicians and the clients you support.
 
-> **Status: v1.0 in development (milestone M0 of 5 complete).** Sign-in, MFA, roles, per-client permissions, and client workspaces work today. Documentation (M1) and the password vault (M2) are next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
+> **Status: v1.0 in development (milestones M0 and M1 of 5 complete).** Sign-in, permissions, and the full documentation workspace work today. The encrypted password vault (M2) is next. Keep passwords out of Atlas and use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
 
 ![Atlas dashboard](docs/screenshots/dashboard.png)
+
+| Asset | Runbook |
+|---|---|
+| ![Asset detail with fields, related items, files, and version history](docs/screenshots/asset.png) | ![Runbook linked to its firewall](docs/screenshots/document.png) |
 
 ## What works now
 
@@ -18,8 +22,21 @@ Self-hosted IT documentation and password manager for MSPs: client workspaces, a
   - Six roles: Owner, Admin, Technician, Read-only technician, Client editor, and Client viewer.
   - Each client can be set to *none / read / edit / edit + passwords*, with an "every client" baseline for staff. Group grants are in the data model, with a UI coming in M3.
   - Changes apply to live sessions immediately.
-- **Clients:** create, edit, search, and filter. Clients a user can't access look exactly like missing ones.
-- **Security log:** sign-ins, failures, lockouts, MFA changes, and account administration.
+- **Clients:** create, edit, search, and filter. Clients a user can't access look exactly like missing ones. Each client has its own workspace with Overview, Assets, Documents, Contacts, Locations, and Activity tabs.
+- **Assets:** 13 built-in layouts (flexible-asset templates): configurations, networks, domains, SSL certificates, licenses, applications, backups, email, internet/WAN, wireless, printers, vendors, and remote access.
+  - Administrators can add their own layouts with 11 field types, including IP address or subnet, URL, date, and choice.
+  - Every field is validated on the server.
+- **Documents:**
+  - A knowledge base for each client, plus an internal MSP knowledge base that client users never see. Folders and templates (runbook/SOP, onboarding checklist) are included.
+  - A rich-text editor with headings, checklists, tables, code blocks, and links. Content is sanitized on the server, and links are limited to http(s), mailto, and tel.
+  - Status and review dates.
+- **History:** every save of an asset or document is a new version. You can compare versions line by line and restore an old one as a new version. Two people editing the same record can't silently overwrite each other.
+- **Relationships and files:**
+  - Link assets, documents, contacts, and locations to each other.
+  - Attach files by drag and drop. Only images that pass a content check display inline; everything else downloads, with a sandboxing CSP.
+- **Contacts and locations:** each client can mark one primary contact and one primary location.
+- **Search:** Ctrl+K from anywhere finds clients, assets (including by IP or serial number), document text, contacts, and locations. It matches as you type and returns only what you're allowed to see.
+- **Security log and activity:** sign-ins, failures, lockouts, and account changes for administrators. Separate activity feeds show documentation changes for each item, each client, and overall.
 - **Interface:** light and dark themes, mobile layout, keyboard support, and WCAG 2.2 AA checks in end-to-end tests.
 
 ## Run it
@@ -45,7 +62,7 @@ npm run dev              # API on :4318, web app with hot reload on :5173
 
 | Path | What it is |
 |---|---|
-| `apps/server` | Fastify + TypeScript API: identity, authorization, clients. Serves the built web app. |
+| `apps/server` | Fastify + TypeScript API: identity, authorization, clients, and documentation (assets, layouts, documents, relationships, attachments, search, activity). Serves the built web app. |
 | `apps/web` | React + Vite + TanStack Router/Query + Tailwind. |
 | `packages/shared` | zod schemas, roles and access levels, and API types shared by server and web. |
 | `packages/db` | Drizzle schema and SQL migrations (PostgreSQL). |

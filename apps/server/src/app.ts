@@ -1,7 +1,9 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { ZodError } from 'zod';
 import { sql } from 'drizzle-orm';
 import type { DatabaseHandle } from '@atlas/db';
@@ -11,6 +13,9 @@ import { HttpError } from './errors.js';
 import type { KeyProvider } from './crypto/keys.js';
 import { IdentityService, sameSecret, type SessionContext } from './identity/service.js';
 import { ClientService } from './services/clients.js';
+import { ensureDefaultLayouts } from './services/layouts.js';
+import { LocalStorage, type FileStorage } from './services/storage.js';
+import { registerDocumentationRoutes } from './routes/docs.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -23,6 +28,7 @@ export interface AppOptions {
   database: DatabaseHandle;
   keys: KeyProvider;
   setupCode?: string;
+  storage?: FileStorage;
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
@@ -51,7 +57,13 @@ function failureLimiter(max: number, windowMs: number) {
   };
 }
 
-export async function buildApp({ config, database, keys, setupCode = '' }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({
+  config,
+  database,
+  keys,
+  setupCode = '',
+  storage,
+}: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
       config.LOG_LEVEL === 'silent'
@@ -73,6 +85,8 @@ export async function buildApp({ config, database, keys, setupCode = '' }: AppOp
   const devHosts = config.NODE_ENV === 'production' ? [] : ['127.0.0.1', 'localhost'];
 
   await app.register(cookie);
+  const maxUploadBytes = config.ATLAS_MAX_UPLOAD_MB * 1024 * 1024;
+  await app.register(multipart, { limits: { fileSize: maxUploadBytes, files: 1, fields: 5, parts: 6 } });
 
   // ---- security headers and request checks ----
   app.addHook('onRequest', async (req) => {
@@ -95,10 +109,12 @@ export async function buildApp({ config, database, keys, setupCode = '' }: AppOp
     reply.header('Cross-Origin-Opener-Policy', 'same-origin');
     reply.header('Cross-Origin-Resource-Policy', 'same-origin');
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
-    reply.header(
-      'Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
-    );
+    // Routes may set a stricter policy (file downloads use a sandbox); keep theirs.
+    if (!reply.hasHeader('Content-Security-Policy'))
+      reply.header(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      );
     if (config.secureCookies) reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
   });
@@ -111,7 +127,11 @@ export async function buildApp({ config, database, keys, setupCode = '' }: AppOp
     if (error instanceof HttpError) {
       // Only an invalid session clears the cookie; a wrong password or code keeps the sign-in in progress.
       if (error.code === 'session' && req.cookies[cookieName]) reply.clearCookie(cookieName, cookieOptions);
-      return reply.status(error.status).send({ error: error.message, ...(error.code ? { code: error.code } : {}) });
+      return reply.status(error.status).send({
+        error: error.message,
+        ...(error.code ? { code: error.code } : {}),
+        ...(error.fields ? { fields: error.fields } : {}),
+      });
     }
     if (error.statusCode && error.statusCode < 500)
       return reply
@@ -171,6 +191,7 @@ export async function buildApp({ config, database, keys, setupCode = '' }: AppOp
       throw new HttpError(403, 'The setup code is incorrect. Copy it from the server console.');
     }
     const user = await identity.bootstrap(body, meta(req));
+    await ensureDefaultLayouts(db, user.orgId);
     const { token } = await identity.createSession(user, meta(req));
     setSession(reply, token);
     return reply.status(201).send(view((await identity.resolve(token))!));
@@ -247,6 +268,13 @@ export async function buildApp({ config, database, keys, setupCode = '' }: AppOp
   app.patch<{ Params: { id: string } }>('/api/clients/:id', authed, async (req) =>
     clients.update(actorOf(req), req.params.id, req.body),
   );
+
+  registerDocumentationRoutes(app, {
+    db,
+    authed,
+    storage: storage ?? new LocalStorage(join(resolve(config.ATLAS_DATA_DIR), 'attachments')),
+    maxUploadBytes,
+  });
 
   // The password vault and BitLocker collection stay closed until M2.
   app.all('/api/vault/*', async () => {

@@ -16,7 +16,9 @@ function watch(page: Page) {
 }
 async function accessible(page: Page) {
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze();
-  expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
+  expect(
+    results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target} — ${n.failureSummary}`).join(', ')}`),
+  ).toEqual([]);
 }
 async function mfaSecretFrom(page: Page) {
   const key = await page.getByText(/^([A-Z2-7]{4} )+[A-Z2-7]{1,4}$/).innerText();
@@ -85,6 +87,122 @@ test.describe.serial('first run to restricted client access', () => {
     await page.screenshot({ path: 'test-results/screens/dashboard.png' });
   });
 
+  test('owner documents an asset from a template, edits it, and compares versions', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .first()
+      .click();
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Assets' }).click();
+    await page.getByRole('button', { name: 'Add asset' }).first().click();
+    await page.getByRole('button', { name: /Configurations/ }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^Name/).fill('HDG-FW-01');
+    await dialog.getByLabel('Type').selectOption('Firewall');
+    await dialog.getByLabel('IP address').fill('10.20.0.999');
+    await dialog.getByRole('button', { name: 'Create asset' }).click();
+    await expect(dialog.getByText(/must be an IP address/)).toBeVisible();
+    await dialog.getByLabel('IP address').fill('10.20.0.1');
+    await dialog.getByLabel('Management URL').fill('https://10.20.0.1');
+    await accessible(page);
+    await dialog.getByRole('button', { name: 'Create asset' }).click();
+    await expect(page.getByRole('heading', { name: /HDG-FW-01/ })).toBeVisible();
+    await expect(page.getByText('10.20.0.1', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('dialog').getByLabel('Serial number').fill('FGT60F-123');
+    await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('FGT60F-123')).toBeVisible();
+    await expect(page.getByText('Version 2', { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Compare' }).click();
+    await expect(page.getByRole('dialog').getByText('+ Serial number: FGT60F-123')).toBeVisible();
+    await accessible(page);
+    await page.getByRole('dialog').getByRole('button', { name: 'Close' }).first().click();
+
+    await page
+      .getByLabel('Choose files to upload')
+      .setInputFiles({ name: 'rack-diagram.txt', mimeType: 'text/plain', buffer: Buffer.from('Rack A, U12') });
+    await expect(page.getByRole('link', { name: /rack-diagram\.txt/ }).first()).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/asset.png', fullPage: true });
+  });
+
+  test('owner writes a runbook, links it to the asset, and finds it with Ctrl+K', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .first()
+      .click();
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Documents' }).click();
+    await page.getByRole('button', { name: 'New document' }).first().click();
+    await page.getByRole('button', { name: /Runbook \/ SOP/ }).click();
+    await page.getByLabel('Title').fill('Internet outage response');
+    const editor = page.getByRole('textbox', { name: 'Document content' });
+    await editor.locator('p').last().click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Call the fiber carrier before rebooting the firewall.');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Save document' }).click();
+    await expect(page.getByRole('heading', { name: 'Internet outage response' })).toBeVisible();
+    await expect(page.getByText('Call the fiber carrier before rebooting the firewall.')).toBeVisible();
+    // The sentence went at the end, after the template's last section.
+    await expect(page.getByRole('document', { name: 'Document content' }).locator('p').last()).toHaveText(
+      'Call the fiber carrier before rebooting the firewall.',
+    );
+
+    await page.getByRole('button', { name: 'Link' }).click();
+    await page.getByRole('dialog').getByPlaceholder('Type a name…').fill('HDG');
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /HDG-FW-01/ })
+      .click();
+    await expect(page.getByRole('link', { name: /HDG-FW-01/ })).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/document.png', fullPage: true });
+
+    await page.keyboard.press('Control+k');
+    await page.getByRole('combobox').fill('fiber carr');
+    await expect(page.getByRole('option', { name: /Internet outage response/ })).toBeVisible();
+    await page.getByRole('combobox').fill('10.20.0.1');
+    await expect(page.getByRole('option', { name: /HDG-FW-01/ })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: /HDG-FW-01/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Internet outage response/ })).toBeVisible();
+  });
+
+  test('admin adds a custom asset layout and writes an MSP knowledge-base article', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Asset layouts');
+    await expect(page.getByText('SSL certificates')).toBeVisible();
+    await page.getByRole('button', { name: 'New layout' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('Door access');
+    await dialog.getByRole('button', { name: 'Add field' }).click();
+    await dialog.getByLabel('Field 1 label').fill('Panel model');
+    await dialog.getByRole('button', { name: 'Add field' }).click();
+    await dialog.getByLabel('Field 2 label').fill('Mode');
+    await dialog.getByLabel('Field 2 type').selectOption('select');
+    await dialog.getByLabel('Field 2 options').fill('Card, PIN, Mobile');
+    await accessible(page);
+    await dialog.getByRole('button', { name: 'Save layout' }).click();
+    await expect(page.getByText('Door access')).toBeVisible();
+
+    await nav(page, 'Knowledge base');
+    await page.getByRole('button', { name: 'New document' }).first().click();
+    await page.getByRole('button', { name: /Blank/ }).click();
+    await page.getByLabel('Title').fill('Firewall hardening standard');
+    await page.getByRole('textbox', { name: 'Document content' }).click();
+    await page.keyboard.type('Disable unused services on every client firewall.');
+    await page.getByRole('button', { name: 'Save document' }).click();
+    await expect(page.getByText('MSP knowledge base').first()).toBeVisible();
+  });
+
   test('client viewer replaces the temporary password and sees only Harbor, read-only', async ({ page }) => {
     watch(page);
     await page.goto('/');
@@ -108,6 +226,21 @@ test.describe.serial('first run to restricted client access', () => {
     ).toHaveCount(0);
     await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
     await expect(page.getByRole('button', { name: 'Edit client' })).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Assets' }).click();
+    await expect(page.getByRole('button', { name: 'Add asset' })).toHaveCount(0);
+    await page.getByRole('link', { name: /HDG-FW-01/ }).click();
+    await expect(page.getByText('FGT60F-123')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Choose files to upload')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Internet outage response/ })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge base' }),
+    ).toHaveCount(0);
+    await page.keyboard.press('Control+k');
+    await page.getByRole('combobox').fill('firewall');
+    await expect(page.getByRole('option', { name: /HDG-FW-01/ })).toBeVisible();
+    await expect(page.getByRole('option', { name: /hardening standard/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await page.goto('/admin/users');
     await expect(page.getByRole('heading', { name: 'Administrators only' })).toBeVisible();
   });

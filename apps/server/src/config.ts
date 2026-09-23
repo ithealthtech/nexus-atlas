@@ -22,6 +22,7 @@ const schema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+  ATLAS_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(1024).default(25),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_DIST: z.string().optional(),
 });

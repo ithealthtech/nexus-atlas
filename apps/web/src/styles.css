@@ -154,3 +154,172 @@
 @utility animate-dialog {
   animation: dialog-in 160ms ease-out;
 }
+
+/* Rich-text content (editor and read-only view). TipTap's own CSS injection is off to keep the CSP strict. */
+.prose-atlas .ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.prose-atlas .ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+.prose-atlas h1 {
+  font-size: 1.6em;
+  font-weight: 650;
+  margin-top: 1.4em;
+  letter-spacing: -0.01em;
+}
+.prose-atlas h2 {
+  font-size: 1.3em;
+  font-weight: 650;
+  margin-top: 1.4em;
+}
+.prose-atlas h3 {
+  font-size: 1.1em;
+  font-weight: 650;
+  margin-top: 1.2em;
+}
+.prose-atlas h4 {
+  font-weight: 650;
+  margin-top: 1em;
+}
+.prose-atlas .ProseMirror > :first-child {
+  margin-top: 0;
+}
+.prose-atlas ul {
+  list-style: disc;
+  padding-left: 1.5em;
+}
+.prose-atlas ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+}
+.prose-atlas li > p {
+  margin: 0.15em 0;
+}
+.prose-atlas ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.25em;
+}
+.prose-atlas ul[data-type='taskList'] li {
+  display: flex;
+  gap: 0.6em;
+  align-items: flex-start;
+  /* Keeps checkbox targets far enough apart for WCAG 2.2 target size. */
+  padding: 0.2em 0;
+}
+.prose-atlas ul[data-type='taskList'] li > label {
+  margin-top: 0.35em;
+  display: inline-flex;
+  user-select: none;
+}
+.prose-atlas ul[data-type='taskList'] li > div {
+  flex: 1;
+}
+.prose-atlas ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+/* A 24px click target (WCAG 2.2) drawn as an 18px box: the inset shadows paint the visible square. */
+.prose-atlas input[type='checkbox'] {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin: -3px;
+  border-radius: 7px;
+  cursor: pointer;
+  background: transparent center / 14px no-repeat;
+  box-shadow:
+    inset 0 0 0 3px var(--surface),
+    inset 0 0 0 4.5px var(--border-strong);
+}
+.prose-atlas input[type='checkbox']:checked {
+  background-color: var(--primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5L20 7'/%3E%3C/svg%3E");
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+.prose-atlas input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -1px;
+}
+.prose-atlas blockquote {
+  border-left: 3px solid var(--primary);
+  background: var(--primary-soft);
+  padding: 0.6em 1em;
+  border-radius: 0 8px 8px 0;
+  color: var(--text-2);
+}
+.prose-atlas code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--surface-3);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.prose-atlas pre {
+  background: #13241e;
+  color: #e3efe8;
+  padding: 0.9em 1.1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.prose-atlas pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+.prose-atlas a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-atlas mark {
+  background: #fdf0b8;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.1em;
+}
+.dark .prose-atlas mark {
+  background: #5a4b12;
+}
+.prose-atlas hr {
+  border: 0;
+  border-top: 1px solid var(--border-strong);
+  margin: 1.5em 0;
+}
+.prose-atlas table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  font-size: 14px;
+}
+.prose-atlas th,
+.prose-atlas td {
+  border: 1px solid var(--border-strong);
+  padding: 0.45em 0.7em;
+  vertical-align: top;
+  text-align: left;
+}
+.prose-atlas th {
+  background: var(--surface-3);
+  font-weight: 600;
+}
+.prose-atlas .selectedCell {
+  background: var(--primary-soft);
+}
+.prose-atlas .tableWrapper {
+  overflow-x: auto;
+}
+.prose-atlas p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

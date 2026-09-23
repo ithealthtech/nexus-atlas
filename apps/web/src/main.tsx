@@ -1,7 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Outlet, RouterProvider, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import {
+  Outlet,
+  RouterProvider,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+} from '@tanstack/react-router';
 import { Loader2, Lock } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { Card, EmptyState, ToastProvider } from '@/components/ui';
@@ -12,7 +19,11 @@ import { sessionKey, useActor, useSession, useSetupNeeded } from '@/lib/session'
 import { applyTheme, storedTheme } from '@/lib/theme';
 import { Dashboard } from '@/pages/Dashboard';
 import { Clients } from '@/pages/Clients';
-import { ClientDetail } from '@/pages/ClientDetail';
+import { ClientLayout } from '@/pages/client/ClientLayout';
+import { ClientOverview } from '@/pages/client/ClientOverview';
+import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
+import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
+import { Layouts } from '@/pages/Layouts';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
 import { Account } from '@/pages/Account';
@@ -92,11 +103,67 @@ function adminOnly(Page: ComponentType) {
 
 const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFound });
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: Gate });
+// Search params used by list pages (folder and layout filters, archived toggle).
+// The rich-text editor is large, so document pages load on first use.
+const documentsPage = (name: 'ClientDocuments' | 'DocumentPage' | 'KnowledgeBase' | 'NewDocument') =>
+  lazyRouteComponent(() => import('@/pages/documents'), name);
+const listSearch = (search: Record<string, unknown>) => ({
+  layout: typeof search.layout === 'string' ? search.layout : undefined,
+  folder: typeof search.folder === 'string' ? search.folder : undefined,
+  archived: search.archived === true || search.archived === 'true' ? true : undefined,
+});
+const newDocSearch = (search: Record<string, unknown>) => ({
+  client: typeof search.client === 'string' ? search.client : undefined,
+  folder: typeof search.folder === 'string' ? search.folder : undefined,
+});
+const clientRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/clients/$clientId',
+  component: ClientLayout,
+});
+const clientRoutes = [
+  createRoute({ getParentRoute: () => clientRoute, path: '/', component: ClientOverview }),
+  createRoute({
+    getParentRoute: () => clientRoute,
+    path: '/assets',
+    component: ClientAssets,
+    validateSearch: listSearch,
+  }),
+  createRoute({
+    getParentRoute: () => clientRoute,
+    path: '/documents',
+    component: documentsPage('ClientDocuments'),
+    validateSearch: listSearch,
+  }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/contacts', component: ClientContacts }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/locations', component: ClientLocations }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
+];
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
-  createRoute({ getParentRoute: () => appRoute, path: '/clients/$clientId', component: ClientDetail }),
+  clientRoute.addChildren(clientRoutes),
+  createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),
+  createRoute({ getParentRoute: () => appRoute, path: '/assets/$assetId', component: AssetDetail }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/documents',
+    component: documentsPage('KnowledgeBase'),
+    validateSearch: listSearch,
+  }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/documents/new',
+    component: documentsPage('NewDocument'),
+    validateSearch: newDocSearch,
+  }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/documents/$documentId',
+    component: documentsPage('DocumentPage'),
+  }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/users', component: adminOnly(Users) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/layouts', component: adminOnly(Layouts) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
 ];

@@ -8,6 +8,20 @@
       "when": 1790202522193,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790204274190,
+      "tag": "0001_pg_trgm",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790204280422,
+      "tag": "0002_documentation",
+      "breakpoints": true
     }
   ]
 }
