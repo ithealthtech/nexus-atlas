@@ -3,8 +3,13 @@ dist/
 bin/
 obj/
 publish*/
+data/
 artifacts/
 tmp/
 .env
-.env.local
+.env.*
+!.env.example
 *.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
