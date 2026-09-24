@@ -1,109 +1,223 @@
+<div align="center">
+
 # MSP Atlas
 
-Self-hosted IT documentation and password manager for MSPs: client workspaces, assets, runbooks, and encrypted credentials, with per-client access for your technicians and the clients you support.
+**Self-hosted IT documentation and password management for managed service providers.**
 
-> **Version 1.0.0.** Documentation, the encrypted password vault, passkeys and two-step sign-in, per-client permissions and groups, a tamper-evident audit log, a REST API, Hudu and CSV import, encrypted nightly backups, a read-only client portal, and Docker or Windows hosting. See the [changelog](CHANGELOG.md), [security model](SECURITY.md), and [roadmap](docs/ROADMAP.md).
+Client workspaces, flexible assets, runbooks, and an encrypted credential vault in one
+application, with per-client access for your technicians and read-only access for the clients
+you support.
 
-![Atlas dashboard](docs/screenshots/dashboard.png)
+[![Version](https://img.shields.io/badge/version-1.0.0-1f6f4a)](CHANGELOG.md)
+[![Runtime](https://img.shields.io/badge/node-22%2B-339933)](#local-development)
+[![Database](https://img.shields.io/badge/PostgreSQL-16-336791)](docs/DEPLOYMENT.md)
+[![Accessibility](https://img.shields.io/badge/WCAG-2.2%20AA-6d28d9)](#verification)
 
-| Asset | Runbook | Password |
-|---|---|---|
-| ![Asset detail with fields, related items, files, and version history](docs/screenshots/asset.png) | ![Runbook linked to its firewall](docs/screenshots/document.png) | ![Password entry with reveal, one-time code, share links, and access history](docs/screenshots/password.png) |
+[**Deployment**](docs/DEPLOYMENT.md) ·
+[Administrator guide](docs/ADMIN-GUIDE.md) ·
+[User guide](docs/USER-GUIDE.md) ·
+[Security model](SECURITY.md) ·
+[Latest release](../../releases/latest)
 
-## Try the demo
+![MSP Atlas dashboard](docs/screenshots/dashboard.png)
 
-`npm run build:demo -w @atlas/web` builds a clickable demo: the real web app answering API calls from sample data in the browser (`apps/web/src/demo`). Nothing is stored, and reloading starts over. Sign-in details are pre-filled and any 6-digit code works. The demo code is left out of the production build.
+</div>
 
-## What works now
+---
 
-- **First-run setup:** a one-time code printed in the server console lets you create the owner account and your company.
-- **Sign-in:**
-  - Passwords are hashed with scrypt.
-  - Two-step verification uses an authenticator app with a QR code, and is required for all staff roles.
-  - Accounts lock after repeated failures.
-  - Sessions are stored in the database; an administrator can revoke them, and changing a password signs out other sessions.
-- **People & access:**
-  - Six roles: Owner, Admin, Technician, Read-only technician, Client editor, and Client viewer.
-  - Each client can be set to *none / read / edit / edit + passwords*, with an "every client" baseline for staff. Groups give a team access to a set of clients in one place.
-  - Changes apply to live sessions immediately.
-- **Clients:** create, edit, search, and filter. Clients a user can't access look exactly like missing ones. Each client has its own workspace with Overview, Assets, Documents, Contacts, Locations, and Activity tabs.
-- **Assets:** 13 built-in layouts (flexible-asset templates): configurations, networks, domains, SSL certificates, licenses, applications, backups, email, internet/WAN, wireless, printers, vendors, and remote access.
-  - Administrators can add their own layouts with 11 field types, including IP address or subnet, URL, date, and choice.
-  - Every field is validated on the server.
-- **Documents:**
-  - A knowledge base for each client, plus an internal MSP knowledge base that client users never see. Folders and templates (runbook/SOP, onboarding checklist) are included.
-  - A rich-text editor with headings, checklists, tables, code blocks, and links. Content is sanitized on the server, and links are limited to http(s), mailto, and tel.
-  - Status and review dates.
-- **History:** every save of an asset or document is a new version. You can compare versions line by line and restore an old one as a new version. Two people editing the same record can't silently overwrite each other.
-- **Relationships and files:**
-  - Link assets, documents, contacts, and locations to each other.
-  - Attach files by drag and drop. Only images that pass a content check display inline; everything else downloads, with a sandboxing CSP.
-- **Contacts and locations:** each client can mark one primary contact and one primary location.
-- **Password vault:**
-  - Logins (username, password, URL, notes, and a TOTP key that shows the live one-time code) and BitLocker recovery keys. Entries link to the assets and runbooks they belong to.
-  - Secrets are encrypted with a separate data key per organization, which is itself encrypted by the master key (envelope encryption). Each ciphertext is bound to its row and field.
-  - The vault needs the "Edit + passwords" access level. Administrators can restrict individual entries to named people.
-  - Every reveal, copy, change, and share goes into an access history. Each client can require a reason before a password is revealed.
-  - A generator (random characters or passphrases), strength and reuse warnings, rotation reminders, and a history of previous passwords. Copied secrets clear from the clipboard after 30 seconds.
-  - **One-time share links:** the password is encrypted in your browser, and the key lives only in the link's `#fragment`, so the server stores ciphertext it can't read. Links expire and have a view limit, which holds even if two people open the link at once.
-- **Search:** Ctrl+K from anywhere finds clients, assets (including by IP or serial number), document text, contacts, and locations. It matches as you type and returns only what you're allowed to see.
-- **Security log and activity:** sign-ins, failures, lockouts, and account changes for administrators. Separate activity feeds show documentation changes for each item, each client, and overall.
-- **Data in and out** ([details](docs/DATA.md)):
-  - A REST API with scoped API keys and an OpenAPI description.
-  - Import from Hudu (companies, layouts, assets, articles, and passwords; re-runs update instead of duplicating), and CSV import with a dry run.
-  - Per-client zip exports, and migration from the 0.2 prototype.
-- **Branding and client portal:** your logo, accent colour, and a welcome message. Client accounts can reveal only the passwords you share with them.
-- **Interface:** light and dark themes, mobile layout, keyboard support, and WCAG 2.2 AA checks in end-to-end tests.
+## The idea
 
-## Run it
+An MSP's documentation and its passwords belong together: the firewall runbook is useless
+without the firewall's admin credential, and the credential is dangerous without a record of
+who used it and why. Most MSPs split them across a documentation tool and a password manager,
+or keep both in a hosted product whose data they don't control.
 
-**Production (Docker, Linux):** see [Deployment](docs/DEPLOYMENT.md). The short version:
+Atlas keeps them in one place you host yourself. Documentation is structured (assets built
+from layouts, linked to runbooks, contacts, and locations) and every change is versioned. The
+vault uses server-side envelope encryption: each organization has its own data key, wrapped by
+a master key that never enters the database. Every reveal, copy, change, and share is recorded.
+
+Three consequences worth knowing before you deploy:
+
+- **The master key is the vault.** Lose it and passwords and backups can't be decrypted; store
+  it with the database and a stolen backup gives everything away. Keep it separately.
+- **Administrators can read every password.** Atlas is not end-to-end encrypted like a personal
+  password manager. It records every read instead, and lets you restrict entries to named people.
+- **Clients a person can't access look exactly like missing ones.** Guessing another client's
+  ID returns not-found, never forbidden.
+
+## Product tour
+
+### Client workspace
+
+Each client has its own assets, documents, passwords, contacts, locations, and activity. Search
+with Ctrl+K finds clients, assets (including by IP address or serial number), document text,
+and contacts, and returns only what you're allowed to see.
+
+![Asset detail with fields, related items, files, and version history](docs/screenshots/asset.png)
+
+### Runbooks and knowledge base
+
+A rich-text editor with checklists, tables, and code blocks, templates for runbooks and
+onboarding, review dates, and line-by-line version comparison. Runbooks link to the assets they
+describe.
+
+![Runbook linked to its firewall](docs/screenshots/document.png)
+
+### Password vault
+
+Logins with live one-time codes, BitLocker recovery keys, a generator, strength and reuse
+warnings, rotation reminders, restricted entries, required reasons, and one-time share links
+encrypted in the browser.
+
+![Password entry with reveal, one-time code, share links, and access history](docs/screenshots/password.png)
+
+### People and access
+
+Six roles, per-client access levels, and groups. Changes apply to people who are already
+signed in, immediately.
+
+![People and access](docs/screenshots/people.png)
+
+## Architecture
+
+```text
+Browser (React, strict CSP)
+        |
+        v
+apps/server  Fastify        Host/Origin/CSRF checks, sessions, MFA, API keys, per-client authorization
+        |
+        +--> services       Documentation, vault (envelope encryption), imports, backups, status
+        |
+        +--> KeyProvider    Master key from ATLAS_MASTER_KEY or a key file, never stored in the database
+        |
+        v
+packages/db  Drizzle        PostgreSQL 16, versioned migrations applied automatically at startup
+        +
+data/attachments            Uploaded files, outside the web root under random names
+```
+
+| Path | What it is |
+| --- | --- |
+| `apps/server` | Fastify API, background jobs, and the command-line tools (backup, restore, migration) |
+| `apps/web` | React, Vite, TanStack Router and Query, Tailwind |
+| `packages/shared` | zod schemas, roles, access levels, and API types shared by server and web |
+| `packages/db` | Drizzle schema and SQL migrations |
+| `deploy` | Docker Compose with Caddy (automatic HTTPS) and the Windows service installer |
+| `e2e` | Playwright browser tests with axe accessibility checks |
+| `legacy` | The 0.2 prototype, kept for `npm run migrate-legacy` |
+| `integrations/bitlocker` | BitLocker collector prototype, the reference for the post-v1 RMM collector |
+
+Full detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Security model
+
+Every browser request runs these checks, in order:
+
+1. The `Host` and `Origin` match `PUBLIC_URL`, and cross-site requests are refused.
+2. The session cookie (`HttpOnly`, `Secure`, `SameSite=Strict`, `__Host-`) resolves to an active,
+   unexpired session, and every change carries the session's CSRF token.
+3. The session has finished its sign-in stages: password, then two-step verification (required
+   for staff), then any required password change.
+4. The person's effective level for the client — the highest of their baseline, grants, and
+   groups, capped by their role — allows the action.
+5. Passwords additionally need _edit + passwords_, pass restriction lists, and ask for a reason
+   when the client requires one. The reveal is recorded.
+
+API keys replace steps 2 and 3 with a hashed bearer key limited to its scopes and to the
+documentation and vault endpoints. The security log is hash-chained by database triggers with a
+checkpoint signed by a key derived from the master key.
+
+Full detail in [SECURITY.md](SECURITY.md) and [docs/IDENTITY.md](docs/IDENTITY.md).
+
+## Install
+
+**Docker (Linux)** — set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD`, and
+`ATLAS_MASTER_KEY` in `.env`, then:
 
 ```bash
-cp .env.example .env    # set PUBLIC_URL, ATLAS_DOMAIN, POSTGRES_PASSWORD, ATLAS_MASTER_KEY
 docker compose -f deploy/docker-compose.yml --env-file .env up -d
 docker compose -f deploy/docker-compose.yml logs app | grep "setup code"
 ```
 
-**Production (Windows Server):** download the Windows package from the [releases](../../releases) page (or build from source), then run `deploy\windows\Install-Atlas.ps1` as administrator. See [Deployment → Windows Server](docs/DEPLOYMENT.md#windows-server).
+**Windows Server** — extract the Windows package from the
+[latest release](../../releases/latest), then from an elevated prompt:
 
-**Development** (Node 22+, PostgreSQL 16):
+```powershell
+.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
+```
 
-```bash
+Open `PUBLIC_URL` and enter the setup code to create the owner account. No default
+administrator or password exists. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Local development
+
+Node.js 22 or later and PostgreSQL 16 are required.
+
+```powershell
 npm install
-echo "DATABASE_URL=postgres://postgres@127.0.0.1:5432/atlas" > .env
-npm run build            # builds the shared packages once
-npm run dev              # API on :4318, web app with hot reload on :5173
+Set-Content .env "DATABASE_URL=postgres://postgres@127.0.0.1:5432/atlas"
+npm run build
+npm run dev
 ```
 
-## Project layout
+The API runs on `http://127.0.0.1:4318` and the web app with hot reload on
+`http://127.0.0.1:5173`. In development a master key file is created in `data/` on first run.
 
-| Path | What it is |
-|---|---|
-| `apps/server` | Fastify + TypeScript API: identity, authorization, clients, and documentation (assets, layouts, documents, relationships, attachments, search, activity). Serves the built web app. |
-| `apps/web` | React + Vite + TanStack Router/Query + Tailwind. |
-| `packages/shared` | zod schemas, roles and access levels, and API types shared by server and web. |
-| `packages/db` | Drizzle schema and SQL migrations (PostgreSQL). |
-| `e2e` | Playwright end-to-end tests with axe accessibility checks. |
-| `deploy` | Docker Compose (Atlas + PostgreSQL + Caddy HTTPS). |
-| `legacy` | The 0.2 prototype (Node + SQLite), kept for reference and for `npm run migrate-legacy`. |
-| `integrations/bitlocker` | BitLocker collector prototype, the reference for the post-v1 RMM collector. |
+`npm run build:demo -w @atlas/web` builds a clickable demo that answers API calls from sample
+data in the browser. The demo code is left out of the production build.
 
-## Checks
+## Verification
 
-```bash
-npm run lint && npm run typecheck && npm test   # unit and integration tests (needs PostgreSQL; set TEST_DATABASE_URL)
-npm run build && npm run test:e2e               # browser tests (needs E2E_DATABASE_URL pointing at an atlas_e2e database)
+```powershell
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+npm run perf -w @atlas/server
+npm audit --omit=dev
 ```
+
+`npm test` (needs `TEST_DATABASE_URL`) covers sign-in and MFA, per-client isolation, restricted
+passwords, the vault's encryption and access history, audit-chain tamper detection, imports,
+exports, backup and restore round trips, and request hardening.
+
+The Playwright gate (needs `E2E_DATABASE_URL`) walks first-run setup through every workflow and
+checks WCAG 2.2 AA with axe on every screen in light, dark, and phone layouts, plus a
+keyboard-only walkthrough. `npm run perf` times the busiest requests against a 2,000-client MSP.
 
 CI runs all of these on every pull request, plus a Windows build and a Docker image build.
+Results for each milestone are in [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-## Docs
+## Current boundary
 
-- [Administrator guide](docs/ADMIN-GUIDE.md) and [user guide](docs/USER-GUIDE.md)
-- [Deployment](docs/DEPLOYMENT.md): Docker, Windows, configuration, the master key, backups and restore, and upgrades.
-- [Architecture](docs/ARCHITECTURE.md): how requests, authorization, and encryption work.
-- [Identity and permissions](docs/IDENTITY.md)
-- [Data in and out](docs/DATA.md): the API, Hudu and CSV import, exports, migrating from 0.2, branding, and the client portal.
-- [BitLocker integration status](docs/BITLOCKER.md)
-- [Security](SECURITY.md), [changelog](CHANGELOG.md), [roadmap](docs/ROADMAP.md), and [verification log](docs/VERIFICATION.md)
+Version 1.0.0 covers documentation, the vault, accounts and security, the REST API, Hudu and CSV
+import, per-client exports, encrypted backups with verified restore, the system status page, a
+read-only client portal, and Docker or Windows hosting.
+
+Not in 1.0: single sign-on with Microsoft Entra ID, PSA and RMM integrations (ConnectWise first),
+a browser autofill extension, IT Glue and ITBoost importers, and multi-tenant cloud hosting. See
+[docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Documentation
+
+| Operators | Users | Developers |
+| --- | --- | --- |
+| [Deployment](docs/DEPLOYMENT.md) | [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) |
+| [Administrator guide](docs/ADMIN-GUIDE.md) | [Data in and out](docs/DATA.md) | [Identity and permissions](docs/IDENTITY.md) |
+| [Security model](SECURITY.md) | [Changelog](CHANGELOG.md) | [Verification log](docs/VERIFICATION.md) |
+| [Roadmap](docs/ROADMAP.md) | | [BitLocker integration](docs/BITLOCKER.md) |
+
+Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [SECURITY.md](SECURITY.md), and the
+[administrator guide](docs/ADMIN-GUIDE.md) before storing client credentials.
+
+## Security
+
+Report vulnerabilities privately through [SECURITY.md](SECURITY.md) — never a public issue.
+
+## Trademarks
+
+Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft,
+Microsoft 365, Windows, Windows Hello, and BitLocker are trademarks of the Microsoft group of
+companies. MSP Atlas is not affiliated with or endorsed by any of them.

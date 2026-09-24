@@ -1,10 +1,21 @@
-# Security
+# Security policy
 
 MSP Atlas holds client documentation and credentials, so its security model is written down here. The details of each mechanism are in [Identity and permissions](docs/IDENTITY.md), [Architecture](docs/ARCHITECTURE.md), and [Deployment](docs/DEPLOYMENT.md).
 
+## Supported versions
+
+Only the latest stable MSP Atlas release receives security fixes. The 0.1 and 0.2 prototypes in `legacy/` and the clickable demo build are not supported for production use.
+
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately through GitHub's **Report a vulnerability** (Security → Advisories) on this repository, rather than in a public issue. Include the version, what you did, and what happened. You'll get an acknowledgement within three working days.
+Do not disclose a suspected vulnerability in a public issue. Use GitHub's private vulnerability reporting feature for this repository (Security → Report a vulnerability) and include the affected version, impact, and reproducible steps. You'll get an acknowledgement within three working days.
+
+## Security expectations
+
+- Never commit `.env` files, master keys, credentials, API keys, client records, databases, backups, logs, or production screenshots.
+- Use synthetic `.example`/`.test` domains and reserved 555 telephone numbers in tests and documentation.
+- Rotate any credential immediately if it may have been exposed, and rotate the master key if a key file may have been.
+- Review `npm audit --omit=dev` and the CI results before every release.
 
 ## What Atlas protects, and from whom
 
