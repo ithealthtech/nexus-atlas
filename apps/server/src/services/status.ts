@@ -128,7 +128,7 @@ export class StatusService {
         'backups',
         'ok',
         'Backups are current',
-        `The last backup finished ${ago(now.getTime() - Date.parse(lastSuccess.createdAt))}.`,
+        `The last backup finished ${ago(now.getTime() - Date.parse(lastSuccess.finishedAt ?? lastSuccess.createdAt))}.`,
       );
     if (missingFile)
       add(

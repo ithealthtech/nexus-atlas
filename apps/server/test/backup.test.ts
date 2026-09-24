@@ -253,6 +253,14 @@ describe('backup and restore', () => {
     expect(status.checks.find((c: { id: string }) => c.id === 'backups').detail).toBe(
       'The last backup finished less than a minute ago.',
     );
+    // A long backup: the wording follows when it finished, not when it started.
+    await t.handle.db.execute(
+      sql`update backup_runs set created_at = now() - interval '5 hours', finished_at = now() - interval '3 hours'`,
+    );
+    const later = (await owner.call('GET', '/api/status')).data;
+    expect(later.checks.find((c: { id: string }) => c.id === 'backups').detail).toBe(
+      'The last backup finished 3 hours ago.',
+    );
   });
 
   it('describes backup ages in words', async () => {

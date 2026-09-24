@@ -1086,7 +1086,7 @@ on('GET', '/status', (): SystemStatus => ({
       id: 'backups',
       level: 'ok',
       title: 'Backups are current',
-      detail: `The last backup finished ${relativeTime(backupRuns[0]!.createdAt)}.`,
+      detail: `The last backup finished ${relativeTime(backupRuns[0]!.finishedAt ?? backupRuns[0]!.createdAt)}.`,
     },
   ],
   database: { version: '16.4', sizeBytes: 187_000_000, migrationsApplied: 8, migrationsAvailable: 8 },
