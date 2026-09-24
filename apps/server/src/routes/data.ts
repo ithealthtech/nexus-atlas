@@ -112,10 +112,16 @@ export function registerDataRoutes(
         storage: deps.storage,
         vault,
       });
-      return reply
-        .header('Content-Type', 'application/zip')
-        .header('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`)
-        .send(Buffer.from(data));
+      return (
+        reply
+          .header('Content-Type', 'application/zip')
+          // An ASCII fallback plus the UTF-8 name: client names can use any script, but headers can't.
+          .header(
+            'Content-Disposition',
+            `attachment; filename="${filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '')}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+          )
+          .send(Buffer.from(data))
+      );
     },
   );
 }

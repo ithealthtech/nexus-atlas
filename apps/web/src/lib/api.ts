@@ -60,7 +60,9 @@ export function download(path: string, filename: string): Promise<void> {
     }
     const url = URL.createObjectURL(await response.blob());
     // Prefer the server's file name (for example the client's name and the date).
-    const named = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1];
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+    const named = encoded ? decodeURIComponent(encoded) : /filename="([^"]+)"/.exec(disposition)?.[1];
     const link = Object.assign(document.createElement('a'), { href: url, download: named ?? filename });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
