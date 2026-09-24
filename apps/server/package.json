@@ -8,7 +8,8 @@
     "build": "tsc -b",
     "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
     "start": "node dist/index.js",
-    "rewrap-keys": "node dist/cli/rewrap-keys.js"
+    "rewrap-keys": "node dist/cli/rewrap-keys.js",
+    "migrate-legacy": "node dist/cli/migrate-legacy.js"
   },
   "dependencies": {
     "@atlas/db": "1.0.0-dev",
@@ -19,6 +20,7 @@
     "@simplewebauthn/server": "^14.0.2",
     "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
+    "fflate": "^0.8.3",
     "nodemailer": "^10.0.10",
     "zod": "^4.6.5"
   },

@@ -541,6 +541,8 @@ export const passwords = pgTable(
     rotationDays: integer('rotation_days'),
     changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
     restricted: boolean('restricted').notNull().default(false),
+    // Shown to client accounts (read-only) in the client portal.
+    clientVisible: boolean('client_visible').notNull().default(false),
     version: integer('version').notNull().default(1),
     archived: boolean('archived').notNull().default(false),
     createdBy: createdBy(),
@@ -641,4 +643,70 @@ export const vaultAudit = pgTable(
     createdAt: created(),
   },
   (t) => [index('vault_audit_item').on(t.passwordId, t.createdAt), index('vault_audit_org').on(t.orgId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------- M3b: API, imports
+
+// REST API keys. Only a SHA-256 hash of the secret is stored; the prefix identifies the key in lists and logs.
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    // The key acts with this user's access, limited further by its scopes.
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    prefix: text('prefix').notNull(),
+    secretHash: text('secret_hash').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    lastUsedIp: text('last_used_ip').notNull().default(''),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('api_keys_prefix').on(t.prefix), index('api_keys_org').on(t.orgId)],
+);
+
+// Maps records from another system (Hudu, IT Glue, 0.2) to Atlas records, so re-running an import updates instead of duplicating.
+export const externalRefs = pgTable(
+  'external_refs',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    source: text('source').notNull(),
+    kind: text('kind').notNull(),
+    externalId: text('external_id').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdAt: created(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.source, t.kind, t.externalId] })],
+);
+
+export const importJobs = pgTable(
+  'import_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    source: text('source').notNull(),
+    status: text('status').notNull().default('running'),
+    // Counts per kind: { clients: { created, updated, failed }, ... }.
+    counts: jsonb('counts').notNull().default({}),
+    messages: jsonb('messages').$type<string[]>().notNull().default([]),
+    startedBy: uuid('started_by').references(() => users.id, { onDelete: 'set null' }),
+    startedByName: text('started_by_name').notNull(),
+    createdAt: created(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('import_jobs_org').on(t.orgId, t.createdAt),
+    check('import_jobs_status_check', sql`${t.status} in ('running','done','failed')`),
+  ],
 );

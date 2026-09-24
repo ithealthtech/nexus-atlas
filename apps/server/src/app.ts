@@ -5,7 +5,7 @@ import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ZodError } from 'zod';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { schema, type DatabaseHandle } from '@atlas/db';
 import {
   changePasswordSchema,
@@ -31,6 +31,9 @@ import { MailService, smtpTransport, type MailTransport } from './services/mail.
 import { SettingsService } from './services/settings.js';
 import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerDataRoutes } from './routes/data.js';
+import { ApiKeyService } from './services/api-keys.js';
+import { openApiSpec } from './openapi.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -46,6 +49,8 @@ export interface AppOptions {
   storage?: FileStorage;
   /** Replaces SMTP delivery (tests capture messages instead of sending them). */
   mailTransport?: MailTransport;
+  /** Replaces fetch for Hudu imports (tests use a fake Hudu). */
+  huduFetch?: typeof fetch;
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
@@ -91,8 +96,16 @@ export async function buildApp({
   setupCode = '',
   storage,
   mailTransport = smtpTransport,
+  huduFetch,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
+    // The versioned REST API (/api/v1/…) serves the same routes as the app, authenticated by API key.
+    rewriteUrl(req) {
+      const url = req.url ?? '/';
+      if (!url.startsWith('/api/v1/')) return url;
+      (req as { atlasApi?: boolean }).atlasApi = true;
+      return `/api/${url.slice('/api/v1/'.length)}`;
+    },
     logger:
       config.LOG_LEVEL === 'silent'
         ? false
@@ -111,6 +124,7 @@ export async function buildApp({
   const mail = new MailService(settings, mailTransport);
   const account = new AccountSecurity(db, identity, mail, { publicOrigin: config.publicOrigin, rpName: 'MSP Atlas' });
   const audit = new AuditService(db, keys, settings);
+  const apiKeys = new ApiKeyService(db);
   const limiter = failureLimiter(10, 15 * 60_000);
   const cookieName = config.secureCookies ? '__Host-atlas_session' : 'atlas_session';
   const cookieOptions = { httpOnly: true, sameSite: 'strict' as const, path: '/', secure: config.secureCookies };
@@ -197,6 +211,33 @@ export async function buildApp({
       : { id: req.hostname.replace(/:\d+$/, ''), origin: new URL(`${req.protocol}://${req.host}`).origin };
 
   async function authenticate(req: FastifyRequest) {
+    if ((req.raw as { atlasApi?: boolean }).atlasApi) {
+      const key = await apiKeys.authenticate(req.headers.authorization, req.method, req.url, req.ip);
+      const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, key.user.orgId));
+      const at = new Date();
+      req.session = {
+        hash: '',
+        session: {
+          tokenHash: '',
+          id: key.keyId,
+          userId: key.user.id,
+          csrf: '',
+          mfaVerified: true,
+          reauthAt: null,
+          challenge: null,
+          createdAt: at,
+          lastSeenAt: at,
+          ip: req.ip,
+          userAgent: String(req.headers['user-agent'] ?? ''),
+        },
+        user: key.user,
+        // Audit and activity entries name the key as well as the person it acts for.
+        actor: { ...key.actor, name: `${key.actor.name} (API key: ${key.keyName})`.slice(0, 120) },
+        stage: 'active',
+        organization: { id: org!.id, name: org!.name },
+      };
+      return;
+    }
     const context = await identity.resolve(req.cookies[cookieName]);
     if (!context) throw new HttpError(401, 'Sign in to continue.', 'session');
     if (
@@ -433,10 +474,11 @@ export async function buildApp({
     clients.update(actorOf(req), req.params.id, req.body),
   );
 
+  const files = storage ?? new LocalStorage(join(resolve(config.ATLAS_DATA_DIR), 'attachments'));
   registerDocumentationRoutes(app, {
     db,
     authed,
-    storage: storage ?? new LocalStorage(join(resolve(config.ATLAS_DATA_DIR), 'attachments')),
+    storage: files,
     maxUploadBytes,
   });
 
@@ -462,6 +504,39 @@ export async function buildApp({
     notifier.start();
     app.addHook('onClose', async () => notifier.stop());
   }
+
+  // ---- API keys, branding, imports, exports ----
+  app.get('/api/openapi.json', async () => openApiSpec(config.publicOrigin));
+  app.get('/api/api-keys', authed, async (req) => apiKeys.list(actorOf(req)));
+  app.post('/api/api-keys', authed, async (req, reply) => {
+    recent(req);
+    return reply.status(201).send(await apiKeys.create(actorOf(req), req.body, req.ip));
+  });
+  app.delete<{ Params: { id: string } }>('/api/api-keys/:id', authed, async (req) => {
+    await apiKeys.revoke(actorOf(req), req.params.id, req.ip);
+    return { ok: true };
+  });
+  // Public: the sign-in page shows the logo and accent colour too.
+  app.get('/api/branding', async () => {
+    const [org] = await db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs).limit(1);
+    return org
+      ? { name: org.name, ...(await settings.branding(org.id)) }
+      : { name: 'MSP Atlas', accent: null, logo: null, portalWelcome: '' };
+  });
+  app.put('/api/branding', authed, async (req) => {
+    requireAdmin(actorOf(req));
+    const saved = await settings.saveBranding(actorOf(req).orgId, req.body);
+    await db.insert(schema.securityEvents).values({
+      orgId: actorOf(req).orgId,
+      userId: actorOf(req).id,
+      actor: actorOf(req).name,
+      action: 'Branding changed',
+      detail: saved.accent ?? 'Default colour',
+      ip: req.ip,
+    });
+    return saved;
+  });
+  registerDataRoutes(app, { db, authed, recent, settings, keys, vault, storage: files, huduFetch });
 
   app.all('/api/*', async () => {
     throw new HttpError(404, 'Not found.');

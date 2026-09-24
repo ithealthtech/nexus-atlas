@@ -52,7 +52,12 @@ export class VaultService {
     return allowedRestricted(scope, ids);
   }
 
-  private async load(scope: Scope, id: string) {
+  /** Client accounts (the portal) see only items shared with the client, read-only. */
+  private isPortal(scope: Scope) {
+    return !ROLE_INFO[scope.actor.role].staff;
+  }
+
+  private async load(scope: Scope, id: string, portalOk = false) {
     const [row] = isUuid(id)
       ? await scope.db
           .select({
@@ -67,7 +72,13 @@ export class VaultService {
           .where(and(eq(schema.passwords.id, id), eq(schema.passwords.orgId, scope.actor.orgId)))
       : [];
     // Anyone without vault access to the client, or outside a restricted item's list, gets the same 404.
-    if (!row || (await scope.level(row.p.clientId)) !== 'edit_passwords') throw notFound();
+    if (!row) throw notFound();
+    if (this.isPortal(scope)) {
+      if (!portalOk || !row.p.clientVisible || row.p.restricted || (await scope.level(row.p.clientId)) === 'none')
+        throw notFound();
+      return row;
+    }
+    if ((await scope.level(row.p.clientId)) !== 'edit_passwords') throw notFound();
     if (row.p.restricted && !this.isAdmin(scope) && !(await this.allowedRestricted(scope, [id])).has(id))
       throw notFound();
     return row;
@@ -76,7 +87,7 @@ export class VaultService {
   /** Summary for links and search results, or null when the actor can't use this item. */
   async ref(scope: Scope, id: string) {
     try {
-      const row = await this.load(scope, id);
+      const row = await this.load(scope, id, true);
       return {
         clientId: row.p.clientId,
         clientName: row.clientName,
@@ -129,6 +140,7 @@ export class VaultService {
       changedAt: r.p.changedAt.toISOString(),
       rotationDue: due,
       restricted: r.p.restricted,
+      clientVisible: r.p.clientVisible,
       version: r.p.version,
       archived: r.p.archived,
       updatedAt: r.p.updatedAt.toISOString(),
@@ -153,6 +165,7 @@ export class VaultService {
 
   // ---------- list and read ----------
   async list(scope: Scope, filter: { clientId?: string; archived?: boolean }): Promise<PasswordView[]> {
+    if (this.isPortal(scope)) return this.portalList(scope, filter.clientId);
     let ids = await this.vaultClients(scope);
     if (filter.clientId) {
       const level = await scope.require(filter.clientId, 'read', 'Client');
@@ -192,9 +205,37 @@ export class VaultService {
     return visible.map((r) => this.view(r, reuse));
   }
 
+  /** Portal: passwords shared with the client accounts of clients the actor can read. */
+  private async portalList(scope: Scope, clientId?: string): Promise<PasswordView[]> {
+    const ids = clientId ? [clientId] : await scope.readableClientIds();
+    if (clientId) await scope.require(clientId, 'read', 'Client');
+    if (!ids.length) return [];
+    const rows = await scope.db
+      .select({
+        p: schema.passwords,
+        clientName: schema.clients.name,
+        requireReason: schema.clients.requireRevealReason,
+        editor: editor.name,
+      })
+      .from(schema.passwords)
+      .innerJoin(schema.clients, eq(schema.clients.id, schema.passwords.clientId))
+      .leftJoin(editor, eq(editor.id, schema.passwords.updatedBy))
+      .where(
+        and(
+          eq(schema.passwords.orgId, scope.actor.orgId),
+          inArray(schema.passwords.clientId, ids),
+          eq(schema.passwords.archived, false),
+          eq(schema.passwords.clientVisible, true),
+          eq(schema.passwords.restricted, false),
+        ),
+      )
+      .orderBy(asc(sql`lower(${schema.passwords.name})`));
+    return rows.map((r) => this.view(r, new Map()));
+  }
+
   async get(scope: Scope, id: string): Promise<PasswordView> {
-    const row = await this.load(scope, id);
-    return this.view(row, await this.reuseCounts(scope, [row.p]));
+    const row = await this.load(scope, id, true);
+    return this.view(row, this.isPortal(scope) ? new Map() : await this.reuseCounts(scope, [row.p]));
   }
 
   // ---------- write ----------
@@ -222,6 +263,7 @@ export class VaultService {
       strength: body.kind === 'bitlocker' ? 4 : passwordStrength(secret),
       rotationDays: body.rotationDays,
       restricted: body.restricted,
+      clientVisible: body.clientVisible,
       createdBy: scope.actor.id,
       updatedBy: scope.actor.id,
     };
@@ -265,6 +307,7 @@ export class VaultService {
       url: body.url,
       rotationDays: body.rotationDays,
       restricted: body.restricted,
+      clientVisible: body.clientVisible,
       version: p.version + 1,
       updatedBy: scope.actor.id,
       updatedAt: new Date(),
@@ -338,7 +381,7 @@ export class VaultService {
 
   // ---------- reveal ----------
   async reveal(scope: Scope, id: string, input: unknown, ip: string): Promise<RevealResult> {
-    const { p, requireReason } = await this.load(scope, id);
+    const { p, requireReason } = await this.load(scope, id, true);
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
@@ -433,6 +476,28 @@ export class VaultService {
     });
     await this.audit(scope, p, 'Changed who may use it', `${userIds.length} people, ${groupIds.length} groups`, ip);
     return { userIds, groupIds };
+  }
+
+  // ---------- export ----------
+  /** Decrypted secrets for a client's passwords, for an administrator's export. Each entry is audited. */
+  async exportSecrets(scope: Scope, clientId: string, ip: string) {
+    if (!this.isAdmin(scope)) throw new HttpError(403, 'Only administrators can export decrypted passwords.');
+    const org = scope.actor.orgId;
+    const rows = await scope.db
+      .select()
+      .from(schema.passwords)
+      .where(and(eq(schema.passwords.orgId, org), eq(schema.passwords.clientId, clientId)));
+    const out: { id: string; secret: string; notes: string; totp: string }[] = [];
+    for (const p of rows) {
+      out.push({
+        id: p.id,
+        secret: await this.keys.open(org, p.secret, aad(p.id, 'secret')),
+        notes: p.notes ? await this.keys.open(org, p.notes, aad(p.id, 'notes')) : '',
+        totp: p.totp ? await this.keys.open(org, p.totp, aad(p.id, 'totp')) : '',
+      });
+      await this.audit(scope, p, 'Exported (decrypted)', '', ip);
+    }
+    return out;
   }
 
   // ---------- audit ----------

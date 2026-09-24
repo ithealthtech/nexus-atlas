@@ -29,6 +29,7 @@ const base = {
   totp: totpSecret.default(''),
   rotationDays: z.number().int().min(1).max(3650).nullable().default(null),
   restricted: z.boolean().default(false),
+  clientVisible: z.boolean().default(false),
 };
 
 export const createPasswordSchema = z
@@ -46,6 +47,7 @@ export const updatePasswordSchema = z.object({
   totp: totpSecret.optional(),
   rotationDays: z.number().int().min(1).max(3650).nullable().optional(),
   restricted: z.boolean().optional(),
+  clientVisible: z.boolean().optional(),
   version: z.number().int().positive(),
 });
 export const revealSchema = z.object({
@@ -90,6 +92,7 @@ export interface PasswordView {
   changedAt: string;
   rotationDue: string | null;
   restricted: boolean;
+  clientVisible: boolean;
   version: number;
   archived: boolean;
   updatedAt: string;

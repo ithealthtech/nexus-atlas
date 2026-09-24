@@ -49,7 +49,10 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function startApp(env: Record<string, string> = {}): Promise<TestApp> {
+export async function startApp(
+  env: Record<string, string> = {},
+  extra: { huduFetch?: typeof fetch } = {},
+): Promise<TestApp> {
   const outbox: TestApp['outbox'] = [];
   const database = await freshDatabase();
   const config = loadConfig({
@@ -64,6 +67,7 @@ export async function startApp(env: Record<string, string> = {}): Promise<TestAp
     database: database.handle,
     keys: staticKeyProvider([randomBytes(32)]),
     setupCode: SETUP_CODE,
+    ...extra,
     mailTransport: async (smtp, message) => {
       if (smtp.host === 'reject.invalid') throw new Error('550 relay denied');
       outbox.push({ ...message, host: smtp.host });
