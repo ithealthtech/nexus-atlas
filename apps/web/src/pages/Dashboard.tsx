@@ -1,4 +1,5 @@
-import { ArrowRight, BookOpen, Building2, CheckCircle2, Circle, Clock, Server } from 'lucide-react';
+import { ArrowRight, BookOpen, Building2, CheckCircle2, Circle, Clock, Info, Server } from 'lucide-react';
+import { useBranding } from '@/lib/branding';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton, Stat } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
 import { ActivityFeed } from '@/components/panels';
@@ -21,6 +22,7 @@ export function Dashboard() {
   const docs = useDocuments({});
   const activity = useActivity({ limit: '8' });
   const expiring = useExpirations(30);
+  const branding = useBranding().data;
   const list = clients.data ?? [];
   const today = new Date().toISOString().slice(0, 10);
   const review = (docs.data ?? [])
@@ -45,8 +47,18 @@ export function Dashboard() {
       <PageHeader
         eyebrow={actor.organization.name}
         title={`${greeting()}, ${actor.name.split(' ')[0]}.`}
-        description="Here's what's happening across your client workspaces."
+        description={
+          actor.isStaff
+            ? "Here's what's happening across your client workspaces."
+            : 'Your documentation, kept by our team.'
+        }
       />
+      {!actor.isStaff && branding?.portalWelcome && (
+        <Card className="mb-7 flex items-start gap-4 p-5">
+          <Info className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+          <p className="text-sm whitespace-pre-line text-text-2">{branding.portalWelcome}</p>
+        </Card>
+      )}
       <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label="Client workspaces"

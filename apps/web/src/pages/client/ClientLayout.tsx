@@ -5,6 +5,8 @@ import { ArrowLeft, Pencil, StickyNote } from 'lucide-react';
 import { LEVEL_INFO, atLeast } from '@atlas/shared';
 import { Badge, Button, Card, EmptyState, Skeleton } from '@/components/ui';
 import { useClient } from '@/lib/queries';
+import { useActor } from '@/lib/session';
+import { ExportButton } from '@/components/ExportButton';
 import { ClientForm, accessTone, statusTone } from '../Clients';
 
 const TABS = [
@@ -21,6 +23,7 @@ export function ClientLayout() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
   const { data: client, isLoading, error } = useClient(clientId);
   const [editing, setEditing] = useState(false);
+  const actor = useActor();
   if (isLoading) return <Skeleton className="h-40" />;
   if (error || !client)
     return (
@@ -62,23 +65,28 @@ export function ClientLayout() {
             </p>
           </div>
         </div>
-        {atLeast(client.access, 'edit') && (
-          <Button variant="secondary" onClick={() => setEditing(true)}>
-            <Pencil /> Edit client
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {actor.isStaff && <ExportButton clientId={client.id} canIncludePasswords={actor.isAdmin} />}
+          {atLeast(client.access, 'edit') && (
+            <Button variant="secondary" onClick={() => setEditing(true)}>
+              <Pencil /> Edit client
+            </Button>
+          )}
+        </div>
       </div>
       <nav aria-label="Client sections" className="mb-7 flex gap-1 overflow-x-auto border-b border-border">
-        {TABS.filter(([path]) => path !== '/passwords' || client.access === 'edit_passwords').map(([path, label]) => (
-          <AppLink
-            key={label}
-            to={`/clients/${clientId}${path}`}
-            activeOptions={{ exact: path === '' }}
-            className="-mb-px border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
-          >
-            {label}
-          </AppLink>
-        ))}
+        {TABS.filter(([path]) => path !== '/passwords' || client.access === 'edit_passwords' || !actor.isStaff).map(
+          ([path, label]) => (
+            <AppLink
+              key={label}
+              to={`/clients/${clientId}${path}`}
+              activeOptions={{ exact: path === '' }}
+              className="-mb-px border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
+            >
+              {label}
+            </AppLink>
+          ),
+        )}
       </nav>
       <Outlet />
       <ClientForm client={client} open={editing} onClose={() => setEditing(false)} />

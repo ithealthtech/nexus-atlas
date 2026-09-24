@@ -1,6 +1,7 @@
-import { and, desc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, type SQL } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import type { ActivityView, Actor } from '@atlas/shared';
+import { canSee } from './items.js';
 import type { Scope } from './scope.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -37,6 +38,13 @@ export async function listActivity(
     conditions.push(or(...visible)!);
   }
   if (options.entityId) conditions.push(eq(schema.activity.entityId, options.entityId));
+  // Password entries (even their names) only show to people who can use that client's vault.
+  const vaultIds = [...(await scope.levels())].filter(([, level]) => level === 'edit_passwords').map(([id]) => id);
+  conditions.push(
+    vaultIds.length
+      ? or(ne(schema.activity.entityType, 'password'), inArray(schema.activity.clientId, vaultIds))!
+      : ne(schema.activity.entityType, 'password'),
+  );
   const rows = await scope.db
     .select({ a: schema.activity, clientName: schema.clients.name })
     .from(schema.activity)
@@ -44,7 +52,16 @@ export async function listActivity(
     .where(and(...conditions))
     .orderBy(desc(schema.activity.id))
     .limit(Math.min(options.limit ?? 50, 200));
-  return rows.map(({ a, clientName }) => ({
+  // Restricted passwords are left out for people not on their list.
+  const visible = [];
+  for (const row of rows)
+    if (
+      row.a.entityType !== 'password' ||
+      !row.a.entityId ||
+      (await canSee(scope, { type: 'password', id: row.a.entityId, clientId: row.a.clientId }))
+    )
+      visible.push(row);
+  return visible.map(({ a, clientName }) => ({
     id: String(a.id),
     clientId: a.clientId,
     clientName,

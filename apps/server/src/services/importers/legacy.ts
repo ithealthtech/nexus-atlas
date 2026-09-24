@@ -235,15 +235,13 @@ export async function migrateLegacy(
               .where(eq(schema.users.id, id));
           const own = grants.filter((g) => g.user_id === u.id && clientIds.has(g.client_id));
           if (role !== 'admin' && own.length)
-            await db
-              .insert(schema.clientAccess)
-              .values(
-                own.map((g) => ({
-                  userId: id,
-                  clientId: clientIds.get(g.client_id)!,
-                  level: role === 'technician' ? 'edit_passwords' : 'read',
-                })),
-              );
+            await db.insert(schema.clientAccess).values(
+              own.map((g) => ({
+                userId: id,
+                clientId: clientIds.get(g.client_id)!,
+                level: role === 'technician' ? 'edit_passwords' : 'read',
+              })),
+            );
           return id;
         });
       }
