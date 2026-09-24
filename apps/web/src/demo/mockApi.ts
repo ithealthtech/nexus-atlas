@@ -1069,7 +1069,7 @@ on('POST', '/backups', () => {
 });
 on('GET', '/backups/:id/download', () => notInDemo('Downloading a backup'));
 on('GET', '/status', (): SystemStatus => ({
-  version: '1.0.0-dev',
+  version: '1.0.0',
   node: 'v22.12.0',
   platform: 'linux x64',
   startedAt: ago(3 * 24 * 60),

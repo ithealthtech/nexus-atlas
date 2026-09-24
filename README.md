@@ -2,7 +2,7 @@
 
 Self-hosted IT documentation and password manager for MSPs: client workspaces, assets, runbooks, and encrypted credentials, with per-client access for your technicians and the clients you support.
 
-> **Status: v1.0 in development (milestones M0–M3 complete).** Sign-in with passkeys and recovery codes, permissions and groups, the documentation workspace, the encrypted password vault, email alerts, a tamper-evident audit log, a REST API, Hudu and CSV import, client exports, branding, and a read-only client portal work today. Release hardening with a security review (M4) is next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
+> **Version 1.0.0.** Documentation, the encrypted password vault, passkeys and two-step sign-in, per-client permissions and groups, a tamper-evident audit log, a REST API, Hudu and CSV import, encrypted nightly backups, a read-only client portal, and Docker or Windows hosting. See the [changelog](CHANGELOG.md), [security model](SECURITY.md), and [roadmap](docs/ROADMAP.md).
 
 ![Atlas dashboard](docs/screenshots/dashboard.png)
 
@@ -65,6 +65,8 @@ docker compose -f deploy/docker-compose.yml --env-file .env up -d
 docker compose -f deploy/docker-compose.yml logs app | grep "setup code"
 ```
 
+**Production (Windows Server):** download the Windows package from the [releases](../../releases) page (or build from source), then run `deploy\windows\Install-Atlas.ps1` as administrator. See [Deployment → Windows Server](docs/DEPLOYMENT.md#windows-server).
+
 **Development** (Node 22+, PostgreSQL 16):
 
 ```bash
@@ -98,9 +100,10 @@ CI runs all of these on every pull request, plus a Windows build and a Docker im
 
 ## Docs
 
-- [Deployment](docs/DEPLOYMENT.md): Docker, configuration, the master key, backups, and upgrades.
+- [Administrator guide](docs/ADMIN-GUIDE.md) and [user guide](docs/USER-GUIDE.md)
+- [Deployment](docs/DEPLOYMENT.md): Docker, Windows, configuration, the master key, backups and restore, and upgrades.
 - [Architecture](docs/ARCHITECTURE.md): how requests, authorization, and encryption work.
 - [Identity and permissions](docs/IDENTITY.md)
 - [Data in and out](docs/DATA.md): the API, Hudu and CSV import, exports, migrating from 0.2, branding, and the client portal.
 - [BitLocker integration status](docs/BITLOCKER.md)
-- [Roadmap](docs/ROADMAP.md) and [verification log](docs/VERIFICATION.md)
+- [Security](SECURITY.md), [changelog](CHANGELOG.md), [roadmap](docs/ROADMAP.md), and [verification log](docs/VERIFICATION.md)

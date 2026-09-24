@@ -1,9 +1,13 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { totp, totpStep } from '../apps/server/src/identity/totp';
 import { E2E } from '../playwright.config';
 
 const OWNER = { name: 'Avery Owner', email: 'owner@atlas.test', password: 'correct horse battery 1' };
+// Kept on disk as well as in memory: Playwright restarts the worker after a failure, and the tests that follow
+// still need to sign in as the owner instead of all failing with it.
+const SECRET_FILE = 'test-results/e2e-data/owner-mfa-secret';
 let ownerSecret = '';
 let recoveryCode = '';
 const problems: string[] = [];
@@ -45,6 +49,8 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(page.getByRole('heading', { name: 'Protect your account' })).toBeVisible();
     await expect(page.getByRole('img', { name: /QR code/ })).toBeVisible();
     ownerSecret = await mfaSecretFrom(page);
+    mkdirSync('test-results/e2e-data', { recursive: true });
+    writeFileSync(SECRET_FILE, ownerSecret);
     await page.getByLabel(/Enter the 6-digit code/).fill(totp(ownerSecret));
     await page.getByRole('button', { name: 'Turn on two-step verification' }).click();
     await expect(page.getByRole('heading', { name: 'Save your recovery codes' })).toBeVisible();
@@ -150,13 +156,28 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByLabel('Title').fill('Internet outage response');
     const editor = page.getByRole('textbox', { name: 'Document content' });
     // Put the cursor at the end of the template, and confirm it's there before typing.
+    await editor.locator('p').last().click();
+    await page.keyboard.press('End');
     await expect
       .poll(async () => {
-        await editor.locator('p').last().click();
-        await page.keyboard.press('End');
-        return page.evaluate(() => window.getSelection()?.anchorNode?.textContent ?? '');
+        // Ask the editor itself, not the browser: ProseMirror catches up with a browser selection change a moment
+        // later, and a key pressed before then goes to its old position (the start of the document).
+        return page.evaluate(() => {
+          type Pm = {
+            state: {
+              selection: {
+                empty: boolean;
+                $head: { parent: { textContent: string; content: { size: number } }; parentOffset: number };
+              };
+            };
+          };
+          const view = (document.querySelector('.ProseMirror') as unknown as { editor?: { view: Pm } }).editor?.view;
+          const sel = view?.state.selection;
+          if (!sel?.empty || sel.$head.parentOffset !== sel.$head.parent.content.size) return '';
+          return sel.$head.parent.textContent;
+        });
       })
-      .toContain('who to tell');
+      .toBe('How to confirm it worked, and who to tell.');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Call the fiber carrier before rebooting the firewall.');
     await accessible(page);
@@ -706,15 +727,21 @@ async function signOut(page: Page) {
 }
 
 // Each code works once, like a real authenticator: wait for an unused time step when needed.
+// The last step used is kept on disk too: a restarted worker must not reuse a code the server already accepted.
+const STEP_FILE = 'test-results/e2e-data/last-totp-step';
 let lastStep = totpStep();
 async function freshCode(secret: string) {
+  if (existsSync(STEP_FILE)) lastStep = Math.max(lastStep, Number(readFileSync(STEP_FILE, 'utf8')));
   const step = Math.max(totpStep() - 1, lastStep + 1);
   while (step > totpStep() + 1) await new Promise((r) => setTimeout(r, 500));
   lastStep = step;
+  mkdirSync('test-results/e2e-data', { recursive: true });
+  writeFileSync(STEP_FILE, String(step));
   return totp(secret, step);
 }
 
-async function signIn(page: Page, email: string, password: string, secret: string) {
+async function signIn(page: Page, email: string, password: string, given: string) {
+  const secret = given || (email === OWNER.email && existsSync(SECRET_FILE) ? readFileSync(SECRET_FILE, 'utf8') : '');
   await page.goto('/');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
