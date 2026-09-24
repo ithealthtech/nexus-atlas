@@ -1,5 +1,38 @@
 # Verification log
 
+## M4b Release (v1.0.0) — September 24, 2026
+
+Run on Node 22 and PostgreSQL 16 in a Linux container.
+
+- **Integration tests:** `npm test` passes all **67 tests in 9 files**. The new `hardening.test.ts` covers:
+  - security headers on pages and API responses;
+  - refusals for other hosts and origins, cross-site requests, and changes without the CSRF token;
+  - API keys staying inside their allowed paths under `..`, `%2e%2e`, `..%2f`, and `//` tricks;
+  - client exports named in any script.
+- **Browser tests:** the full suite ran locally; 15 of the first 16 tests passed. The 17th, a keyboard-only walkthrough, didn't run because the accessibility sweep before it failed on a real problem. That problem is fixed; CI runs the whole suite on the pull request.
+- **Accessibility sweep:** runs axe (WCAG 2.2 AA) on 21 screens in light and dark themes, and 5 at phone width.
+- **Keyboard walkthrough:** covers the skip link, Ctrl+K search with Enter, and dialogs that keep focus inside and give it back on close.
+- **Performance:** `npm run perf -w @atlas/server` loads 2,000 clients with 40,000 assets, 20,000 passwords, 20,000 contacts, 10,000 documents, and 200,000 activity entries. Median times, owner and technician alike:
+
+  | Request | Before | After |
+  |---|---|---|
+  | Clients list | 18 ms | 20 ms |
+  | A client's assets or passwords | 4–6 ms | 4–6 ms |
+  | Search by name or IP address | 70 ms | 50 ms |
+  | Search in document text (10,000 matches) | 180 ms | 165 ms |
+  | Activity feed | 21–27 ms | 20–23 ms |
+  | Expirations, 90 days (about 6,500 upcoming dates) | 780 ms* | 300 ms |
+
+  \*Measured before the warranty dates were added to the sample data, so the real before figure was higher.
+- **Issues found and fixed:**
+  - Exporting a client whose name uses non-Latin characters failed, because the download header rejected them.
+  - Expirations loaded every asset in the MSP to find the few with an upcoming date.
+  - Search matched client, contact, and location names without an index.
+  - A link inside a sentence (the API description link) was set apart by colour alone, at 1.29:1 contrast with a custom accent colour. In-text links are now underlined.
+  - Authorization headers are now redacted from logs.
+  - Two browser-test reliability problems: typing raced the editor's own cursor tracking, and a restarted test worker lost the owner's sign-in secret and reused a one-time code.
+- **Also run:** lint, typecheck, and `npm audit --omit=dev`.
+
 ## M4a Operations — September 24, 2026
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.

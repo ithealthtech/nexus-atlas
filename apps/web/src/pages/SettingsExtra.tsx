@@ -268,7 +268,7 @@ export function ApiKeysCard() {
           <>
             For PSA, RMM, and scripts. The REST API is at <code className="font-mono">/api/v1</code>, described in{' '}
             <a
-              className="font-semibold text-primary hover:underline"
+              className="font-semibold text-primary underline underline-offset-2"
               href="/api/v1/openapi.json"
               target="_blank"
               rel="noreferrer"

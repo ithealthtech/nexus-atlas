@@ -124,7 +124,7 @@ export function ClientOverview() {
             </div>
           ) : (
             <p className="px-5 py-4 text-sm text-muted">
-              <AppLink to={`/clients/${clientId}/contacts`} className="text-primary hover:underline">
+              <AppLink to={`/clients/${clientId}/contacts`} className="text-primary underline underline-offset-2">
                 Add contacts
               </AppLink>{' '}
               and mark one as primary.
