@@ -19,6 +19,7 @@ import {
   type Role,
   type SessionStage,
 } from '@atlas/shared';
+import { relativeTime } from '@/lib/format';
 import { ago, daysFromNow, seed, uuid } from './seed';
 
 type Json = Record<string, unknown>;
@@ -1069,7 +1070,7 @@ on('POST', '/backups', () => {
 });
 on('GET', '/backups/:id/download', () => notInDemo('Downloading a backup'));
 on('GET', '/status', (): SystemStatus => ({
-  version: '1.0.0',
+  version: '1.0.1',
   node: 'v22.12.0',
   platform: 'linux x64',
   startedAt: ago(3 * 24 * 60),
@@ -1081,7 +1082,12 @@ on('GET', '/status', (): SystemStatus => ({
       title: 'Backups are on the same disk as Atlas',
       detail: 'Copy the backup folder somewhere else, or set ATLAS_BACKUP_DIR to a network share.',
     },
-    { id: 'backups', level: 'ok', title: 'Backups are current', detail: `Last backup ${backupRuns[0]!.createdAt}.` },
+    {
+      id: 'backups',
+      level: 'ok',
+      title: 'Backups are current',
+      detail: `The last backup finished ${relativeTime(backupRuns[0]!.createdAt)}.`,
+    },
   ],
   database: { version: '16.4', sizeBytes: 187_000_000, migrationsApplied: 8, migrationsAvailable: 8 },
   storage: {
