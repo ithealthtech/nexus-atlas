@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-09-24
+
+### Fixed
+
+- **System status:** the "Backups are current" check said when the last backup finished as a raw timestamp (`2026-09-24T13:19:25.847Z`). It now says how long ago, for example "The last backup finished 9 hours ago."
+
 ## [1.0.0] - 2026-09-24
 
 ### Added

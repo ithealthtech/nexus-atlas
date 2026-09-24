@@ -250,6 +250,28 @@ describe('backup and restore', () => {
     // The backup folder here is outside the data folder, so there's no same-disk warning.
     expect(ids).not.toContain('backup-location');
     expect(ids).toContain('backups');
+    expect(status.checks.find((c: { id: string }) => c.id === 'backups').detail).toBe(
+      'The last backup finished less than a minute ago.',
+    );
+    // A long backup: the wording follows when it finished, not when it started.
+    await t.handle.db.execute(
+      sql`update backup_runs set created_at = now() - interval '5 hours', finished_at = now() - interval '3 hours'`,
+    );
+    const later = (await owner.call('GET', '/api/status')).data;
+    expect(later.checks.find((c: { id: string }) => c.id === 'backups').detail).toBe(
+      'The last backup finished 3 hours ago.',
+    );
+  });
+
+  it('describes backup ages in words', async () => {
+    const { ago } = await import('../src/services/status.js');
+    expect(ago(-5_000)).toBe('less than a minute ago');
+    expect(ago(59_000)).toBe('less than a minute ago');
+    expect(ago(60_000)).toBe('1 minute ago');
+    expect(ago(59 * 60_000)).toBe('59 minutes ago');
+    expect(ago(60 * 60_000)).toBe('1 hour ago');
+    expect(ago(47 * 3_600_000)).toBe('47 hours ago');
+    expect(ago(49 * 3_600_000)).toBe('2 days ago');
   });
 
   it('refuses a backup from a newer Atlas before erasing anything, and recovers from interrupted runs', async () => {

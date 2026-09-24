@@ -8,7 +8,7 @@ Client workspaces, flexible assets, runbooks, and an encrypted credential vault 
 application, with per-client access for your technicians and read-only access for the clients
 you support.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-1f6f4a)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-1f6f4a)](CHANGELOG.md)
 [![Runtime](https://img.shields.io/badge/node-22%2B-339933)](#local-development)
 [![Database](https://img.shields.io/badge/PostgreSQL-16-336791)](docs/DEPLOYMENT.md)
 [![Accessibility](https://img.shields.io/badge/WCAG-2.2%20AA-6d28d9)](#verification)
@@ -192,7 +192,7 @@ Results for each milestone are in [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Current boundary
 
-Version 1.0.0 covers documentation, the vault, accounts and security, the REST API, Hudu and CSV
+Version 1.0 covers documentation, the vault, accounts and security, the REST API, Hudu and CSV
 import, per-client exports, encrypted backups with verified restore, the system status page, a
 read-only client portal, and Docker or Windows hosting.
 

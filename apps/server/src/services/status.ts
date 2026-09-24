@@ -12,6 +12,16 @@ import type { SettingsService } from './settings.js';
 
 const DAY = 86_400_000;
 
+/** How long ago something happened, in words that don't depend on the server's or the reader's time zone. */
+export function ago(ms: number): string {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000);
+  if (minutes < 1) return 'less than a minute ago';
+  if (minutes < 60) return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  return `${Math.floor(hours / 24)} days ago`;
+}
+
 async function disk(path: string) {
   try {
     const s = await statfs(path);
@@ -113,7 +123,13 @@ export class StatusService {
         'The last backup is more than two days old',
         'Check the backup history below for errors, and that the backup folder is writable.',
       );
-    else add('backups', 'ok', 'Backups are current', `Last backup ${lastSuccess.createdAt}.`);
+    else
+      add(
+        'backups',
+        'ok',
+        'Backups are current',
+        `The last backup finished ${ago(now.getTime() - Date.parse(lastSuccess.finishedAt ?? lastSuccess.createdAt))}.`,
+      );
     if (missingFile)
       add(
         'backup-missing',

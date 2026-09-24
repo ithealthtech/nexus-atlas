@@ -1,5 +1,14 @@
 # Verification log
 
+## v1.0.1 — September 24, 2026
+
+Run on Node 22 and PostgreSQL 16 in a Linux container.
+
+- **Fix:** the "Backups are current" check on System status now gives the backup's age in words instead of a raw timestamp. The wording is worked out on the server and doesn't depend on its time zone.
+- **Integration tests:** `npm test` passes all **68 tests in 9 files**. The new test covers the age wording (under a minute, minutes, hours, and days), and the status test checks the exact text. For a long backup the text follows when it finished, not when it started (found in code review).
+- **Browser tests:** all **17** pass locally, including the backup and system status walkthrough, the accessibility sweep, and the keyboard-only walkthrough. A first run had 3 failures that didn't repeat on a clean rerun; that run reused sign-in state left in `test-results/e2e-data/` by an earlier run.
+- **Also passing:** lint, typecheck, and build.
+
 ## M4b Release (v1.0.0) — September 24, 2026
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.
