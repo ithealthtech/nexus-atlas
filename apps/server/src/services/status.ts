@@ -123,7 +123,13 @@ export class StatusService {
         'The last backup is more than two days old',
         'Check the backup history below for errors, and that the backup folder is writable.',
       );
-    else add('backups', 'ok', 'Backups are current', `The last backup finished ${ago(now.getTime() - Date.parse(lastSuccess.createdAt))}.`);
+    else
+      add(
+        'backups',
+        'ok',
+        'Backups are current',
+        `The last backup finished ${ago(now.getTime() - Date.parse(lastSuccess.createdAt))}.`,
+      );
     if (missingFile)
       add(
         'backup-missing',
