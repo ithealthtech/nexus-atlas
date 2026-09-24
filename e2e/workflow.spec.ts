@@ -706,10 +706,20 @@ test.describe.serial('accessibility sweep', () => {
     await edit.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('dialog')).toBeVisible();
+    // A native modal <dialog> makes the page behind it unreachable. Tab moves through the dialog, then out to the
+    // browser's own controls (the page sees <body>), then back in. Focus must never land on the page behind it.
+    let insideDialog = 0;
     for (let i = 0; i < 15; i++) {
       await page.keyboard.press('Tab');
-      expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
+      const where = await page.evaluate(() => {
+        const active = document.activeElement;
+        if (!active || active === document.body) return 'browser';
+        return active.closest('dialog[open]') ? 'dialog' : `page: ${active.outerHTML.slice(0, 80)}`;
+      });
+      expect(['dialog', 'browser']).toContain(where);
+      if (where === 'dialog') insideDialog++;
     }
+    expect(insideDialog).toBeGreaterThan(5);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
     await expect(edit).toBeFocused();
