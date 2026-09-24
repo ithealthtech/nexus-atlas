@@ -11,6 +11,7 @@ import { LayoutService } from '../layouts.js';
 import { contacts } from '../people.js';
 import { RelationService } from '../relations.js';
 import { Scope } from '../scope.js';
+import { HttpError } from '../../errors.js';
 import { ImportRun } from './common.js';
 
 type LegacyClient = { id: string; name: string; industry: string; contact: string; email: string };
@@ -95,9 +96,16 @@ export async function migrateLegacy(
   db: Database,
   actor: Actor,
   keys: KeyProvider,
-  options: { file: string; legacyKey?: Buffer },
+  options: { file: string; legacyKey?: Buffer; workspace?: string },
 ): Promise<ImportRun> {
   const legacy = new DatabaseSync(options.file, { readOnly: true });
+  let workspace: string;
+  try {
+    workspace = chooseWorkspace(legacy, options.workspace);
+  } catch (error) {
+    legacy.close();
+    throw error;
+  }
   const run = await ImportRun.start(db, actor, 'legacy');
   try {
     const scope = new Scope(db, actor);
@@ -111,7 +119,9 @@ export async function migrateLegacy(
     if (!configLayout) throw new Error('The built-in Configurations layout is missing. Finish Atlas setup first.');
 
     const clientIds = new Map<string, string>();
-    for (const c of legacy.prepare('SELECT * FROM clients ORDER BY name').all() as LegacyClient[]) {
+    for (const c of legacy
+      .prepare('SELECT * FROM clients WHERE msp_id = ? ORDER BY name')
+      .all(workspace) as LegacyClient[]) {
       const body = { name: c.name, type: 'Customer', notes: c.industry ? `Industry: ${c.industry}` : '' };
       const id = await run.upsert(
         'clients',
@@ -188,13 +198,15 @@ export async function migrateLegacy(
       );
     }
 
-    const hasUsers = legacy.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+    const hasUsers = hasTable(legacy, 'users');
     if (hasUsers) {
       const grants = legacy.prepare('SELECT user_id, client_id FROM user_clients').all() as {
         user_id: string;
         client_id: string;
       }[];
-      for (const u of legacy.prepare('SELECT * FROM users ORDER BY created_at').all() as LegacyUser[]) {
+      for (const u of legacy
+        .prepare('SELECT * FROM users WHERE msp_id = ? ORDER BY created_at')
+        .all(workspace) as LegacyUser[]) {
         const email = u.email.trim().toLowerCase();
         const [existing] = await db
           .select({ id: schema.users.id })
@@ -257,4 +269,38 @@ export async function migrateLegacy(
   } finally {
     legacy.close();
   }
+}
+
+const hasTable = (legacy: DatabaseSync, name: string) =>
+  !!legacy.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+
+/**
+ * 0.2 kept every workspace (msp_id) in one file. Only one is migrated per run: the one named, or the only one
+ * with user accounts (or, without accounts, the only one with clients). Anything else must be named explicitly.
+ */
+function chooseWorkspace(legacy: DatabaseSync, requested?: string): string {
+  const counts = new Map<string, { clients: number; users: number }>();
+  const tally = (table: 'clients' | 'users', key: 'clients' | 'users') => {
+    for (const row of legacy.prepare(`SELECT msp_id AS id, COUNT(*) AS n FROM ${table} GROUP BY msp_id`).all() as {
+      id: string;
+      n: number;
+    }[]) {
+      const entry = counts.get(row.id) ?? { clients: 0, users: 0 };
+      entry[key] = row.n;
+      counts.set(row.id, entry);
+    }
+  };
+  tally('clients', 'clients');
+  if (hasTable(legacy, 'users')) tally('users', 'users');
+  const list = () => [...counts].map(([id, c]) => `${id} (${c.clients} clients, ${c.users} users)`).join(', ');
+  if (requested) {
+    if (!counts.has(requested))
+      throw new HttpError(400, `No workspace "${requested}" in this file. It has: ${list()}.`);
+    return requested;
+  }
+  const withUsers = [...counts].filter(([, c]) => c.users > 0).map(([id]) => id);
+  const candidates = withUsers.length ? withUsers : [...counts].filter(([, c]) => c.clients > 0).map(([id]) => id);
+  if (candidates.length === 1) return candidates[0]!;
+  if (!candidates.length) throw new HttpError(400, 'This file has no clients or accounts to migrate.');
+  throw new HttpError(400, `This file has several workspaces; choose one with --workspace: ${list()}.`);
 }

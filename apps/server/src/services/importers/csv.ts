@@ -71,7 +71,12 @@ export async function importCsv(
           const existing = byName.get(parsed.name.toLowerCase());
           if (body.dryRun) break;
           if (existing) {
-            await clientService.update(actor, existing, parsed);
+            // Only the columns in the file change; settings the file can't carry (such as requiring a
+            // reason to reveal passwords) and empty cells keep their current values.
+            const patch = Object.fromEntries(
+              (['type', 'status', 'notes'] as const).filter((k) => rest[k]?.trim()).map((k) => [k, parsed[k]]),
+            );
+            if (Object.keys(patch).length) await clientService.update(actor, existing, patch);
             result.updated++;
           } else {
             const created = await clientService.create(actor, parsed);

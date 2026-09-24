@@ -287,6 +287,39 @@ describe('Hudu import', () => {
     expect((await owner.call('GET', `/api/passwords?client=${harbor.id}`)).data).toHaveLength(1);
   });
 
+  it('runs one import at a time, and frees the slot held by an abandoned import', async () => {
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const starts = await Promise.all([
+      owner.call('POST', '/api/import/hudu/run', {}),
+      owner.call('POST', '/api/import/hudu/run', {}),
+    ]);
+    expect(starts.map((r) => r.status).sort()).toEqual([202, 409]);
+    await waitForJob(owner, starts.find((r) => r.status === 202)!.data.id);
+
+    // A job still marked running with a recent heartbeat blocks; one whose heartbeat stopped long ago doesn't.
+    const [org] = (await t.handle.db.execute(sql`select id from orgs`)).rows as { id: string }[];
+    const insert = async (minutesAgo: number) =>
+      (
+        (
+          await t.handle.db.execute(
+            sql`insert into import_jobs (org_id, source, started_by_name, heartbeat_at)
+                values (${org!.id}, 'hudu', 'Crashed run', now() - make_interval(mins => ${minutesAgo}))
+                returning id`,
+          )
+        ).rows[0] as { id: string }
+      ).id;
+    const fresh = await insert(1);
+    expect((await owner.call('POST', '/api/import/hudu/run', {})).status).toBe(409);
+    await t.handle.db.execute(sql`delete from import_jobs where id = ${fresh}`);
+    const abandoned = await insert(30);
+    const next = await owner.call('POST', '/api/import/hudu/run', {});
+    expect(next.status).toBe(202);
+    const old = (await owner.call('GET', `/api/import/jobs/${abandoned}`)).data;
+    expect(old.status).toBe('failed');
+    expect(old.messages.join(' ')).toContain('Atlas stopped while this import was running');
+    expect((await waitForJob(owner, next.data.id)).status).toBe('done');
+  });
+
   it('reports a rejected API key', async () => {
     await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'wrong-key-000000000' });
     const preview = await owner.call('POST', '/api/import/hudu/preview', {});
@@ -321,6 +354,22 @@ describe('CSV import and export', () => {
     expect(
       (await owner.call('POST', '/api/import/csv', { target: 'clients', rows: clients.slice(0, 2) })).data,
     ).toMatchObject({ created: 0, updated: 2 });
+
+    // Updating a client changes only the columns in the file; its other settings stay.
+    const northline = (await owner.call('GET', '/api/clients')).data.find(
+      (c: { name: string }) => c.name === 'Northline Architecture',
+    );
+    await owner.call('PATCH', `/api/clients/${northline.id}`, { type: 'Architects', requireRevealReason: true });
+    await owner.call('POST', '/api/import/csv', {
+      target: 'clients',
+      rows: [{ name: 'northline architecture', notes: 'Two studios' }],
+    });
+    expect((await owner.call('GET', `/api/clients/${northline.id}`)).data).toMatchObject({
+      name: 'Northline Architecture',
+      type: 'Architects',
+      requireRevealReason: true,
+      notes: 'Two studios',
+    });
 
     const contacts = await owner.call('POST', '/api/import/csv', {
       target: 'contacts',
@@ -383,6 +432,42 @@ describe('CSV import and export', () => {
     expect(data.passwords[0].name).toBe('Router');
     expect(JSON.stringify(data)).not.toContain('R0uter!pass-2026');
     expect(Object.keys(files).some((f) => f.startsWith('documents/Runbook'))).toBe(true);
+    // Links to a global knowledge-base article are exported whichever end the client's item is stored on.
+    const kb = (
+      await owner.call('POST', '/api/documents', {
+        title: 'Printer SOP',
+        clientId: null,
+        content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Power cycle' }] }] },
+      })
+    ).data.id;
+    const office = (await owner.call('POST', `/api/clients/${harbor}/locations`, { name: 'Main office' })).data.id;
+    const contact = (await owner.call('GET', `/api/clients/${harbor}/contacts`)).data[0].id;
+    for (const [type, id] of [
+      ['location', office],
+      ['contact', contact],
+    ])
+      expect(await owner.call('POST', `/api/items/document/${kb}/relations`, { type, id })).toMatchObject({
+        status: 200,
+      });
+    const linked = JSON.parse(
+      strFromU8(
+        unzipSync(
+          new Uint8Array(
+            (
+              await t.app.inject({
+                method: 'GET',
+                url: `/api/clients/${harbor}/export`,
+                headers: { cookie: owner.cookie },
+              })
+            ).rawPayload,
+          ),
+        )['client.json']!,
+      ),
+    );
+    const ends = linked.relations.flatMap((r: { a: { id: string }; b: { id: string } }) => [r.a.id, r.b.id]);
+    expect(ends).toEqual(expect.arrayContaining([office, contact, kb]));
+    expect(linked.relations).toHaveLength(2);
+    expect(JSON.stringify(linked.relations)).toContain('"title":"Printer SOP","external":true');
 
     await t.handle.db.execute(sql`update sessions set reauth_at = null`);
     const stale = await t.app.inject({
@@ -452,6 +537,51 @@ describe('client portal passwords', () => {
   });
 });
 
+describe('activity paging', () => {
+  it('fills the page with activity the person may see, skipping restricted passwords in the query', async () => {
+    const t = await startApp();
+    try {
+      const owner = (await setupOwner(t.app)).b;
+      const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+      const secret = (
+        await owner.call('POST', `/api/clients/${harbor}/passwords`, {
+          name: 'Domain admin',
+          secret: 'D0main!Admin-26',
+          restricted: true,
+        })
+      ).data;
+      await owner.call('POST', '/api/users', {
+        email: 'casey@atlas.test',
+        name: 'Casey Tech',
+        role: 'technician',
+        grants: [{ clientId: harbor, level: 'edit_passwords' }],
+        password: TEMP,
+      });
+      const { b } = await signIn(t.app, 'casey@atlas.test', TEMP);
+      await b.call('POST', '/api/account/password', { current: TEMP, next: 'cobalt fresh pass 12' });
+      await enroll(b);
+      const [org] = (await t.handle.db.execute(sql`select id from orgs`)).rows as { id: string }[];
+      // 55 older visible entries, then 60 newer ones about the restricted password.
+      await t.handle.db.execute(sql`
+        insert into activity (org_id, actor_name, client_id, action, entity_type, entity_id, title)
+        select ${org!.id}, 'Alex', ${harbor}, 'Updated', 'client', ${harbor}, 'Harbor ' || g
+        from generate_series(1, 55) g`);
+      await t.handle.db.execute(sql`
+        insert into activity (org_id, actor_name, client_id, action, entity_type, entity_id, title)
+        select ${org!.id}, 'Alex', ${harbor}, 'Revealed', 'password', ${secret.id}, 'Domain admin'
+        from generate_series(1, 60) g`);
+      const page = (await b.call('GET', `/api/activity?client=${harbor}&limit=50`)).data as { title: string }[];
+      expect(page).toHaveLength(50);
+      expect(page.map((a) => a.title)).not.toContain('Domain admin');
+      // The owner (an admin) sees the restricted entries.
+      const all = (await owner.call('GET', `/api/activity?client=${harbor}&limit=50`)).data as { title: string }[];
+      expect(all[0]!.title).toBe('Domain admin');
+    } finally {
+      await t.close();
+    }
+  });
+});
+
 describe('0.2 migration', () => {
   it('moves users, clients, records, and links from the SQLite file', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'atlas-legacy-'));
@@ -471,7 +601,7 @@ describe('0.2 migration', () => {
         )
         .run(
           'u1',
-          'msp',
+          'msp-demo',
           'Legacy.Tech@atlas.test',
           'Lee Legacy',
           'technician',
@@ -500,6 +630,16 @@ describe('0.2 migration', () => {
       expect(run.counts.assets!.created).toBeGreaterThan(0);
       expect(run.counts.documents!.created).toBeGreaterThan(0);
       expect(run.counts.users).toMatchObject({ created: 1 });
+      // Only the workspace with accounts moves: the seed's other-msp isolation fixture stays behind.
+      const names = ((await t.handle.db.execute(sql`select name from clients`)).rows as { name: string }[]).map(
+        (r) => r.name,
+      );
+      expect(names).toContain('Harbor Dental Group');
+      expect(names).not.toContain('Isolation Test Company');
+      const titles = ((await t.handle.db.execute(sql`select title from documents`)).rows as { title: string }[]).map(
+        (r) => r.title,
+      );
+      expect(titles).not.toContain('Private tenant record');
 
       // The 0.2 password hash still works.
       const { r } = await signIn(t.app, 'legacy.tech@atlas.test', 'legacy password 99');
@@ -508,6 +648,28 @@ describe('0.2 migration', () => {
       const again = await migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), { file });
       expect(again.counts.clients!.created).toBe(0);
       expect(again.counts.users).toMatchObject({ skipped: 1 });
+
+      // With accounts in two workspaces, the migration asks which one instead of mixing them.
+      const { DatabaseSync } = await import('node:sqlite');
+      const writable = new DatabaseSync(file);
+      writable
+        .prepare(
+          'INSERT INTO users (id, msp_id, email, name, role, all_clients, password_hash, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+        )
+        .run('u2', 'other-msp', 'other@atlas.test', 'Other Tenant', 'admin', 1, 'x', now, now);
+      writable.close();
+      await expect(migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), { file })).rejects.toThrow(
+        /several workspaces.*msp-demo.*other-msp|several workspaces.*other-msp.*msp-demo/,
+      );
+      await expect(
+        migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), { file, workspace: 'nope' }),
+      ).rejects.toThrow('No workspace "nope"');
+      const chosen = await migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), {
+        file,
+        workspace: 'msp-demo',
+      });
+      expect(chosen.counts.clients!.created).toBe(0);
+      expect(chosen.counts.users).toMatchObject({ skipped: 1 });
     } finally {
       await t.close();
       rmSync(dir, { recursive: true, force: true });

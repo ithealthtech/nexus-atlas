@@ -4,7 +4,7 @@
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.
 
-- **Integration tests:** `npm test` passes all **54 tests in 7 files**. The 9 new ones in `data.test.ts` cover:
+- **Integration tests:** `npm test` passes all **56 tests in 7 files**. The 11 new ones in `data.test.ts` cover:
   - **API keys:** a key is shown once and stored as a hash. Scopes are enforced, the passwords scope is needed for the vault, and account and settings endpoints are closed to keys. Revoked keys get 401. Actions are recorded under the key's name.
   - **OpenAPI:** `/api/openapi.json` describes the documented paths.
   - **Hudu:** tested against a fake Hudu with 26 companies, so pagination runs. It covers layouts, assets, HTML articles (with unsafe links removed), and passwords flattened into client vaults. A second run updates instead of duplicating. A rejected key reports a clear error.
@@ -21,6 +21,13 @@ Run on Node 22 and PostgreSQL 16 in a Linux container.
   - The rich-text editor could move the cursor while typing, because its options were rebuilt on every render. This was also the cause of an intermittently failing runbook test.
   - A Hudu article with a `javascript:` link failed to import as a whole. Unsafe links are now dropped and their text kept.
   - CSV headers such as "Client Name" weren't matched automatically.
+  - Review findings, each now covered by a test:
+    - An import interrupted by a restart blocked all later imports.
+    - Two imports started at the same moment could both run.
+    - A CSV row for an existing client reset settings the file didn't include, such as requiring a reason to reveal passwords.
+    - The 0.2 migration read every workspace in the file.
+    - Client exports missed links stored with the client's item second.
+    - Restricted passwords were filtered out of activity after the page limit, so pages came back short.
 - **Also run:** lint, typecheck, legacy 0.2 tests, and `npm audit --omit=dev`.
 
 ## M3a Accounts and security — September 24, 2026

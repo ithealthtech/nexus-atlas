@@ -1,7 +1,6 @@
-import { and, desc, eq, inArray, isNull, ne, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import type { ActivityView, Actor } from '@atlas/shared';
-import { canSee } from './items.js';
+import { ROLE_INFO, type ActivityView, type Actor } from '@atlas/shared';
 import type { Scope } from './scope.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -45,22 +44,33 @@ export async function listActivity(
       ? or(ne(schema.activity.entityType, 'password'), inArray(schema.activity.clientId, vaultIds))!
       : ne(schema.activity.entityType, 'password'),
   );
-  const rows = await scope.db
+  // Restricted passwords only show to admins and the people listed on them (directly or through a group).
+  // This is part of the query, so the limit counts only rows the person may see.
+  if (!ROLE_INFO[scope.actor.role].admin) {
+    const me = scope.actor.id;
+    conditions.push(
+      or(
+        ne(schema.activity.entityType, 'password'),
+        sql`not exists (
+          select 1 from ${schema.passwords} p
+          where p.id = ${schema.activity.entityId} and p.restricted
+            and not exists (select 1 from ${schema.passwordAccess} pa where pa.password_id = p.id and pa.user_id = ${me})
+            and not exists (
+              select 1 from ${schema.passwordGroupAccess} pga
+              join ${schema.groupMembers} gm on gm.group_id = pga.group_id
+              where pga.password_id = p.id and gm.user_id = ${me}
+            )
+        )`,
+      )!,
+    );
+  }
+  const visible = await scope.db
     .select({ a: schema.activity, clientName: schema.clients.name })
     .from(schema.activity)
     .leftJoin(schema.clients, eq(schema.clients.id, schema.activity.clientId))
     .where(and(...conditions))
     .orderBy(desc(schema.activity.id))
     .limit(Math.min(options.limit ?? 50, 200));
-  // Restricted passwords are left out for people not on their list.
-  const visible = [];
-  for (const row of rows)
-    if (
-      row.a.entityType !== 'password' ||
-      !row.a.entityId ||
-      (await canSee(scope, { type: 'password', id: row.a.entityId, clientId: row.a.clientId }))
-    )
-      visible.push(row);
   return visible.map(({ a, clientName }) => ({
     id: String(a.id),
     clientId: a.clientId,

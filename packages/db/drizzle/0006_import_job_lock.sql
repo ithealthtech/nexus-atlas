@@ -1,0 +1,2 @@
+ALTER TABLE "import_jobs" ADD COLUMN "heartbeat_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "import_jobs_one_running" ON "import_jobs" USING btree ("org_id") WHERE "import_jobs"."status" = 'running';

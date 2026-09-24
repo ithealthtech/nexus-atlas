@@ -1,5 +1,5 @@
 // Migrates an Atlas 0.2 SQLite database (legacy/data/atlas.sqlite) into this installation.
-// Usage: npm run migrate-legacy -w @atlas/server -- <path to atlas.sqlite> [--legacy-key <0.2 key file>] [--owner <email>]
+// Usage: npm run migrate-legacy -w @atlas/server -- <path to atlas.sqlite> [--legacy-key <0.2 key file>] [--owner <email>] [--workspace <0.2 msp_id>]
 // Run it after first-run setup. It can be run again: records it already migrated are skipped.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -17,10 +17,11 @@ const flag = (name: string) => {
 };
 const legacyKeyFile = flag('--legacy-key');
 const ownerEmail = flag('--owner');
+const workspace = flag('--workspace');
 const file = args[0];
 if (!file) {
   console.error(
-    'Usage: npm run migrate-legacy -w @atlas/server -- <atlas.sqlite> [--legacy-key <file>] [--owner <email>]',
+    'Usage: npm run migrate-legacy -w @atlas/server -- <atlas.sqlite> [--legacy-key <file>] [--owner <email>] [--workspace <id>]',
   );
   process.exit(2);
 }
@@ -41,7 +42,15 @@ if (!owner) {
   process.exit(1);
 }
 const legacyKey = legacyKeyFile ? Buffer.from(readFileSync(legacyKeyFile, 'utf8').trim(), 'base64url') : undefined;
-const run = await migrateLegacy(database.db, actorFor(owner), keys, { file: resolve(file), legacyKey });
+const run = await migrateLegacy(database.db, actorFor(owner), keys, {
+  file: resolve(file),
+  legacyKey,
+  workspace,
+}).catch(async (error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  await database.close();
+  process.exit(1);
+});
 for (const [kind, c] of Object.entries(run.counts))
   console.log(
     `${kind.padEnd(10)} ${c.created} created, ${c.updated} updated, ${c.skipped} skipped, ${c.failed} failed`,

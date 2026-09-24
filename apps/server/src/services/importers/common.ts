@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import type { Actor, ImportCounts, ImportJobView, ImportSource } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
@@ -6,11 +6,23 @@ import { isUuid } from '../scope.js';
 
 type Kind = string;
 
+/** A running job whose heartbeat is older than this was abandoned by a restart or crash. */
+const STALE_MS = 5 * 60_000;
+const HEARTBEAT_MS = 30_000;
+const ABANDONED =
+  'Atlas stopped while this import was running. Start it again; items already imported are updated, not duplicated.';
+
+const isUniqueViolation = (error: unknown) =>
+  !!error &&
+  typeof error === 'object' &&
+  ((error as { code?: string }).code === '23505' || (error as { cause?: { code?: string } }).cause?.code === '23505');
+
 /** Tracks one import run: counts per kind, messages, and the external-ID map that makes re-runs idempotent. */
 export class ImportRun {
   readonly counts: Record<Kind, ImportCounts> = {};
   readonly messages: string[] = [];
   private lastFlush = 0;
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly db: Database,
@@ -20,16 +32,44 @@ export class ImportRun {
   ) {}
 
   static async start(db: Database, actor: Actor, source: ImportSource) {
-    const [running] = await db
-      .select({ id: schema.importJobs.id })
-      .from(schema.importJobs)
-      .where(and(eq(schema.importJobs.orgId, actor.orgId), eq(schema.importJobs.status, 'running')));
-    if (running) throw new HttpError(409, 'Another import is still running. Wait for it to finish.');
-    const [job] = await db
-      .insert(schema.importJobs)
-      .values({ orgId: actor.orgId, source, startedBy: actor.id, startedByName: actor.name })
-      .returning();
-    return new ImportRun(db, job!.id, actor.orgId, source);
+    let job: typeof schema.importJobs.$inferSelect | undefined;
+    try {
+      [job] = await db.transaction(async (tx) => {
+        // Free the slot held by an import that stopped without finishing (the process restarted or crashed).
+        await tx
+          .update(schema.importJobs)
+          .set({
+            status: 'failed',
+            finishedAt: new Date(),
+            messages: sql`${schema.importJobs.messages} || ${JSON.stringify([ABANDONED])}::jsonb`,
+          })
+          .where(
+            and(
+              eq(schema.importJobs.orgId, actor.orgId),
+              eq(schema.importJobs.status, 'running'),
+              lt(schema.importJobs.heartbeatAt, new Date(Date.now() - STALE_MS)),
+            ),
+          );
+        // The partial unique index import_jobs_one_running allows one running import per organization.
+        return tx
+          .insert(schema.importJobs)
+          .values({ orgId: actor.orgId, source, startedBy: actor.id, startedByName: actor.name })
+          .returning();
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new HttpError(409, 'Another import is still running. Wait for it to finish.');
+      throw error;
+    }
+    const run = new ImportRun(db, job!.id, actor.orgId, source);
+    run.heartbeat = setInterval(() => {
+      void db
+        .update(schema.importJobs)
+        .set({ heartbeatAt: new Date() })
+        .where(and(eq(schema.importJobs.id, run.jobId), eq(schema.importJobs.status, 'running')))
+        .catch(() => undefined);
+    }, HEARTBEAT_MS);
+    run.heartbeat.unref();
+    return run;
   }
 
   count(kind: Kind, what: keyof ImportCounts) {
@@ -117,15 +157,21 @@ export class ImportRun {
 
   async flush(status: 'running' | 'done' | 'failed') {
     this.lastFlush = Date.now();
+    if (status !== 'running' && this.heartbeat) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = null;
+    }
     await this.db
       .update(schema.importJobs)
       .set({
         status,
         counts: this.counts,
         messages: this.messages,
+        heartbeatAt: new Date(),
         ...(status !== 'running' ? { finishedAt: new Date() } : {}),
       })
-      .where(eq(schema.importJobs.id, this.jobId));
+      // A job another start marked abandoned stays failed, even if this run turns out to be alive.
+      .where(and(eq(schema.importJobs.id, this.jobId), eq(schema.importJobs.status, 'running')));
   }
 }
 

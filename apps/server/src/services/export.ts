@@ -1,11 +1,12 @@
 import { Readable } from 'node:stream';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { zipSync, strToU8 } from 'fflate';
 import { schema, type Database } from '@atlas/db';
-import type { Actor } from '@atlas/shared';
+import type { Actor, ItemType } from '@atlas/shared';
 import { requireClient } from '../authz.js';
 import { AssetService } from './assets.js';
 import { DocumentService } from './documents.js';
+import { canSee, loadItem } from './items.js';
 import { LayoutService } from './layouts.js';
 import { contacts, locations } from './people.js';
 import { Scope } from './scope.js';
@@ -55,7 +56,6 @@ export async function exportClient(
   const fullDocs = await Promise.all([...docList, ...archivedDocs].map((d) => documents.get(scope, d.id)));
   const secrets = options.passwords ? await options.vault.exportSecrets(scope, clientId, options.ip) : [];
   const secretById = new Map(secrets.map((s) => [s.id, s]));
-  // Links never cross clients, so every relation touching one of this client's items is internal to it.
   const itemIds = [
     ...contactList,
     ...locationList,
@@ -64,12 +64,31 @@ export async function exportClient(
     ...fullDocs,
     ...passwordList,
   ].map((x) => x.id);
-  const relations = itemIds.length
+  // Links are stored in a fixed order, so this client's item can be either end. The other end can be outside the
+  // client (a global knowledge-base article) or something this person can't open; it's kept only when they can.
+  const itemSet = new Set(itemIds);
+  const linked = itemIds.length
     ? await db
         .select()
         .from(schema.relations)
-        .where(and(eq(schema.relations.orgId, actor.orgId), inArray(schema.relations.aId, itemIds)))
+        .where(
+          and(
+            eq(schema.relations.orgId, actor.orgId),
+            or(inArray(schema.relations.aId, itemIds), inArray(schema.relations.bId, itemIds)),
+          ),
+        )
     : [];
+  const endpoint = async (type: string, id: string) => {
+    if (itemSet.has(id)) return { type, id };
+    const item = await loadItem(db, actor.orgId, type as ItemType, id);
+    if (!item || !(await canSee(scope, { type: item.type, id, clientId: item.clientId }))) return null;
+    return { type, id, title: item.title, external: true };
+  };
+  const relations = [];
+  for (const r of linked) {
+    const [a, b] = [await endpoint(r.aType, r.aId), await endpoint(r.bType, r.bId)];
+    if (a && b) relations.push({ a, b, note: r.note });
+  }
   const files = await db.select().from(schema.attachments).where(eq(schema.attachments.clientId, clientId));
 
   const entries: Record<string, Uint8Array> = {};
@@ -94,11 +113,7 @@ export async function exportClient(
           }
         : {}),
     })),
-    relations: relations.map((r) => ({
-      a: { type: r.aType, id: r.aId },
-      b: { type: r.bType, id: r.bId },
-      note: r.note,
-    })),
+    relations,
     attachments: files.map((f) => ({
       id: f.id,
       item: { type: f.entityType, id: f.entityId },

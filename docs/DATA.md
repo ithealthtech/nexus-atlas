@@ -44,7 +44,7 @@ curl -H "Authorization: Bearer $ATLAS_KEY" https://atlas.example.com/api/v1/clie
 - **Files:** comma, semicolon, or tab separated, up to 10 MB, with a header row.
 - **Column matching:** Atlas matches columns by name, including common alternatives such as "Client Name" or "Company". Any column can be reassigned before importing.
 - **Check the file first:** this dry run validates every row, reports each problem with its row number, and saves nothing. **Import** is available once the check has run.
-- **Matching rows:** rows go to clients by name. Clients that already exist are skipped, not changed.
+- **Matching rows:** rows go to clients by name. A client that already exists is updated with the non-empty columns in the file; everything else about it, including whether reveals need a reason, is kept.
 - **Passwords:** importing passwords needs "Edit + passwords" on each client involved. The import is recorded in the security log.
 
 ## Exporting a client
@@ -62,12 +62,13 @@ Administrators can add **decrypted passwords**. This needs a recent password con
 The 0.2 prototype stored everything in one SQLite file. Run this once against a new or existing Atlas database:
 
 ```bash
-npm run migrate-legacy -w @atlas/server -- /path/to/atlas.sqlite [--legacy-key /path/to/0.2/master.key] [--owner you@example.com]
+npm run migrate-legacy -w @atlas/server -- /path/to/atlas.sqlite [--legacy-key /path/to/0.2/master.key] [--owner you@example.com] [--workspace msp-demo]
 ```
 
 - **What moves:** clients and their contacts. Records become assets in the Configurations layout, or documents. Relationships move with them.
 - **People:** users keep their passwords (same scrypt format) and client grants.
 - **Two-step verification:** authenticator apps carry over only when the 0.2 key file is given; otherwise those people set up two-step verification again.
+- **One workspace per run:** a 0.2 file can hold several workspaces. Atlas migrates the only one with user accounts, and otherwise stops and lists them so you can choose one with `--workspace`.
 - **Safe to repeat:** running it again skips what was already migrated.
 
 ## Branding and the client portal

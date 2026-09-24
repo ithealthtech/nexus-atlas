@@ -704,9 +704,15 @@ export const importJobs = pgTable(
     startedByName: text('started_by_name').notNull(),
     createdAt: created(),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
+    // Refreshed while the import runs; a running job with an old heartbeat was abandoned (restart or crash).
+    heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('import_jobs_org').on(t.orgId, t.createdAt),
+    // One running import per organization, enforced by the database so concurrent starts can't both win.
+    uniqueIndex('import_jobs_one_running')
+      .on(t.orgId)
+      .where(sql`${t.status} = 'running'`),
     check('import_jobs_status_check', sql`${t.status} in ('running','done','failed')`),
   ],
 );
