@@ -16,6 +16,8 @@ export interface SessionView {
   csrf: string;
   stage: SessionStage;
   organization: { id: string; name: string };
+  /** Second-step options, sent while the session is at the "mfa" stage. */
+  methods?: { totp: boolean; passkey: boolean };
 }
 export interface ClientSummary {
   id: string;

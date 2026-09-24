@@ -1,10 +1,10 @@
-import { ArrowRight, BookOpen, Building2, CheckCircle2, Circle, Clock, KeyRound, Server } from 'lucide-react';
+import { ArrowRight, BookOpen, Building2, CheckCircle2, Circle, Clock, Server } from 'lucide-react';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton, Stat } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
 import { ActivityFeed } from '@/components/panels';
 import { useActor } from '@/lib/session';
-import { useRotationDue } from '@/lib/vault';
-import { useActivity, useAssets, useClients, useDocuments, useUsers } from '@/lib/queries';
+import { ExpiryRow } from './Expirations';
+import { useActivity, useAssets, useClients, useDocuments, useExpirations, useUsers } from '@/lib/queries';
 import { formatDate, relativeTime } from '@/lib/format';
 import { statusTone } from './Clients';
 
@@ -20,7 +20,7 @@ export function Dashboard() {
   const assets = useAssets({});
   const docs = useDocuments({});
   const activity = useActivity({ limit: '8' });
-  const rotation = useRotationDue(actor.isStaff);
+  const expiring = useExpirations(30);
   const list = clients.data ?? [];
   const today = new Date().toISOString().slice(0, 10);
   const review = (docs.data ?? [])
@@ -178,38 +178,31 @@ export function Dashboard() {
               <p className="px-5 py-4 text-sm text-muted">Nothing is due for review.</p>
             )}
           </Card>
-          {actor.isStaff && (
-            <Card>
-              <CardHeader title="Passwords to rotate" description="Due now or within two weeks." />
-              {rotation.data?.length ? (
-                <ul className="divide-y divide-border">
-                  {rotation.data.slice(0, 6).map((p) => (
-                    <li key={p.id}>
-                      <AppLink
-                        to={`/passwords/${p.id}`}
-                        className="flex items-center gap-3 px-5 py-3 hover:bg-surface-2"
-                      >
-                        <KeyRound className="size-4 shrink-0 text-warning" aria-hidden />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{p.name}</span>
-                          <span className="block text-xs text-muted">{p.clientName}</span>
-                        </span>
-                        <span
-                          className={
-                            p.rotationDue! <= today ? 'text-xs font-semibold text-danger' : 'text-xs text-muted'
-                          }
-                        >
-                          {formatDate(`${p.rotationDue}T12:00:00`)}
-                        </span>
-                      </AppLink>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="px-5 py-4 text-sm text-muted">Nothing is due.</p>
-              )}
-            </Card>
-          )}
+          <Card>
+            <CardHeader
+              title="Coming up"
+              description="Expiring or due in the next 30 days."
+              actions={
+                <AppLink
+                  to="/expirations"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                >
+                  All <ArrowRight className="size-3.5" />
+                </AppLink>
+              }
+            />
+            {expiring.data?.length ? (
+              <ul className="divide-y divide-border">
+                {expiring.data.slice(0, 6).map((i) => (
+                  <li key={`${i.kind}-${i.id}-${i.label}`}>
+                    <ExpiryRow item={i} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="px-5 py-4 text-sm text-muted">{expiring.isLoading ? 'Loading…' : 'Nothing is due.'}</p>
+            )}
+          </Card>
           <p className="px-1 text-xs text-muted">Tip: press Ctrl+K anywhere to search.</p>
         </div>
       </div>

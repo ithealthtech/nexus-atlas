@@ -180,6 +180,7 @@ export async function buildApp({
     csrf: c.session.csrf,
     stage: c.stage,
     organization: c.organization,
+    ...(c.stage === 'mfa' ? { methods: { totp: !!c.user.mfaSecret, passkey: c.user.passkeyCount > 0 } } : {}),
   });
   const setSession = (reply: FastifyReply, token: string) =>
     reply.setCookie(cookieName, token, { ...cookieOptions, maxAge: 12 * 3600 });

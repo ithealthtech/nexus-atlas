@@ -21,7 +21,43 @@ export const onUnauthenticated = (handler: () => void) => {
   onSessionLost = handler;
 };
 
-export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+// Sensitive actions answer 403 "reauth" when the password wasn't confirmed recently. The app registers a
+// handler that asks for it; the request is then retried once.
+let confirmPassword: (() => Promise<boolean>) | null = null;
+export const onReauthRequired = (handler: (() => Promise<boolean>) | null) => {
+  confirmPassword = handler;
+};
+
+async function withReauth<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'reauth' && confirmPassword && (await confirmPassword()))
+      return run();
+    throw error;
+  }
+}
+
+export function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+  return withReauth(() => request<T>(path, options));
+}
+
+/** Downloads a file response (CSV exports) through the same session and reauth handling. */
+export function download(path: string, filename: string): Promise<void> {
+  return withReauth(async () => {
+    const response = await fetch(`/api${path}`, { credentials: 'same-origin' });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as ApiErrorBody | null;
+      throw new ApiError(response.status, data?.error ?? 'The download failed.', data?.code);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+}
+
+async function request<T>(path: string, options: { method?: string; body?: unknown }): Promise<T> {
   const method = options.method ?? 'GET';
   let response: Response;
   try {

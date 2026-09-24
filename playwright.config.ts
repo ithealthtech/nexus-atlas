@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 const port = Number(process.env.E2E_PORT ?? 4399);
 export const E2E = {
-  baseURL: `http://127.0.0.1:${port}`,
+  // "localhost" rather than 127.0.0.1: passkeys (WebAuthn) need a host name, not an IP address.
+  baseURL: `http://localhost:${port}`,
   setupCode: 'e2e-setup-code-0123456789',
   databaseUrl: process.env.E2E_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5432/atlas_e2e',
 };
@@ -31,6 +32,7 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       DATABASE_URL: E2E.databaseUrl,
+      HOST: 'localhost',
       PORT: String(port),
       PUBLIC_URL: E2E.baseURL,
       ATLAS_SETUP_CODE: E2E.setupCode,

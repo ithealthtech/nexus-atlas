@@ -22,18 +22,26 @@
   - scrypt (N=32768, r=8, p=1) with a 16-byte salt, in the same format as 0.2, so migrated hashes keep working.
   - 12–256 characters, reasonably varied, and not containing the email name.
 - **Unknown accounts:** they take the same time and get the same response as a wrong password.
-- **MFA:** TOTP (RFC 6238), set up by QR code or by typing the key. Each code works once: the last-used time step is stored, and a database check stops two requests from using the same code. MFA is required for staff and optional for client accounts. Secrets are sealed with the master key.
+- **Second step (MFA):** an authenticator app, a passkey, or both. MFA is required for staff and optional for client accounts.
+  - **Authenticator app:** TOTP (RFC 6238), set up by QR code or by typing the key. Each code works once: the last-used time step is stored, and a database check stops two requests from using the same code. Secrets are sealed with the master key.
+  - **Passkeys (WebAuthn):** Windows Hello, Touch ID, phones, or security keys. A passkey can be the second step after the password, or sign someone in on its own when it verifies them (PIN or biometrics). Staff can enroll a passkey instead of an authenticator app. The relying party is the `PUBLIC_URL` host name, so passkeys need a host name (not an IP address). Up to 10 per person.
+  - **Recovery codes:** 10 single-use codes are issued with the first second factor and shown once. They are stored as SHA-256 hashes and removed atomically when used. People can replace them from their account page.
+  - **Remember this browser:** after the second step, a person can skip it on that browser for 30 days. The browser keeps a random token in an `HttpOnly` cookie; the server stores only its hash. People see and remove remembered browsers on their account page, and an MFA reset removes them all.
 - **Lockout:** 5 wrong passwords or codes lock the account for 15 minutes and end its sessions.
 - **Session stages:** a session moves through `mfa` → `password` (temporary password) → `mfa-setup` (staff without MFA) → `active`. The server allows only that stage's own endpoints until the session is `active`.
-- **Sessions:** 2 hours idle or 12 hours total, and at most 10 per user. Changing a password or enrolling MFA signs out other sessions. Disabling an account or resetting it signs out all of its sessions.
+- **Sessions:** 2 hours idle or 12 hours total, and at most 10 per user. Changing a password or enrolling MFA signs out other sessions. Disabling an account or resetting it signs out all of its sessions. People see where they are signed in and can sign out any other session; administrators can sign someone out everywhere.
+- **Confirming it's you:** changing people, groups, email settings, passkeys, or recovery codes, and exporting logs, need the password to have been entered in the last 10 minutes. The app asks for it and then continues.
+- **Forgotten passwords:** when email is set up, the sign-in page offers a reset link. The response is the same whether or not the account exists, and at most 3 links are sent per account per hour. A link works once, expires in an hour, and carries its token in the URL fragment so it never reaches server logs. Using it signs the person out everywhere and emails them a notice. Two-step verification still applies at the next sign-in.
 
 ## Administration
 
 - **Adding people:** administrators add people with a generated temporary passphrase. The person must replace it at first sign-in.
 - **Reset sign-in:** issues a new temporary password, optionally resets MFA for a lost authenticator, unlocks the account, and signs the person out everywhere.
-- **Security log:** records setup, sign-ins (successful, failed, and blocked), lockouts, MFA enrollment and failures, password changes, and user creation, updates, and resets, with IP addresses. Only administrators can see it.
+- **Groups:** give members per-client access in one place. A member's effective level is the highest of their baseline, their own grants, and their groups' grants, then capped by their role. Groups are for staff; client accounts get access individually. Restricted passwords can list groups as well as people.
+- **Security log:** records setup, sign-ins (successful, failed, and blocked, and which second step was used), lockouts, MFA and passkey changes, recovery code use, password changes and resets, remembered devices, session sign-outs, user and group changes, email settings, and log exports, with IP addresses. Only administrators can see it.
+- **Tamper evidence:** a database trigger chains every security event to the previous one with SHA-256, and another trigger refuses edits. **Verify now** on the Security log page recomputes the chain. A checkpoint of the newest event, signed with a key derived from the master key, is refreshed hourly and on each verification, so deleting the newest events is also detected. Someone with full database access can still rebuild the chain, but not the signed checkpoint without the master key.
+- **Retention and export:** security and password-activity logs can be kept forever (the default) or for 1–7 years, and exported as CSV (cells that spreadsheets would treat as formulas are neutralised).
 
 ## Coming later
 
-- **M3:** passkeys (WebAuthn), MFA recovery codes, "remember this device", re-authentication before sensitive actions, a session list with remote sign-out, email password reset over SMTP, and a UI for groups.
-- **After v1:** Entra ID / Microsoft 365 single sign-on (the provider interface and `user_identities` table land in M3).
+- **After v1:** Entra ID / Microsoft 365 single sign-on.

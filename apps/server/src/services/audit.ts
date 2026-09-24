@@ -66,7 +66,7 @@ export class AuditService {
     const orgId = actor.orgId;
     const result = await this.db.execute(sql`
       select id::text as id, prev_hash, hash, atlas_event_hash(prev_hash, e) as expected
-      from security_events e where org_id = ${orgId} order by id`);
+      from security_events e where org_id = ${orgId} order by e.id`);
     const rows = result.rows as { id: string; prev_hash: string; hash: string; expected: string }[];
     let brokenAt: string | null = null;
     rows.forEach((row, i) => {

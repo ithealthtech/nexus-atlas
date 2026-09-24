@@ -14,7 +14,16 @@ import type {
   SearchResult,
 } from '@atlas/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ClientSummary, SecurityEventView, UserView } from '@atlas/shared';
+import type {
+  AccountSecurityView,
+  ClientSummary,
+  ExpirationItem,
+  GroupView,
+  NotificationSettings,
+  SecurityEventView,
+  SmtpSettingsView,
+  UserView,
+} from '@atlas/shared';
 import { api } from './api';
 
 export const useClients = () => useQuery({ queryKey: ['clients'], queryFn: () => api<ClientSummary[]>('/clients') });
@@ -24,6 +33,20 @@ export const useUsers = (enabled = true) =>
   useQuery({ queryKey: ['users'], queryFn: () => api<UserView[]>('/users'), enabled });
 export const useSecurityEvents = () =>
   useQuery({ queryKey: ['security-events'], queryFn: () => api<SecurityEventView[]>('/security-events') });
+
+export const useAccountSecurity = () =>
+  useQuery({ queryKey: ['account-security'], queryFn: () => api<AccountSecurityView>('/account/security') });
+export const useGroups = (enabled = true) =>
+  useQuery({ queryKey: ['groups'], queryFn: () => api<GroupView[]>('/groups'), enabled });
+export const useExpirations = (days = 90) =>
+  useQuery({ queryKey: ['expirations', days], queryFn: () => api<ExpirationItem[]>(`/expirations?days=${days}`) });
+export const useEmailSettings = () =>
+  useQuery({ queryKey: ['settings', 'email'], queryFn: () => api<SmtpSettingsView>('/settings/email') });
+export const useNotificationSettings = () =>
+  useQuery({
+    queryKey: ['settings', 'notifications'],
+    queryFn: () => api<NotificationSettings>('/settings/notifications'),
+  });
 
 /** A mutation that refreshes the listed queries when it succeeds. */
 export function useSave<TBody, TResult>(send: (body: TBody) => Promise<TResult>, invalidate: string[][]) {

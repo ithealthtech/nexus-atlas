@@ -473,6 +473,24 @@ describe('groups, expirations, and the audit log', () => {
     );
   });
 
+  it('keeps the chain intact when many events are written at once', async () => {
+    const orgId = (await t.handle.db.execute(sql`select id from orgs`)).rows[0]!.id as string;
+    await Promise.all(
+      Array.from({ length: 30 }, (_, i) =>
+        t.handle.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`insert into security_events (org_id, actor, action, detail) values (${orgId}, 'Load test', 'Concurrent', ${String(i)})`,
+          );
+          // Hold the transaction open briefly so inserts overlap.
+          await tx.execute(sql`select pg_sleep(${(i % 5) / 200})`);
+        }),
+      ),
+    );
+    const result = await owner.call('POST', '/api/audit/verify', {});
+    expect(result.data).toMatchObject({ ok: true, brokenAt: null });
+    expect(result.data.checked).toBeGreaterThan(30);
+  });
+
   it('detects rows deleted from the end of the log with the signed checkpoint', async () => {
     await owner.call('POST', '/api/audit/verify', {});
     await t.handle.db.execute(sql`delete from security_events where id = (select max(id) from security_events)`);

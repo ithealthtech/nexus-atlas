@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { KeyRound, Plus, RefreshCw, ShieldCheck, UserPlus, Users as UsersIcon } from 'lucide-react';
+import { KeyRound, LogOut, Plus, RefreshCw, ShieldCheck, UserPlus, Users as UsersIcon } from 'lucide-react';
 import {
   ACCESS_LEVELS,
   LEVEL_INFO,
@@ -136,9 +136,24 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
       footer={
         <>
           {user && user.id !== actor.id && (
-            <Button variant="ghost" className="mr-auto" onClick={() => setResetting(true)}>
-              <KeyRound /> Reset sign-in
-            </Button>
+            <div className="mr-auto flex flex-wrap gap-1">
+              <Button variant="ghost" onClick={() => setResetting(true)}>
+                <KeyRound /> Reset sign-in
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    await api(`/users/${user.id}/sign-out`, { method: 'POST', body: {} });
+                    toast(`${user.name} was signed out everywhere.`);
+                  } catch (err) {
+                    toast((err as Error).message, 'error');
+                  }
+                }}
+              >
+                <LogOut /> Sign out everywhere
+              </Button>
+            </div>
           )}
           <Button variant="secondary" onClick={onClose}>
             Cancel

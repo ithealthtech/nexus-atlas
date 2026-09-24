@@ -5,6 +5,7 @@ import { E2E } from '../playwright.config';
 
 const OWNER = { name: 'Avery Owner', email: 'owner@atlas.test', password: 'correct horse battery 1' };
 let ownerSecret = '';
+let recoveryCode = '';
 const problems: string[] = [];
 
 function watch(page: Page) {
@@ -46,6 +47,12 @@ test.describe.serial('first run to restricted client access', () => {
     ownerSecret = await mfaSecretFrom(page);
     await page.getByLabel(/Enter the 6-digit code/).fill(totp(ownerSecret));
     await page.getByRole('button', { name: 'Turn on two-step verification' }).click();
+    await expect(page.getByRole('heading', { name: 'Save your recovery codes' })).toBeVisible();
+    const codes = page.getByRole('list', { name: 'Recovery codes' }).getByRole('listitem');
+    await expect(codes).toHaveCount(10);
+    recoveryCode = await codes.first().innerText();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Continue to Atlas' }).click();
     await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Avery/ })).toBeVisible();
     await accessible(page);
   });
@@ -313,10 +320,10 @@ test.describe.serial('first run to restricted client access', () => {
     await page.goto('/');
     await page.getByLabel('Email').fill('morgan@harbor.test');
     await page.getByLabel('Password').fill('wrong password here');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Email or password is incorrect');
     await page.getByLabel('Password').fill('temporary pass 1234');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Choose your password' })).toBeVisible();
     await page.getByLabel('Temporary password').fill('temporary pass 1234');
     await page.getByLabel('New password').fill('harbor reader pass 7');
@@ -381,6 +388,126 @@ test.describe.serial('first run to restricted client access', () => {
   });
 });
 
+test.describe.serial('account security and administration', () => {
+  test.setTimeout(90_000);
+
+  test('owner signs in with a recovery code and remembers the browser', async ({ page }) => {
+    watch(page);
+    await page.goto('/');
+    await page.getByLabel('Email').fill(OWNER.email);
+    await page.getByLabel('Password').fill(OWNER.password);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByRole('button', { name: 'Use a recovery code' }).click();
+    await page.getByLabel('Recovery code').fill(recoveryCode);
+    await page.getByLabel('Remember this browser for 30 days').check();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Verify' }).click();
+    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+
+    await signOut(page);
+    await page.getByLabel('Email').fill(OWNER.email);
+    await page.getByLabel('Password').fill(OWNER.password);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    // Remembered: no second step on this browser.
+    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+    await page.goto('/account');
+    await expect(page.getByText('9 of 10 unused')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Remembered browsers' })).toBeVisible();
+    await accessible(page);
+  });
+
+  test('owner adds a passkey and signs in with it alone', async ({ page }) => {
+    watch(page);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('WebAuthn.enable');
+    await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        protocol: 'ctap2',
+        transport: 'internal',
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    });
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await page.goto('/account');
+    await page.getByRole('button', { name: 'Add passkey' }).click();
+    await page.getByRole('dialog').getByLabel('Name').fill('Office laptop');
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByText('Passkey added.')).toBeVisible();
+    await expect(page.getByText('Office laptop')).toBeVisible();
+    await accessible(page);
+
+    await page.context().clearCookies();
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
+    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+  });
+
+  test('admin sets up Microsoft 365 email, a group, and checks expirations and log integrity', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Settings');
+    await page.getByLabel('Send email from Atlas').check();
+    await page.getByLabel('Microsoft 365').check();
+    await expect(page.getByLabel('SMTP server', { exact: true })).toHaveValue('smtp.office365.com');
+    await expect(page.getByLabel('Port', { exact: true })).toHaveValue('587');
+    await page.getByLabel('Username', { exact: true }).fill('atlas@itdonerightnc.test');
+    await page.getByLabel('Password', { exact: true }).fill('app-password-for-smtp');
+    await page.getByLabel('From address').fill('atlas@itdonerightnc.test');
+    await page.getByRole('button', { name: 'Save email settings' }).click();
+    await expect(page.getByText('Email settings saved')).toBeVisible();
+    await expect(page.getByText('Saved and encrypted. Leave empty to keep it.')).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/settings.png', fullPage: true });
+
+    await nav(page, 'Groups');
+    await page.getByRole('button', { name: 'New group' }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('Tier 1 helpdesk');
+    await dialog.getByLabel('Group access to Harbor Dental Group').selectOption('read');
+    await accessible(page);
+    await dialog.getByRole('button', { name: 'Create group' }).click();
+    await expect(page.getByText('Tier 1 helpdesk')).toBeVisible();
+    await expect(page.getByText('Harbor Dental Group · Read')).toBeVisible();
+    await accessible(page);
+
+    await nav(page, 'Expirations');
+    await expect(page.getByRole('heading', { name: 'Expirations' })).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/expirations.png', fullPage: true });
+
+    await nav(page, 'Security log');
+    await page.getByRole('button', { name: 'Verify now' }).click();
+    await expect(page.getByText('Intact.')).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/security.png' });
+
+    await page.goto('/account');
+    await page.screenshot({ path: 'test-results/screens/account.png', fullPage: true });
+
+    // With email on, the sign-in page offers a reset link.
+    await page.context().clearCookies();
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Forgot your password?' }).click();
+    await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
+    await accessible(page);
+    await page.goto('/reset-password');
+    await expect(page.getByRole('heading', { name: 'This link is incomplete' })).toBeVisible();
+  });
+
+  test.afterAll(() => {
+    expect(problems).toEqual([]);
+  });
+});
+
+async function signOut(page: Page) {
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in to Atlas' })).toBeVisible();
+}
+
 // Each code works once, like a real authenticator: wait for an unused time step when needed.
 let lastStep = totpStep();
 async function freshCode(secret: string) {
@@ -394,7 +521,7 @@ async function signIn(page: Page, email: string, password: string, secret: strin
   await page.goto('/');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByLabel('Authentication code').fill(await freshCode(secret));
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();

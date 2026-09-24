@@ -84,6 +84,9 @@ DECLARE last text;
 BEGIN
   -- One writer per organization at a time, so the chain never forks.
   PERFORM pg_advisory_xact_lock(hashtext('atlas-audit:' || coalesce(NEW.org_id::text, '')));
+  -- Take the ID only after the lock: the default was drawn before it, so concurrent inserts could otherwise
+  -- get IDs in a different order from the chain.
+  NEW.id := nextval(pg_get_serial_sequence('security_events', 'id'));
   SELECT hash INTO last FROM security_events
     WHERE org_id IS NOT DISTINCT FROM NEW.org_id ORDER BY id DESC LIMIT 1;
   NEW.prev_hash := coalesce(last, '');

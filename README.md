@@ -2,7 +2,7 @@
 
 Self-hosted IT documentation and password manager for MSPs: client workspaces, assets, runbooks, and encrypted credentials, with per-client access for your technicians and the clients you support.
 
-> **Status: v1.0 in development (milestones M0–M2 of 5 complete).** Sign-in, permissions, the documentation workspace, and the encrypted password vault work today. Administration features (M3) and release hardening with a security review (M4) are next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
+> **Status: v1.0 in development (milestones M0–M2 and M3a complete).** Sign-in with passkeys and recovery codes, permissions and groups, the documentation workspace, the encrypted password vault, email alerts, and a tamper-evident audit log work today. Import, export, and the API (M3b) and release hardening with a security review (M4) are next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
 
 ![Atlas dashboard](docs/screenshots/dashboard.png)
 
@@ -20,7 +20,7 @@ Self-hosted IT documentation and password manager for MSPs: client workspaces, a
   - Sessions are stored in the database; an administrator can revoke them, and changing a password signs out other sessions.
 - **People & access:**
   - Six roles: Owner, Admin, Technician, Read-only technician, Client editor, and Client viewer.
-  - Each client can be set to *none / read / edit / edit + passwords*, with an "every client" baseline for staff. Group grants are in the data model, with a UI coming in M3.
+  - Each client can be set to *none / read / edit / edit + passwords*, with an "every client" baseline for staff. Groups give a team access to a set of clients in one place.
   - Changes apply to live sessions immediately.
 - **Clients:** create, edit, search, and filter. Clients a user can't access look exactly like missing ones. Each client has its own workspace with Overview, Assets, Documents, Contacts, Locations, and Activity tabs.
 - **Assets:** 13 built-in layouts (flexible-asset templates): configurations, networks, domains, SSL certificates, licenses, applications, backups, email, internet/WAN, wireless, printers, vendors, and remote access.

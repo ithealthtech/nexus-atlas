@@ -26,6 +26,10 @@ import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
 import { ReasonProvider } from '@/lib/vault';
+import { ReauthProvider } from '@/components/Reauth';
+import { Groups } from '@/pages/Groups';
+import { Settings } from '@/pages/Settings';
+import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
 import { Account } from '@/pages/Account';
@@ -76,15 +80,25 @@ function Gate() {
         </div>
       </div>
     );
-  if (!session.data) return <AuthScreen stage={setup.data?.needed ? 'setup' : 'signin'} />;
+  if (!session.data)
+    return <AuthScreen stage={setup.data?.needed ? 'setup' : 'signin'} passwordReset={setup.data?.passwordReset} />;
   if (session.data.stage !== 'active')
-    return <AuthScreen stage={session.data.stage} email={session.data.actor.email} onSignOut={signOut} />;
+    return (
+      <AuthScreen
+        stage={session.data.stage}
+        email={session.data.actor.email}
+        methods={session.data.methods}
+        onSignOut={signOut}
+      />
+    );
   return (
-    <ReasonProvider>
-      <AppShell>
-        <Outlet />
-      </AppShell>
-    </ReasonProvider>
+    <ReauthProvider>
+      <ReasonProvider>
+        <AppShell>
+          <Outlet />
+        </AppShell>
+      </ReasonProvider>
+    </ReauthProvider>
   );
 }
 
@@ -189,11 +203,19 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/users', component: adminOnly(Users) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/layouts', component: adminOnly(Layouts) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/groups', component: adminOnly(Groups) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
 ];
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/share/$token', component: SharePage }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/reset-password',
+      component: () => <AuthScreen stage="reset" />,
+    }),
     appRoute.addChildren(routes),
   ]),
   defaultPreload: 'intent',
