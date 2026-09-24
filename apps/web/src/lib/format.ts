@@ -28,3 +28,31 @@ export function relativeTime(iso: string) {
   }
   return formatDate(iso);
 }
+
+/** "Edge on Windows" from a user-agent string; good enough to recognise your own devices. */
+export function describeDevice(userAgent: string) {
+  if (!userAgent) return 'Unknown device';
+  const browser = /Edg\//.test(userAgent)
+    ? 'Edge'
+    : /OPR\//.test(userAgent)
+      ? 'Opera'
+      : /Firefox\//.test(userAgent)
+        ? 'Firefox'
+        : /Chrome\//.test(userAgent)
+          ? 'Chrome'
+          : /Safari\//.test(userAgent)
+            ? 'Safari'
+            : 'Browser';
+  const os = /Windows/.test(userAgent)
+    ? 'Windows'
+    : /iPhone|iPad/.test(userAgent)
+      ? 'iOS'
+      : /Mac OS X/.test(userAgent)
+        ? 'macOS'
+        : /Android/.test(userAgent)
+          ? 'Android'
+          : /Linux/.test(userAgent)
+            ? 'Linux'
+            : '';
+  return os ? `${browser} on ${os}` : browser;
+}

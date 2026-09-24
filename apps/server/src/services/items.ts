@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { ROLE_INFO, type ItemRef, type ItemType } from '@atlas/shared';
 import { HttpError } from '../errors.js';
@@ -129,9 +129,21 @@ export async function canSee(
     .from(schema.passwords)
     .where(eq(schema.passwords.id, item.id));
   if (!row?.restricted || ROLE_INFO[scope.actor.role].admin) return true;
-  const [allowed] = await scope.db
+  return (await allowedRestricted(scope, [item.id])).has(item.id);
+}
+
+/** Which of these restricted passwords the actor is listed on, directly or through a group. */
+export async function allowedRestricted(scope: Scope, ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const direct = scope.db
     .select({ id: schema.passwordAccess.passwordId })
     .from(schema.passwordAccess)
-    .where(and(eq(schema.passwordAccess.passwordId, item.id), eq(schema.passwordAccess.userId, scope.actor.id)));
-  return !!allowed;
+    .where(and(inArray(schema.passwordAccess.passwordId, ids), eq(schema.passwordAccess.userId, scope.actor.id)));
+  const viaGroup = scope.db
+    .select({ id: schema.passwordGroupAccess.passwordId })
+    .from(schema.passwordGroupAccess)
+    .innerJoin(schema.groupMembers, eq(schema.groupMembers.groupId, schema.passwordGroupAccess.groupId))
+    .where(and(inArray(schema.passwordGroupAccess.passwordId, ids), eq(schema.groupMembers.userId, scope.actor.id)));
+  const rows = [...(await direct), ...(await viaGroup)];
+  return new Set(rows.map((r) => r.id));
 }

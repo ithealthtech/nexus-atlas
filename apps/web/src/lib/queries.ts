@@ -14,8 +14,18 @@ import type {
   SearchResult,
 } from '@atlas/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ClientSummary, SecurityEventView, UserView } from '@atlas/shared';
+import type {
+  AccountSecurityView,
+  ClientSummary,
+  ExpirationItem,
+  GroupView,
+  NotificationSettings,
+  SecurityEventView,
+  SmtpSettingsView,
+  UserView,
+} from '@atlas/shared';
 import { api } from './api';
+import { DEMO } from './demo';
 
 export const useClients = () => useQuery({ queryKey: ['clients'], queryFn: () => api<ClientSummary[]>('/clients') });
 export const useClient = (id: string) =>
@@ -24,6 +34,20 @@ export const useUsers = (enabled = true) =>
   useQuery({ queryKey: ['users'], queryFn: () => api<UserView[]>('/users'), enabled });
 export const useSecurityEvents = () =>
   useQuery({ queryKey: ['security-events'], queryFn: () => api<SecurityEventView[]>('/security-events') });
+
+export const useAccountSecurity = () =>
+  useQuery({ queryKey: ['account-security'], queryFn: () => api<AccountSecurityView>('/account/security') });
+export const useGroups = (enabled = true) =>
+  useQuery({ queryKey: ['groups'], queryFn: () => api<GroupView[]>('/groups'), enabled });
+export const useExpirations = (days = 90) =>
+  useQuery({ queryKey: ['expirations', days], queryFn: () => api<ExpirationItem[]>(`/expirations?days=${days}`) });
+export const useEmailSettings = () =>
+  useQuery({ queryKey: ['settings', 'email'], queryFn: () => api<SmtpSettingsView>('/settings/email') });
+export const useNotificationSettings = () =>
+  useQuery({
+    queryKey: ['settings', 'notifications'],
+    queryFn: () => api<NotificationSettings>('/settings/notifications'),
+  });
 
 /** A mutation that refreshes the listed queries when it succeeds. */
 export function useSave<TBody, TResult>(send: (body: TBody) => Promise<TResult>, invalidate: string[][]) {
@@ -129,6 +153,7 @@ export const useSearch = (q: string, client?: string) =>
 
 /** Upload with fetch + FormData (the JSON helper doesn't handle files). */
 export async function uploadFile(type: ItemType, id: string, file: File, csrf: string): Promise<AttachmentView[]> {
+  if (DEMO) throw new Error("File uploads aren't available in the demo.");
   const form = new FormData();
   form.append('file', file);
   const response = await fetch(`/api/items/${type}/${id}/attachments`, {

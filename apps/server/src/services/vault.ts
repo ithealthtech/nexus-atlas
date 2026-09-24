@@ -22,6 +22,7 @@ import type { VaultKeys } from '../crypto/vault-keys.js';
 import { totp } from '../identity/totp.js';
 import { recordActivity } from './activity.js';
 import { isUuid, type Scope } from './scope.js';
+import { allowedRestricted } from './items.js';
 
 type Row = typeof schema.passwords.$inferSelect;
 const editor = alias(schema.users, 'pw_editor');
@@ -46,14 +47,9 @@ export class VaultService {
     return [...(await scope.levels())].filter(([, level]) => level === 'edit_passwords').map(([id]) => id);
   }
 
-  /** Restricted items are visible to admins and to the people listed on them. */
+  /** Restricted items are visible to admins and to the people and groups listed on them. */
   private async allowedRestricted(scope: Scope, ids: string[]): Promise<Set<string>> {
-    if (!ids.length) return new Set();
-    const rows = await scope.db
-      .select({ id: schema.passwordAccess.passwordId })
-      .from(schema.passwordAccess)
-      .where(and(inArray(schema.passwordAccess.passwordId, ids), eq(schema.passwordAccess.userId, scope.actor.id)));
-    return new Set(rows.map((r) => r.id));
+    return allowedRestricted(scope, ids);
   }
 
   private async load(scope: Scope, id: string) {
@@ -387,34 +383,56 @@ export class VaultService {
   }
 
   // ---------- restriction list ----------
-  async access(scope: Scope, id: string): Promise<{ userIds: string[] }> {
+  async access(scope: Scope, id: string): Promise<{ userIds: string[]; groupIds: string[] }> {
     await this.load(scope, id);
-    const rows = await scope.db
-      .select({ userId: schema.passwordAccess.userId })
-      .from(schema.passwordAccess)
-      .where(eq(schema.passwordAccess.passwordId, id));
-    return { userIds: rows.map((r) => r.userId) };
+    const [users, groups] = await Promise.all([
+      scope.db
+        .select({ userId: schema.passwordAccess.userId })
+        .from(schema.passwordAccess)
+        .where(eq(schema.passwordAccess.passwordId, id)),
+      scope.db
+        .select({ groupId: schema.passwordGroupAccess.groupId })
+        .from(schema.passwordGroupAccess)
+        .where(eq(schema.passwordGroupAccess.passwordId, id)),
+    ]);
+    return { userIds: users.map((r) => r.userId), groupIds: groups.map((r) => r.groupId) };
   }
 
-  async setAccess(scope: Scope, id: string, input: unknown, ip: string): Promise<{ userIds: string[] }> {
+  async setAccess(
+    scope: Scope,
+    id: string,
+    input: unknown,
+    ip: string,
+  ): Promise<{ userIds: string[]; groupIds: string[] }> {
     if (!this.isAdmin(scope)) throw new HttpError(403, 'Only administrators can change who may use a password.');
     const { p } = await this.load(scope, id);
-    const { userIds } = passwordAccessSchema.parse(input);
-    const unique = [...new Set(userIds)];
-    if (unique.length) {
+    const body = passwordAccessSchema.parse(input);
+    const userIds = [...new Set(body.userIds)];
+    const groupIds = [...new Set(body.groupIds)];
+    if (userIds.length) {
       const found = await scope.db
         .select({ id: schema.users.id })
         .from(schema.users)
-        .where(and(eq(schema.users.orgId, scope.actor.orgId), inArray(schema.users.id, unique)));
-      if (found.length !== unique.length) throw new HttpError(400, 'Choose people from this workspace.');
+        .where(and(eq(schema.users.orgId, scope.actor.orgId), inArray(schema.users.id, userIds)));
+      if (found.length !== userIds.length) throw new HttpError(400, 'Choose people from this workspace.');
+    }
+    if (groupIds.length) {
+      const found = await scope.db
+        .select({ id: schema.groups.id })
+        .from(schema.groups)
+        .where(and(eq(schema.groups.orgId, scope.actor.orgId), inArray(schema.groups.id, groupIds)));
+      if (found.length !== groupIds.length) throw new HttpError(400, 'Choose groups from this workspace.');
     }
     await scope.db.transaction(async (tx) => {
       await tx.delete(schema.passwordAccess).where(eq(schema.passwordAccess.passwordId, id));
-      if (unique.length)
-        await tx.insert(schema.passwordAccess).values(unique.map((userId) => ({ passwordId: id, userId })));
+      await tx.delete(schema.passwordGroupAccess).where(eq(schema.passwordGroupAccess.passwordId, id));
+      if (userIds.length)
+        await tx.insert(schema.passwordAccess).values(userIds.map((userId) => ({ passwordId: id, userId })));
+      if (groupIds.length)
+        await tx.insert(schema.passwordGroupAccess).values(groupIds.map((groupId) => ({ passwordId: id, groupId })));
     });
-    await this.audit(scope, p, 'Changed who may use it', `${unique.length} people`, ip);
-    return { userIds: unique };
+    await this.audit(scope, p, 'Changed who may use it', `${userIds.length} people, ${groupIds.length} groups`, ip);
+    return { userIds, groupIds };
   }
 
   // ---------- audit ----------

@@ -1,5 +1,25 @@
 # Verification log
 
+## M3a Accounts and security — September 24, 2026
+
+Run on Node 22 and PostgreSQL 16 in a Linux container.
+
+- **Integration tests:** `npm test` passes all **45 tests in 6 files**. The 14 new ones in `security.test.ts` cover:
+  - **Recovery codes:** 10 unique codes, stored only as hashes; each works once (reuse and made-up codes get 400); replacing them needs a recent password confirmation and invalidates the old set.
+  - **Remembered browsers and sessions:** a remembered browser skips the second step; a forged device cookie does not. Sessions can be listed (no token hashes exposed) and ended one at a time or all at once; forgetting the browser brings the second step back.
+  - **Passkeys:** registration and sign-in are exercised with a software authenticator (ES256). A response for the wrong challenge or from another origin is rejected. Passwordless sign-in requires user verification and each challenge works once. Removal needs a recent password confirmation. Staff can enroll a passkey instead of an app, and an admin MFA reset removes passkeys.
+  - **Email:** the SMTP password is never stored or logged in plaintext; saving without a password keeps it; test sends report the server's rejection. Only admins with a recent password confirmation can change settings.
+  - **Password reset:** nothing is sent when email is off or the account is unknown; the link works once, rejects weak passwords, signs the person out everywhere, and MFA still applies afterwards.
+  - **Groups:** group grants give client access; restricted passwords open to listed groups only; client accounts can't join; duplicate names get 409; deleting a group removes access.
+  - **Expirations and alerts:** only items within the window and visible to the person are listed; alert emails go out once per day and the digest on Mondays.
+  - **Audit log:** a clean chain verifies; normal SQL can't edit rows; an edited row (triggers disabled) is pinpointed; deleting the newest row fails the signed checkpoint; 30 concurrent writers leave the chain intact; CSV cells can't run as formulas.
+- **Browser tests:** `npm run test:e2e` passes all **12 tests** with no axe (WCAG 2.2 AA) violations. The 3 new ones cover signing in with a recovery code and remembering the browser; adding a passkey with Chrome's virtual authenticator and signing in with it alone; and Microsoft 365 email settings, groups, expirations, log verification, and the forgot-password page. The e2e server now runs on `localhost` because passkeys need a host name.
+- **Issues found and fixed during M3a verification:**
+  - Signing out left the workspace on screen until a reload (the whole query cache was cleared, detaching the session query). Existed before M3a.
+  - Concurrent security events could take IDs out of chain order; the ID is now assigned after the chain lock.
+  - Log verification sorted event IDs as text, so logs with 10 or more events reported a false break.
+- **Also run:** lint, typecheck, legacy 0.2 tests, and `npm audit --omit=dev` (0 vulnerabilities).
+
 ## M2 Password vault — September 24, 2026
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.

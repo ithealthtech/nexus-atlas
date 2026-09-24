@@ -25,7 +25,7 @@ export function useSession() {
 export function useSetupNeeded(enabled: boolean) {
   return useQuery({
     queryKey: ['setup'],
-    queryFn: () => api<{ needed: boolean }>('/setup'),
+    queryFn: () => api<{ needed: boolean; passwordReset: boolean }>('/setup'),
     enabled,
     staleTime: Infinity,
   });

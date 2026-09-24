@@ -12,7 +12,10 @@ import {
   Menu as MenuIcon,
   Monitor,
   Moon,
+  CalendarClock,
   ScrollText,
+  Settings2,
+  UsersRound,
   Search,
   Server,
   Sun,
@@ -22,7 +25,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { CommandPalette } from '@/components/CommandPalette';
-import { useQueryClient } from '@tanstack/react-query';
 import { Avatar } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
@@ -58,10 +60,10 @@ function NavLink({
 
 export function useSignOut() {
   const apply = useApplySession();
-  const client = useQueryClient();
   return async () => {
     await api('/session', { method: 'DELETE' }).catch(() => undefined);
-    client.clear();
+    // apply(null) also drops every other cached query. Clearing the whole cache here instead would detach the
+    // session query the app is watching, leaving the workspace on screen after signing out.
     apply(null);
   };
 }
@@ -167,14 +169,17 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         <NavLink to="/assets" icon={Server} label="Assets" onNavigate={onNavigate} />
         {actor.isStaff && <NavLink to="/documents" icon={BookOpen} label="Knowledge base" onNavigate={onNavigate} />}
         {actor.isStaff && <NavLink to="/passwords" icon={KeyRound} label="Passwords" onNavigate={onNavigate} />}
+        <NavLink to="/expirations" icon={CalendarClock} label="Expirations" onNavigate={onNavigate} />
         {actor.isAdmin && (
           <>
             <p className="px-3 pt-5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase">
               Administration
             </p>
             <NavLink to="/admin/users" icon={Users} label="People & access" onNavigate={onNavigate} />
+            <NavLink to="/admin/groups" icon={UsersRound} label="Groups" onNavigate={onNavigate} />
             <NavLink to="/admin/layouts" icon={LayoutTemplate} label="Asset layouts" onNavigate={onNavigate} />
             <NavLink to="/admin/security" icon={ScrollText} label="Security log" onNavigate={onNavigate} />
+            <NavLink to="/admin/settings" icon={Settings2} label="Settings" onNavigate={onNavigate} />
           </>
         )}
       </nav>

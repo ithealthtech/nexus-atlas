@@ -24,6 +24,8 @@ const updated = () => timestamp('updated_at', { withTimezone: true }).notNull().
 export const orgs = pgTable('orgs', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
+  // Email (SMTP), notification, and audit settings. The SMTP password inside is sealed with the master key.
+  settings: jsonb('settings').notNull().default({}),
   createdAt: created(),
 });
 
@@ -44,6 +46,10 @@ export const users = pgTable(
     mfaSecret: text('mfa_secret'),
     mfaPending: text('mfa_pending'),
     mfaLastStep: bigint('mfa_last_step', { mode: 'number' }).notNull().default(0),
+    // SHA-256 hashes of unused one-time recovery codes.
+    recoveryCodes: jsonb('recovery_codes').$type<string[]>().notNull().default([]),
+    passkeyCount: integer('passkey_count').notNull().default(0),
+    notifyDigest: boolean('notify_digest').notNull().default(true),
     disabled: boolean('disabled').notNull().default(false),
     failedAttempts: integer('failed_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -84,14 +90,20 @@ export const clients = pgTable(
   ],
 );
 
-export const groups = pgTable('groups', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  orgId: uuid('org_id')
-    .notNull()
-    .references(() => orgs.id),
-  name: text('name').notNull(),
-  createdAt: created(),
-});
+export const groups = pgTable(
+  'groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [uniqueIndex('groups_org_name').on(t.orgId, sql`lower(${t.name})`)],
+);
 
 export const groupMembers = pgTable(
   'group_members',
@@ -134,17 +146,90 @@ export const sessions = pgTable(
   'sessions',
   {
     tokenHash: text('token_hash').primaryKey(),
+    // Public identifier for the session list; the token hash is never sent to the browser.
+    id: uuid('id').notNull().defaultRandom(),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     csrf: text('csrf').notNull(),
     mfaVerified: boolean('mfa_verified').notNull().default(false),
+    // Last time the user re-entered their password; sensitive actions need this to be recent.
+    reauthAt: timestamp('reauth_at', { withTimezone: true }),
+    // Pending WebAuthn challenge for this session (passkey sign-in or registration).
+    challenge: text('challenge'),
     createdAt: created(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     ip: text('ip').notNull().default(''),
     userAgent: text('user_agent').notNull().default(''),
   },
-  (t) => [index('sessions_user').on(t.userId)],
+  (t) => [index('sessions_user').on(t.userId), uniqueIndex('sessions_id').on(t.id)],
+);
+
+// "Remember this device": skips the second factor on this browser for 30 days.
+export const trustedDevices = pgTable(
+  'trusted_devices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    userAgent: text('user_agent').notNull().default(''),
+    ip: text('ip').notNull().default(''),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('trusted_devices_token').on(t.tokenHash), index('trusted_devices_user').on(t.userId)],
+);
+
+export const passkeys = pgTable(
+  'passkeys',
+  {
+    // WebAuthn credential ID (base64url).
+    id: text('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    publicKey: text('public_key').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    transports: jsonb('transports').$type<string[]>().notNull().default([]),
+    createdAt: created(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  },
+  (t) => [index('passkeys_user').on(t.userId)],
+);
+
+// Challenges for passwordless passkey sign-in, before any session exists.
+export const authChallenges = pgTable('auth_challenges', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  challenge: text('challenge').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+});
+
+export const passwordResets = pgTable(
+  'password_resets',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [index('password_resets_user').on(t.userId)],
+);
+
+// Keeps notification emails from being sent twice (one row per user, kind, and day or item).
+export const notificationLog = pgTable(
+  'notification_log',
+  {
+    key: text('key').primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('notification_log_sent').on(t.sentAt)],
 );
 
 export const securityEvents = pgTable(
@@ -158,6 +243,9 @@ export const securityEvents = pgTable(
     detail: text('detail').notNull().default(''),
     ip: text('ip').notNull().default(''),
     createdAt: created(),
+    // Hash chain (set by a database trigger): each row's hash covers the row and the previous row's hash.
+    prevHash: text('prev_hash').notNull().default(''),
+    hash: text('hash').notNull().default(''),
   },
   (t) => [index('security_events_org').on(t.orgId, t.createdAt)],
 );
@@ -495,6 +583,20 @@ export const passwordAccess = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
   },
   (t) => [primaryKey({ columns: [t.passwordId, t.userId] })],
+);
+
+// Groups whose members may use a restricted item.
+export const passwordGroupAccess = pgTable(
+  'password_group_access',
+  {
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.passwordId, t.groupId] })],
 );
 
 // One-time share links. The server holds only browser-encrypted ciphertext; the key lives in the link's #fragment.

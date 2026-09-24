@@ -49,7 +49,7 @@ import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
-import { useClient, useClients, useUsers } from '@/lib/queries';
+import { useClient, useClients, useUsers, useGroups } from '@/lib/queries';
 import {
   DEFAULT_GENERATOR,
   copySecret,
@@ -989,37 +989,73 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
 
 function AccessCard({ item }: { item: PasswordView }) {
   const users = useUsers(true);
+  const groups = useGroups(true);
   const toast = useToast();
-  const [selected, setSelected] = useState<Set<string> | null>(null);
+  const [selected, setSelected] = useState<{ users: Set<string>; groups: Set<string> } | null>(null);
   useEffect(() => {
-    api<{ userIds: string[] }>(`/passwords/${item.id}/access`).then((r) => setSelected(new Set(r.userIds)));
+    api<{ userIds: string[]; groupIds: string[] }>(`/passwords/${item.id}/access`).then((r) =>
+      setSelected({ users: new Set(r.userIds), groups: new Set(r.groupIds) }),
+    );
   }, [item.id]);
   const staff = (users.data ?? []).filter((u: UserView) => !['owner', 'admin'].includes(u.role) && !u.disabled);
+  const toggle = async (kind: 'users' | 'groups', id: string, on: boolean) => {
+    const next = { users: new Set(selected!.users), groups: new Set(selected!.groups) };
+    if (on) next[kind].add(id);
+    else next[kind].delete(id);
+    setSelected(next);
+    try {
+      await api(`/passwords/${item.id}/access`, {
+        method: 'PUT',
+        body: { userIds: [...next.users], groupIds: [...next.groups] },
+      });
+      toast('Access updated.');
+    } catch (err) {
+      setSelected(selected);
+      toast((err as Error).message, 'error');
+    }
+  };
   return (
     <Card>
-      <CardHeader title="Who can use it" description="Restricted: administrators plus the people ticked here." />
-      <div className="space-y-2 px-5 py-4">
+      <CardHeader
+        title="Who can use it"
+        description="Restricted: administrators plus the people and groups ticked here."
+      />
+      <div className="space-y-4 px-5 py-4">
         {!selected ? (
           <Skeleton className="h-16" />
-        ) : !staff.length ? (
-          <p className="text-sm text-muted">There are no other staff accounts yet.</p>
         ) : (
-          staff.map((u) => (
-            <Checkbox
-              key={u.id}
-              label={u.name}
-              description={u.email}
-              checked={selected.has(u.id)}
-              onChange={async (e) => {
-                const next = new Set(selected);
-                if (e.target.checked) next.add(u.id);
-                else next.delete(u.id);
-                setSelected(next);
-                await api(`/passwords/${item.id}/access`, { method: 'PUT', body: { userIds: [...next] } });
-                toast('Access updated.');
-              }}
-            />
-          ))
+          <>
+            {!!groups.data?.length && (
+              <fieldset className="space-y-2">
+                <legend className="mb-1 text-xs font-bold tracking-wide text-muted uppercase">Groups</legend>
+                {groups.data.map((g) => (
+                  <Checkbox
+                    key={g.id}
+                    label={g.name}
+                    description={`${g.memberIds.length} member${g.memberIds.length === 1 ? '' : 's'}`}
+                    checked={selected.groups.has(g.id)}
+                    onChange={(e) => toggle('groups', g.id, e.target.checked)}
+                  />
+                ))}
+              </fieldset>
+            )}
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-xs font-bold tracking-wide text-muted uppercase">People</legend>
+              {!staff.length ? (
+                <p className="text-sm text-muted">There are no other staff accounts yet.</p>
+              ) : (
+                staff.map((u) => (
+                  <Checkbox
+                    key={u.id}
+                    label={u.name}
+                    description={u.email}
+                    checked={selected.users.has(u.id)}
+                    onChange={(e) => toggle('users', u.id, e.target.checked)}
+                  />
+                ))
+              )}
+            </fieldset>
+          </>
         )}
       </div>
     </Card>

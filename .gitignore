@@ -17,3 +17,4 @@ playwright-report/
 *.sqlite-shm
 *.sqlite-wal
 atlas.key
+apps/web/dist-demo

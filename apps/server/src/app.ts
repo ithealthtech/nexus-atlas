@@ -6,18 +6,31 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ZodError } from 'zod';
 import { sql } from 'drizzle-orm';
-import type { DatabaseHandle } from '@atlas/db';
-import { changePasswordSchema, mfaSchema, signInSchema, type SessionView } from '@atlas/shared';
+import { schema, type DatabaseHandle } from '@atlas/db';
+import {
+  changePasswordSchema,
+  mfaSchema,
+  reauthSchema,
+  recoveryCodeSchema,
+  signInSchema,
+  type SessionView,
+} from '@atlas/shared';
 import type { Config } from './config.js';
 import { HttpError } from './errors.js';
 import type { KeyProvider } from './crypto/keys.js';
-import { IdentityService, sameSecret, type SessionContext } from './identity/service.js';
+import { IdentityService, hasMfa, sameSecret, type SessionContext } from './identity/service.js';
+import { requireAdmin } from './authz.js';
 import { ClientService } from './services/clients.js';
 import { ensureDefaultLayouts } from './services/layouts.js';
 import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
 import { registerVaultRoutes } from './routes/vault.js';
 import { VaultKeys } from './crypto/vault-keys.js';
+import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
+import { MailService, smtpTransport, type MailTransport } from './services/mail.js';
+import { SettingsService } from './services/settings.js';
+import { AuditService } from './services/audit.js';
+import { registerAdminRoutes } from './routes/admin.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -31,13 +44,25 @@ export interface AppOptions {
   keys: KeyProvider;
   setupCode?: string;
   storage?: FileStorage;
+  /** Replaces SMTP delivery (tests capture messages instead of sending them). */
+  mailTransport?: MailTransport;
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
 const STAGE_ROUTES: Record<string, string[]> = {
-  mfa: ['POST /api/session/mfa'],
+  mfa: [
+    'POST /api/session/mfa',
+    'POST /api/session/recovery',
+    'POST /api/session/passkey/options',
+    'POST /api/session/passkey',
+  ],
   password: ['POST /api/account/password'],
-  'mfa-setup': ['POST /api/account/mfa/setup', 'POST /api/account/mfa/confirm'],
+  'mfa-setup': [
+    'POST /api/account/mfa/setup',
+    'POST /api/account/mfa/confirm',
+    'POST /api/account/passkeys/options',
+    'POST /api/account/passkeys',
+  ],
 };
 
 /** Per-address failure counter for unauthenticated endpoints (sign-in, setup, MFA). */
@@ -65,6 +90,7 @@ export async function buildApp({
   keys,
   setupCode = '',
   storage,
+  mailTransport = smtpTransport,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger:
@@ -81,9 +107,14 @@ export async function buildApp({
   const { db } = database;
   const identity = new IdentityService(db, keys, { requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA });
   const clients = new ClientService(db);
+  const settings = new SettingsService(db, keys);
+  const mail = new MailService(settings, mailTransport);
+  const account = new AccountSecurity(db, identity, mail, { publicOrigin: config.publicOrigin, rpName: 'MSP Atlas' });
+  const audit = new AuditService(db, keys, settings);
   const limiter = failureLimiter(10, 15 * 60_000);
   const cookieName = config.secureCookies ? '__Host-atlas_session' : 'atlas_session';
   const cookieOptions = { httpOnly: true, sameSite: 'strict' as const, path: '/', secure: config.secureCookies };
+  const deviceCookie = config.secureCookies ? '__Host-atlas_device' : 'atlas_device';
   const devHosts = config.NODE_ENV === 'production' ? [] : ['127.0.0.1', 'localhost'];
 
   await app.register(cookie);
@@ -149,10 +180,21 @@ export async function buildApp({
     csrf: c.session.csrf,
     stage: c.stage,
     organization: c.organization,
+    ...(c.stage === 'mfa' ? { methods: { totp: !!c.user.mfaSecret, passkey: c.user.passkeyCount > 0 } } : {}),
   });
   const setSession = (reply: FastifyReply, token: string) =>
     reply.setCookie(cookieName, token, { ...cookieOptions, maxAge: 12 * 3600 });
   const meta = (req: FastifyRequest) => ({ ip: req.ip, userAgent: req.headers['user-agent'] ?? '' });
+  const rememberDevice = async (req: FastifyRequest, reply: FastifyReply) => {
+    const token = await account.rememberDevice(req.session!.user, meta(req));
+    reply.setCookie(deviceCookie, token, { ...cookieOptions, maxAge: DEVICE_DAYS * 86_400 });
+  };
+  const current = async (req: FastifyRequest) => view((await identity.resolve(req.cookies[cookieName]))!);
+  // WebAuthn is bound to the site's host name. Outside production, loopback addresses (the dev server) also work.
+  const relyingParty = (req: FastifyRequest): RelyingParty =>
+    config.NODE_ENV === 'production'
+      ? { id: new URL(config.publicOrigin).hostname, origin: config.publicOrigin }
+      : { id: req.hostname.replace(/:\d+$/, ''), origin: new URL(`${req.protocol}://${req.host}`).origin };
 
   async function authenticate(req: FastifyRequest) {
     const context = await identity.resolve(req.cookies[cookieName]);
@@ -183,7 +225,10 @@ export async function buildApp({
   });
 
   // ---- setup and sign-in ----
-  app.get('/api/setup', async () => ({ needed: await identity.needsSetup() }));
+  app.get('/api/setup', async () => {
+    const [org] = await db.select({ id: schema.orgs.id }).from(schema.orgs).limit(1);
+    return { needed: !org, passwordReset: org ? await mail.enabled(org.id) : false };
+  });
   app.post('/api/setup', async (req, reply) => {
     limiter.check(req.ip);
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -211,7 +256,14 @@ export async function buildApp({
     }
     const previous = await identity.resolve(req.cookies[cookieName]);
     if (previous) await identity.signOut(previous, req.ip);
-    const { token } = await identity.createSession(user, meta(req));
+    // A remembered device stands in for the second step on this browser.
+    const trusted = hasMfa(user) && (await account.isTrusted(user, req.cookies[deviceCookie]));
+    const { token } = await identity.createSession(
+      user,
+      meta(req),
+      trusted,
+      trusted ? 'Password on a remembered device' : '',
+    );
     setSession(reply, token);
     return view((await identity.resolve(token))!);
   });
@@ -221,16 +273,89 @@ export async function buildApp({
     reply.clearCookie(cookieName, cookieOptions);
     return { ok: true };
   });
-  app.post('/api/session/mfa', authed, async (req) => {
+  const limited = async (req: FastifyRequest, work: () => Promise<unknown>) => {
     limiter.check(req.ip);
-    const { code } = mfaSchema.parse(req.body ?? {});
     try {
-      await identity.verifyMfa(req.session!, code, req.ip);
+      await work();
     } catch (error) {
       if (error instanceof HttpError && (error.code === 'mfa_invalid' || error.status === 429)) limiter.fail(req.ip);
       throw error;
     }
-    return view((await identity.resolve(req.cookies[cookieName]))!);
+  };
+  const remember = (body: unknown) => (body as { remember?: unknown } | null)?.remember === true;
+  app.post('/api/session/mfa', authed, async (req, reply) => {
+    const { code } = mfaSchema.parse(req.body ?? {});
+    await limited(req, () => identity.verifyMfa(req.session!, code, req.ip));
+    if (remember(req.body)) await rememberDevice(req, reply);
+    return current(req);
+  });
+  app.post('/api/session/recovery', authed, async (req, reply) => {
+    const body = recoveryCodeSchema.parse(req.body ?? {});
+    await limited(req, () => account.useRecoveryCode(req.session!, body.code, req.ip));
+    if (body.remember) await rememberDevice(req, reply);
+    return current(req);
+  });
+  app.post('/api/session/passkey/options', authed, async (req) =>
+    account.secondFactorOptions(req.session!, relyingParty(req)),
+  );
+  app.post('/api/session/passkey', authed, async (req, reply) => {
+    await limited(req, () => account.secondFactor(req.session!, req.body, relyingParty(req), req.ip));
+    if (remember(req.body)) await rememberDevice(req, reply);
+    return current(req);
+  });
+  // Passwordless: a passkey that verifies the person (PIN or biometrics) is both factors.
+  app.post('/api/passkey/options', async (req) => {
+    limiter.check(req.ip);
+    return account.passwordlessOptions(relyingParty(req));
+  });
+  app.post('/api/passkey/sign-in', async (req, reply) => {
+    limiter.check(req.ip);
+    let user;
+    try {
+      user = await account.passwordless(req.body, relyingParty(req));
+    } catch (error) {
+      if (error instanceof HttpError && error.status < 500) limiter.fail(req.ip);
+      throw error;
+    }
+    const previous = await identity.resolve(req.cookies[cookieName]);
+    if (previous) await identity.signOut(previous, req.ip);
+    const { token } = await identity.createSession(user, meta(req), true, 'Passkey');
+    setSession(reply, token);
+    return view((await identity.resolve(token))!);
+  });
+  app.post('/api/session/reauth', authed, async (req) => {
+    const { password } = reauthSchema.parse(req.body ?? {});
+    await limited(req, async () => {
+      try {
+        await identity.reauthenticate(req.session!, password, req.ip);
+      } catch (error) {
+        if (error instanceof HttpError && error.code === 'reauth_invalid') limiter.fail(req.ip);
+        throw error;
+      }
+    });
+    return { ok: true };
+  });
+
+  // ---- password reset by email ----
+  app.post('/api/password-reset', async (req) => {
+    limiter.check(req.ip);
+    limiter.fail(req.ip); // Every request counts, so the endpoint can't be used to flood a mailbox.
+    await account.requestReset(req.body ?? {}, meta(req)).catch((error) => {
+      // The response never says whether the account exists or whether sending worked.
+      if (error instanceof ZodError) throw error;
+      req.log.warn({ err: error }, 'Password reset email failed');
+    });
+    return { ok: true };
+  });
+  app.post('/api/password-reset/complete', async (req) => {
+    limiter.check(req.ip);
+    try {
+      await account.completeReset(req.body ?? {}, req.ip);
+    } catch (error) {
+      if (error instanceof HttpError && error.code === 'reset_invalid') limiter.fail(req.ip);
+      throw error;
+    }
+    return { ok: true };
   });
 
   // ---- account ----
@@ -242,21 +367,58 @@ export async function buildApp({
   app.post('/api/account/mfa/setup', authed, async (req) => identity.beginMfa(req.session!));
   app.post('/api/account/mfa/confirm', authed, async (req) => {
     const { code } = mfaSchema.parse(req.body ?? {});
-    await identity.confirmMfa(req.session!, code, req.ip);
-    return view((await identity.resolve(req.cookies[cookieName]))!);
+    const { recoveryCodes } = await identity.confirmMfa(req.session!, code, req.ip);
+    return { ...(await current(req)), recoveryCodes };
+  });
+  app.get('/api/account/security', authed, async (req) => account.overview(req.session!));
+  app.patch('/api/account/preferences', authed, async (req) => {
+    await account.setPreferences(req.session!, req.body);
+    return account.overview(req.session!);
+  });
+  app.post('/api/account/recovery-codes', authed, async (req) => account.regenerateRecoveryCodes(req.session!, req.ip));
+  app.post('/api/account/passkeys/options', authed, async (req) =>
+    account.registrationOptions(req.session!, relyingParty(req)),
+  );
+  app.post('/api/account/passkeys', authed, async (req) => {
+    const { recoveryCodes } = await account.register(req.session!, req.body, relyingParty(req), req.ip);
+    return { ...(await current(req)), recoveryCodes };
+  });
+  app.delete<{ Params: { id: string } }>('/api/account/passkeys/:id', authed, async (req) => {
+    await account.removePasskey(req.session!, req.params.id, req.ip);
+    return current(req);
+  });
+  app.delete<{ Params: { id: string } }>('/api/account/sessions/:id', authed, async (req) => {
+    await account.endSession(req.session!, req.params.id, req.ip);
+    return { ok: true };
+  });
+  app.post('/api/account/sessions/end-others', authed, async (req) => account.endOtherSessions(req.session!, req.ip));
+  app.delete<{ Params: { id: string } }>('/api/account/devices/:id', authed, async (req) => {
+    await account.forgetDevice(req.session!, req.params.id, req.ip);
+    return { ok: true };
   });
 
   // ---- administration ----
+  // Changing who can do what needs a recent password confirmation.
+  const recent = (req: FastifyRequest) => identity.requireRecentAuth(req.session!);
   app.get('/api/users', authed, async (req) => identity.listUsers(actorOf(req)));
-  app.post('/api/users', authed, async (req, reply) =>
-    reply.status(201).send(await identity.createUser(actorOf(req), req.body, req.ip)),
-  );
-  app.patch<{ Params: { id: string } }>('/api/users/:id', authed, async (req) =>
-    identity.updateUser(actorOf(req), req.params.id, req.body, req.ip),
-  );
-  app.post<{ Params: { id: string } }>('/api/users/:id/reset', authed, async (req) =>
-    identity.resetUser(actorOf(req), req.params.id, req.body, req.ip),
-  );
+  app.post('/api/users', authed, async (req, reply) => {
+    recent(req);
+    return reply.status(201).send(await identity.createUser(actorOf(req), req.body, req.ip));
+  });
+  app.patch<{ Params: { id: string } }>('/api/users/:id', authed, async (req) => {
+    recent(req);
+    return identity.updateUser(actorOf(req), req.params.id, req.body, req.ip);
+  });
+  app.post<{ Params: { id: string } }>('/api/users/:id/reset', authed, async (req) => {
+    recent(req);
+    return identity.resetUser(actorOf(req), req.params.id, req.body, req.ip);
+  });
+  app.post<{ Params: { id: string } }>('/api/users/:id/sign-out', authed, async (req) => {
+    requireAdmin(actorOf(req));
+    recent(req);
+    await account.signOutUser(actorOf(req), req.params.id, req.ip);
+    return { ok: true };
+  });
   app.get('/api/security-events', authed, async (req) => identity.events(actorOf(req)));
 
   // ---- clients ----
@@ -278,12 +440,28 @@ export async function buildApp({
     maxUploadBytes,
   });
 
-  registerVaultRoutes(app, {
+  const vault = registerVaultRoutes(app, {
     db,
     authed,
     keys: new VaultKeys(db, keys),
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
+
+  const notifier = registerAdminRoutes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    mail,
+    audit,
+    vault,
+    publicOrigin: config.publicOrigin,
+    sendHour: config.ATLAS_DIGEST_HOUR,
+  });
+  if (config.NODE_ENV !== 'test') {
+    notifier.start();
+    app.addHook('onClose', async () => notifier.stop());
+  }
 
   app.all('/api/*', async () => {
     throw new HttpError(404, 'Not found.');

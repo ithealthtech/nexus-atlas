@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, LogIn, ScrollText, Search, ShieldCheck, UserCog } from 'lucide-react';
-import { Card, EmptyState, Input, PageHeader, Skeleton } from '@/components/ui';
+import { AlertTriangle, Download, LogIn, ScrollText, Search, ShieldCheck, ShieldX, UserCog } from 'lucide-react';
+import type { AuditVerification } from '@atlas/shared';
+import { Button, Card, EmptyState, FormError, Input, PageHeader, Skeleton, useToast } from '@/components/ui';
+import { api, download } from '@/lib/api';
 import { useSecurityEvents } from '@/lib/queries';
 import { useVaultAudit } from '@/lib/vault';
 import { CardHeader } from '@/components/ui';
@@ -33,6 +35,7 @@ export function Security() {
         title="Security log"
         description="Sign-ins, failed attempts, lockouts, and account changes. The latest 200 events are shown."
       />
+      <AuditIntegrity />
       <Card>
         <div className="border-b border-border p-4">
           <label className="relative block max-w-md">
@@ -126,6 +129,82 @@ function VaultAudit() {
           ))}
         </ul>
       )}
+    </Card>
+  );
+}
+
+function AuditIntegrity() {
+  const toast = useToast();
+  const [result, setResult] = useState<AuditVerification | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const verify = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await api<AuditVerification>('/audit/verify', { method: 'POST', body: {} }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const exportLog = async (kind: 'security' | 'vault') => {
+    try {
+      await download(`/audit/export/${kind}`, `atlas-${kind}-log-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  };
+  return (
+    <Card className="mb-6">
+      <CardHeader
+        title="Log integrity"
+        description="Each event includes a fingerprint of the one before it, so edited or removed entries are detected."
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => exportLog('security')}>
+              <Download /> Security events CSV
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => exportLog('vault')}>
+              <Download /> Password activity CSV
+            </Button>
+          </>
+        }
+      />
+      <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+        {result ? (
+          result.ok ? (
+            <ShieldCheck className="size-6 text-success" aria-hidden />
+          ) : (
+            <ShieldX className="size-6 text-danger" aria-hidden />
+          )
+        ) : (
+          <ScrollText className="size-6 text-muted" aria-hidden />
+        )}
+        <div className="min-w-0 flex-1 text-sm" aria-live="polite">
+          {!result ? (
+            <p className="text-muted">Check that no security events have been changed or deleted.</p>
+          ) : result.ok ? (
+            <p>
+              <span className="font-semibold text-success">Intact.</span> {result.checked} events checked
+              {result.checkpoint === 'missing' ? '; a signed checkpoint was created for next time.' : '.'}
+            </p>
+          ) : (
+            <p>
+              <span className="font-semibold text-danger">Problem found.</span>{' '}
+              {result.brokenAt
+                ? `Event #${result.brokenAt} was changed, or an event before it was removed.`
+                : 'The newest events no longer match the signed checkpoint, so recent entries may have been deleted.'}{' '}
+              Investigate database access and restore from backup if needed.
+            </p>
+          )}
+          <FormError message={error} />
+        </div>
+        <Button onClick={verify} loading={busy}>
+          Verify now
+        </Button>
+      </div>
     </Card>
   );
 }

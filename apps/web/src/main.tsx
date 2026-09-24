@@ -6,6 +6,7 @@ import {
   RouterProvider,
   createRootRoute,
   createRoute,
+  createHashHistory,
   createRouter,
   lazyRouteComponent,
 } from '@tanstack/react-router';
@@ -26,10 +27,15 @@ import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
 import { ReasonProvider } from '@/lib/vault';
+import { ReauthProvider } from '@/components/Reauth';
+import { Groups } from '@/pages/Groups';
+import { Settings } from '@/pages/Settings';
+import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
 import { Account } from '@/pages/Account';
 import { NotFound } from '@/pages/NotFound';
+import { DEMO } from '@/lib/demo';
 import './styles.css';
 
 applyTheme(storedTheme());
@@ -76,15 +82,25 @@ function Gate() {
         </div>
       </div>
     );
-  if (!session.data) return <AuthScreen stage={setup.data?.needed ? 'setup' : 'signin'} />;
+  if (!session.data)
+    return <AuthScreen stage={setup.data?.needed ? 'setup' : 'signin'} passwordReset={setup.data?.passwordReset} />;
   if (session.data.stage !== 'active')
-    return <AuthScreen stage={session.data.stage} email={session.data.actor.email} onSignOut={signOut} />;
+    return (
+      <AuthScreen
+        stage={session.data.stage}
+        email={session.data.actor.email}
+        methods={session.data.methods}
+        onSignOut={signOut}
+      />
+    );
   return (
-    <ReasonProvider>
-      <AppShell>
-        <Outlet />
-      </AppShell>
-    </ReasonProvider>
+    <ReauthProvider>
+      <ReasonProvider>
+        <AppShell>
+          <Outlet />
+        </AppShell>
+      </ReasonProvider>
+    </ReauthProvider>
   );
 }
 
@@ -105,7 +121,20 @@ function adminOnly(Page: ComponentType) {
   };
 }
 
-const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFound });
+function Root() {
+  return (
+    <>
+      <Outlet />
+      {DEMO && (
+        <p className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md">
+          Demo · sample data · resets when you reload
+        </p>
+      )}
+    </>
+  );
+}
+
+const rootRoute = createRootRoute({ component: Root, notFoundComponent: NotFound });
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: Gate });
 // Search params used by list pages (folder and layout filters, archived toggle).
 // The rich-text editor is large, so document pages load on first use.
@@ -189,14 +218,24 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/users', component: adminOnly(Users) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/layouts', component: adminOnly(Layouts) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/groups', component: adminOnly(Groups) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
 ];
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/share/$token', component: SharePage }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/reset-password',
+      component: () => <AuthScreen stage="reset" />,
+    }),
     appRoute.addChildren(routes),
   ]),
   defaultPreload: 'intent',
+  // The demo is a single published page, so routes live in the URL fragment.
+  ...(DEMO ? { history: createHashHistory() } : {}),
 });
 declare module '@tanstack/react-router' {
   interface Register {

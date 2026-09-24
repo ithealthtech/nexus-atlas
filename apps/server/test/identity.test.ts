@@ -28,7 +28,7 @@ describe('identity', () => {
 
   it('first-run setup needs the console code, runs once, and forces MFA enrollment', async () => {
     const b = browser(t.app);
-    expect((await b.call('GET', '/api/setup')).data).toEqual({ needed: true });
+    expect((await b.call('GET', '/api/setup')).data).toEqual({ needed: true, passwordReset: false });
     expect((await b.call('POST', '/api/setup', { ...OWNER, setupCode: 'wrong' })).status).toBe(403);
     expect((await b.call('POST', '/api/setup', { ...OWNER, password: 'short', setupCode: SETUP_CODE })).status).toBe(
       400,

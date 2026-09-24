@@ -23,6 +23,8 @@ const schema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   ATLAS_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(1024).default(25),
+  // Local hour (0–23) after which expiry alerts and the Monday digest are emailed.
+  ATLAS_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(7),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_DIST: z.string().optional(),
 });

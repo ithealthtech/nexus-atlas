@@ -3,3 +3,4 @@ integrations/
 packages/db/drizzle/
 dist/
 *.md
+apps/web/dist-demo

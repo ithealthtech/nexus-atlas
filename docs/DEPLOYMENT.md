@@ -44,9 +44,19 @@ The certificate is used only for the install step and is not stored in the image
 | `ATLAS_REQUIRE_STAFF_MFA` | `true` | Require an authenticator app for staff |
 | `ATLAS_MAX_UPLOAD_MB` | `25` | Largest attachment accepted |
 | `ATLAS_DATA_DIR` | `./data` (`/data` in the container) | Holds attachments (`attachments/`) and, in development, the key file |
+| `ATLAS_DIGEST_HOUR` | `7` | Local hour after which expiry alerts and the Monday digest are emailed |
 | `LOG_LEVEL` | `info` | Logs are JSON; cookies and CSRF tokens are removed from them |
 
 In development, with no key configured, Atlas creates `data/atlas-master.key` on first run.
+
+## Email
+
+Atlas sends password reset links, expiry alerts, and a Monday digest. An administrator sets it up under **Settings → Email**; nothing is needed in the environment.
+
+- **Microsoft 365:** choose the Microsoft 365 preset (`smtp.office365.com`, port 587, STARTTLS). Sign in as a licensed mailbox, or one with send-as rights for the From address. In the Microsoft 365 admin center, open that user → **Mail** → **Manage email apps** and turn on **Authenticated SMTP**. If the account uses MFA, use an app password. Microsoft plans to retire basic authentication for SMTP in Exchange Online; OAuth sign-in is planned for Atlas before then.
+- **Other providers or an internal relay:** choose **Other SMTP server** and enter the host, port, and encryption (STARTTLS on 587, TLS on 465, or none for a trusted relay).
+- The SMTP password is encrypted with the master key. **Send test** checks the saved settings and shows the server's error if it refuses.
+- Alerts go to staff who can see the item and haven't turned them off on their account page. Each email goes out once per person per day (alerts) or week (digest), even with several Atlas servers.
 
 ## Health, logs, and upgrades
 

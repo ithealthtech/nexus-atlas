@@ -1,4 +1,5 @@
 import type { ApiError as ApiErrorBody } from '@atlas/shared';
+import { DEMO } from './demo';
 
 export class ApiError extends Error {
   constructor(
@@ -21,8 +22,62 @@ export const onUnauthenticated = (handler: () => void) => {
   onSessionLost = handler;
 };
 
-export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+// Sensitive actions answer 403 "reauth" when the password wasn't confirmed recently. The app registers a
+// handler that asks for it; the request is then retried once.
+let confirmPassword: (() => Promise<boolean>) | null = null;
+export const onReauthRequired = (handler: (() => Promise<boolean>) | null) => {
+  confirmPassword = handler;
+};
+
+async function withReauth<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'reauth' && confirmPassword && (await confirmPassword()))
+      return run();
+    throw error;
+  }
+}
+
+export function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+  return withReauth(() => request<T>(path, options));
+}
+
+/** Downloads a file response (CSV exports) through the same session and reauth handling. */
+export function download(path: string, filename: string): Promise<void> {
+  return withReauth(async () => {
+    if (DEMO) {
+      const text = String(await request(path, {}));
+      const href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      Object.assign(document.createElement('a'), { href, download: filename }).click();
+      setTimeout(() => URL.revokeObjectURL(href), 1000);
+      return;
+    }
+    const response = await fetch(`/api${path}`, { credentials: 'same-origin' });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as ApiErrorBody | null;
+      throw new ApiError(response.status, data?.error ?? 'The download failed.', data?.code);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+}
+
+async function request<T>(path: string, options: { method?: string; body?: unknown }): Promise<T> {
   const method = options.method ?? 'GET';
+  // Checked inline (not via DEMO) so production builds drop the sample backend entirely.
+  if (import.meta.env.MODE === 'demo') {
+    const { MockError, mockRequest } = await import('@/demo/mockApi');
+    try {
+      return (await mockRequest(path, method, options.body)) as T;
+    } catch (error) {
+      if (!(error instanceof MockError)) throw error;
+      if (error.status === 401 && error.code === 'session') onSessionLost();
+      throw new ApiError(error.status, error.message, error.code);
+    }
+  }
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
