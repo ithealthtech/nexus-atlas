@@ -11,7 +11,8 @@
     "rewrap-keys": "node dist/cli/rewrap-keys.js",
     "migrate-legacy": "node dist/cli/migrate-legacy.js",
     "backup": "node dist/cli/backup.js",
-    "restore": "node dist/cli/restore.js"
+    "restore": "node dist/cli/restore.js",
+    "perf": "tsx test/perf.bench.ts"
   },
   "dependencies": {
     "@atlas/db": "1.0.0-dev",
