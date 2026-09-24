@@ -33,6 +33,10 @@ import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
 import { ApiKeyService } from './services/api-keys.js';
+import { BackupService } from './backup/service.js';
+import { registerOpsRoutes } from './routes/ops.js';
+import { StatusService } from './services/status.js';
+import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
 
 declare module 'fastify' {
@@ -500,9 +504,27 @@ export async function buildApp({
     publicOrigin: config.publicOrigin,
     sendHour: config.ATLAS_DIGEST_HOUR,
   });
+  const backups = new BackupService(database, keys, files, {
+    dir: config.ATLAS_BACKUP_DIR ?? join(resolve(config.ATLAS_DATA_DIR), 'backups'),
+    keep: config.ATLAS_BACKUP_KEEP,
+    hour: config.ATLAS_BACKUP_HOUR,
+    enabled: config.ATLAS_BACKUP_ENABLED,
+    appVersion: APP_VERSION,
+  });
+  registerOpsRoutes(app, {
+    db,
+    authed,
+    recent,
+    backups,
+    status: new StatusService(database, { config, keys, backups, settings, notifier, version: APP_VERSION }),
+  });
   if (config.NODE_ENV !== 'test') {
     notifier.start();
-    app.addHook('onClose', async () => notifier.stop());
+    backups.start();
+    app.addHook('onClose', async () => {
+      notifier.stop();
+      backups.stop();
+    });
   }
 
   // ---- API keys, branding, imports, exports ----

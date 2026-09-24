@@ -552,6 +552,24 @@ test.describe.serial('data in and out, and the client portal', () => {
     expect(download.suggestedFilename()).toMatch(/^atlas-Harbor-Dental-Group-\d{4}-\d{2}-\d{2}\.zip$/);
   });
 
+  test('admin makes a backup and reviews system status', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'System status');
+    await expect(page.getByRole('heading', { name: 'System status' })).toBeVisible();
+    await expect(page.getByText('No backup yet')).toBeVisible();
+    await page.getByRole('button', { name: 'Back up now' }).click();
+    await expect(page.getByText('Backups are current')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('table', { name: 'Backup history' }).getByText('Done')).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/status.png', fullPage: true });
+    const [file] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: /^Download backup from/ }).click(),
+    ]);
+    expect(file.suggestedFilename()).toMatch(/^atlas-\d{8}-\d{6}\.atlasbak$/);
+  });
+
   test('a client viewer sees the passwords shared with their client, read-only', async ({ page }) => {
     watch(page);
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);

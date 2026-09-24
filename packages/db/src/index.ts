@@ -30,11 +30,11 @@ export function connect(
 export const migrationsFolder = fileURLToPath(new URL('../drizzle', import.meta.url));
 
 // A session-level advisory lock keeps two starting instances from migrating at the same time.
-export async function runMigrations(handle: DatabaseHandle): Promise<void> {
+export async function runMigrations(handle: DatabaseHandle, folder = migrationsFolder): Promise<void> {
   const client = await handle.pool.connect();
   try {
     await client.query('select pg_advisory_lock(727274)');
-    await migrate(drizzle(client, { schema }), { migrationsFolder });
+    await migrate(drizzle(client, { schema }), { migrationsFolder: folder });
   } finally {
     await client.query('select pg_advisory_unlock(727274)').catch(() => undefined);
     client.release();

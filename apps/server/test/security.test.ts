@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { totp } from '../src/identity/totp.js';
+import { totp, totpStep } from '../src/identity/totp.js';
 import { AuditService, toCsv } from '../src/services/audit.js';
 import { ExpirationService } from '../src/services/expirations.js';
 import { MailService } from '../src/services/mail.js';
@@ -39,12 +39,9 @@ describe('account security', () => {
   });
 
   const expireReauth = () => t.handle.db.execute(sql`update sessions set reauth_at = now() - interval '1 hour'`);
-  // Waits for the next TOTP step so a fresh code isn't rejected as a replay.
-  const nextCode = async (key: string) => {
-    const code = totp(key);
-    for (let i = 0; i < 40 && totp(key) === code; i++) await new Promise((r) => setTimeout(r, 1000));
-    return totp(key);
-  };
+  // The code for the next step: accepted (one step of clock drift is allowed) and never a replay of the code
+  // just used at setup, without waiting up to 30 seconds for the clock to move on.
+  const nextCode = (key: string) => totp(key, totpStep() + 1);
 
   it('issues recovery codes once, accepts each code once, and replaces them after reauthentication', async () => {
     // Codes came back when MFA was confirmed; regenerate to capture them here.
@@ -83,7 +80,7 @@ describe('account security', () => {
 
   it('remembers a device for the second step, lists sessions, and ends them remotely', async () => {
     const first = await signIn(t.app, OWNER.email, OWNER.password);
-    const done = await first.b.call('POST', '/api/session/mfa', { code: await nextCode(secret), remember: true });
+    const done = await first.b.call('POST', '/api/session/mfa', { code: nextCode(secret), remember: true });
     expect(done.data.stage).toBe('active');
     const device = [...first.b.jar].find(([k]) => k === 'atlas_device');
     expect(device).toBeTruthy();

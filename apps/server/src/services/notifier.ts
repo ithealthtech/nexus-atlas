@@ -27,6 +27,8 @@ export function isoWeek(date: Date) {
 export class Notifier {
   private timer?: NodeJS.Timeout;
   private running = false;
+  /** When background work last completed, for the status page. */
+  lastRunAt: Date | null = null;
 
   constructor(
     private readonly db: Database,
@@ -64,6 +66,7 @@ export class Notifier {
           await this.deps.audit.checkpoint(org.id);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
         }
+        this.lastRunAt = new Date();
       } finally {
         await this.db.execute(sql`select pg_advisory_unlock(727277)`);
       }

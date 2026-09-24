@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { connect, runMigrations, type DatabaseHandle } from '@atlas/db';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
-import { staticKeyProvider } from '../src/crypto/keys.js';
+import { staticKeyProvider, type KeyProvider } from '../src/crypto/keys.js';
 import { totp } from '../src/identity/totp.js';
 import type { SendArgs } from '../src/services/mail.js';
 
@@ -18,7 +18,9 @@ export const OWNER = {
 };
 
 /** A fresh database with migrations applied, dropped when the test finishes. */
-export async function freshDatabase(): Promise<{ url: string; handle: DatabaseHandle; drop(): Promise<void> }> {
+export async function freshDatabase(
+  options: { migrate?: boolean } = {},
+): Promise<{ url: string; handle: DatabaseHandle; drop(): Promise<void> }> {
   const name = `atlas_test_${randomBytes(6).toString('hex')}`;
   const admin = new pg.Client({ connectionString: ADMIN_URL });
   await admin.connect();
@@ -27,7 +29,7 @@ export async function freshDatabase(): Promise<{ url: string; handle: DatabaseHa
   const url = new URL(ADMIN_URL);
   url.pathname = `/${name}`;
   const handle = connect(url.toString(), { max: 5 });
-  await runMigrations(handle);
+  if (options.migrate !== false) await runMigrations(handle);
   return {
     url: url.toString(),
     handle,
@@ -51,10 +53,15 @@ export interface TestApp {
 
 export async function startApp(
   env: Record<string, string> = {},
-  extra: { huduFetch?: typeof fetch } = {},
+  extra: {
+    huduFetch?: typeof fetch;
+    keys?: KeyProvider;
+    /** An existing database (for example one a backup was restored into) instead of a fresh one. */
+    database?: Awaited<ReturnType<typeof freshDatabase>>;
+  } = {},
 ): Promise<TestApp> {
   const outbox: TestApp['outbox'] = [];
-  const database = await freshDatabase();
+  const { keys = staticKeyProvider([randomBytes(32)]), database = await freshDatabase(), ...rest } = extra;
   const config = loadConfig({
     DATABASE_URL: database.url,
     NODE_ENV: 'test',
@@ -65,9 +72,9 @@ export async function startApp(
   const app = await buildApp({
     config,
     database: database.handle,
-    keys: staticKeyProvider([randomBytes(32)]),
+    keys,
     setupCode: SETUP_CODE,
-    ...extra,
+    ...rest,
     mailTransport: async (smtp, message) => {
       if (smtp.host === 'reject.invalid') throw new Error('550 relay denied');
       outbox.push({ ...message, host: smtp.host });

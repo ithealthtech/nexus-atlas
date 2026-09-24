@@ -716,3 +716,26 @@ export const importJobs = pgTable(
     check('import_jobs_status_check', sql`${t.status} in ('running','done','failed')`),
   ],
 );
+
+// Backups cover the whole installation, so runs aren't tied to an organization. The files live in the backup folder.
+export const backupRuns = pgTable(
+  'backup_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    trigger: text('trigger').notNull(),
+    status: text('status').notNull().default('running'),
+    fileName: text('file_name'),
+    size: bigint('size', { mode: 'number' }),
+    rows: integer('rows'),
+    files: integer('files'),
+    error: text('error'),
+    startedByName: text('started_by_name').notNull(),
+    createdAt: created(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('backup_runs_created').on(t.createdAt),
+    check('backup_runs_trigger_check', sql`${t.trigger} in ('schedule','manual')`),
+    check('backup_runs_status_check', sql`${t.status} in ('running','done','failed')`),
+  ],
+);
