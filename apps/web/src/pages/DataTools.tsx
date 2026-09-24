@@ -45,7 +45,7 @@ function JobSummary({ job }: { job: ImportJobView }) {
         </span>
       </div>
       {Object.keys(job.counts).length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="relative overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-left text-sm tabular-nums">
             <thead className="bg-surface-2 text-xs text-muted">
               <tr>

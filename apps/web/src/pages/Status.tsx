@@ -209,7 +209,7 @@ function Backups({ status }: { status: SystemStatus }) {
       {!backups.runs.length ? (
         <p className="px-5 py-4 text-sm text-muted">No backups yet.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">Backup history</caption>
             <thead className="text-left text-xs text-muted">

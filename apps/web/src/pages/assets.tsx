@@ -181,7 +181,7 @@ export function AssetDialog({
 function AssetTable({ assets, layout, showClient }: { assets: AssetView[]; layout?: LayoutView; showClient: boolean }) {
   const columns: LayoutField[] = layout ? layout.fields.filter((f) => f.showInList).slice(0, 4) : [];
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="bg-surface-2 text-xs text-muted">
           <tr>

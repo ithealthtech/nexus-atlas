@@ -43,6 +43,6 @@ Do not disclose a suspected vulnerability in a public issue. Use GitHub's privat
 
 - Serve Atlas only over HTTPS (`PUBLIC_URL` must be `https://` in production), behind a reverse proxy with `TRUST_PROXY=true`.
 - Keep the master key in a password manager and on paper, not next to backups. Keep an old key after rotating for as long as you keep backups made with it.
-- Keep backups off the Atlas server (a share, a NAS, or cloud storage), and check them with `npm run backup -- verify <file>`.
+- Keep backups off the Atlas server (a share, a NAS, or cloud storage), and check them with `npm run backup -w @atlas/server -- verify <file>`.
 - Check **System status** and **Security log → Verify now** regularly.
 - Update Atlas when new versions are released. `npm audit --omit=dev` runs in CI on every change.
