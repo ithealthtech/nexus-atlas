@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
   ArrowDownUp,
+  Gauge,
   BookOpen,
   KeyRound,
   Building2,
@@ -181,6 +182,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
             <NavLink to="/admin/layouts" icon={LayoutTemplate} label="Asset layouts" onNavigate={onNavigate} />
             <NavLink to="/admin/security" icon={ScrollText} label="Security log" onNavigate={onNavigate} />
             <NavLink to="/admin/data" icon={ArrowDownUp} label="Import & export" onNavigate={onNavigate} />
+            <NavLink to="/admin/status" icon={Gauge} label="System status" onNavigate={onNavigate} />
             <NavLink to="/admin/settings" icon={Settings2} label="Settings" onNavigate={onNavigate} />
           </>
         )}
