@@ -2,13 +2,13 @@
 
 Self-hosted IT documentation and password manager for MSPs: client workspaces, assets, runbooks, and encrypted credentials, with per-client access for your technicians and the clients you support.
 
-> **Status: v1.0 in development (milestones M0 and M1 of 5 complete).** Sign-in, permissions, and the full documentation workspace work today. The encrypted password vault (M2) is next. Keep passwords out of Atlas and use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
+> **Status: v1.0 in development (milestones M0–M2 of 5 complete).** Sign-in, permissions, the documentation workspace, and the encrypted password vault work today. Administration features (M3) and release hardening with a security review (M4) are next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
 
 ![Atlas dashboard](docs/screenshots/dashboard.png)
 
-| Asset | Runbook |
-|---|---|
-| ![Asset detail with fields, related items, files, and version history](docs/screenshots/asset.png) | ![Runbook linked to its firewall](docs/screenshots/document.png) |
+| Asset | Runbook | Password |
+|---|---|---|
+| ![Asset detail with fields, related items, files, and version history](docs/screenshots/asset.png) | ![Runbook linked to its firewall](docs/screenshots/document.png) | ![Password entry with reveal, one-time code, share links, and access history](docs/screenshots/password.png) |
 
 ## What works now
 
@@ -35,6 +35,13 @@ Self-hosted IT documentation and password manager for MSPs: client workspaces, a
   - Link assets, documents, contacts, and locations to each other.
   - Attach files by drag and drop. Only images that pass a content check display inline; everything else downloads, with a sandboxing CSP.
 - **Contacts and locations:** each client can mark one primary contact and one primary location.
+- **Password vault:**
+  - Logins (username, password, URL, notes, and a TOTP key that shows the live one-time code) and BitLocker recovery keys. Entries link to the assets and runbooks they belong to.
+  - Secrets are encrypted with a separate data key per organization, which is itself encrypted by the master key (envelope encryption). Each ciphertext is bound to its row and field.
+  - The vault needs the "Edit + passwords" access level. Administrators can restrict individual entries to named people.
+  - Every reveal, copy, change, and share goes into an access history. Each client can require a reason before a password is revealed.
+  - A generator (random characters or passphrases), strength and reuse warnings, rotation reminders, and a history of previous passwords. Copied secrets clear from the clipboard after 30 seconds.
+  - **One-time share links:** the password is encrypted in your browser, and the key lives only in the link's `#fragment`, so the server stores ciphertext it can't read. Links expire and have a view limit, which holds even if two people open the link at once.
 - **Search:** Ctrl+K from anywhere finds clients, assets (including by IP or serial number), document text, contacts, and locations. It matches as you type and returns only what you're allowed to see.
 - **Security log and activity:** sign-ins, failures, lockouts, and account changes for administrators. Separate activity feeds show documentation changes for each item, each client, and overall.
 - **Interface:** light and dark themes, mobile layout, keyboard support, and WCAG 2.2 AA checks in end-to-end tests.

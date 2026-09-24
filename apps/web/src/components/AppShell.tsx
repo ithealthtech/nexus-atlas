@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
   BookOpen,
+  KeyRound,
   Building2,
   ChevronsUpDown,
   LayoutDashboard,
@@ -165,6 +166,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         <NavLink to="/clients" icon={Building2} label="Clients" onNavigate={onNavigate} />
         <NavLink to="/assets" icon={Server} label="Assets" onNavigate={onNavigate} />
         {actor.isStaff && <NavLink to="/documents" icon={BookOpen} label="Knowledge base" onNavigate={onNavigate} />}
+        {actor.isStaff && <NavLink to="/passwords" icon={KeyRound} label="Passwords" onNavigate={onNavigate} />}
         {actor.isAdmin && (
           <>
             <p className="px-3 pt-5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase">

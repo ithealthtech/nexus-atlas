@@ -10,7 +10,7 @@ export function Logo({ className, compact }: { className?: string; compact?: boo
       {!compact && (
         <span className="leading-none">
           <span className="block text-xl tracking-tight">atlas</span>
-          <span className="mt-1 block text-[9px] font-bold tracking-[0.2em] opacity-60">FOR MSPs</span>
+          <span className="mt-1 block text-[9px] font-bold tracking-[0.2em] opacity-80">FOR MSPs</span>
         </span>
       )}
     </span>

@@ -456,14 +456,14 @@ export function ActivityFeed({
     <ul className="divide-y divide-border">
       {items.map((a) => {
         const href =
-          a.entityId && ['asset', 'document'].includes(a.entityType)
+          a.entityId && ['asset', 'document', 'password'].includes(a.entityType)
             ? itemHref({ type: a.entityType as ItemType, id: a.entityId, clientId: a.clientId })
             : null;
         return (
           <li key={a.id} className="flex items-start gap-3 px-5 py-3 text-sm">
             <ItemIcon
               type={
-                (['asset', 'document', 'contact', 'location'].includes(a.entityType)
+                (['asset', 'document', 'contact', 'location', 'password'].includes(a.entityType)
                   ? a.entityType
                   : 'client') as ItemType
               }

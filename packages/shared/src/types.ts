@@ -23,6 +23,7 @@ export interface ClientSummary {
   type: string;
   status: 'active' | 'prospect' | 'inactive';
   notes: string;
+  requireRevealReason: boolean;
   access: AccessLevel;
   createdAt: string;
   updatedAt: string;

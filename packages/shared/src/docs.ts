@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { patchOf } from './patch.js';
 
 // ---------- asset layouts ----------
 export const FIELD_TYPES = [
@@ -82,10 +83,9 @@ export const assetSchema = z.object({
   fields: z.record(z.string(), z.unknown()).default({}),
   notes: z.string().max(20000).default(''),
 });
-export const updateAssetSchema = assetSchema
-  .omit({ layoutId: true })
-  .partial()
-  .extend({ version: z.number().int().positive() });
+export const updateAssetSchema = patchOf(assetSchema.omit({ layoutId: true })).extend({
+  version: z.number().int().positive(),
+});
 
 // ---------- documents ----------
 export const DOCUMENT_STATUSES = ['current', 'needs_review', 'draft'] as const;
@@ -109,7 +109,7 @@ export const documentSchema = z.object({
   folderId: z.string().uuid().nullable().default(null),
 });
 export const createDocumentSchema = documentSchema.extend({ clientId: z.string().uuid().nullable().default(null) });
-export const updateDocumentSchema = documentSchema.partial().extend({ version: z.number().int().positive() });
+export const updateDocumentSchema = patchOf(documentSchema).extend({ version: z.number().int().positive() });
 export const folderSchema = z.object({
   name: z.string().trim().min(1).max(120),
   clientId: z.string().uuid().nullable().default(null),
@@ -141,7 +141,7 @@ export const locationSchema = z.object({
 });
 
 // ---------- links, search, activity ----------
-export const ITEM_TYPES = ['asset', 'document', 'contact', 'location'] as const;
+export const ITEM_TYPES = ['asset', 'document', 'contact', 'location', 'password'] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
 export const relationSchema = z.object({
   type: z.enum(ITEM_TYPES),

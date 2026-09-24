@@ -11,6 +11,7 @@ const TABS = [
   ['', 'Overview'],
   ['/assets', 'Assets'],
   ['/documents', 'Documents'],
+  ['/passwords', 'Passwords'],
   ['/contacts', 'Contacts'],
   ['/locations', 'Locations'],
   ['/activity', 'Activity'],
@@ -68,7 +69,7 @@ export function ClientLayout() {
         )}
       </div>
       <nav aria-label="Client sections" className="mb-7 flex gap-1 overflow-x-auto border-b border-border">
-        {TABS.map(([path, label]) => (
+        {TABS.filter(([path]) => path !== '/passwords' || client.access === 'edit_passwords').map(([path, label]) => (
           <AppLink
             key={label}
             to={`/clients/${clientId}${path}`}

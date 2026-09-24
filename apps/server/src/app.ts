@@ -16,6 +16,8 @@ import { ClientService } from './services/clients.js';
 import { ensureDefaultLayouts } from './services/layouts.js';
 import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
+import { registerVaultRoutes } from './routes/vault.js';
+import { VaultKeys } from './crypto/vault-keys.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -276,9 +278,11 @@ export async function buildApp({
     maxUploadBytes,
   });
 
-  // The password vault and BitLocker collection stay closed until M2.
-  app.all('/api/vault/*', async () => {
-    throw new HttpError(501, 'The password vault is not available in this build.');
+  registerVaultRoutes(app, {
+    db,
+    authed,
+    keys: new VaultKeys(db, keys),
+    shareLimiter: failureLimiter(30, 15 * 60_000),
   });
 
   app.all('/api/*', async () => {

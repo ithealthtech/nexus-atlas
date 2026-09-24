@@ -1,3 +1,4 @@
+import { patchOf } from './patch.js';
 import { z } from 'zod';
 import { ACCESS_LEVELS, ROLES } from './access.js';
 
@@ -51,5 +52,6 @@ export const createClientSchema = z.object({
   type: z.string().trim().max(80).default('Customer'),
   status: clientStatusSchema.default('active'),
   notes: z.string().max(5000).default(''),
+  requireRevealReason: z.boolean().default(false),
 });
-export const updateClientSchema = createClientSchema.partial();
+export const updateClientSchema = patchOf(createClientSchema);

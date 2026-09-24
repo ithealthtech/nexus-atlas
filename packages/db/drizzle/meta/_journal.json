@@ -22,6 +22,13 @@
       "when": 1790204280422,
       "tag": "0002_documentation",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790206830894,
+      "tag": "0003_vault",
+      "breakpoints": true
     }
   ]
 }

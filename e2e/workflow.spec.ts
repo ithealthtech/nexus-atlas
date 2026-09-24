@@ -142,8 +142,14 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('button', { name: /Runbook \/ SOP/ }).click();
     await page.getByLabel('Title').fill('Internet outage response');
     const editor = page.getByRole('textbox', { name: 'Document content' });
-    await editor.locator('p').last().click();
-    await page.keyboard.press('End');
+    // Put the cursor at the end of the template, and confirm it's there before typing.
+    await expect
+      .poll(async () => {
+        await editor.locator('p').last().click();
+        await page.keyboard.press('End');
+        return page.evaluate(() => window.getSelection()?.anchorNode?.textContent ?? '');
+      })
+      .toContain('who to tell');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Call the fiber carrier before rebooting the firewall.');
     await accessible(page);
@@ -203,6 +209,105 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(page.getByText('MSP knowledge base').first()).toBeVisible();
   });
 
+  test('owner stores a password, reveals it, rotates it, and shares a one-time link', async ({ page, browser }) => {
+    watch(page);
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .first()
+      .click();
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
+    await page.getByRole('button', { name: 'Add password' }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name', { exact: true }).fill('HDG-FW-01 admin');
+    await dialog.getByLabel('Username', { exact: true }).fill('fwadmin');
+    await dialog.getByRole('button', { name: 'Generate' }).click();
+    await dialog.getByRole('button', { name: 'Use', exact: true }).click();
+    const generated = await dialog.getByLabel('Password', { exact: true }).inputValue();
+    expect(generated.length).toBeGreaterThanOrEqual(24);
+    await expect(dialog.getByText('Very strong')).toBeVisible();
+    await dialog.getByLabel('Website or address').fill('https://10.20.0.1');
+    await dialog.getByLabel(/Authenticator setup key/).fill('JBSWY3DPEHPK3PXP');
+    await accessible(page);
+    await dialog.getByRole('button', { name: 'Save to vault' }).click();
+    await expect(page.getByRole('heading', { name: /HDG-FW-01 admin/ })).toBeVisible();
+    await expect(page.getByText(generated)).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Show password' }).click();
+    await expect(page.getByText(generated)).toBeVisible();
+    await page.getByRole('button', { name: 'Copy password' }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(generated);
+    await page.getByRole('button', { name: 'Show code' }).click();
+    await expect(page.getByText(/^\d{3} \d{3}/)).toBeVisible();
+    await expect(page.getByText('Copied password').first()).toBeVisible();
+    await accessible(page);
+
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('dialog').getByLabel('New password').fill('Replaced-Firewall-Passphrase-2026!');
+    await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText(/Replaced by Avery Owner/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Share' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Create link' }).click();
+    const link = await page.getByRole('dialog').getByLabel('Share link').inputValue();
+    expect(link).toMatch(/\/share\/[\w-]{32}#[\w-]{43}$/);
+    await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByText('0 of 1 view used')).toBeVisible();
+    // The recipient has no Atlas account.
+    const outsider = await browser.newContext({ reducedMotion: 'reduce' });
+    const recipient = await outsider.newPage();
+    await recipient.goto(link);
+    await expect(recipient.getByRole('heading', { name: 'Someone shared a password with you' })).toBeVisible();
+    expect(recipient.url()).not.toContain('#');
+    await recipient.getByRole('button', { name: 'Reveal the password' }).click();
+    await expect(recipient.getByText('Replaced-Firewall-Passphrase-2026!')).toBeVisible();
+    await expect(recipient.getByText(/used up/)).toBeVisible();
+    await accessible(recipient);
+    const again = await outsider.newPage();
+    await again.goto(link);
+    await again.getByRole('button', { name: 'Reveal the password' }).click();
+    await expect(again.getByRole('alert')).toContainText('already been used');
+    await outsider.close();
+    await page.screenshot({ path: 'test-results/screens/password.png', fullPage: true });
+  });
+
+  test('a client can require reasons, and BitLocker keys are validated', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .first()
+      .click();
+    await page.getByRole('button', { name: 'Edit client' }).click();
+    await page.getByRole('dialog').getByLabel('Require a reason to view passwords').check();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
+    await page.getByRole('link', { name: /HDG-FW-01 admin/ }).click();
+    await page.getByRole('button', { name: 'Show password' }).click();
+    await expect(page.getByRole('heading', { name: 'Why do you need this password?' })).toBeVisible();
+    await page.getByRole('dialog').getByLabel('Reason').fill('Ticket 4411 firmware update');
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByText('Replaced-Firewall-Passphrase-2026!')).toBeVisible();
+    await expect(page.getByText('Reason: Ticket 4411 firmware update')).toBeVisible();
+
+    await page.getByRole('link', { name: /Harbor Dental Group · Passwords/ }).click();
+    await page.getByRole('button', { name: 'Add password' }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'BitLocker recovery key' }).click();
+    await dialog.getByLabel('Name', { exact: true }).fill('HDG-DC-01 · C:');
+    await dialog.getByLabel('Recovery key', { exact: true }).fill('1234');
+    await dialog.getByRole('button', { name: 'Save to vault' }).click();
+    await expect(dialog.getByText(/8 groups of 6 digits/)).toBeVisible();
+    await dialog
+      .getByLabel('Recovery key', { exact: true })
+      .fill('123456-234567-345678-456789-567890-678901-789012-890123');
+    await dialog.getByRole('button', { name: 'Save to vault' }).click();
+    await expect(page.getByText('BitLocker recovery key').first()).toBeVisible();
+  });
+
   test('client viewer replaces the temporary password and sees only Harbor, read-only', async ({ page }) => {
     watch(page);
     await page.goto('/');
@@ -235,6 +340,17 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(page.getByRole('link', { name: /Internet outage response/ })).toBeVisible();
     await expect(
       page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge base' }),
+    ).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Passwords' })).toHaveCount(
+      0,
+    );
+    await page.goto('/clients');
+    await page
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .first()
+      .click();
+    await expect(
+      page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }),
     ).toHaveCount(0);
     await page.keyboard.press('Control+k');
     await page.getByRole('combobox').fill('firewall');

@@ -111,7 +111,7 @@ describe('identity', () => {
       (await browser(t.app).call('GET', '/api/clients', undefined, { cookie: 'atlas_session=' + 'a'.repeat(43) }))
         .status,
     ).toBe(401);
-    expect((await b.call('POST', '/api/vault/items', {})).status).toBe(501);
+    expect((await b.call('GET', '/api/vault/unknown')).status).toBe(404);
     const res = await t.app.inject({ method: 'GET', url: '/healthz' });
     expect(res.headers['content-security-policy']).toContain("frame-ancestors 'none'");
     expect((await t.app.inject({ method: 'GET', url: '/readyz' })).statusCode).toBe(200);

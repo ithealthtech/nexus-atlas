@@ -3,7 +3,7 @@ import { schema } from '@atlas/db';
 import { relationSchema, type ItemType, type RelationView } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
-import { loadItem, requireItem } from './items.js';
+import { canSee, loadItem, requireItem } from './items.js';
 import type { Scope } from './scope.js';
 
 const order = (x: { type: string; id: string }, y: { type: string; id: string }) =>
@@ -29,7 +29,7 @@ export class RelationService {
     for (const r of rows) {
       const [otherType, otherId] = r.aId === id ? [r.bType, r.bId] : [r.aType, r.aId];
       const item = await loadItem(scope.db, scope.actor.orgId, otherType as ItemType, otherId);
-      if (!item || item.archived || (await scope.level(item.clientId)) === 'none') continue;
+      if (!item || item.archived || !(await canSee(scope, item))) continue;
       const { archived: _archived, ...ref } = item;
       out.push({ ...ref, relationId: r.id, note: r.note });
     }

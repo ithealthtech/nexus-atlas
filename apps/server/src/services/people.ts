@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { schema } from '@atlas/db';
-import { contactSchema, locationSchema, type ContactView, type LocationView } from '@atlas/shared';
+import { contactSchema, locationSchema, patchOf, type ContactView, type LocationView } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
 import { isUuid, type Scope } from './scope.js';
@@ -100,7 +100,7 @@ function makeService<TView extends { id: string; clientId: string }>(opts: {
 export const contacts = makeService<ContactView>({
   table: schema.contacts,
   parse: (i) => contactSchema.parse(i),
-  parsePartial: (i) => contactSchema.partial().parse(i),
+  parsePartial: (i) => patchOf(contactSchema).parse(i),
   entityType: 'contact',
   label: 'Contact',
   view: (r) => ({
@@ -120,7 +120,7 @@ export const contacts = makeService<ContactView>({
 export const locations = makeService<LocationView>({
   table: schema.locations,
   parse: (i) => locationSchema.parse(i),
-  parsePartial: (i) => locationSchema.partial().parse(i),
+  parsePartial: (i) => patchOf(locationSchema).parse(i),
   entityType: 'location',
   label: 'Location',
   view: (r) => ({
