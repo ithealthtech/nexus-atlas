@@ -1,10 +1,12 @@
 name: Release
 
-# Push a tag such as v1.0.0 to publish that version: the Docker image goes to GitHub Container Registry and a
-# ready-to-run Windows package is attached to a GitHub release with that version's changelog.
+# Publishes the version in package.json: the Docker image goes to GitHub Container Registry and a ready-to-run
+# Windows package is attached to a GitHub release with that version's changelog. Start it either by pushing a tag
+# such as v1.0.1, or from the Actions tab (Run workflow on main), which creates the tag on that commit.
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,16 +17,30 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - id: version
         run: |
           version=$(node -p "require('./package.json').version")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json version $version."
-            exit 1
+          tag="v$version"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            if [ "$tag" != "$GITHUB_REF_NAME" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json version $version."
+              exit 1
+            fi
+          else
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "::error::Run the release from main, not $GITHUB_REF_NAME."
+              exit 1
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+              echo "::error::$tag is already released. Bump the version in package.json first."
+              exit 1
+            fi
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   docker:
     name: Docker image
@@ -119,8 +135,11 @@ jobs:
           **Docker:** \`ghcr.io/${GITHUB_REPOSITORY,,}:${{ needs.check.outputs.version }}\`
           **Windows:** download the zip below, extract it to a folder such as \`C:\\Program Files\\MSP Atlas\`, and run \`deploy\\windows\\Install-Atlas.ps1\` (see docs/DEPLOYMENT.md).
           EOF
+      # On a manual run the tag doesn't exist yet; the release creates it on the commit that was built.
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.check.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: MSP Atlas ${{ needs.check.outputs.version }}
           body_path: notes.md
           files: |
