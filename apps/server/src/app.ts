@@ -115,7 +115,12 @@ export async function buildApp({
         ? false
         : {
             level: config.LOG_LEVEL,
-            redact: ['req.headers.cookie', 'req.headers["x-csrf-token"]', 'res.headers["set-cookie"]'],
+            redact: [
+              'req.headers.cookie',
+              'req.headers.authorization',
+              'req.headers["x-csrf-token"]',
+              'res.headers["set-cookie"]',
+            ],
           },
     trustProxy: config.TRUST_PROXY,
     bodyLimit: 1024 * 1024,

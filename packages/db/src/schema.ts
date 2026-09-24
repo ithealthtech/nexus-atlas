@@ -86,6 +86,8 @@ export const clients = pgTable(
   },
   (t) => [
     index('clients_org').on(t.orgId, t.name),
+    // Search matches names anywhere in the text (ILIKE '%…%'); trigram indexes keep that from scanning every row.
+    index('clients_name_trgm').using('gin', sql`${t.name} gin_trgm_ops`),
     check('clients_status_check', sql`${t.status} in ('active','prospect','inactive')`),
   ],
 );
@@ -280,7 +282,11 @@ export const contacts = pgTable(
         sql`to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(title,'') || ' ' || coalesce(email,'') || ' ' || coalesce(phone,''))`,
     ),
   },
-  (t) => [index('contacts_client').on(t.clientId), index('contacts_search').using('gin', t.search)],
+  (t) => [
+    index('contacts_client').on(t.clientId),
+    index('contacts_search').using('gin', t.search),
+    index('contacts_name_trgm').using('gin', sql`${t.name} gin_trgm_ops`),
+  ],
 );
 
 export const locations = pgTable(
@@ -309,7 +315,11 @@ export const locations = pgTable(
         sql`to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(address,'') || ' ' || coalesce(city,''))`,
     ),
   },
-  (t) => [index('locations_client').on(t.clientId), index('locations_search').using('gin', t.search)],
+  (t) => [
+    index('locations_client').on(t.clientId),
+    index('locations_search').using('gin', t.search),
+    index('locations_name_trgm').using('gin', sql`${t.name} gin_trgm_ops`),
+  ],
 );
 
 // Admin-defined templates for assets ("flexible assets"). Fields are validated by the API.

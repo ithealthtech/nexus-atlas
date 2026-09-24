@@ -104,7 +104,7 @@ export function AuthScreen({
           {onSignOut && stage !== 'signin' && stage !== 'setup' && stage !== 'reset' && (
             <p className="mt-6 text-center text-sm text-muted">
               Not you?{' '}
-              <button className="font-semibold text-primary hover:underline" onClick={onSignOut}>
+              <button className="font-semibold text-primary underline underline-offset-2" onClick={onSignOut}>
                 Sign out
               </button>
             </p>

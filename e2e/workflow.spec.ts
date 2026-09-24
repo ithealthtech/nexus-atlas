@@ -1,9 +1,13 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { totp, totpStep } from '../apps/server/src/identity/totp';
 import { E2E } from '../playwright.config';
 
 const OWNER = { name: 'Avery Owner', email: 'owner@atlas.test', password: 'correct horse battery 1' };
+// Kept on disk as well as in memory: Playwright restarts the worker after a failure, and the tests that follow
+// still need to sign in as the owner instead of all failing with it.
+const SECRET_FILE = 'test-results/e2e-data/owner-mfa-secret';
 let ownerSecret = '';
 let recoveryCode = '';
 const problems: string[] = [];
@@ -45,6 +49,8 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(page.getByRole('heading', { name: 'Protect your account' })).toBeVisible();
     await expect(page.getByRole('img', { name: /QR code/ })).toBeVisible();
     ownerSecret = await mfaSecretFrom(page);
+    mkdirSync('test-results/e2e-data', { recursive: true });
+    writeFileSync(SECRET_FILE, ownerSecret);
     await page.getByLabel(/Enter the 6-digit code/).fill(totp(ownerSecret));
     await page.getByRole('button', { name: 'Turn on two-step verification' }).click();
     await expect(page.getByRole('heading', { name: 'Save your recovery codes' })).toBeVisible();
@@ -150,13 +156,28 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByLabel('Title').fill('Internet outage response');
     const editor = page.getByRole('textbox', { name: 'Document content' });
     // Put the cursor at the end of the template, and confirm it's there before typing.
+    await editor.locator('p').last().click();
+    await page.keyboard.press('End');
     await expect
       .poll(async () => {
-        await editor.locator('p').last().click();
-        await page.keyboard.press('End');
-        return page.evaluate(() => window.getSelection()?.anchorNode?.textContent ?? '');
+        // Ask the editor itself, not the browser: ProseMirror catches up with a browser selection change a moment
+        // later, and a key pressed before then goes to its old position (the start of the document).
+        return page.evaluate(() => {
+          type Pm = {
+            state: {
+              selection: {
+                empty: boolean;
+                $head: { parent: { textContent: string; content: { size: number } }; parentOffset: number };
+              };
+            };
+          };
+          const view = (document.querySelector('.ProseMirror') as unknown as { editor?: { view: Pm } }).editor?.view;
+          const sel = view?.state.selection;
+          if (!sel?.empty || sel.$head.parentOffset !== sel.$head.parent.content.size) return '';
+          return sel.$head.parent.textContent;
+        });
       })
-      .toContain('who to tell');
+      .toBe('How to confirm it worked, and who to tell.');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Call the fiber carrier before rebooting the firewall.');
     await accessible(page);
@@ -609,6 +630,106 @@ test.describe.serial('data in and out, and the client portal', () => {
   });
 });
 
+test.describe.serial('accessibility sweep', () => {
+  test.setTimeout(180_000);
+
+  test('every screen passes WCAG 2.2 AA checks in light, dark, and phone layouts', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    const client = new URL(page.url()).pathname;
+    const screens = [
+      '/',
+      '/clients',
+      client,
+      `${client}/assets`,
+      `${client}/documents`,
+      `${client}/passwords`,
+      `${client}/contacts`,
+      `${client}/locations`,
+      `${client}/activity`,
+      '/assets',
+      '/documents',
+      '/passwords',
+      '/expirations',
+      '/account',
+      '/admin/users',
+      '/admin/groups',
+      '/admin/layouts',
+      '/admin/security',
+      '/admin/data',
+      '/admin/status',
+      '/admin/settings',
+    ];
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => {
+        document.documentElement.classList.toggle('dark', t === 'dark');
+      }, theme);
+      for (const path of screens) {
+        await page.goto(path);
+        await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+        if (theme === 'dark') await page.evaluate(() => document.documentElement.classList.add('dark'));
+        await accessible(page);
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const path of ['/', client, `${client}/passwords`, '/admin/status', '/admin/settings']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), path).toBeLessThanOrEqual(0);
+      await accessible(page);
+    }
+  });
+
+  test('works from the keyboard alone', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    // The first Tab reaches the skip link, which moves focus past the navigation.
+    await page.keyboard.press('Tab');
+    const skip = page.getByRole('link', { name: 'Skip to content' });
+    await expect(skip).toBeFocused();
+    await page.keyboard.press('Enter');
+    expect(
+      await page.evaluate(() => document.activeElement?.closest('main') !== null || location.hash === '#main'),
+    ).toBe(true);
+    // Ctrl+K opens search, results can be chosen with the arrow keys, and Escape returns focus.
+    await page.keyboard.press('Control+k');
+    const search = page.getByRole('dialog');
+    await expect(search).toBeVisible();
+    await page.keyboard.type('Harbor');
+    await expect(search.getByText('Harbor Dental Group').first()).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Harbor Dental Group' })).toBeVisible();
+    // Dialogs open from the keyboard, keep focus inside, and give it back when closed.
+    const edit = page.getByRole('button', { name: 'Edit client' });
+    await edit.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    // A native modal <dialog> makes the page behind it unreachable. Tab moves through the dialog, then out to the
+    // browser's own controls (the page sees <body>), then back in. Focus must never land on the page behind it.
+    let insideDialog = 0;
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press('Tab');
+      const where = await page.evaluate(() => {
+        const active = document.activeElement;
+        if (!active || active === document.body) return 'browser';
+        return active.closest('dialog[open]') ? 'dialog' : `page: ${active.outerHTML.slice(0, 80)}`;
+      });
+      expect(['dialog', 'browser']).toContain(where);
+      if (where === 'dialog') insideDialog++;
+    }
+    expect(insideDialog).toBeGreaterThan(5);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(edit).toBeFocused();
+  });
+
+  test.afterAll(() => {
+    expect(problems).toEqual([]);
+  });
+});
+
 async function signOut(page: Page) {
   await page.getByRole('button', { name: 'Account menu' }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
@@ -616,15 +737,21 @@ async function signOut(page: Page) {
 }
 
 // Each code works once, like a real authenticator: wait for an unused time step when needed.
+// The last step used is kept on disk too: a restarted worker must not reuse a code the server already accepted.
+const STEP_FILE = 'test-results/e2e-data/last-totp-step';
 let lastStep = totpStep();
 async function freshCode(secret: string) {
+  if (existsSync(STEP_FILE)) lastStep = Math.max(lastStep, Number(readFileSync(STEP_FILE, 'utf8')));
   const step = Math.max(totpStep() - 1, lastStep + 1);
   while (step > totpStep() + 1) await new Promise((r) => setTimeout(r, 500));
   lastStep = step;
+  mkdirSync('test-results/e2e-data', { recursive: true });
+  writeFileSync(STEP_FILE, String(step));
   return totp(secret, step);
 }
 
-async function signIn(page: Page, email: string, password: string, secret: string) {
+async function signIn(page: Page, email: string, password: string, given: string) {
+  const secret = given || (email === OWNER.email && existsSync(SECRET_FILE) ? readFileSync(SECRET_FILE, 'utf8') : '');
   await page.goto('/');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);

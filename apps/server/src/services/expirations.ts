@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import type { ExpirationItem, LayoutField } from '@atlas/shared';
 import type { Scope } from './scope.js';
@@ -22,7 +22,24 @@ export class ExpirationService {
     const clientIds = await scope.readableClientIds();
     const items: ExpirationItem[] = [];
 
-    if (clientIds.length) {
+    // Only layouts with a date field marked "expires" matter, and the database compares those dates directly, so
+    // the thousands of assets without one (or with a date far off) are never loaded.
+    const expiring = clientIds.length
+      ? (
+          await scope.db
+            .select({ id: schema.assetLayouts.id, fields: schema.assetLayouts.fields })
+            .from(schema.assetLayouts)
+            .where(eq(schema.assetLayouts.orgId, scope.actor.orgId))
+        ).flatMap((l) =>
+          (l.fields as LayoutField[])
+            .filter((f) => f.expires && f.type === 'date')
+            .map(
+              (f) =>
+                sql`(${schema.assets.layoutId} = ${l.id} and ${schema.assets.fields} ->> ${f.key} between '0000-01-01' and ${cutoff})`,
+            ),
+        )
+      : [];
+    if (expiring.length) {
       const rows = await scope.db
         .select({
           id: schema.assets.id,
@@ -41,6 +58,7 @@ export class ExpirationService {
             eq(schema.assets.orgId, scope.actor.orgId),
             eq(schema.assets.archived, false),
             inArray(schema.assets.clientId, clientIds),
+            or(...expiring),
           ),
         );
       for (const row of rows) {

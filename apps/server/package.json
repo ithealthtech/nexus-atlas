@@ -1,6 +1,6 @@
 {
   "name": "@atlas/server",
-  "version": "1.0.0-dev",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -11,11 +11,12 @@
     "rewrap-keys": "node dist/cli/rewrap-keys.js",
     "migrate-legacy": "node dist/cli/migrate-legacy.js",
     "backup": "node dist/cli/backup.js",
-    "restore": "node dist/cli/restore.js"
+    "restore": "node dist/cli/restore.js",
+    "perf": "tsx test/perf.bench.ts"
   },
   "dependencies": {
-    "@atlas/db": "1.0.0-dev",
-    "@atlas/shared": "1.0.0-dev",
+    "@atlas/db": "1.0.0",
+    "@atlas/shared": "1.0.0",
     "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.2",
     "@fastify/static": "^10.1.4",

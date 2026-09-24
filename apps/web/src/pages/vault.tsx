@@ -548,7 +548,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             ))}
           </div>
         ) : rows.length ? (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-surface-2 text-xs text-muted">
                 <tr>

@@ -98,7 +98,7 @@ In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run res
 ## Windows Server
 
 1. Install [Node.js 22 LTS](https://nodejs.org) and PostgreSQL 16, and create an empty database and user for Atlas.
-2. Copy the Atlas source to, for example, `C:\Program Files\MSP Atlas`. Then run `npm ci` and `npm run build` there.
+2. Extract the Windows package from the GitHub release (`msp-atlas-<version>-windows.zip`, already built, with a `.sha256` checksum beside it) to, for example, `C:\Program Files\MSP Atlas`. From source instead: copy the repository there and run `npm ci` and `npm run build`.
 3. From an elevated PowerShell prompt:
    ```powershell
    .\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
@@ -114,6 +114,6 @@ What the script does:
 After install:
 - **Setup code:** the first-run setup code is in `C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log`.
 - **HTTPS:** Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite + Application Request Routing) or Caddy for Windows. Atlas trusts the proxy's forwarded client address.
-- **Upgrading:** replace the source, run `npm ci` and `npm run build`, then run the script again with no arguments. It keeps your settings and key.
+- **Upgrading:** extract the new package over the old folder (or update the source and rebuild), then run the script again with no arguments. It keeps your settings and key.
 - **Backups:** add `-BackupDir \\nas\atlas-backups` to keep them on another machine. The service account needs write access there.
 - **Removing:** `-Uninstall` removes the service but leaves data, key, and backups in place.
