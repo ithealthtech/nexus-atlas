@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build:demo": "vite build --config vite.demo.config.ts --mode demo && node scripts/demo-page.mjs"
   },
   "dependencies": {
     "@atlas/shared": "1.0.0-dev",

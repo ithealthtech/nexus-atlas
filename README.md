@@ -10,6 +10,10 @@ Self-hosted IT documentation and password manager for MSPs: client workspaces, a
 |---|---|---|
 | ![Asset detail with fields, related items, files, and version history](docs/screenshots/asset.png) | ![Runbook linked to its firewall](docs/screenshots/document.png) | ![Password entry with reveal, one-time code, share links, and access history](docs/screenshots/password.png) |
 
+## Try the demo
+
+`npm run build:demo -w @atlas/web` builds a clickable demo: the real web app answering API calls from sample data in the browser (`apps/web/src/demo`). Nothing is stored, and reloading starts over. Sign-in details are pre-filled and any 6-digit code works. The demo code is left out of the production build.
+
 ## What works now
 
 - **First-run setup:** a one-time code printed in the server console lets you create the owner account and your company.

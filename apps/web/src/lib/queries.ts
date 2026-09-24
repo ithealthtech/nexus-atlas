@@ -25,6 +25,7 @@ import type {
   UserView,
 } from '@atlas/shared';
 import { api } from './api';
+import { DEMO } from './demo';
 
 export const useClients = () => useQuery({ queryKey: ['clients'], queryFn: () => api<ClientSummary[]>('/clients') });
 export const useClient = (id: string) =>
@@ -152,6 +153,7 @@ export const useSearch = (q: string, client?: string) =>
 
 /** Upload with fetch + FormData (the JSON helper doesn't handle files). */
 export async function uploadFile(type: ItemType, id: string, file: File, csrf: string): Promise<AttachmentView[]> {
+  if (DEMO) throw new Error("File uploads aren't available in the demo.");
   const form = new FormData();
   form.append('file', file);
   const response = await fetch(`/api/items/${type}/${id}/attachments`, {

@@ -6,6 +6,7 @@ import {
   RouterProvider,
   createRootRoute,
   createRoute,
+  createHashHistory,
   createRouter,
   lazyRouteComponent,
 } from '@tanstack/react-router';
@@ -34,6 +35,7 @@ import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
 import { Account } from '@/pages/Account';
 import { NotFound } from '@/pages/NotFound';
+import { DEMO } from '@/lib/demo';
 import './styles.css';
 
 applyTheme(storedTheme());
@@ -119,7 +121,20 @@ function adminOnly(Page: ComponentType) {
   };
 }
 
-const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFound });
+function Root() {
+  return (
+    <>
+      <Outlet />
+      {DEMO && (
+        <p className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md">
+          Demo · sample data · resets when you reload
+        </p>
+      )}
+    </>
+  );
+}
+
+const rootRoute = createRootRoute({ component: Root, notFoundComponent: NotFound });
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: Gate });
 // Search params used by list pages (folder and layout filters, archived toggle).
 // The rich-text editor is large, so document pages load on first use.
@@ -219,6 +234,8 @@ const router = createRouter({
     appRoute.addChildren(routes),
   ]),
   defaultPreload: 'intent',
+  // The demo is a single published page, so routes live in the URL fragment.
+  ...(DEMO ? { history: createHashHistory() } : {}),
 });
 declare module '@tanstack/react-router' {
   interface Register {

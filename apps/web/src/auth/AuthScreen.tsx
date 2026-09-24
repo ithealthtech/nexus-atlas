@@ -5,6 +5,7 @@ import type { SessionView } from '@atlas/shared';
 import { Button, Checkbox, Field, FormError, Input } from '@/components/ui';
 import { RecoveryCodes } from '@/components/RecoveryCodes';
 import { addPasskey, passkeysSupported, signInWithPasskey, verifyWithPasskey } from '@/lib/passkeys';
+import { DEMO } from '@/lib/demo';
 import { ApiError, api } from '@/lib/api';
 import { useApplySession } from '@/lib/session';
 import { Logo } from '@/components/Logo';
@@ -144,12 +145,35 @@ function SignIn({ done, passwordReset }: Done & { passwordReset: boolean }) {
   };
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
-      <Heading title="Sign in to Atlas">Use the account your administrator created for you.</Heading>
+      <Heading title="Sign in to Atlas">
+        {DEMO
+          ? 'This is a demo with sample data. The sign-in details are filled in; on the next step, any 6-digit code works.'
+          : 'Use the account your administrator created for you.'}
+      </Heading>
       <Field label="Email">
-        {(p) => <Input {...p} name="email" type="email" autoComplete="username webauthn" required autoFocus />}
+        {(p) => (
+          <Input
+            {...p}
+            name="email"
+            type="email"
+            autoComplete="username webauthn"
+            required
+            autoFocus
+            defaultValue={DEMO ? 'alex@itdoneright.demo' : undefined}
+          />
+        )}
       </Field>
       <Field label="Password">
-        {(p) => <Input {...p} name="password" type="password" autoComplete="current-password" required />}
+        {(p) => (
+          <Input
+            {...p}
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            defaultValue={DEMO ? 'demo-password' : undefined}
+          />
+        )}
       </Field>
       <FormError message={error ?? passkeyError} />
       <Button type="submit" size="lg" className="w-full" loading={busy}>

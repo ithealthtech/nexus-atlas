@@ -7,8 +7,11 @@ import {
 } from '@simplewebauthn/browser';
 import type { SessionView } from '@atlas/shared';
 import { api } from './api';
+import { DEMO } from './demo';
 
-export const passkeysSupported = () => browserSupportsWebAuthn();
+export const passkeysSupported = () => DEMO || browserSupportsWebAuthn();
+// The demo skips the browser's passkey prompt; the sample backend accepts any response.
+const ceremony = <T>(run: () => Promise<T>) => (DEMO ? Promise.resolve({} as T) : run());
 
 /** The browser's message when someone closes the passkey prompt isn't useful; say what happened instead. */
 function friendly(error: unknown): never {
@@ -24,7 +27,7 @@ export async function addPasskey(name: string): Promise<SessionView & { recovery
     method: 'POST',
     body: {},
   });
-  const response = await startRegistration({ optionsJSON: options }).catch(friendly);
+  const response = await ceremony(() => startRegistration({ optionsJSON: options })).catch(friendly);
   return api('/account/passkeys', { method: 'POST', body: { name, response } });
 }
 
@@ -34,7 +37,7 @@ export async function verifyWithPasskey(remember: boolean): Promise<SessionView>
     method: 'POST',
     body: {},
   });
-  const response = await startAuthentication({ optionsJSON: options }).catch(friendly);
+  const response = await ceremony(() => startAuthentication({ optionsJSON: options })).catch(friendly);
   return api('/session/passkey', { method: 'POST', body: { response, remember } });
 }
 
@@ -44,6 +47,6 @@ export async function signInWithPasskey(): Promise<SessionView> {
     challengeId: string;
     options: PublicKeyCredentialRequestOptionsJSON;
   }>('/passkey/options', { method: 'POST', body: {} });
-  const response = await startAuthentication({ optionsJSON: options }).catch(friendly);
+  const response = await ceremony(() => startAuthentication({ optionsJSON: options })).catch(friendly);
   return api('/passkey/sign-in', { method: 'POST', body: { challengeId, response } });
 }
