@@ -1,6 +1,6 @@
 # Deploying MSP Atlas
 
-Atlas runs as one Node.js service in front of PostgreSQL 16, behind an HTTPS reverse proxy. The supported path today is **Docker on Linux**. A Windows Server service installer is planned for milestone M4 and will use the same build.
+Atlas runs as one Node.js service in front of PostgreSQL 16, behind an HTTPS reverse proxy. It runs on **Docker (Linux)** or as a **Windows service**; both use the same build.
 
 ## Docker Compose (Linux)
 
@@ -45,6 +45,10 @@ The certificate is used only for the install step and is not stored in the image
 | `ATLAS_MAX_UPLOAD_MB` | `25` | Largest attachment accepted |
 | `ATLAS_DATA_DIR` | `./data` (`/data` in the container) | Holds attachments (`attachments/`) and, in development, the key file |
 | `ATLAS_DIGEST_HOUR` | `7` | Local hour after which expiry alerts and the Monday digest are emailed |
+| `ATLAS_BACKUP_ENABLED` | `true` | Nightly encrypted backups |
+| `ATLAS_BACKUP_DIR` | `<data dir>/backups` | Where backups are written; ideally another disk or a share |
+| `ATLAS_BACKUP_HOUR` | `2` | Local hour after which the nightly backup runs |
+| `ATLAS_BACKUP_KEEP` | `14` | How many backup files to keep |
 | `LOG_LEVEL` | `info` | Logs are JSON; cookies and CSRF tokens are removed from them |
 
 In development, with no key configured, Atlas creates `data/atlas-master.key` on first run.
@@ -68,18 +72,48 @@ After setup, import from Hudu or CSV files under **Import & export**, or move a 
 - Database migrations run automatically on start. A database lock ensures only one instance migrates at a time.
 - **To upgrade:** pull or build the new image, then run `docker compose ... up -d`. Back up first (below).
 
-## Backups (interim, until M4 adds scheduled encrypted backups)
+## Backups
 
-```bash
-docker compose -f deploy/docker-compose.yml exec -T db pg_dump -U atlas -Fc atlas > atlas-$(date +%F).dump
-# restore into an empty database:
-docker compose -f deploy/docker-compose.yml exec -T db pg_restore -U atlas -d atlas --clean --if-exists < atlas-YYYY-MM-DD.dump
-```
+Atlas backs itself up every night. Each backup is one encrypted `.atlasbak` file holding the whole database and every attachment.
 
-Attachments are stored as files in the data volume, not in PostgreSQL, so back them up too:
+- **Schedule:** daily after `ATLAS_BACKUP_HOUR` (default 02:00 server time). The newest `ATLAS_BACKUP_KEEP` files are kept (default 14). **System status → Back up now** makes one on demand, and `npm run backup -w @atlas/server` does the same from the command line.
+- **Where:** `ATLAS_BACKUP_DIR` (default `<data dir>/backups`). The status page warns while backups sit on the same disk as Atlas. Point this at a network share, or copy the folder off the server on a schedule.
+- **Encryption:** AES-256-GCM with a key derived from the master key. A backup can't be read, and a changed or cut-off file is detected, without that key. **Keep the master key somewhere other than the backups.**
+- **Checking a file:** `npm run backup -w @atlas/server -- verify <file>` reads the whole file and reports what's in it.
+- **Not included:** sign-in sessions (everyone signs in again after a restore).
 
-```bash
-docker run --rm -v atlas_data:/data -v "$PWD":/backup alpine tar czf /backup/atlas-files-$(date +%F).tgz -C /data attachments
-```
+### Restoring
 
-Keep the database dump, the attachments archive, and a separate, protected copy of the master key together.
+1. Stop Atlas.
+2. Make sure the master key the backup was made with is loaded (`ATLAS_MASTER_KEY` or the key file). After a rotation, keep the old key listed.
+3. Run `npm run restore -w @atlas/server -- <file.atlasbak>` against a new, empty database. To overwrite the current database and attachments, add `--replace`.
+4. Start Atlas.
+
+In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run restore -w @atlas/server -- /data/backups/<file>`.
+
+- **Nothing changes until the file checks out:** the restore reads the whole file first, and a damaged file stops it.
+- **Older backups:** a backup from an older Atlas version is loaded at its own schema version, then upgraded.
+- **Security log:** the hash chain and signed checkpoint are kept, so **Verify now** passes after a restore.
+
+## Windows Server
+
+1. Install [Node.js 22 LTS](https://nodejs.org) and PostgreSQL 16, and create an empty database and user for Atlas.
+2. Copy the Atlas source to, for example, `C:\Program Files\MSP Atlas`. Then run `npm ci` and `npm run build` there.
+3. From an elevated PowerShell prompt:
+   ```powershell
+   .\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
+   ```
+
+What the script does:
+- **Data folder:** creates `C:\ProgramData\MSP Atlas`, readable only by Administrators and SYSTEM.
+- **Master key:** creates the key file there on first install, and reminds you to copy it somewhere safe.
+- **Settings:** writes `atlas.env` with your settings.
+- **Service wrapper:** downloads WinSW 2.12.0 and checks it against a pinned SHA-256.
+- **Service:** registers the `MSPAtlas` service to start automatically and restart if it stops, then waits until Atlas answers.
+
+After install:
+- **Setup code:** the first-run setup code is in `C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log`.
+- **HTTPS:** Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite + Application Request Routing) or Caddy for Windows. Atlas trusts the proxy's forwarded client address.
+- **Upgrading:** replace the source, run `npm ci` and `npm run build`, then run the script again with no arguments. It keeps your settings and key.
+- **Backups:** add `-BackupDir \\nas\atlas-backups` to keep them on another machine. The service account needs write access there.
+- **Removing:** `-Uninstall` removes the service but leaves data, key, and backups in place.

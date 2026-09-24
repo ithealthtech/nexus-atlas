@@ -72,6 +72,12 @@ jobs:
       - run: npm run typecheck
       # Database-backed tests run on Linux; these cover crypto, key files, and configuration on Windows.
       - run: npx vitest run apps/server/test/keys.test.ts
+      - name: Installer script parses
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/deploy/windows/Install-Atlas.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.ToString() }; exit 1 }
 
   docker:
     name: Docker image
