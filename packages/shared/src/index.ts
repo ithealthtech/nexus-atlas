@@ -4,3 +4,4 @@ export * from './types.js';
 export * from './docs.js';
 export * from './vault.js';
 export * from './patch.js';
+export * from './admin.js';

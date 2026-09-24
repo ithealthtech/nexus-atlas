@@ -69,7 +69,10 @@ export const shareSchema = z.object({
     .default(24),
   reason: z.string().trim().max(300).default(''),
 });
-export const passwordAccessSchema = z.object({ userIds: z.array(z.string().uuid()).max(500) });
+export const passwordAccessSchema = z.object({
+  userIds: z.array(z.string().uuid()).max(500),
+  groupIds: z.array(z.string().uuid()).max(200).default([]),
+});
 
 export interface PasswordView {
   id: string;

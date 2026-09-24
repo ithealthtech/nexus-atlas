@@ -6,6 +6,7 @@ import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { staticKeyProvider } from '../src/crypto/keys.js';
 import { totp } from '../src/identity/totp.js';
+import type { SendArgs } from '../src/services/mail.js';
 
 export const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5432/postgres';
 export const SETUP_CODE = 'test-setup-code-123';
@@ -43,10 +44,13 @@ export async function freshDatabase(): Promise<{ url: string; handle: DatabaseHa
 export interface TestApp {
   app: FastifyInstance;
   handle: DatabaseHandle;
+  /** Emails the app has sent (SMTP is replaced by a capture). */
+  outbox: (SendArgs & { host: string })[];
   close(): Promise<void>;
 }
 
 export async function startApp(env: Record<string, string> = {}): Promise<TestApp> {
+  const outbox: TestApp['outbox'] = [];
   const database = await freshDatabase();
   const config = loadConfig({
     DATABASE_URL: database.url,
@@ -60,10 +64,15 @@ export async function startApp(env: Record<string, string> = {}): Promise<TestAp
     database: database.handle,
     keys: staticKeyProvider([randomBytes(32)]),
     setupCode: SETUP_CODE,
+    mailTransport: async (smtp, message) => {
+      if (smtp.host === 'reject.invalid') throw new Error('550 relay denied');
+      outbox.push({ ...message, host: smtp.host });
+    },
   });
   return {
     app,
     handle: database.handle,
+    outbox,
     async close() {
       await app.close();
       await database.drop();
@@ -73,8 +82,22 @@ export async function startApp(env: Record<string, string> = {}): Promise<TestAp
 
 /** A browser-like client: keeps its session cookie and CSRF token. */
 export function browser(app: FastifyInstance) {
+  const jar = new Map<string, string>();
   const agent = {
-    cookie: '',
+    jar,
+    get cookie() {
+      return [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+    },
+    set cookie(value: string) {
+      jar.clear();
+      for (const part of value
+        .split(';')
+        .map((p) => p.trim())
+        .filter(Boolean)) {
+        const i = part.indexOf('=');
+        jar.set(part.slice(0, i), part.slice(i + 1));
+      }
+    },
     csrf: '',
     async call(
       method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT',
@@ -93,9 +116,15 @@ export function browser(app: FastifyInstance) {
         ...(body !== undefined ? { payload: body as object } : {}),
       });
       const setCookie = response.headers['set-cookie'];
-      const first = Array.isArray(setCookie) ? setCookie[0] : setCookie;
-      if (first) agent.cookie = first.split(';')[0]!.endsWith('=') ? '' : first.split(';')[0]!;
-      const data = response.body ? JSON.parse(response.body) : null;
+      for (const header of Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : []) {
+        const pair = header.split(';')[0]!;
+        const i = pair.indexOf('=');
+        if (pair.slice(i + 1)) jar.set(pair.slice(0, i), pair.slice(i + 1));
+        else jar.delete(pair.slice(0, i));
+      }
+      const data = response.headers['content-type']?.toString().includes('json')
+        ? JSON.parse(response.body)
+        : response.body || null;
       if (data?.csrf) agent.csrf = data.csrf;
       return { status: response.statusCode, data, headers: response.headers };
     },

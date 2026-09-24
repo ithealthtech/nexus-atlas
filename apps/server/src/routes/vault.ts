@@ -78,4 +78,5 @@ export function registerVaultRoutes(
       throw error;
     }
   });
+  return vault;
 }

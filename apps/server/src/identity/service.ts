@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
@@ -43,9 +43,13 @@ interface RequestMeta {
   userAgent?: string;
 }
 
-const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
+export const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 const mfaAad = (userId: string) => `user|${userId}|mfa`;
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+/** A second factor is an authenticator app, a passkey, or both. */
+export const hasMfa = (user: Pick<UserRow, 'mfaSecret' | 'passkeyCount'>) => !!user.mfaSecret || user.passkeyCount > 0;
+export const REAUTH_MS = 10 * 60_000;
 
 export function actorFor(user: UserRow): Actor {
   return {
@@ -54,7 +58,7 @@ export function actorFor(user: UserRow): Actor {
     name: user.name,
     email: user.email,
     role: user.role as Role,
-    mfa: !!user.mfaSecret,
+    mfa: hasMfa(user),
     allClients: user.allClients as AccessLevel,
   };
 }
@@ -154,7 +158,7 @@ export class IdentityService {
     return u;
   }
 
-  private async recordFailure(user: UserRow, reason: string, ip: string) {
+  async recordFailure(user: UserRow, reason: string, ip: string) {
     const attempts = user.failedAttempts + 1;
     const lock = attempts >= LIMITS.attempts;
     await this.db
@@ -171,7 +175,7 @@ export class IdentityService {
     if (lock) fail(429, 'Too many attempts. Try again in 15 minutes.');
   }
 
-  async createSession(user: UserRow, meta: RequestMeta, mfaVerified = false): Promise<{ token: string }> {
+  async createSession(user: UserRow, meta: RequestMeta, mfaVerified = false, detail = ''): Promise<{ token: string }> {
     const token = randomBytes(32).toString('base64url');
     const now = Date.now();
     await this.db.transaction(async (tx) => {
@@ -195,17 +199,19 @@ export class IdentityService {
         userId: user.id,
         csrf: randomBytes(32).toString('base64url'),
         mfaVerified,
+        // Entering the password counts as a fresh confirmation for sensitive actions.
+        reauthAt: new Date(now),
         ip: meta.ip.slice(0, 64),
         userAgent: (meta.userAgent ?? '').slice(0, 200),
       });
-      if (mfaVerified || !user.mfaSecret) {
+      if (mfaVerified || !hasMfa(user)) {
         await tx.update(schema.users).set({ lastLoginAt: new Date() }).where(eq(schema.users.id, user.id));
         await tx.insert(schema.securityEvents).values({
           orgId: user.orgId,
           userId: user.id,
           actor: user.name,
           action: 'Signed in',
-          detail: user.mfaSecret ? 'Password and MFA' : 'Password',
+          detail: detail || (hasMfa(user) ? 'Password and MFA' : 'Password'),
           ip: meta.ip,
         });
       }
@@ -214,9 +220,9 @@ export class IdentityService {
   }
 
   stageFor(user: UserRow, session: SessionRow): SessionStage {
-    if (user.mfaSecret && !session.mfaVerified) return 'mfa';
+    if (hasMfa(user) && !session.mfaVerified) return 'mfa';
     if (user.mustChangePassword) return 'password';
-    if (this.options.requireStaffMfa && ROLE_INFO[user.role as Role].staff && !user.mfaSecret) return 'mfa-setup';
+    if (this.options.requireStaffMfa && ROLE_INFO[user.role as Role].staff && !hasMfa(user)) return 'mfa-setup';
     return 'active';
   }
 
@@ -267,6 +273,47 @@ export class IdentityService {
   }
 
   // ---------- MFA ----------
+  /** Throws unless the user confirmed their password within the last few minutes. */
+  requireRecentAuth(context: SessionContext) {
+    const at = context.session.reauthAt?.getTime() ?? 0;
+    if (Date.now() - at > REAUTH_MS) fail(403, 'Confirm your password to continue.', 'reauth');
+  }
+
+  async reauthenticate(context: SessionContext, password: string, ip: string) {
+    const { user } = context;
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now())
+      fail(429, 'Too many attempts. Try again in 15 minutes.');
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      await this.recordFailure(user, 'Incorrect password', ip);
+      fail(400, 'That password is incorrect.', 'reauth_invalid');
+    }
+    await this.db
+      .update(schema.sessions)
+      .set({ reauthAt: new Date() })
+      .where(eq(schema.sessions.tokenHash, context.hash));
+    await this.db.update(schema.users).set({ failedAttempts: 0 }).where(eq(schema.users.id, user.id));
+  }
+
+  /** Marks the session's second factor as done (after TOTP, a passkey, or a recovery code). */
+  async completeMfa(context: SessionContext, detail: string, ip: string) {
+    const { user } = context;
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(schema.users)
+        .set({ failedAttempts: 0, lastLoginAt: new Date() })
+        .where(eq(schema.users.id, user.id));
+      await tx.update(schema.sessions).set({ mfaVerified: true }).where(eq(schema.sessions.tokenHash, context.hash));
+      await tx.insert(schema.securityEvents).values({
+        orgId: user.orgId,
+        userId: user.id,
+        actor: user.name,
+        action: 'Signed in',
+        detail,
+        ip,
+      });
+    });
+  }
+
   async verifyMfa(context: SessionContext, code: string, ip: string) {
     const { user } = context;
     if (!user.mfaSecret) fail(400, 'MFA is not enabled for this account.');
@@ -310,12 +357,14 @@ export class IdentityService {
     return { secret, uri: otpauthUri(secret, user.email) };
   }
 
-  async confirmMfa(context: SessionContext, code: string, ip: string) {
+  async confirmMfa(context: SessionContext, code: string, ip: string): Promise<{ recoveryCodes: string[] }> {
     const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, context.user.id));
     if (!user?.mfaPending) fail(400, 'Start MFA setup first.');
     const secret = open(this.keys, user!.mfaPending!, mfaAad(user!.id));
     const step = matchTotp(secret, code, 0);
     if (!step) fail(400, 'That code did not match. Check the time on your device and try again.');
+    // First second factor: issue recovery codes. Adding TOTP next to a passkey keeps the existing ones.
+    const codes = user!.recoveryCodes.length ? [] : newRecoveryCodes();
     await this.db.transaction(async (tx) => {
       await tx
         .update(schema.users)
@@ -323,6 +372,7 @@ export class IdentityService {
           mfaSecret: seal(this.keys, secret, mfaAad(user!.id)),
           mfaPending: null,
           mfaLastStep: step,
+          ...(codes.length ? { recoveryCodes: codes.map(hashRecoveryCode) } : {}),
           updatedAt: new Date(),
         })
         .where(eq(schema.users.id, user!.id));
@@ -339,6 +389,7 @@ export class IdentityService {
         ip,
       });
     });
+    return { recoveryCodes: codes };
   }
 
   // ---------- account ----------
@@ -383,7 +434,7 @@ export class IdentityService {
       role: user.role as Role,
       allClients: ROLE_INFO[user.role as Role].admin ? 'edit_passwords' : (user.allClients as AccessLevel),
       grants: grants.map((g) => ({ clientId: g.clientId, level: g.level as AccessLevel })),
-      mfa: !!user.mfaSecret,
+      mfa: hasMfa(user),
       disabled: user.disabled,
       locked: !!user.lockedUntil && user.lockedUntil.getTime() > Date.now(),
       mustChangePassword: user.mustChangePassword,
@@ -566,10 +617,16 @@ export class IdentityService {
           failedAttempts: 0,
           lockedUntil: null,
           updatedAt: new Date(),
-          ...(body.resetMfa ? { mfaSecret: null, mfaPending: null, mfaLastStep: 0 } : {}),
+          ...(body.resetMfa
+            ? { mfaSecret: null, mfaPending: null, mfaLastStep: 0, recoveryCodes: [], passkeyCount: 0 }
+            : {}),
         })
         .where(eq(schema.users.id, id));
       await tx.delete(schema.sessions).where(eq(schema.sessions.userId, id));
+      if (body.resetMfa) {
+        await tx.delete(schema.passkeys).where(eq(schema.passkeys.userId, id));
+        await tx.delete(schema.trustedDevices).where(eq(schema.trustedDevices.userId, id));
+      }
       await tx.insert(schema.securityEvents).values({
         orgId: actor.orgId,
         userId: actor.id,
@@ -600,6 +657,19 @@ export class IdentityService {
     }));
   }
 }
+
+// Recovery codes: 10 characters from an unambiguous 31-letter alphabet (about 49 bits each), shown as xxxxx-xxxxx.
+const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+export function newRecoveryCodes(count = 10): string[] {
+  return Array.from({ length: count }, () => {
+    const raw = Array.from({ length: 10 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
+    return `${raw.slice(0, 5)}-${raw.slice(5)}`;
+  });
+}
+export const hashRecoveryCode = (code: string) =>
+  createHash('sha256')
+    .update(`atlas-recovery|${code.toLowerCase().replace(/[^a-z0-9]/g, '')}`)
+    .digest('hex');
 
 export const sameSecret = (a: string, b: string) => {
   const x = Buffer.from(a);
