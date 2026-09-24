@@ -32,7 +32,10 @@
     themeButton.addEventListener('click', function () {
       const next = body.dataset.docTheme === 'light' ? 'dark' : 'light';
       body.dataset.docTheme = next;
-      themeButton.setAttribute('aria-label', next === 'light' ? 'Use dark documentation theme' : 'Use light documentation theme');
+      themeButton.setAttribute(
+        'aria-label',
+        next === 'light' ? 'Use dark documentation theme' : 'Use light documentation theme',
+      );
       themeButton.textContent = next === 'light' ? '\u263e' : '\u2600';
       announce('Documentation theme changed to ' + next + '.');
     });

@@ -1,162 +1,245 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Troubleshooting MSP Atlas: setup codes, sign-in, access, email, backups, restore, and imports.">
-  <meta name="theme-color" content="#0b1714">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>Support &middot; MSP Atlas</title>
-  <link rel="icon" href="images/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="assets/site.css">
-  <script src="assets/site.js" defer></script>
-</head>
-<body>
-  <a class="skip-link" href="#main">Skip to content</a>
-  <header class="site-header">
-    <div class="nav-shell">
-      <a class="brand" href="index.html" aria-label="MSP Atlas home">
-        <span class="brand-mark" aria-hidden="true">A</span>
-        <span>MSP Atlas</span>
-      </a>
-      <nav class="site-nav" data-site-nav aria-label="Primary navigation">
-        <a href="index.html">Overview</a>
-        <a href="install.html">Install</a>
-        <a href="security.html">Security</a>
-        <a href="support.html" aria-current="page">Support</a>
-        <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
-      </nav>
-      <div class="nav-actions">
-        <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">&#9728;</button>
-        <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">&#9776;</button>
-      </div>
-    </div>
-  </header>
-
-  <main id="main">
-    <section class="page-hero">
-      <div class="container">
-        <p class="eyebrow">Support</p>
-        <h1>Troubleshooting</h1>
-        <p class="hero-copy">Most problems show up on <strong>System status</strong> first. Start there, then search below.</p>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="container" data-filter-list>
-        <div class="section-heading">
-          <p class="section-kicker">Symptom finder</p>
-          <h2>Search troubleshooting</h2>
-          <p>Type a symptom, a setting, or a screen name.</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Troubleshooting MSP Atlas: setup codes, sign-in, access, email, backups, restore, and imports."
+    />
+    <meta name="theme-color" content="#0b1714" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Support &middot; MSP Atlas</title>
+    <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/site.css" />
+    <script src="assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="nav-shell">
+        <a class="brand" href="index.html" aria-label="MSP Atlas home">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <span>MSP Atlas</span>
+        </a>
+        <nav class="site-nav" data-site-nav aria-label="Primary navigation">
+          <a href="index.html">Overview</a>
+          <a href="install.html">Install</a>
+          <a href="security.html">Security</a>
+          <a href="support.html" aria-current="page">Support</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">
+            &#9728;
+          </button>
+          <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">
+            &#9776;
+          </button>
         </div>
-        <div class="filter-bar">
-          <label class="sr-only" for="support-search">Search troubleshooting</label>
-          <input class="search-input" id="support-search" type="search" data-filter-input placeholder="Try &quot;setup code&quot;, &quot;backup&quot;, or &quot;email&quot;">
-        </div>
-        <div class="accordion">
-          <details data-filter-item>
-            <summary>I lost the setup code</summary>
-            <div>
-              <p>With Docker, read it from the log: <code>docker compose -f deploy/docker-compose.yml logs app | grep "setup code"</code>. On Windows it is in <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>. It works only until the first account exists. To choose your own, set <code>ATLAS_SETUP_CODE</code> before first start.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>Atlas refuses to start in production</summary>
-            <div>
-              <p>Production needs an <code>https://</code> <code>PUBLIC_URL</code> and a master key (<code>ATLAS_MASTER_KEY</code> or <code>ATLAS_MASTER_KEY_FILE</code>). The log names the missing setting.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>Someone is locked out after too many attempts</summary>
-            <div>
-              <p>Wait 15 minutes, or an administrator can use <strong>Reset sign-in</strong> on their account.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>The owner lost their phone and recovery codes</summary>
-            <div>
-              <p>Another owner or administrator can reset their sign-in. If there is none, contact whoever runs the server.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>A technician can't see a client</summary>
-            <div>
-              <p>By design, a client someone can't access looks exactly like a missing one. Check their access level for that client, their groups, and their role under <strong>People &amp; access</strong>.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>A password shows but can't be revealed</summary>
-            <div>
-              <p>Revealing needs edit-and-passwords access for the client, a place on the entry's restriction list if it has one, and a reason if the client requires reasons.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>Email isn't sending</summary>
-            <div>
-              <p>Use <strong>Settings &rarr; Email &rarr; Send test</strong>; it shows the mail server's error. For Microsoft 365, turn on <strong>Authenticated SMTP</strong> for the mailbox, and use an app password if it has MFA.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>Backups are failing or on the same disk</summary>
-            <div>
-              <p>Read the error on <strong>System status</strong>. Check that the backup folder exists, Atlas can write to it, and the disk isn't full. Point <code>ATLAS_BACKUP_DIR</code> at a network share to clear the same-disk warning.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>Restoring a backup fails with a key error</summary>
-            <div>
-              <p>A backup can only be read with the master key it was made with. After a rotation, list the old key after the new one and try again.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>Verify now reports a break in the security log</summary>
-            <div>
-              <p>Someone changed the database directly. Keep the server as it is, export the security log, and investigate. Restore from a backup if needed.</p>
-            </div>
-          </details>
-          <details data-filter-item>
-            <summary>A Hudu import stopped partway</summary>
-            <div>
-              <p>Run it again. The importer updates what it already brought in rather than duplicating it, and a stuck run is picked up again automatically.</p>
-            </div>
-          </details>
-        </div>
-        <p class="empty-state" data-filter-empty>No troubleshooting entry matches that search.</p>
       </div>
-    </section>
+    </header>
 
-    <section class="section">
-      <div class="container">
-        <div class="cta-panel">
-          <div>
-            <p class="section-kicker">Still stuck?</p>
-            <h2>Open an issue.</h2>
-            <p>Use <a href="https://github.com/ithealthtech/nexus-atlas/issues">GitHub Issues</a> for verified defects. Never include passwords, master keys, API keys, client data, or screenshots containing secrets. Report suspected vulnerabilities privately through the <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">security policy</a>.</p>
+    <main id="main">
+      <section class="page-hero">
+        <div class="container">
+          <p class="eyebrow">Support</p>
+          <h1>Troubleshooting</h1>
+          <p class="hero-copy">
+            Most problems show up on <strong>System status</strong> first. Start there, then search below.
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container" data-filter-list>
+          <div class="section-heading">
+            <p class="section-kicker">Symptom finder</p>
+            <h2>Search troubleshooting</h2>
+            <p>Type a symptom, a setting, or a screen name.</p>
           </div>
-          <div class="button-row">
-            <a class="button button-primary" href="https://github.com/ithealthtech/nexus-atlas/issues/new">Report a problem</a>
-            <a class="button" href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/USER-GUIDE.md">User guide</a>
+          <div class="filter-bar">
+            <label class="sr-only" for="support-search">Search troubleshooting</label>
+            <input
+              class="search-input"
+              id="support-search"
+              type="search"
+              data-filter-input
+              placeholder='Try "setup code", "backup", or "email"'
+            />
+          </div>
+          <div class="accordion">
+            <details data-filter-item>
+              <summary>I lost the setup code</summary>
+              <div>
+                <p>
+                  With Docker, read it from the log:
+                  <code>docker compose -f deploy/docker-compose.yml logs app | grep "setup code"</code>. On Windows it
+                  is in <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>. It works only until the first
+                  account exists. To choose your own, set <code>ATLAS_SETUP_CODE</code> before first start.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>Atlas refuses to start in production</summary>
+              <div>
+                <p>
+                  Production needs an <code>https://</code> <code>PUBLIC_URL</code> and a master key (<code
+                    >ATLAS_MASTER_KEY</code
+                  >
+                  or <code>ATLAS_MASTER_KEY_FILE</code>). The log names the missing setting.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>Someone is locked out after too many attempts</summary>
+              <div>
+                <p>Wait 15 minutes, or an administrator can use <strong>Reset sign-in</strong> on their account.</p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>The owner lost their phone and recovery codes</summary>
+              <div>
+                <p>
+                  Another owner or administrator can reset their sign-in. If there is none, contact whoever runs the
+                  server.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>A technician can't see a client</summary>
+              <div>
+                <p>
+                  By design, a client someone can't access looks exactly like a missing one. Check their access level
+                  for that client, their groups, and their role under <strong>People &amp; access</strong>.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>A password shows but can't be revealed</summary>
+              <div>
+                <p>
+                  Revealing needs edit-and-passwords access for the client, a place on the entry's restriction list if
+                  it has one, and a reason if the client requires reasons.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>Email isn't sending</summary>
+              <div>
+                <p>
+                  Use <strong>Settings &rarr; Email &rarr; Send test</strong>; it shows the mail server's error. For
+                  Microsoft 365, turn on <strong>Authenticated SMTP</strong> for the mailbox, and use an app password if
+                  it has MFA.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>Backups are failing or on the same disk</summary>
+              <div>
+                <p>
+                  Read the error on <strong>System status</strong>. Check that the backup folder exists, Atlas can write
+                  to it, and the disk isn't full. Point <code>ATLAS_BACKUP_DIR</code> at a network share to clear the
+                  same-disk warning.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>Restoring a backup fails with a key error</summary>
+              <div>
+                <p>
+                  A backup can only be read with the master key it was made with. After a rotation, list the old key
+                  after the new one and try again.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>Verify now reports a break in the security log</summary>
+              <div>
+                <p>
+                  Someone changed the database directly. Keep the server as it is, export the security log, and
+                  investigate. Restore from a backup if needed.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>A Hudu import stopped partway</summary>
+              <div>
+                <p>
+                  Run it again. The importer updates what it already brought in rather than duplicating it, and a stuck
+                  run is picked up again automatically.
+                </p>
+              </div>
+            </details>
+          </div>
+          <p class="empty-state" data-filter-empty>No troubleshooting entry matches that search.</p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="cta-panel">
+            <div>
+              <p class="section-kicker">Still stuck?</p>
+              <h2>Open an issue.</h2>
+              <p>
+                Use <a href="https://github.com/ithealthtech/nexus-atlas/issues">GitHub Issues</a> for verified defects.
+                Never include passwords, master keys, API keys, client data, or screenshots containing secrets. Report
+                suspected vulnerabilities privately through the
+                <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">security policy</a>.
+              </p>
+            </div>
+            <div class="button-row">
+              <a class="button button-primary" href="https://github.com/ithealthtech/nexus-atlas/issues/new"
+                >Report a problem</a
+              >
+              <a class="button" href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/USER-GUIDE.md"
+                >User guide</a
+              >
+            </div>
           </div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
 
-  <footer class="site-footer">
-    <div class="container footer-grid">
-      <div>
-        <a class="brand" href="index.html" aria-label="MSP Atlas home"><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a>
-        <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a class="brand" href="index.html" aria-label="MSP Atlas home"
+            ><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a
+          >
+          <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
+        </div>
+        <div>
+          <h3>Learn</h3>
+          <a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a>
+        </div>
+        <div>
+          <h3>Project</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas">Repository</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a>
+        </div>
+        <div>
+          <h3>Policy</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a>
+          <p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p>
+        </div>
       </div>
-      <div><h3>Learn</h3><a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a></div>
-      <div><h3>Project</h3><a href="https://github.com/ithealthtech/nexus-atlas">Repository</a><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a></div>
-      <div><h3>Policy</h3><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a><p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p></div>
-    </div>
-    <div class="container">
-      <p class="footer-note">Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365, Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or endorsed by any of them.</p>
-    </div>
-  </footer>
+      <div class="container">
+        <p class="footer-note">
+          Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365,
+          Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or
+          endorsed by any of them.
+        </p>
+      </div>
+    </footer>
 
-  <div class="sr-only" aria-live="polite" data-live-region></div>
-</body>
+    <div class="sr-only" aria-live="polite" data-live-region></div>
+  </body>
 </html>

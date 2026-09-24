@@ -1,146 +1,238 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MSP Atlas: self-hosted IT documentation and an encrypted password vault for managed service providers, with per-client access and a read-only client portal.">
-  <meta name="theme-color" content="#0b1714">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <title>MSP Atlas</title>
-  <link rel="icon" href="images/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="assets/site.css">
-  <script src="assets/site.js" defer></script>
-</head>
-<body>
-  <a class="skip-link" href="#main">Skip to content</a>
-  <header class="site-header">
-    <div class="nav-shell">
-      <a class="brand" href="index.html" aria-label="MSP Atlas home">
-        <span class="brand-mark" aria-hidden="true">A</span>
-        <span>MSP Atlas</span>
-      </a>
-      <nav class="site-nav" data-site-nav aria-label="Primary navigation">
-        <a href="index.html" aria-current="page">Overview</a>
-        <a href="install.html">Install</a>
-        <a href="security.html">Security</a>
-        <a href="support.html">Support</a>
-        <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
-      </nav>
-      <div class="nav-actions">
-        <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">&#9728;</button>
-        <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">&#9776;</button>
-      </div>
-    </div>
-  </header>
-
-  <main id="main">
-    <section class="hero">
-      <div class="container hero-grid">
-        <div>
-          <p class="eyebrow">MSP Atlas 1.0.1</p>
-          <h1>Your documentation and your passwords, on a server you own.</h1>
-          <p class="hero-copy">Client workspaces, flexible assets, runbooks, and an encrypted credential vault in one self-hosted application &mdash; with per-client access for technicians and read-only access for the clients you support.</p>
-          <div class="button-row">
-            <a class="button button-primary" href="install.html">Install it</a>
-            <a class="button" href="security.html">Read the security model</a>
-            <a class="button" href="https://github.com/ithealthtech/nexus-atlas">View on GitHub</a>
-          </div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="MSP Atlas: self-hosted IT documentation and an encrypted password vault for managed service providers, with per-client access and a read-only client portal."
+    />
+    <meta name="theme-color" content="#0b1714" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>MSP Atlas</title>
+    <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/site.css" />
+    <script src="assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="nav-shell">
+        <a class="brand" href="index.html" aria-label="MSP Atlas home">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <span>MSP Atlas</span>
+        </a>
+        <nav class="site-nav" data-site-nav aria-label="Primary navigation">
+          <a href="index.html" aria-current="page">Overview</a>
+          <a href="install.html">Install</a>
+          <a href="security.html">Security</a>
+          <a href="support.html">Support</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">
+            &#9728;
+          </button>
+          <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">
+            &#9776;
+          </button>
         </div>
-        <aside class="hero-panel" aria-label="At a glance">
-          <div class="release-line">
-            <div>
-              <span class="status-dot" aria-hidden="true"></span>
-              <span class="badge badge-success">Current release</span>
-            </div>
-            <strong>v1.0.1</strong>
-          </div>
-          <dl class="meta-list">
-            <div class="meta-row"><dt>Runs on</dt><dd>Docker (Linux) or Windows Server</dd></div>
-            <div class="meta-row"><dt>Runtime</dt><dd>Node.js 22+</dd></div>
-            <div class="meta-row"><dt>Database</dt><dd>PostgreSQL 16</dd></div>
-            <div class="meta-row"><dt>Vault</dt><dd>AES-256-GCM envelope encryption</dd></div>
-            <div class="meta-row"><dt>Accessibility</dt><dd>WCAG 2.2 AA, tested</dd></div>
-          </dl>
-          <div class="notice notice-warning">
-            <span aria-hidden="true">!</span>
-            <p><strong>The master key is the vault.</strong> Lose it and passwords and backups can't be decrypted. Keep it somewhere other than your database backups.</p>
-          </div>
-        </aside>
       </div>
-    </section>
+    </header>
 
-    <section class="section-compact">
-      <div class="container grid-4" aria-label="Highlights">
-        <article class="card">
-          <div class="card-icon" aria-hidden="true">01</div>
-          <h3>Documentation that stays current</h3>
-          <p>Assets built from layouts, runbooks with checklists and review dates, and version history with line-by-line comparison and restore.</p>
-        </article>
-        <article class="card">
-          <div class="card-icon" aria-hidden="true">02</div>
-          <h3>A vault with a record</h3>
-          <p>Every reveal, copy, change, and share is recorded. Restrict entries to named people, and require a reason for each reveal.</p>
-        </article>
-        <article class="card">
-          <div class="card-icon" aria-hidden="true">03</div>
-          <h3>Clients kept apart</h3>
-          <p>Per-client access levels and groups. A client you can't access looks exactly like one that doesn't exist.</p>
-        </article>
-        <article class="card">
-          <div class="card-icon" aria-hidden="true">04</div>
-          <h3>Bring your data</h3>
-          <p>Import from Hudu or CSV, export any client as a zip, and automate with a REST API and scoped API keys.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="container">
-        <div class="section-heading">
-          <p class="section-kicker">Product tour</p>
-          <h2>Everything a technician needs for a client, in one place</h2>
-          <p>Each client has its own assets, documents, passwords, contacts, locations, and activity. Ctrl+K search finds any of them &mdash; including by IP address or serial number &mdash; and returns only what you're allowed to see.</p>
-        </div>
-        <figure class="panel">
-          <img src="images/dashboard.png" alt="MSP Atlas dashboard listing clients, recent activity, and upcoming expirations" loading="lazy">
-          <figcaption><strong>Dashboard.</strong> Your clients, recent changes, and what expires soon: certificates, domains, warranties, and passwords due for rotation.</figcaption>
-        </figure>
-        <figure class="panel">
-          <img src="images/asset.png" alt="An asset page showing its fields, related items, attached files, and version history" loading="lazy">
-          <figcaption><strong>Assets.</strong> Thirteen built-in layouts plus your own, with related items, safe attachments, and full version history.</figcaption>
-        </figure>
-        <figure class="panel">
-          <img src="images/document.png" alt="A runbook in the rich-text editor, linked to the firewall it describes" loading="lazy">
-          <figcaption><strong>Runbooks and knowledge base.</strong> Checklists, tables, and code blocks; templates for runbooks and onboarding; links to the assets they describe.</figcaption>
-        </figure>
-        <figure class="panel">
-          <img src="images/password.png" alt="A password entry with reveal, a live one-time code, share links, and access history" loading="lazy">
-          <figcaption><strong>Password vault.</strong> Logins with live one-time codes, BitLocker recovery keys, a generator, rotation reminders, and one-time share links encrypted in the browser.</figcaption>
-        </figure>
-        <figure class="panel">
-          <img src="images/people.png" alt="The people and access page showing roles, client access levels, and groups" loading="lazy">
-          <figcaption><strong>People and access.</strong> Six roles, per-client access levels, and groups. Changes apply immediately, even to people already signed in.</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="container">
-        <div class="section-heading">
-          <p class="section-kicker">How it works</p>
-          <h2>One service, one database, one key you keep</h2>
-        </div>
-        <div class="grid-2">
-          <ol class="step-list">
-            <li><strong>Host and origin checks</strong>Requests must match your public address; cross-site requests are refused.</li>
-            <li><strong>A real session</strong><code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Strict</code> cookies, plus a CSRF token on every change.</li>
-            <li><strong>Two-step sign-in</strong>Required for staff: an authenticator app or a passkey.</li>
-            <li><strong>Per-client access</strong>The highest of your baseline, grants, and groups, capped by your role.</li>
-            <li><strong>Passwords need more</strong>Edit-and-passwords access, the restriction list, and a reason when the client requires one. Every reveal is recorded.</li>
-          </ol>
+    <main id="main">
+      <section class="hero">
+        <div class="container hero-grid">
           <div>
-            <div class="code-block">
-              <pre><code>Browser (React, strict CSP)
+            <p class="eyebrow">MSP Atlas 1.0.1</p>
+            <h1>Your documentation and your passwords, on a server you own.</h1>
+            <p class="hero-copy">
+              Client workspaces, flexible assets, runbooks, and an encrypted credential vault in one self-hosted
+              application &mdash; with per-client access for technicians and read-only access for the clients you
+              support.
+            </p>
+            <div class="button-row">
+              <a class="button button-primary" href="install.html">Install it</a>
+              <a class="button" href="security.html">Read the security model</a>
+              <a class="button" href="https://github.com/ithealthtech/nexus-atlas">View on GitHub</a>
+            </div>
+          </div>
+          <aside class="hero-panel" aria-label="At a glance">
+            <div class="release-line">
+              <div>
+                <span class="status-dot" aria-hidden="true"></span>
+                <span class="badge badge-success">Current release</span>
+              </div>
+              <strong>v1.0.1</strong>
+            </div>
+            <dl class="meta-list">
+              <div class="meta-row">
+                <dt>Runs on</dt>
+                <dd>Docker (Linux) or Windows Server</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Runtime</dt>
+                <dd>Node.js 22+</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Database</dt>
+                <dd>PostgreSQL 16</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Vault</dt>
+                <dd>AES-256-GCM envelope encryption</dd>
+              </div>
+              <div class="meta-row">
+                <dt>Accessibility</dt>
+                <dd>WCAG 2.2 AA, tested</dd>
+              </div>
+            </dl>
+            <div class="notice notice-warning">
+              <span aria-hidden="true">!</span>
+              <p>
+                <strong>The master key is the vault.</strong> Lose it and passwords and backups can't be decrypted. Keep
+                it somewhere other than your database backups.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section-compact">
+        <div class="container grid-4" aria-label="Highlights">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">01</div>
+            <h3>Documentation that stays current</h3>
+            <p>
+              Assets built from layouts, runbooks with checklists and review dates, and version history with
+              line-by-line comparison and restore.
+            </p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">02</div>
+            <h3>A vault with a record</h3>
+            <p>
+              Every reveal, copy, change, and share is recorded. Restrict entries to named people, and require a reason
+              for each reveal.
+            </p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">03</div>
+            <h3>Clients kept apart</h3>
+            <p>
+              Per-client access levels and groups. A client you can't access looks exactly like one that doesn't exist.
+            </p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">04</div>
+            <h3>Bring your data</h3>
+            <p>
+              Import from Hudu or CSV, export any client as a zip, and automate with a REST API and scoped API keys.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-heading">
+            <p class="section-kicker">Product tour</p>
+            <h2>Everything a technician needs for a client, in one place</h2>
+            <p>
+              Each client has its own assets, documents, passwords, contacts, locations, and activity. Ctrl+K search
+              finds any of them &mdash; including by IP address or serial number &mdash; and returns only what you're
+              allowed to see.
+            </p>
+          </div>
+          <figure class="panel">
+            <img
+              src="images/dashboard.png"
+              alt="MSP Atlas dashboard listing clients, recent activity, and upcoming expirations"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>Dashboard.</strong> Your clients, recent changes, and what expires soon: certificates, domains,
+              warranties, and passwords due for rotation.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/asset.png"
+              alt="An asset page showing its fields, related items, attached files, and version history"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>Assets.</strong> Thirteen built-in layouts plus your own, with related items, safe attachments,
+              and full version history.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/document.png"
+              alt="A runbook in the rich-text editor, linked to the firewall it describes"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>Runbooks and knowledge base.</strong> Checklists, tables, and code blocks; templates for runbooks
+              and onboarding; links to the assets they describe.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/password.png"
+              alt="A password entry with reveal, a live one-time code, share links, and access history"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>Password vault.</strong> Logins with live one-time codes, BitLocker recovery keys, a generator,
+              rotation reminders, and one-time share links encrypted in the browser.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/people.png"
+              alt="The people and access page showing roles, client access levels, and groups"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>People and access.</strong> Six roles, per-client access levels, and groups. Changes apply
+              immediately, even to people already signed in.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-heading">
+            <p class="section-kicker">How it works</p>
+            <h2>One service, one database, one key you keep</h2>
+          </div>
+          <div class="grid-2">
+            <ol class="step-list">
+              <li>
+                <strong>Host and origin checks</strong>Requests must match your public address; cross-site requests are
+                refused.
+              </li>
+              <li>
+                <strong>A real session</strong><code>HttpOnly</code>, <code>Secure</code>,
+                <code>SameSite=Strict</code> cookies, plus a CSRF token on every change.
+              </li>
+              <li><strong>Two-step sign-in</strong>Required for staff: an authenticator app or a passkey.</li>
+              <li>
+                <strong>Per-client access</strong>The highest of your baseline, grants, and groups, capped by your role.
+              </li>
+              <li>
+                <strong>Passwords need more</strong>Edit-and-passwords access, the restriction list, and a reason when
+                the client requires one. Every reveal is recorded.
+              </li>
+            </ol>
+            <div>
+              <div class="code-block">
+                <pre><code>Browser (React, strict CSP)
         |
         v
 apps/server  Fastify   checks, sessions, MFA,
@@ -153,48 +245,73 @@ apps/server  Fastify   checks, sessions, MFA,
         |
         v
 PostgreSQL 16  +  attachments folder</code></pre>
-            </div>
-            <div class="notice">
-              <span aria-hidden="true">i</span>
-              <p>Full detail in the <a href="security.html">security model</a>.</p>
+              </div>
+              <div class="notice">
+                <span aria-hidden="true">i</span>
+                <p>Full detail in the <a href="security.html">security model</a>.</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="section">
+      <section class="section">
+        <div class="container">
+          <div class="cta-panel">
+            <div>
+              <p class="section-kicker">Before you store client credentials</p>
+              <h2>Know the current boundary.</h2>
+              <p>
+                Version 1.0.1 covers documentation, the vault, accounts and security, the REST API, Hudu and CSV import,
+                per-client exports, encrypted backups with verified restore, a system status page, a read-only client
+                portal, and Docker or Windows hosting. Not yet included: single sign-on with Microsoft Entra ID, PSA and
+                RMM integrations, a browser autofill extension, and IT Glue or ITBoost importers.
+              </p>
+            </div>
+            <div class="button-row">
+              <a class="button button-primary" href="install.html">Install guide</a>
+              <a class="button" href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ROADMAP.md">Roadmap</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a class="brand" href="index.html" aria-label="MSP Atlas home"
+            ><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a
+          >
+          <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
+        </div>
+        <div>
+          <h3>Learn</h3>
+          <a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a>
+        </div>
+        <div>
+          <h3>Project</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas">Repository</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a>
+        </div>
+        <div>
+          <h3>Policy</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a>
+          <p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p>
+        </div>
+      </div>
       <div class="container">
-        <div class="cta-panel">
-          <div>
-            <p class="section-kicker">Before you store client credentials</p>
-            <h2>Know the current boundary.</h2>
-            <p>Version 1.0.1 covers documentation, the vault, accounts and security, the REST API, Hudu and CSV import, per-client exports, encrypted backups with verified restore, a system status page, a read-only client portal, and Docker or Windows hosting. Not yet included: single sign-on with Microsoft Entra ID, PSA and RMM integrations, a browser autofill extension, and IT Glue or ITBoost importers.</p>
-          </div>
-          <div class="button-row">
-            <a class="button button-primary" href="install.html">Install guide</a>
-            <a class="button" href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ROADMAP.md">Roadmap</a>
-          </div>
-        </div>
+        <p class="footer-note">
+          Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365,
+          Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or
+          endorsed by any of them.
+        </p>
       </div>
-    </section>
-  </main>
+    </footer>
 
-  <footer class="site-footer">
-    <div class="container footer-grid">
-      <div>
-        <a class="brand" href="index.html" aria-label="MSP Atlas home"><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a>
-        <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
-      </div>
-      <div><h3>Learn</h3><a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a></div>
-      <div><h3>Project</h3><a href="https://github.com/ithealthtech/nexus-atlas">Repository</a><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a></div>
-      <div><h3>Policy</h3><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a><p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p></div>
-    </div>
-    <div class="container">
-      <p class="footer-note">Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365, Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or endorsed by any of them.</p>
-    </div>
-  </footer>
-
-  <div class="sr-only" aria-live="polite" data-live-region></div>
-</body>
+    <div class="sr-only" aria-live="polite" data-live-region></div>
+  </body>
 </html>

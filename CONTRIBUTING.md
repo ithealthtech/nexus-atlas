@@ -107,7 +107,8 @@ labelled controls, no colour-only meaning, and no sideways scrolling at 390 px.
 
 The workflow checks the tag against `package.json`, then publishes the Docker image to GitHub
 Container Registry and a Windows package with its SHA-256 checksum to the GitHub release, with
-notes from the changelog.
+notes from the changelog. A manual run claims the tag before it builds anything, so if a later
+job fails, use **Re-run failed jobs** rather than starting a new run.
 
 ## Documentation
 
