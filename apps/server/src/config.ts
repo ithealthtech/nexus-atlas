@@ -33,6 +33,13 @@ const schema = z.object({
   ATLAS_BACKUP_DIR: z.string().optional(),
   ATLAS_BACKUP_HOUR: z.coerce.number().int().min(0).max(23).default(2),
   ATLAS_BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),
+  // Updates: the GitHub repository releases come from, and the folder shared with the root updater
+  // (set by deploy/linux/install-atlas.sh). Without the folder, the Updates page can only check.
+  ATLAS_UPDATE_REPO: z
+    .string()
+    .regex(/^[\w.-]+\/[\w.-]+$/, 'ATLAS_UPDATE_REPO must look like owner/repository.')
+    .default('ithealthtech/nexus-atlas'),
+  ATLAS_UPDATER_DIR: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_DIST: z.string().optional(),
 });

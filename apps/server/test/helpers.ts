@@ -55,6 +55,7 @@ export async function startApp(
   env: Record<string, string> = {},
   extra: {
     huduFetch?: typeof fetch;
+    updateFetch?: typeof fetch;
     keys?: KeyProvider;
     /** An existing database (for example one a backup was restored into) instead of a fresh one. */
     database?: Awaited<ReturnType<typeof freshDatabase>>;

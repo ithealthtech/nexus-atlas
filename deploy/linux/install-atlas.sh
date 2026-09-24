@@ -17,6 +17,7 @@ PUBLIC_URL=""
 APP_DIR="/opt/msp-atlas"
 DATA_DIR="/var/lib/msp-atlas"
 CONF_DIR="/etc/msp-atlas"
+UPDATER_DIR="/var/lib/msp-atlas-updater"
 SERVICE_USER="atlas"
 DB_NAME="atlas"
 DB_USER="atlas"
@@ -93,6 +94,9 @@ log "Service account and folders"
 id "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$DATA_DIR" "$DATA_DIR/backups"
 install -d -m 0750 -o root -g "$SERVICE_USER" "$CONF_DIR"
+# The updater's folder is root's; Atlas can only read it, and write update requests to inbox/.
+install -d -m 0750 -o root -g "$SERVICE_USER" "$UPDATER_DIR"
+install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$UPDATER_DIR/inbox"
 
 log "Master key"
 if [[ ! -f "$KEY_FILE" ]]; then
@@ -129,6 +133,10 @@ SETTINGS[PORT]="$PORT"
 SETTINGS[TRUST_PROXY]=true
 SETTINGS[ATLAS_MASTER_KEY_FILE]="$KEY_FILE"
 SETTINGS[ATLAS_DATA_DIR]="$DATA_DIR"
+SETTINGS[ATLAS_UPDATER_DIR]="$UPDATER_DIR"
+if [[ "$REPO" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$ ]]; then
+  SETTINGS[ATLAS_UPDATE_REPO]="${BASH_REMATCH[1]%.git}"
+fi
 : "${SETTINGS[LOG_LEVEL]:=info}"
 umask 027
 { for k in $(printf '%s\n' "${!SETTINGS[@]}" | sort); do echo "$k=${SETTINGS[$k]}"; done; } > "$ENV_FILE.tmp"
@@ -167,7 +175,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=$DATA_DIR
+ReadWritePaths=$DATA_DIR $UPDATER_DIR/inbox
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
@@ -175,8 +183,39 @@ RestrictSUIDSGID=true
 [Install]
 WantedBy=multi-user.target
 EOF
+
+log "Updater (Settings -> Updates)"
+# Prefer the copies shipped with the release just built; fall back to the ones beside this script.
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+SRC_DIR="$APP_DIR/deploy/linux"; [[ -f "$SRC_DIR/atlas-updater.sh" ]] || SRC_DIR="$SCRIPT_DIR"
+# `install` replaces the file rather than rewriting it, so a running copy of this script isn't disturbed.
+install -m 0755 -o root -g root "$SRC_DIR/install-atlas.sh" /usr/local/sbin/atlas-install
+install -m 0755 -o root -g root "$SRC_DIR/atlas-updater.sh" /usr/local/sbin/atlas-updater
+printf 'REPO=%q\n' "$REPO" > "$CONF_DIR/updater.conf"; chmod 0644 "$CONF_DIR/updater.conf"
+cat > /etc/systemd/system/msp-atlas-updater.path <<EOF
+[Unit]
+Description=Watch for MSP Atlas update requests
+
+[Path]
+PathExists=$UPDATER_DIR/inbox/request.json
+Unit=msp-atlas-updater.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+cat > /etc/systemd/system/msp-atlas-updater.service <<EOF
+[Unit]
+Description=Install a requested MSP Atlas update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/atlas-updater
+TimeoutStartSec=30min
+EOF
+
 systemctl daemon-reload
 systemctl enable --now msp-atlas
+systemctl enable --now msp-atlas-updater.path
 
 log "Caddy HTTPS proxy for $SITE_HOST"
 TLS_LINE=""

@@ -36,6 +36,8 @@ import { ApiKeyService } from './services/api-keys.js';
 import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
 import { StatusService } from './services/status.js';
+import { registerUpdateRoutes } from './routes/updates.js';
+import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
 
@@ -55,6 +57,8 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Replaces fetch for Hudu imports (tests use a fake Hudu). */
   huduFetch?: typeof fetch;
+  /** Replaces fetch for the GitHub release check (tests use fake releases). */
+  updateFetch?: typeof fetch;
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
@@ -101,6 +105,7 @@ export async function buildApp({
   storage,
   mailTransport = smtpTransport,
   huduFetch,
+  updateFetch,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     // The versioned REST API (/api/v1/…) serves the same routes as the app, authenticated by API key.
@@ -522,6 +527,17 @@ export async function buildApp({
     recent,
     backups,
     status: new StatusService(database, { config, keys, backups, settings, notifier, version: APP_VERSION }),
+  });
+  registerUpdateRoutes(app, {
+    db,
+    authed,
+    recent,
+    updates: new UpdateService({
+      repo: config.ATLAS_UPDATE_REPO,
+      current: APP_VERSION,
+      dir: config.ATLAS_UPDATER_DIR,
+      fetch: updateFetch,
+    }),
   });
   if (config.NODE_ENV !== 'test') {
     notifier.start();
