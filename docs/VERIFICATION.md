@@ -1,5 +1,28 @@
 # Verification log
 
+## M3b Data in and out — September 24, 2026
+
+Run on Node 22 and PostgreSQL 16 in a Linux container.
+
+- **Integration tests:** `npm test` passes all **54 tests in 7 files**. The 9 new ones in `data.test.ts` cover:
+  - **API keys:** a key is shown once and stored as a hash. Scopes are enforced, the passwords scope is needed for the vault, and account and settings endpoints are closed to keys. Revoked keys get 401. Actions are recorded under the key's name.
+  - **OpenAPI:** `/api/openapi.json` describes the documented paths.
+  - **Hudu:** tested against a fake Hudu with 26 companies, so pagination runs. It covers layouts, assets, HTML articles (with unsafe links removed), and passwords flattened into client vaults. A second run updates instead of duplicating. A rejected key reports a clear error.
+  - **CSV:** a dry run saves nothing and reports row numbers. Imports of clients, contacts, assets, and passwords are covered, and password imports need vault access.
+  - **Export:** the zip holds client.json, documents, and attachments. Decrypted passwords are included only for administrators who have just confirmed their password.
+  - **Client portal:** a client account sees only shared, unrestricted passwords.
+  - **0.2 migration:** a sample 0.2 database moves over clients, records, relationships, users with their passwords, and grants.
+- **Browser tests:** `npm run test:e2e` passes all **14 tests** with no axe (WCAG 2.2 AA) violations. The new ones cover:
+  - CSV import with column matching and a dry run, API key creation, and branding (the accent colour applies).
+  - A client export download.
+  - A client contact revealing a shared password, including the client's required reason.
+- **Issues found and fixed during M3b verification:**
+  - Client viewers could see password names in a client's activity feed. Existed before M3b.
+  - The rich-text editor could move the cursor while typing, because its options were rebuilt on every render. This was also the cause of an intermittently failing runbook test.
+  - A Hudu article with a `javascript:` link failed to import as a whole. Unsafe links are now dropped and their text kept.
+  - CSV headers such as "Client Name" weren't matched automatically.
+- **Also run:** lint, typecheck, legacy 0.2 tests, and `npm audit --omit=dev`.
+
 ## M3a Accounts and security — September 24, 2026
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.

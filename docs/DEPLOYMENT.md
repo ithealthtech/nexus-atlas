@@ -58,6 +58,10 @@ Atlas sends password reset links, expiry alerts, and a Monday digest. An adminis
 - The SMTP password is encrypted with the master key. **Send test** checks the saved settings and shows the server's error if it refuses.
 - Alerts go to staff who can see the item and haven't turned them off on their account page. Each email goes out once per person per day (alerts) or week (digest), even with several Atlas servers.
 
+## Bringing data in
+
+After setup, import from Hudu or CSV files under **Import & export**, or move a 0.2 prototype database with `npm run migrate-legacy -w @atlas/server -- <atlas.sqlite>` (in Docker: `docker compose -f deploy/docker-compose.yml exec app npm run migrate-legacy -w @atlas/server -- /data/atlas.sqlite`, after copying the file into the data volume). See [Data in and out](DATA.md).
+
 ## Health, logs, and upgrades
 
 - `GET /healthz` reports that the process is up. `GET /readyz` also checks the database. The container health check uses `/healthz`.

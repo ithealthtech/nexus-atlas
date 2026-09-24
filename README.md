@@ -2,7 +2,7 @@
 
 Self-hosted IT documentation and password manager for MSPs: client workspaces, assets, runbooks, and encrypted credentials, with per-client access for your technicians and the clients you support.
 
-> **Status: v1.0 in development (milestones M0–M2 and M3a complete).** Sign-in with passkeys and recovery codes, permissions and groups, the documentation workspace, the encrypted password vault, email alerts, and a tamper-evident audit log work today. Import, export, and the API (M3b) and release hardening with a security review (M4) are next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
+> **Status: v1.0 in development (milestones M0–M3 complete).** Sign-in with passkeys and recovery codes, permissions and groups, the documentation workspace, the encrypted password vault, email alerts, a tamper-evident audit log, a REST API, Hudu and CSV import, client exports, branding, and a read-only client portal work today. Release hardening with a security review (M4) is next. Use synthetic data until v1.0. See the [roadmap](docs/ROADMAP.md).
 
 ![Atlas dashboard](docs/screenshots/dashboard.png)
 
@@ -48,6 +48,11 @@ Self-hosted IT documentation and password manager for MSPs: client workspaces, a
   - **One-time share links:** the password is encrypted in your browser, and the key lives only in the link's `#fragment`, so the server stores ciphertext it can't read. Links expire and have a view limit, which holds even if two people open the link at once.
 - **Search:** Ctrl+K from anywhere finds clients, assets (including by IP or serial number), document text, contacts, and locations. It matches as you type and returns only what you're allowed to see.
 - **Security log and activity:** sign-ins, failures, lockouts, and account changes for administrators. Separate activity feeds show documentation changes for each item, each client, and overall.
+- **Data in and out** ([details](docs/DATA.md)):
+  - A REST API with scoped API keys and an OpenAPI description.
+  - Import from Hudu (companies, layouts, assets, articles, and passwords; re-runs update instead of duplicating), and CSV import with a dry run.
+  - Per-client zip exports, and migration from the 0.2 prototype.
+- **Branding and client portal:** your logo, accent colour, and a welcome message. Client accounts can reveal only the passwords you share with them.
 - **Interface:** light and dark themes, mobile layout, keyboard support, and WCAG 2.2 AA checks in end-to-end tests.
 
 ## Run it
@@ -79,7 +84,7 @@ npm run dev              # API on :4318, web app with hot reload on :5173
 | `packages/db` | Drizzle schema and SQL migrations (PostgreSQL). |
 | `e2e` | Playwright end-to-end tests with axe accessibility checks. |
 | `deploy` | Docker Compose (Atlas + PostgreSQL + Caddy HTTPS). |
-| `legacy` | The 0.2 prototype (Node + SQLite), kept for reference and for the M3 data migration. |
+| `legacy` | The 0.2 prototype (Node + SQLite), kept for reference and for `npm run migrate-legacy`. |
 | `integrations/bitlocker` | BitLocker collector prototype, the reference for the post-v1 RMM collector. |
 
 ## Checks
@@ -96,5 +101,6 @@ CI runs all of these on every pull request, plus a Windows build and a Docker im
 - [Deployment](docs/DEPLOYMENT.md): Docker, configuration, the master key, backups, and upgrades.
 - [Architecture](docs/ARCHITECTURE.md): how requests, authorization, and encryption work.
 - [Identity and permissions](docs/IDENTITY.md)
+- [Data in and out](docs/DATA.md): the API, Hudu and CSV import, exports, migrating from 0.2, branding, and the client portal.
 - [BitLocker integration status](docs/BITLOCKER.md)
 - [Roadmap](docs/ROADMAP.md) and [verification log](docs/VERIFICATION.md)
