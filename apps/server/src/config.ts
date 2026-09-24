@@ -25,6 +25,14 @@ const schema = z.object({
   ATLAS_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(1024).default(25),
   // Local hour (0–23) after which expiry alerts and the Monday digest are emailed.
   ATLAS_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(7),
+  // Encrypted backups: made daily after this local hour, kept in this folder (default <data dir>/backups).
+  ATLAS_BACKUP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  ATLAS_BACKUP_DIR: z.string().optional(),
+  ATLAS_BACKUP_HOUR: z.coerce.number().int().min(0).max(23).default(2),
+  ATLAS_BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_DIST: z.string().optional(),
 });

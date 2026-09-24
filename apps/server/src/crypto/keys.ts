@@ -9,6 +9,8 @@ import { dirname } from 'node:path';
 export interface KeyProvider {
   /** Short fingerprint stored with each ciphertext so rotated keys can be told apart. */
   readonly keyId: string;
+  /** Every loaded key's fingerprint: the current one first, then older ones kept for rotation. */
+  readonly keyIds: string[];
   key(keyId: string): Buffer;
 }
 
@@ -26,6 +28,7 @@ export function staticKeyProvider(keys: Buffer[]): KeyProvider {
   const keyId = fingerprint(keys[0]!);
   return {
     keyId,
+    keyIds: [...byId.keys()],
     key(id) {
       const key = byId.get(id);
       if (!key) throw new Error(`Master key ${id} is not available. Restore the matching key file.`);

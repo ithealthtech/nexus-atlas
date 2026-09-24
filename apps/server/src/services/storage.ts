@@ -16,7 +16,10 @@ export interface StoredFile {
 export interface FileStorage {
   put(orgId: string, stream: Readable, maxBytes: number): Promise<StoredFile>;
   get(key: string): Promise<Readable>;
+  size(key: string): Promise<number>;
   remove(key: string): Promise<void>;
+  /** Writes a file back under its original key (restoring a backup). */
+  restore(key: string, stream: Readable): Promise<void>;
 }
 
 export class TooLargeError extends Error {}
@@ -62,8 +65,23 @@ export class LocalStorage implements FileStorage {
     await stat(this.path(key));
     return createReadStream(this.path(key));
   }
+  async size(key: string) {
+    return (await stat(this.path(key))).size;
+  }
   async remove(key: string) {
     await rm(this.path(key), { force: true });
+  }
+  async restore(key: string, stream: Readable) {
+    const final = this.path(key);
+    const temp = `${final}.part`;
+    await mkdir(dirname(final), { recursive: true });
+    try {
+      await pipeline(stream, createWriteStream(temp, { mode: 0o600 }));
+      await rename(temp, final);
+    } catch (error) {
+      await rm(temp, { force: true });
+      throw error;
+    }
   }
 }
 

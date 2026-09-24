@@ -6,3 +6,4 @@ export * from './vault.js';
 export * from './patch.js';
 export * from './admin.js';
 export * from './data.js';
+export * from './ops.js';
