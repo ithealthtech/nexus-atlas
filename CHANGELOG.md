@@ -4,6 +4,12 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [1.0.1] - 2026-09-24
 
+### Added
+
+- **Product site:** an overview, install guide, security model, and troubleshooting page at <https://ithealthtech.github.io/nexus-atlas/>.
+- **Contributing guide:** setup, checks, the rules for code on the request path, and how to release.
+- **Releases:** the Release workflow can be run from the Actions tab on `main`, and creates the version tag itself.
+
 ### Fixed
 
 - **System status:** the "Backups are current" check said when the last backup finished as a raw timestamp (`2026-09-24T13:19:25.847Z`). It now says how long ago, for example "The last backup finished 9 hours ago."

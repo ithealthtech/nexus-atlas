@@ -13,11 +13,11 @@ you support.
 [![Database](https://img.shields.io/badge/PostgreSQL-16-336791)](docs/DEPLOYMENT.md)
 [![Accessibility](https://img.shields.io/badge/WCAG-2.2%20AA-6d28d9)](#verification)
 
-[**Deployment**](docs/DEPLOYMENT.md) ·
-[Administrator guide](docs/ADMIN-GUIDE.md) ·
-[User guide](docs/USER-GUIDE.md) ·
+[**Product site**](https://ithealthtech.github.io/nexus-atlas/) ·
+[Install](https://ithealthtech.github.io/nexus-atlas/install.html) ·
 [Security model](SECURITY.md) ·
-[Latest release](../../releases/latest)
+[Latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest) ·
+[Documentation](docs/)
 
 ![MSP Atlas dashboard](docs/screenshots/dashboard.png)
 
@@ -141,7 +141,7 @@ docker compose -f deploy/docker-compose.yml logs app | grep "setup code"
 ```
 
 **Windows Server** — extract the Windows package from the
-[latest release](../../releases/latest), then from an elevated prompt:
+[latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), then from an elevated prompt:
 
 ```powershell
 .\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
@@ -207,7 +207,8 @@ a browser autofill extension, IT Glue and ITBoost importers, and multi-tenant cl
 | [Deployment](docs/DEPLOYMENT.md) | [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) |
 | [Administrator guide](docs/ADMIN-GUIDE.md) | [Data in and out](docs/DATA.md) | [Identity and permissions](docs/IDENTITY.md) |
 | [Security model](SECURITY.md) | [Changelog](CHANGELOG.md) | [Verification log](docs/VERIFICATION.md) |
-| [Roadmap](docs/ROADMAP.md) | | [BitLocker integration](docs/BITLOCKER.md) |
+| [Roadmap](docs/ROADMAP.md) | [Product site](https://ithealthtech.github.io/nexus-atlas/) | [BitLocker integration](docs/BITLOCKER.md) |
+| | | [Contributing](CONTRIBUTING.md) |
 
 Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [SECURITY.md](SECURITY.md), and the
 [administrator guide](docs/ADMIN-GUIDE.md) before storing client credentials.

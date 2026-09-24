@@ -51,7 +51,7 @@ test.describe.serial('first run to restricted client access', () => {
     ownerSecret = await mfaSecretFrom(page);
     mkdirSync('test-results/e2e-data', { recursive: true });
     writeFileSync(SECRET_FILE, ownerSecret);
-    await page.getByLabel(/Enter the 6-digit code/).fill(totp(ownerSecret));
+    await page.getByLabel(/Enter the 6-digit code/).fill(await freshCode(ownerSecret));
     await page.getByRole('button', { name: 'Turn on two-step verification' }).click();
     await expect(page.getByRole('heading', { name: 'Save your recovery codes' })).toBeVisible();
     const codes = page.getByRole('list', { name: 'Recovery codes' }).getByRole('listitem');

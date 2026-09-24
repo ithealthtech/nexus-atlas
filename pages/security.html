@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="How MSP Atlas protects client documentation and credentials: envelope encryption, per-client access, MFA, a tamper-evident security log, and encrypted backups."
+    />
+    <meta name="theme-color" content="#0b1714" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Security model &middot; MSP Atlas</title>
+    <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/site.css" />
+    <script src="assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="nav-shell">
+        <a class="brand" href="index.html" aria-label="MSP Atlas home">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <span>MSP Atlas</span>
+        </a>
+        <nav class="site-nav" data-site-nav aria-label="Primary navigation">
+          <a href="index.html">Overview</a>
+          <a href="install.html">Install</a>
+          <a href="security.html" aria-current="page">Security</a>
+          <a href="support.html">Support</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">
+            &#9728;
+          </button>
+          <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">
+            &#9776;
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="page-hero">
+        <div class="container">
+          <p class="eyebrow">Security model</p>
+          <h1>What Atlas protects, and from whom.</h1>
+          <p class="hero-copy">
+            Atlas holds client documentation and credentials, so its protections &mdash; and their limits &mdash; are
+            written down.
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container docs-layout">
+          <nav class="toc" aria-label="On this page">
+            <h2>On this page</h2>
+            <a href="#request">Every request</a>
+            <a href="#threats">Threats and protections</a>
+            <a href="#limits">What it doesn't protect</a>
+            <a href="#operate">Operating securely</a>
+            <a href="#report">Reporting a vulnerability</a>
+          </nav>
+
+          <div class="docs-content">
+            <h2 id="request">Every request</h2>
+            <ol class="step-list">
+              <li>
+                <strong>Host and Origin</strong>must match <code>PUBLIC_URL</code>; cross-site requests are refused.
+              </li>
+              <li>
+                <strong>The session cookie</strong>(<code>HttpOnly</code>, <code>Secure</code>,
+                <code>SameSite=Strict</code>, <code>__Host-</code>) resolves to an active session, and every change
+                carries its CSRF token.
+              </li>
+              <li>
+                <strong>Sign-in stages</strong>are complete: password, then two-step verification (required for staff),
+                then any required password change.
+              </li>
+              <li>
+                <strong>Client access</strong>&mdash; the highest of the person's baseline, grants, and groups, capped
+                by their role &mdash; allows the action.
+              </li>
+              <li>
+                <strong>Passwords</strong>also need edit-and-passwords access, pass restriction lists, and a reason when
+                the client requires one. The reveal is recorded.
+              </li>
+            </ol>
+            <p>
+              API keys replace the session steps with a hashed bearer key limited to its scopes and to the documentation
+              and vault endpoints.
+            </p>
+
+            <h2 id="threats">Threats and protections</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Threat</th>
+                    <th>Protection</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Stolen database or backup</td>
+                    <td>
+                      Passwords, notes, one-time code keys, MFA secrets, and the SMTP and Hudu credentials are encrypted
+                      with AES-256-GCM, bound to their row and field. Keys are wrapped by a master key that is never
+                      stored in the database. Backups are encrypted with a key derived from it.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Password guessing</td>
+                    <td>
+                      scrypt hashes, lockout after 5 failures, per-address rate limits, and MFA for staff. Passkeys
+                      can't be phished.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Stolen session</td>
+                    <td>
+                      Sessions expire after 2 hours idle or 12 hours; people can see and end their sessions; sensitive
+                      actions need the password again.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Cross-site attacks</td>
+                    <td>
+                      Host, Origin, and <code>Sec-Fetch-Site</code> checks, a per-session CSRF token, and a strict
+                      Content Security Policy with no inline or third-party scripts.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Over-broad access inside the MSP</td>
+                    <td>
+                      Per-client access levels, restricted passwords, required reasons, and an access history of every
+                      reveal, copy, change, and share.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Malicious uploads</td>
+                    <td>
+                      Stored outside the web root under random names. Only images that pass a content check display
+                      inline.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Tampering with the audit trail</td>
+                    <td>
+                      Security events are hash-chained by database triggers with a signed checkpoint.
+                      <strong>Verify now</strong> detects edited, reordered, and deleted events.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Leaked API key</td>
+                    <td>
+                      Stored as hashes, limited by scope, kept away from account, people, settings, backup, and log
+                      endpoints, and can expire.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>One-time share links</td>
+                    <td>
+                      The password is encrypted in the browser; the key lives only in the link's <code>#fragment</code>,
+                      which the server never receives.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h2 id="limits">What it doesn't protect against</h2>
+            <div class="notice notice-warning">
+              <span aria-hidden="true">!</span>
+              <p>
+                <strong>Administrators can read every password.</strong> Atlas is not end-to-end encrypted like a
+                personal password manager. It records every read instead, and lets you restrict entries to named people.
+              </p>
+            </div>
+            <ul>
+              <li>Someone who has both the master key and the database.</li>
+              <li>A compromised server, administrator account, or signed-in person's device.</li>
+              <li>
+                Server-side requests an administrator configures: the Hudu importer connects to any
+                <code>https://</code> address, including internal ones.
+              </li>
+              <li>
+                Rate limits across several servers: failed-attempt counters are per server, though account lockout
+                applies everywhere.
+              </li>
+            </ul>
+
+            <h2 id="operate">Operating securely</h2>
+            <ul>
+              <li>Serve Atlas only over HTTPS, behind a reverse proxy with <code>TRUST_PROXY=true</code>.</li>
+              <li>Keep the master key in a password manager and on paper, not next to backups.</li>
+              <li>
+                Keep backups off the Atlas server, and check them with
+                <code>npm run backup -w @atlas/server -- verify &lt;file&gt;</code>.
+              </li>
+              <li>
+                Check <strong>System status</strong> and <strong>Security log &rarr; Verify now</strong> regularly.
+              </li>
+            </ul>
+
+            <h2 id="report">Reporting a vulnerability</h2>
+            <p>
+              Never in a public issue. Use GitHub's private vulnerability reporting (<a
+                href="https://github.com/ithealthtech/nexus-atlas/security/advisories/new"
+                >Security &rarr; Report a vulnerability</a
+              >) with the affected version, impact, and steps to reproduce. See the
+              <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">security policy</a>.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a class="brand" href="index.html" aria-label="MSP Atlas home"
+            ><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a
+          >
+          <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
+        </div>
+        <div>
+          <h3>Learn</h3>
+          <a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a>
+        </div>
+        <div>
+          <h3>Project</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas">Repository</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a>
+        </div>
+        <div>
+          <h3>Policy</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a>
+          <p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p>
+        </div>
+      </div>
+      <div class="container">
+        <p class="footer-note">
+          Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365,
+          Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or
+          endorsed by any of them.
+        </p>
+      </div>
+    </footer>
+
+    <div class="sr-only" aria-live="polite" data-live-region></div>
+  </body>
+</html>

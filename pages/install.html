@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Install MSP Atlas with Docker Compose on Linux or as a Windows service, set up the master key, and configure email and backups."
+    />
+    <meta name="theme-color" content="#0b1714" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Install &middot; MSP Atlas</title>
+    <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/site.css" />
+    <script src="assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="nav-shell">
+        <a class="brand" href="index.html" aria-label="MSP Atlas home">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <span>MSP Atlas</span>
+        </a>
+        <nav class="site-nav" data-site-nav aria-label="Primary navigation">
+          <a href="index.html">Overview</a>
+          <a href="install.html" aria-current="page">Install</a>
+          <a href="security.html">Security</a>
+          <a href="support.html">Support</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">
+            &#9728;
+          </button>
+          <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">
+            &#9776;
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="page-hero">
+        <div class="container">
+          <p class="eyebrow">Install</p>
+          <h1>From download to your first client.</h1>
+          <p class="hero-copy">
+            Atlas runs as one Node.js service in front of PostgreSQL 16, behind HTTPS. There is no default
+            administrator: you create the owner account with a one-time setup code.
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container docs-layout">
+          <nav class="toc" aria-label="On this page">
+            <h2>On this page</h2>
+            <a href="#docker">Docker (Linux)</a>
+            <a href="#windows">Windows Server</a>
+            <a href="#key">The master key</a>
+            <a href="#first-day">First day</a>
+            <a href="#backups">Backups and restore</a>
+            <a href="#upgrade">Upgrading</a>
+          </nav>
+
+          <div class="docs-content">
+            <h2 id="docker">Docker (Linux)</h2>
+            <p>
+              Point a DNS name at the server and open ports 80 and 443; Caddy gets and renews the certificate
+              automatically. Copy <code>.env.example</code> to <code>.env</code> and set <code>PUBLIC_URL</code>,
+              <code>ATLAS_DOMAIN</code>, <code>POSTGRES_PASSWORD</code>, and <code>ATLAS_MASTER_KEY</code>. Generate the
+              key with:
+            </p>
+            <div class="code-block">
+              <button class="copy-button" type="button" data-copy-target="#key-cmd">Copy</button>
+              <pre><code id="key-cmd">node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"</code></pre>
+            </div>
+            <p>Then start Atlas and read the setup code from the log:</p>
+            <div class="code-block">
+              <button class="copy-button" type="button" data-copy-target="#docker-cmd">Copy</button>
+              <pre><code id="docker-cmd">docker compose -f deploy/docker-compose.yml --env-file .env up -d
+docker compose -f deploy/docker-compose.yml logs app | grep "setup code"</code></pre>
+            </div>
+            <p>
+              Open your <code>PUBLIC_URL</code>, enter the setup code, and create the owner account. The code works only
+              until the first account exists.
+            </p>
+            <p>
+              A ready-built image is also published for each release:
+              <code>ghcr.io/ithealthtech/nexus-atlas:1.0.1</code>.
+            </p>
+
+            <h2 id="windows">Windows Server</h2>
+            <p>
+              Install Node.js 22 LTS and PostgreSQL 16, and create an empty database and user. Download
+              <code>msp-atlas-1.0.1-windows.zip</code> from the
+              <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">latest release</a>, check it against
+              the <code>.sha256</code> file beside it, and extract it to a folder such as
+              <code>C:\Program Files\MSP Atlas</code>. From an elevated PowerShell prompt:
+            </p>
+            <div class="code-block">
+              <button class="copy-button" type="button" data-copy-target="#win-cmd">Copy</button>
+              <pre><code id="win-cmd">.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:&lt;password&gt;@localhost:5432/atlas"</code></pre>
+            </div>
+            <p>
+              The script creates <code>C:\ProgramData\MSP Atlas</code> (readable only by Administrators and SYSTEM),
+              creates the master key file on first install, and registers the <code>MSPAtlas</code> service to start
+              automatically. The setup code is in <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>.
+            </p>
+            <div class="notice">
+              <span aria-hidden="true">i</span>
+              <p>
+                Atlas listens on <code>127.0.0.1:4318</code>. Publish it over HTTPS with IIS (URL Rewrite and
+                Application Request Routing) or Caddy for Windows. Add <code>-BackupDir \\nas\atlas-backups</code> to
+                keep backups on another machine.
+              </p>
+            </div>
+
+            <h2 id="key">The master key</h2>
+            <p>
+              The master key protects every encrypted value: vault passwords, one-time code keys, MFA secrets, and the
+              email and Hudu credentials. It also encrypts backups.
+            </p>
+            <div class="notice notice-danger">
+              <span aria-hidden="true">!</span>
+              <p>
+                <strong>If you lose the key, encrypted data and backups can't be recovered.</strong> Keep a copy in your
+                existing password manager and a sealed printout &mdash; never next to database backups.
+              </p>
+            </div>
+            <p>
+              To rotate it, list the new key first and the old one after it, restart, run
+              <code>npm run rewrap-keys -w @atlas/server</code>, then remove the old key. Keep the old key for as long
+              as you keep backups made with it.
+            </p>
+
+            <h2 id="first-day">First day</h2>
+            <ol>
+              <li>Turn on two-step sign-in for the owner account, and save the recovery codes.</li>
+              <li>
+                Set up email under <strong>Settings &rarr; Email</strong> (there's a Microsoft 365 preset) so password
+                resets and expiry alerts work.
+              </li>
+              <li>Add your clients, or import them from Hudu or CSV under <strong>Import &amp; export</strong>.</li>
+              <li>Invite technicians and set their client access under <strong>People &amp; access</strong>.</li>
+              <li>Open <strong>System status</strong> and make sure every check is green.</li>
+            </ol>
+
+            <h2 id="backups">Backups and restore</h2>
+            <p>
+              Atlas backs itself up every night into one encrypted <code>.atlasbak</code> file holding the database and
+              every attachment, and keeps the newest 14. <strong>System status &rarr; Back up now</strong> makes one on
+              demand. Point <code>ATLAS_BACKUP_DIR</code> at a network share or copy the folder off the server.
+            </p>
+            <div class="code-block">
+              <button class="copy-button" type="button" data-copy-target="#verify-cmd">Copy</button>
+              <pre><code id="verify-cmd">npm run backup -w @atlas/server -- verify &lt;file.atlasbak&gt;
+npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
+            </div>
+            <p>
+              A restore reads and checks the whole file before it changes anything, and needs the master key the backup
+              was made with. Stop Atlas first; add <code>--replace</code> to overwrite the current database.
+            </p>
+
+            <h2 id="upgrade">Upgrading</h2>
+            <p>
+              Back up first. With Docker, pull the new image and run <code>docker compose ... up -d</code>. On Windows,
+              extract the new package over the old folder and run the install script again with no arguments; it keeps
+              your settings and key. Database updates run automatically on start.
+            </p>
+            <p>
+              Full detail, including every setting, is in the
+              <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DEPLOYMENT.md">deployment guide</a>
+              and the
+              <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md">administrator guide</a
+              >.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a class="brand" href="index.html" aria-label="MSP Atlas home"
+            ><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a
+          >
+          <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
+        </div>
+        <div>
+          <h3>Learn</h3>
+          <a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a>
+        </div>
+        <div>
+          <h3>Project</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas">Repository</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a>
+        </div>
+        <div>
+          <h3>Policy</h3>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a
+          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a>
+          <p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p>
+        </div>
+      </div>
+      <div class="container">
+        <p class="footer-note">
+          Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365,
+          Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or
+          endorsed by any of them.
+        </p>
+      </div>
+    </footer>
+
+    <div class="sr-only" aria-live="polite" data-live-region></div>
+  </body>
+</html>
