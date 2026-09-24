@@ -7,6 +7,8 @@ import {
   type AccessLevel,
   type ActivityView,
   type ApiKeyView,
+  type BackupRunView,
+  type SystemStatus,
   type Branding,
   type CsvImportResult,
   type ImportJobView,
@@ -1034,6 +1036,76 @@ on('POST', '/import/csv', (_m, b) => {
   return { created, updated, errors } satisfies CsvImportResult;
 });
 on('GET', '/clients/:id/export', () => notInDemo('Downloading a client export'));
+
+// operations
+const backupRuns: BackupRunView[] = [
+  {
+    id: uuid(),
+    trigger: 'schedule',
+    status: 'done',
+    fileName: 'atlas-demo.atlasbak',
+    size: 48_213_504,
+    rows: 18_422,
+    files: 312,
+    error: null,
+    startedByName: 'Scheduled backup',
+    createdAt: ago(9 * 60),
+    finishedAt: ago(9 * 60),
+  },
+];
+on('GET', '/backups', () => backupRuns);
+on('POST', '/backups', () => {
+  const run: BackupRunView = {
+    ...backupRuns[0]!,
+    id: uuid(),
+    trigger: 'manual',
+    startedByName: db.owner.name,
+    createdAt: now(),
+    finishedAt: now(),
+  };
+  backupRuns.unshift(run);
+  event('Backup started', run.id);
+  return run;
+});
+on('GET', '/backups/:id/download', () => notInDemo('Downloading a backup'));
+on('GET', '/status', (): SystemStatus => ({
+  version: '1.0.0-dev',
+  node: 'v22.12.0',
+  platform: 'linux x64',
+  startedAt: ago(3 * 24 * 60),
+  publicUrl: 'https://atlas.example.com',
+  checks: [
+    {
+      id: 'backup-location',
+      level: 'warn',
+      title: 'Backups are on the same disk as Atlas',
+      detail: 'Copy the backup folder somewhere else, or set ATLAS_BACKUP_DIR to a network share.',
+    },
+    { id: 'backups', level: 'ok', title: 'Backups are current', detail: `Last backup ${backupRuns[0]!.createdAt}.` },
+  ],
+  database: { version: '16.4', sizeBytes: 187_000_000, migrationsApplied: 8, migrationsAvailable: 8 },
+  storage: {
+    dataDir: '/data',
+    freeBytes: 412_000_000_000,
+    totalBytes: 500_000_000_000,
+    attachments: 312,
+    attachmentBytes: 1_240_000_000,
+  },
+  backups: {
+    enabled: true,
+    dir: '/data/backups',
+    hour: 2,
+    keep: 14,
+    freeBytes: 412_000_000_000,
+    lastSuccessAt: backupRuns[0]!.createdAt,
+    nextAt: new Date(Date.now() + 14 * 3_600_000).toISOString(),
+    runs: backupRuns,
+  },
+  email: { enabled: smtp.enabled, host: smtp.host },
+  keys: { current: 'k7Qe2xLp', loaded: 1 },
+  audit: { events: db.events.length, lastCheckpointAt: ago(5 * 60) },
+  background: { lastRunAt: new Date(Date.now() - 4 * 60_000).toISOString() },
+}));
 
 /** Answers an API request from memory, after a short delay so loading states show as they would for real. */
 export async function mockRequest(path: string, method: string, body: unknown): Promise<unknown> {
