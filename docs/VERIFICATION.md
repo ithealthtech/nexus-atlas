@@ -1,6 +1,28 @@
 # Verification log
 
-## M3b Data in and out — September 24, 2026
+## M4a Operations — September 24, 2026
+
+Run on Node 22 and PostgreSQL 16 in a Linux container.
+
+- **Integration tests:** `npm test` passes all **61 tests in 8 files**. The 5 new ones in `backup.test.ts` cover:
+  - **Encryption:** a 200 KB round trip across several chunks. A flipped byte, a file cut at a chunk boundary, an edited header, and the wrong master key are each rejected. A rotated-out key still opens old backups.
+  - **Backup and restore:** a backup with a client, a password, a contact, and an attachment contains none of them in readable form. Downloading it needs a fresh password confirmation. The backup is restored into an empty database and a new attachments folder, and Atlas then runs on it:
+    - the owner signs in with MFA;
+    - the password reveals;
+    - the attachment downloads;
+    - security-log verification passes;
+    - new rows get new IDs.
+    Restoring into a database that isn't empty is refused.
+  - **Damaged backups:** a damaged file is refused, and the target database is left without a single table.
+  - **Schedule:** the backup doesn't run before the backup hour, then runs once that day. Only the newest files are kept. The status report is correct.
+  - **Access:** only administrators can see the status page or start and download backups.
+- **Browser tests:** the new System status test starts a backup, waits for it, downloads it, and runs an accessibility check.
+- **Issues found and fixed:**
+  - Chunk framing overflowed JavaScript's signed bit operations.
+  - Constraint checks had to run before triggers were re-enabled during restore.
+  - A sign-in test depended on the clock and could exceed its timeout.
+
+ — September 24, 2026
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.
 
