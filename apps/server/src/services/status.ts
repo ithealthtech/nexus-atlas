@@ -64,7 +64,20 @@ export class StatusService {
     const checkpoint = await settings.auditCheckpoint(actor.orgId);
     const smtp = await settings.smtpView(actor.orgId);
     const runs = await backups.list();
-    const lastSuccess = runs.find((r) => r.status === 'done');
+    // A run only counts while its file is still in the backup folder (not deleted, moved, or on an unmounted share).
+    let lastSuccess: (typeof runs)[number] | undefined;
+    for (const run of runs.filter((r) => r.status === 'done')) {
+      if (
+        await backups.file(run.id).then(
+          () => true,
+          () => false,
+        )
+      ) {
+        lastSuccess = run;
+        break;
+      }
+    }
+    const missingFile = runs.find((r) => r.status === 'done') !== lastSuccess;
     const dataDisk = await disk(dataDir);
     const backupDisk = await disk(backups.dir);
 
@@ -101,6 +114,13 @@ export class StatusService {
         'Check the backup history below for errors, and that the backup folder is writable.',
       );
     else add('backups', 'ok', 'Backups are current', `Last backup ${lastSuccess.createdAt}.`);
+    if (missingFile)
+      add(
+        'backup-missing',
+        'error',
+        'The newest backup file is missing',
+        `It is no longer in ${backups.dir}. Check that the folder or share is available.`,
+      );
     const lastRun = runs[0];
     if (lastRun?.status === 'failed')
       add('backup-failed', 'error', 'The last backup failed', lastRun.error ?? 'See the backup history.');
@@ -129,7 +149,7 @@ export class StatusService {
         'keys',
         'warn',
         'An old master key is still loaded',
-        'Finish the rotation: run rewrap-keys, then remove the old key.',
+        'After rewrap-keys, the database no longer needs it, but backups made before the rotation do. Keep a copy of the old key for as long as you keep those backups.',
       );
     if (!checkpoint || now.getTime() - Date.parse(checkpoint.at) > 2 * DAY)
       add(

@@ -31,7 +31,6 @@ try {
   // Read the whole file first: a damaged backup must never erase anything.
   console.log('Checking the backup…');
   await verifyBackup(resolve(file), keys);
-  if (replace) await rm(attachments, { recursive: true, force: true });
   const result = await restoreBackup({
     handle: database,
     keys,
@@ -39,6 +38,7 @@ try {
     file: resolve(file),
     replace,
     verified: true,
+    beforeErase: () => rm(attachments, { recursive: true, force: true }),
     log: (line) => console.log(line),
   });
   console.log(

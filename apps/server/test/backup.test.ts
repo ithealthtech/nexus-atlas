@@ -238,6 +238,8 @@ describe('backup and restore', () => {
     for (let i = 0; i < 3; i++) await service.run('manual', 'Test');
     expect(readdirSync(join(dir, 'scheduled')).filter((n) => n.endsWith('.atlasbak'))).toHaveLength(2);
 
+    // The status page checks files in the app's own backup folder, so make one there too.
+    await waitForBackup((await owner.call('POST', '/api/backups', {})).data.id);
     const status = (await owner.call('GET', '/api/status')).data;
     expect(status.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(status.database.migrationsApplied).toBe(status.database.migrationsAvailable);
@@ -248,6 +250,66 @@ describe('backup and restore', () => {
     // The backup folder here is outside the data folder, so there's no same-disk warning.
     expect(ids).not.toContain('backup-location');
     expect(ids).toContain('backups');
+  });
+
+  it('refuses a backup from a newer Atlas before erasing anything, and recovers from interrupted runs', async () => {
+    // A small, valid backup whose manifest says it needs more database updates than this build has.
+    const { frames } = await import('../src/backup/format.js');
+    const { createGzip } = await import('node:zlib');
+    const newer = join(dir, 'newer.atlasbak');
+    const out: Buffer[] = [];
+    await pipeline(
+      Readable.from([
+        frames.json('M', {
+          format: 'msp-atlas-backup',
+          version: 1,
+          appVersion: '9.0.0',
+          createdAt: new Date().toISOString(),
+          migrations: 999,
+          tables: [],
+        }),
+        frames.json('E', { rows: {}, files: 0 }),
+      ]),
+      createGzip(),
+      encryptStream(keys, '9.0.0'),
+      new Writable({
+        write(c: Buffer, _e, done) {
+          out.push(c);
+          done();
+        },
+      }),
+    );
+    writeFileSync(newer, Buffer.concat(out));
+    let erased = false;
+    await expect(
+      restoreBackup({
+        handle: t.handle,
+        keys,
+        storage: new LocalStorage(join(dir, 'data', 'attachments')),
+        file: newer,
+        replace: true,
+        verified: true,
+        beforeErase: async () => {
+          erased = true;
+        },
+      }),
+    ).rejects.toThrow('newer version');
+    expect(erased).toBe(false);
+    expect((await owner.call('GET', '/api/session')).status).toBe(200);
+
+    // A run left "running" by a restart is marked failed, and doesn't block the next backup.
+    await t.handle.db.execute(sql`insert into backup_runs (trigger, started_by_name) values ('schedule', 'Crashed')`);
+    const runs = (await owner.call('GET', '/api/backups')).data as { startedByName: string; status: string }[];
+    expect(runs.find((r) => r.startedByName === 'Crashed')?.status).toBe('failed');
+    expect((await owner.call('POST', '/api/backups', {})).status).toBe(202);
+  });
+
+  it('reports a backup whose file has gone missing', async () => {
+    const run = await waitForBackup((await owner.call('POST', '/api/backups', {})).data.id);
+    rmSync(join(dir, 'backups', run.fileName));
+    const status = (await owner.call('GET', '/api/status')).data;
+    expect(status.backups.lastSuccessAt).toBeNull();
+    expect(status.checks.map((c: { id: string }) => c.id)).toContain('backup-missing');
   });
 
   it('keeps backups and the status page to administrators', async () => {

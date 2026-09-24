@@ -69,6 +69,7 @@ export class BackupService {
   }
 
   async list(): Promise<BackupRunView[]> {
+    await this.reclaim();
     const rows = await this.handle.db
       .select()
       .from(schema.backupRuns)
@@ -101,6 +102,7 @@ export class BackupService {
   /** Runs the day's scheduled backup once the backup hour has passed, if it hasn't run yet today. */
   async tick(now = new Date()) {
     if (!this.options.enabled || now.getHours() < this.options.hour) return null;
+    await this.reclaim();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const [last] = await this.handle.db
       .select({ createdAt: schema.backupRuns.createdAt, status: schema.backupRuns.status })
@@ -113,6 +115,31 @@ export class BackupService {
     return this.run('schedule', 'Scheduled backup').catch(() => null);
   }
 
+  /** Marks runs left "running" by a restart or crash as failed. Call only while holding the backup lock. */
+  private async failAbandoned() {
+    await this.handle.db
+      .update(schema.backupRuns)
+      .set({ status: 'failed', error: 'Atlas stopped while this backup was running.', finishedAt: new Date() })
+      .where(eq(schema.backupRuns.status, 'running'));
+  }
+
+  /** Clears abandoned runs if no backup is running anywhere right now. */
+  private async reclaim() {
+    if (this.running) return;
+    const client = await this.handle.pool.connect();
+    try {
+      const { rows } = await client.query<{ ok: boolean }>('select pg_try_advisory_lock($1) as ok', [LOCK]);
+      if (!rows[0]!.ok) return;
+      try {
+        await this.failAbandoned();
+      } finally {
+        await client.query('select pg_advisory_unlock($1)', [LOCK]).catch(() => undefined);
+      }
+    } finally {
+      client.release();
+    }
+  }
+
   /** Makes a backup now. Only one runs at a time across all Atlas servers sharing the database. */
   async run(
     trigger: 'schedule' | 'manual',
@@ -121,17 +148,21 @@ export class BackupService {
   ): Promise<BackupRunView> {
     if (this.running) throw new HttpError(409, 'A backup is already running.');
     this.running = true;
-    const lock = await this.handle.pool.connect();
     try {
-      const { rows } = await lock.query<{ ok: boolean }>('select pg_try_advisory_lock($1) as ok', [LOCK]);
-      if (!rows[0]!.ok) throw new HttpError(409, 'A backup is already running.');
+      const lock = await this.handle.pool.connect();
       try {
-        return await this.write(trigger, startedByName, onStarted);
+        const { rows } = await lock.query<{ ok: boolean }>('select pg_try_advisory_lock($1) as ok', [LOCK]);
+        if (!rows[0]!.ok) throw new HttpError(409, 'A backup is already running.');
+        try {
+          await this.failAbandoned();
+          return await this.write(trigger, startedByName, onStarted);
+        } finally {
+          await lock.query('select pg_advisory_unlock($1)', [LOCK]).catch(() => undefined);
+        }
       } finally {
-        await lock.query('select pg_advisory_unlock($1)', [LOCK]).catch(() => undefined);
+        lock.release();
       }
     } finally {
-      lock.release();
       this.running = false;
     }
   }

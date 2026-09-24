@@ -66,11 +66,22 @@ export async function restoreBackup(options: {
   replace?: boolean;
   /** Skip the read-through check when the caller has just verified the file. */
   verified?: boolean;
+  /** Runs just before an existing database is erased (with `replace`), after every check has passed. */
+  beforeErase?: () => Promise<void>;
   log?: (line: string) => void;
 }): Promise<RestoreResult> {
   const { handle, keys, storage, log = () => undefined } = options;
   // A damaged or altered file is found before anything in the database changes.
   if (!options.verified) await verifyBackup(options.file, keys);
+  const reader = open(options.file, keys);
+  const manifest = await readManifest(reader);
+  log(`Backup from ${manifest.createdAt} (Atlas ${manifest.appVersion}).`);
+  const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')) as {
+    entries: unknown[];
+  };
+  // Every check that can refuse the backup happens before anything is erased.
+  if (manifest.migrations > journal.entries.length)
+    throw new Error('This backup was made by a newer version of Atlas. Upgrade Atlas first, then restore.');
   const existing = await handle.pool.query<{ n: number }>(
     `select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
   );
@@ -80,19 +91,11 @@ export async function restoreBackup(options: {
         'This database already has Atlas tables. Restore into a new, empty database, or add --replace to erase this one first.',
       );
     log('Erasing the current database…');
+    await options.beforeErase?.();
     await handle.pool.query('drop schema if exists drizzle cascade; drop schema public cascade; create schema public;');
   }
 
-  const reader = open(options.file, keys);
-  const manifest = await readManifest(reader);
-  log(`Backup from ${manifest.createdAt} (Atlas ${manifest.appVersion}).`);
-
   // Build the schema exactly as it was when the backup was made; newer migrations run after the data is in.
-  const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')) as {
-    entries: unknown[];
-  };
-  if (manifest.migrations > journal.entries.length)
-    throw new Error('This backup was made by a newer version of Atlas. Upgrade Atlas first, then restore.');
   const folder = await mkdtemp(join(tmpdir(), 'atlas-restore-'));
   try {
     await cp(migrationsFolder, folder, { recursive: true });
