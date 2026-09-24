@@ -24,6 +24,8 @@ import { ClientOverview } from '@/pages/client/ClientOverview';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
+import { SharePage } from '@/pages/SharePage';
+import { ReasonProvider } from '@/lib/vault';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
 import { Account } from '@/pages/Account';
@@ -78,9 +80,11 @@ function Gate() {
   if (session.data.stage !== 'active')
     return <AuthScreen stage={session.data.stage} email={session.data.actor.email} onSignOut={signOut} />;
   return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    <ReasonProvider>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </ReasonProvider>
   );
 }
 
@@ -107,6 +111,9 @@ const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', compo
 // The rich-text editor is large, so document pages load on first use.
 const documentsPage = (name: 'ClientDocuments' | 'DocumentPage' | 'KnowledgeBase' | 'NewDocument') =>
   lazyRouteComponent(() => import('@/pages/documents'), name);
+// The vault pages load on first use too.
+const vaultPage = (name: 'ClientPasswords' | 'AllPasswords' | 'PasswordDetail') =>
+  lazyRouteComponent(() => import('@/pages/vault'), name);
 const listSearch = (search: Record<string, unknown>) => ({
   layout: typeof search.layout === 'string' ? search.layout : undefined,
   folder: typeof search.folder === 'string' ? search.folder : undefined,
@@ -133,6 +140,12 @@ const clientRoutes = [
     getParentRoute: () => clientRoute,
     path: '/documents',
     component: documentsPage('ClientDocuments'),
+    validateSearch: listSearch,
+  }),
+  createRoute({
+    getParentRoute: () => clientRoute,
+    path: '/passwords',
+    component: vaultPage('ClientPasswords'),
     validateSearch: listSearch,
   }),
   createRoute({ getParentRoute: () => clientRoute, path: '/contacts', component: ClientContacts }),
@@ -162,13 +175,27 @@ const routes = [
     path: '/documents/$documentId',
     component: documentsPage('DocumentPage'),
   }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/passwords',
+    component: vaultPage('AllPasswords'),
+    validateSearch: listSearch,
+  }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/passwords/$passwordId',
+    component: vaultPage('PasswordDetail'),
+  }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/users', component: adminOnly(Users) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/layouts', component: adminOnly(Layouts) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
 ];
 const router = createRouter({
-  routeTree: rootRoute.addChildren([appRoute.addChildren(routes)]),
+  routeTree: rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/share/$token', component: SharePage }),
+    appRoute.addChildren(routes),
+  ]),
   defaultPreload: 'intent',
 });
 declare module '@tanstack/react-router' {

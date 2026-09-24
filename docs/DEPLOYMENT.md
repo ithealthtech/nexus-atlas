@@ -25,7 +25,11 @@ The certificate is used only for the install step and is not stored in the image
 
 - **What it protects:** secrets that are stored encrypted, namely MFA secrets now and vault passwords from M2. Everything else is in PostgreSQL.
 - **Keep a copy offline**, separate from database backups: for example, in your existing password manager plus a sealed printout. **If you lose the key, encrypted data can't be recovered.** If someone steals a database backup without the key, they can't read those secrets.
-- **Rotation:** you can list several keys, comma-separated in `ATLAS_MASTER_KEY` or one per line in `ATLAS_MASTER_KEY_FILE`. Atlas encrypts new data with the first key and decrypts with whichever key matches. Tooling to re-encrypt existing data under the new key arrives with the vault (M2).
+- **What the vault stores:** each organization's vault data key is kept only in encrypted form, under the master key, in `vault_keys`. Passwords, notes, and TOTP keys are encrypted with that data key.
+- **Rotating the master key:**
+  1. Put the new key first and keep the old one after it (comma-separated in `ATLAS_MASTER_KEY`, or one per line in the key file). Restart.
+  2. Run `docker compose -f deploy/docker-compose.yml exec app npm run rewrap-keys -w @atlas/server`. This re-encrypts the vault data keys and MFA secrets under the new key and prints how many it changed.
+  3. Remove the old key and restart.
 
 ## Configuration
 

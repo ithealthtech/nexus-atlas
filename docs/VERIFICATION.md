@@ -1,5 +1,38 @@
 # Verification log
 
+## M2 Password vault — September 24, 2026
+
+Run on Node 22 and PostgreSQL 16 in a Linux container.
+
+- **Integration tests:** `npm test` passes all **31 tests in 5 files**. The 7 new ones in `vault.test.ts` cover:
+  - **No plaintext:** a full dump of `passwords`, `vault_keys`, `vault_audit`, and `activity` contains no secret, TOTP key, or note.
+  - **Reveals:** password, notes, and TOTP (checked against the live code) reveal correctly, and copies and views are audited in order.
+  - **History and reuse:** changing a password keeps the previous one, which can be revealed; editing details doesn't reset the rotation clock; stale edits get 409; reuse across clients is flagged and clears after a change; archiving works.
+  - **Access:**
+    - "Edit" access without passwords gets 404, 403 on listing, and nothing in search.
+    - Client viewers see nothing.
+    - Only admins can restrict an entry; a restricted entry disappears for everyone not listed, including from search, until they're added.
+    - The organization-wide vault audit is admin-only.
+  - **Reasons:** a client setting makes a reason mandatory (400 with `reason_required`), and the reason is stored.
+  - **BitLocker and TOTP:** recovery-key format and TOTP keys are validated. A BitLocker key links to an asset, and the link is hidden from people without vault access. Files can't be attached to vault entries.
+  - **Share links:** only ciphertext and a token hash are stored. Two simultaneous opens of a one-view link give exactly one 200 and one 404. Revoked and expired links fail, and opens are audited.
+  - **Key re-wrap:** data keys are re-wrapped under a new master key and data still decrypts; the old master key no longer works.
+- **Other issues found and fixed during M2 verification:**
+  - The access history didn't refresh after a reveal.
+  - The logo's small text had low contrast on light pages.
+  - The share page used invalid list markup.
+  - A timing race in the editor test (the cursor wasn't placed before typing).
+- **Regression found and fixed:** update requests reset every field they didn't mention. This affected clients, assets, documents, contacts, and locations, because zod's `.partial()` keeps default values. A new `patchOf()` helper builds update schemas without defaults, and a test now covers a partial client update.
+- **Browser tests:** `npm run test:e2e` passes all **9 Playwright tests**. The vault flow covers:
+  - Generate a password and see the strength meter; save with a TOTP key; reveal, copy (clipboard checked), and show the one-time code.
+  - Change the password and see it appear in the history.
+  - Create a one-time share link and open it in a separate browser with no account. The key is removed from the address bar, the password decrypts, and a second open is refused.
+  - Turn on "require a reason" for the client, reveal with a reason, and see it in the access history.
+  - Validate a BitLocker key.
+  - The client viewer has no Passwords navigation or tab.
+  - axe checks the vault form, detail page, and share page.
+
+
 ## M1 Documentation — September 23, 2026
 
 Run on Node 22 and PostgreSQL 16 in a Linux container.

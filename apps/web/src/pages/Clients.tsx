@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Dialog,
   EmptyState,
   Field,
@@ -44,7 +45,11 @@ export function ClientForm({ client, open, onClose }: { client?: ClientSummary; 
     e.preventDefault();
     setError(null);
     try {
-      const saved = await save.mutateAsync(Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>);
+      const form = new FormData(e.currentTarget);
+      const saved = await save.mutateAsync({
+        ...Object.fromEntries(form),
+        requireRevealReason: form.get('requireRevealReason') === 'on',
+      } as never);
       toast(client ? 'Client updated.' : `${saved.name} added.`);
       onClose();
       if (!client) navigate({ to: '/clients/$clientId', params: { clientId: saved.id } });
@@ -111,6 +116,12 @@ export function ClientForm({ client, open, onClose }: { client?: ClientSummary; 
         >
           {(p) => <Textarea {...p} name="notes" defaultValue={client?.notes} maxLength={5000} rows={4} />}
         </Field>
+        <Checkbox
+          name="requireRevealReason"
+          defaultChecked={client?.requireRevealReason}
+          label="Require a reason to view passwords"
+          description="Technicians must say why before revealing, copying, or sharing this client's passwords. Reasons are kept in the access history."
+        />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
     </Dialog>

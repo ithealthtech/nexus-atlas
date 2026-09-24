@@ -10,6 +10,7 @@ const view = (c: ClientRow, access: ClientSummary['access']): ClientSummary => (
   type: c.type,
   status: c.status as ClientSummary['status'],
   notes: c.notes,
+  requireRevealReason: c.requireRevealReason,
   access,
   createdAt: c.createdAt.toISOString(),
   updatedAt: c.updatedAt.toISOString(),

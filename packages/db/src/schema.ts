@@ -73,6 +73,8 @@ export const clients = pgTable(
     type: text('type').notNull().default('Customer'),
     status: text('status').notNull().default('active'),
     notes: text('notes').notNull().default(''),
+    // When true, technicians must give a reason before revealing a password for this client.
+    requireRevealReason: boolean('require_reveal_reason').notNull().default(false),
     createdAt: created(),
     updatedAt: updated(),
   },
@@ -408,4 +410,133 @@ export const activity = pgTable(
     createdAt: created(),
   },
   (t) => [index('activity_scope').on(t.orgId, t.clientId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------- M2: password vault
+
+// Per-organization data keys, stored only wrapped (encrypted) by the master key. The newest active key encrypts new data.
+export const vaultKeys = pgTable(
+  'vault_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    wrappedKey: text('wrapped_key').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdAt: created(),
+  },
+  (t) => [index('vault_keys_org').on(t.orgId)],
+);
+
+export const passwords = pgTable(
+  'passwords',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull().default('login'),
+    name: text('name').notNull(),
+    // Username and URL stay searchable; secrets below are ciphertext only.
+    username: text('username').notNull().default(''),
+    url: text('url').notNull().default(''),
+    secret: text('secret').notNull(),
+    notes: text('notes'),
+    totp: text('totp'),
+    // Keyed hash of the secret, used only to spot reuse within the organization.
+    fingerprint: text('fingerprint').notNull(),
+    strength: integer('strength').notNull().default(0),
+    rotationDays: integer('rotation_days'),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
+    restricted: boolean('restricted').notNull().default(false),
+    version: integer('version').notNull().default(1),
+    archived: boolean('archived').notNull().default(false),
+    createdBy: createdBy(),
+    updatedBy: updatedBy(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    index('passwords_client').on(t.clientId),
+    index('passwords_fingerprint').on(t.orgId, t.fingerprint),
+    index('passwords_name_trgm').using('gin', sql`${t.name} gin_trgm_ops`),
+    check('passwords_kind_check', sql`${t.kind} in ('login','bitlocker')`),
+  ],
+);
+
+export const passwordHistory = pgTable(
+  'password_history',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    secret: text('secret').notNull(),
+    changedBy: uuid('changed_by').references(() => users.id, { onDelete: 'set null' }),
+    changedByName: text('changed_by_name').notNull(),
+    createdAt: created(),
+  },
+  (t) => [index('password_history_item').on(t.passwordId, t.createdAt)],
+);
+
+// For restricted items: the only non-admins who may use them.
+export const passwordAccess = pgTable(
+  'password_access',
+  {
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.passwordId, t.userId] })],
+);
+
+// One-time share links. The server holds only browser-encrypted ciphertext; the key lives in the link's #fragment.
+export const shareLinks = pgTable(
+  'share_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    ciphertext: text('ciphertext').notNull(),
+    maxViews: integer('max_views').notNull(),
+    views: integer('views').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revoked: boolean('revoked').notNull().default(false),
+    createdBy: createdBy(),
+    createdByName: text('created_by_name').notNull(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('share_links_token').on(t.tokenHash), index('share_links_item').on(t.passwordId)],
+);
+
+export const vaultAudit = pgTable(
+  'vault_audit',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+    passwordId: uuid('password_id'),
+    passwordName: text('password_name').notNull(),
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    actorName: text('actor_name').notNull(),
+    action: text('action').notNull(),
+    reason: text('reason').notNull().default(''),
+    ip: text('ip').notNull().default(''),
+    createdAt: created(),
+  },
+  (t) => [index('vault_audit_item').on(t.passwordId, t.createdAt), index('vault_audit_org').on(t.orgId, t.createdAt)],
 );

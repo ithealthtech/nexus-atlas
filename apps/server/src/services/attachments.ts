@@ -53,6 +53,8 @@ export class AttachmentService {
 
   async upload(scope: Scope, type: ItemType, id: string, file: MultipartFile | undefined): Promise<AttachmentView[]> {
     if (!file) throw new HttpError(400, 'Choose a file to upload.');
+    // Files aren't encrypted at rest, so they can't be attached to vault items.
+    if (type === 'password') throw new HttpError(400, 'Files can’t be attached to passwords.');
     const item = await requireItem(scope, type, id, 'edit');
     let stored;
     try {

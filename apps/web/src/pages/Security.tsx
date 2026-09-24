@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, LogIn, ScrollText, Search, ShieldCheck, UserCog } from 'lucide-react';
 import { Card, EmptyState, Input, PageHeader, Skeleton } from '@/components/ui';
 import { useSecurityEvents } from '@/lib/queries';
+import { useVaultAudit } from '@/lib/vault';
+import { CardHeader } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
@@ -83,6 +85,47 @@ export function Security() {
           </ul>
         )}
       </Card>
+      <VaultAudit />
     </>
+  );
+}
+
+function VaultAudit() {
+  const { data } = useVaultAudit(true);
+  return (
+    <Card className="mt-6">
+      <CardHeader
+        title="Vault access"
+        description="Every reveal, copy, change, and share across all clients (latest 300)."
+      />
+      {!data?.length ? (
+        <p className="px-5 py-4 text-sm text-muted">No vault activity yet.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {data.map((a) => (
+            <li key={a.id} className="flex items-start gap-3 px-5 py-3 text-sm">
+              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning">
+                <ShieldCheck className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p>
+                  <span className="font-semibold">{a.actorName}</span>{' '}
+                  <span className="text-text-2">{a.action.toLowerCase()}</span>{' '}
+                  <span className="font-medium">{a.passwordName}</span>
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {a.clientName}
+                  {a.ip && ` · ${a.ip}`}
+                  {a.reason && ` · Reason: ${a.reason}`}
+                </p>
+              </div>
+              <time dateTime={a.createdAt} className="shrink-0 text-xs text-muted">
+                {formatDateTime(a.createdAt)}
+              </time>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

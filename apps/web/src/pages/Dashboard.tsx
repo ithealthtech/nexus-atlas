@@ -3,6 +3,7 @@ import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton, Stat } from 
 import { AppLink } from '@/components/AppLink';
 import { ActivityFeed } from '@/components/panels';
 import { useActor } from '@/lib/session';
+import { useRotationDue } from '@/lib/vault';
 import { useActivity, useAssets, useClients, useDocuments, useUsers } from '@/lib/queries';
 import { formatDate, relativeTime } from '@/lib/format';
 import { statusTone } from './Clients';
@@ -19,6 +20,7 @@ export function Dashboard() {
   const assets = useAssets({});
   const docs = useDocuments({});
   const activity = useActivity({ limit: '8' });
+  const rotation = useRotationDue(actor.isStaff);
   const list = clients.data ?? [];
   const today = new Date().toISOString().slice(0, 10);
   const review = (docs.data ?? [])
@@ -176,10 +178,39 @@ export function Dashboard() {
               <p className="px-5 py-4 text-sm text-muted">Nothing is due for review.</p>
             )}
           </Card>
-          <div className="flex gap-3 rounded-xl border border-border bg-surface-2 p-4 text-xs text-muted">
-            <KeyRound className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-            The encrypted password vault arrives in the next milestone. Press Ctrl+K anywhere to search.
-          </div>
+          {actor.isStaff && (
+            <Card>
+              <CardHeader title="Passwords to rotate" description="Due now or within two weeks." />
+              {rotation.data?.length ? (
+                <ul className="divide-y divide-border">
+                  {rotation.data.slice(0, 6).map((p) => (
+                    <li key={p.id}>
+                      <AppLink
+                        to={`/passwords/${p.id}`}
+                        className="flex items-center gap-3 px-5 py-3 hover:bg-surface-2"
+                      >
+                        <KeyRound className="size-4 shrink-0 text-warning" aria-hidden />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{p.name}</span>
+                          <span className="block text-xs text-muted">{p.clientName}</span>
+                        </span>
+                        <span
+                          className={
+                            p.rotationDue! <= today ? 'text-xs font-semibold text-danger' : 'text-xs text-muted'
+                          }
+                        >
+                          {formatDate(`${p.rotationDue}T12:00:00`)}
+                        </span>
+                      </AppLink>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-5 py-4 text-sm text-muted">Nothing is due.</p>
+              )}
+            </Card>
+          )}
+          <p className="px-1 text-xs text-muted">Tip: press Ctrl+K anywhere to search.</p>
         </div>
       </div>
     </>

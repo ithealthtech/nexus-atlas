@@ -50,8 +50,10 @@ const TYPE_ICONS: Record<ItemRef['type'], LucideIcon> = {
   contact: User,
   location: MapPin,
   client: Building2,
+  password: KeyRound,
 };
 const TYPE_TONES: Record<ItemRef['type'], string> = {
+  password: 'bg-warning-soft text-warning',
   asset: 'bg-info-soft text-info',
   document: 'bg-primary-soft text-primary',
   contact: 'bg-warning-soft text-warning',
@@ -81,5 +83,7 @@ export function itemHref(item: Pick<ItemRef, 'type' | 'id' | 'clientId'>): strin
       return `/clients/${item.clientId}/locations`;
     case 'client':
       return `/clients/${item.id}`;
+    case 'password':
+      return `/passwords/${item.id}`;
   }
 }

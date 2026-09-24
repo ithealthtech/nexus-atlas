@@ -26,6 +26,24 @@
   - Input becomes a prefix query (`'harb':* & 'fire':*`), so results appear as you type, and is always passed as a bound parameter.
   - One query combines assets, documents (with `ts_headline` snippets), contacts, locations, and clients, limited to the clients the user can read (plus the MSP knowledge base for staff).
 
+## Password vault
+
+- **Envelope encryption** (`crypto/vault-keys.ts`):
+  - Each organization gets a random 256-bit data key, stored only in encrypted form, under the master key, in `vault_keys`.
+  - Secret fields (password, notes, TOTP key, previous passwords) use AES-256-GCM, with associated data naming the row and field (`pw|<id>|secret`, `pwh|<historyId>`). A ciphertext copied into another row or field won't decrypt.
+  - `npm run rewrap-keys` re-encrypts data keys under a new master key.
+- **Reuse detection:** a keyed HMAC of each secret (the key is derived from the organization's first data key) lets Atlas spot the same password used twice without storing anything reversible. Strength is a rough score used for guidance only.
+- **Access:**
+  - Vault entries need `edit_passwords` on their client. Restricted entries also need an administrator or a place on the entry's allow-list. Everyone else gets 404.
+  - Search and relationship lists apply the same rule, and match only names, usernames, and URLs, never secrets.
+- **Audit:** each reveal, copy, TOTP view, change, share, and restriction change goes into `vault_audit`, with the person, IP address, and optional reason. A client setting (`require_reveal_reason`) makes the reason mandatory.
+- **Share links:**
+  - The browser reveals the secret (which is audited), encrypts it with a fresh AES-GCM key using WebCrypto, and uploads only the ciphertext.
+  - The key goes in the link's `#fragment`, which browsers never send to the server. The server stores a hash of the link token.
+  - Opening a link is one atomic `UPDATE … WHERE views < max_views AND expires_at > now()`, so a one-view link opens once even under concurrent requests.
+  - The recipient page removes the key from the address bar before doing anything else.
+- **Files and the vault:** attachments aren't encrypted at rest, so they can't be attached to vault entries.
+
 ## Authorization
 
 The code is in `apps/server/src/authz.ts`.
