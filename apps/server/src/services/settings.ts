@@ -1,6 +1,9 @@
 import { eq, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
+  brandingSchema,
+  huduConnectionSchema,
+  type Branding,
   notificationSettingsSchema,
   smtpSettingsSchema,
   type NotificationSettings,
@@ -9,6 +12,7 @@ import {
   type SmtpSettingsView,
 } from '@atlas/shared';
 import { open, seal, type KeyProvider } from '../crypto/keys.js';
+import { HttpError } from '../errors.js';
 
 /** SMTP settings as stored: the password is sealed with the master key. */
 interface StoredSmtp {
@@ -29,6 +33,8 @@ export interface AuditCheckpoint {
   at: string;
 }
 interface StoredSettings {
+  branding?: Branding;
+  hudu?: { url: string; keySealed: string };
   smtp?: StoredSmtp;
   notifications?: NotificationSettings;
   auditCheckpoint?: AuditCheckpoint;
@@ -110,6 +116,45 @@ export class SettingsService {
     body.alertDays = [...new Set(body.alertDays)].sort((a, b) => b - a);
     await this.put(orgId, 'notifications', body);
     return body;
+  }
+
+  async branding(orgId: string): Promise<Branding> {
+    return brandingSchema.parse((await this.load(orgId)).branding ?? {});
+  }
+
+  async saveBranding(orgId: string, input: unknown): Promise<Branding> {
+    const body = brandingSchema.parse(input);
+    await this.put(orgId, 'branding', body);
+    return body;
+  }
+
+  /** Hudu connection for imports; the API key is sealed with the master key. */
+  async hudu(orgId: string): Promise<{ url: string; apiKey: string } | null> {
+    const saved = (await this.load(orgId)).hudu;
+    return saved ? { url: saved.url, apiKey: open(this.keys, saved.keySealed, `org|${orgId}|hudu`) } : null;
+  }
+
+  async huduView(orgId: string): Promise<{ url: string; hasKey: boolean } | null> {
+    const saved = (await this.load(orgId)).hudu;
+    return saved ? { url: saved.url, hasKey: true } : null;
+  }
+
+  async saveHudu(orgId: string, input: unknown) {
+    const body = huduConnectionSchema.parse(input);
+    const current = await this.hudu(orgId);
+    const apiKey = body.apiKey ?? current?.apiKey;
+    if (!apiKey) throw new HttpError(400, 'Enter the Hudu API key.');
+    await this.put(orgId, 'hudu', {
+      url: body.url.replace(/\/+$/, ''),
+      keySealed: seal(this.keys, apiKey, `org|${orgId}|hudu`),
+    });
+  }
+
+  async forgetHudu(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${schema.orgs.settings} - 'hudu'` })
+      .where(eq(schema.orgs.id, orgId));
   }
 
   async auditCheckpoint(orgId: string): Promise<AuditCheckpoint | undefined> {

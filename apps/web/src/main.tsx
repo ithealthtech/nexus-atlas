@@ -36,6 +36,8 @@ import { Security } from '@/pages/Security';
 import { Account } from '@/pages/Account';
 import { NotFound } from '@/pages/NotFound';
 import { DEMO } from '@/lib/demo';
+import { useApplyBranding } from '@/lib/branding';
+import { DataTools } from '@/pages/DataTools';
 import './styles.css';
 
 applyTheme(storedTheme());
@@ -122,6 +124,7 @@ function adminOnly(Page: ComponentType) {
 }
 
 function Root() {
+  useApplyBranding();
   return (
     <>
       <Outlet />
@@ -220,6 +223,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/groups', component: adminOnly(Groups) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
 ];

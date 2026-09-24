@@ -23,6 +23,7 @@ import {
   Share2,
   ShieldCheck,
   Timer,
+  Users,
 } from 'lucide-react';
 import { STRENGTH_LABELS, passwordStrength, type PasswordKind, type PasswordView, type UserView } from '@atlas/shared';
 import {
@@ -204,6 +205,7 @@ export function PasswordDialog({
       url: kind === 'login' ? text('url') : '',
       rotationDays: rotation ? Number(rotation) : null,
       ...(actor.isAdmin ? { restricted: form.get('restricted') === 'on' } : {}),
+      clientVisible: form.get('clientVisible') === 'on',
     };
     // On edit, secrets are sent only when changed, so unrevealed values are never round-tripped.
     if (!item || secret) body.secret = secret;
@@ -432,6 +434,12 @@ export function PasswordDialog({
             </div>
           )}
         </div>
+        <Checkbox
+          name="clientVisible"
+          defaultChecked={item?.clientVisible}
+          label="Share with the client's own accounts"
+          description="Client contacts with access to this client can view it (read-only) in their portal. Not used for restricted entries."
+        />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
     </Dialog>
@@ -470,7 +478,9 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const search = useSearch({ strict: false }) as { archived?: boolean };
   const go = useGo();
   const client = useClient(clientId ?? '');
-  const canUse = clientId ? client.data?.access === 'edit_passwords' : true;
+  const actor = useActor();
+  // Client accounts (the portal) see the entries shared with them.
+  const canUse = clientId ? client.data?.access === 'edit_passwords' || !actor.isStaff : true;
   const list = usePasswords({ client: clientId, archived: search.archived });
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
@@ -516,10 +526,16 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               className="pl-9"
             />
           </label>
-          <Button variant="ghost" size="sm" onClick={() => go(base, { archived: search.archived ? undefined : true })}>
-            {search.archived ? <ArchiveRestore /> : <Archive />} {search.archived ? 'Show active' : 'Show archived'}
-          </Button>
-          {clientId && (
+          {actor.isStaff && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => go(base, { archived: search.archived ? undefined : true })}
+            >
+              {search.archived ? <ArchiveRestore /> : <Archive />} {search.archived ? 'Show active' : 'Show archived'}
+            </Button>
+          )}
+          {clientId && actor.isStaff && (
             <Button onClick={() => setAdding(true)}>
               <Plus /> Add password
             </Button>
@@ -590,14 +606,24 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
         ) : (
           <EmptyState
             icon={KeyRound}
-            title={search.archived ? 'No archived passwords' : query ? 'Nothing matches' : 'The vault is empty'}
+            title={
+              !actor.isStaff
+                ? 'Nothing has been shared with you yet'
+                : search.archived
+                  ? 'No archived passwords'
+                  : query
+                    ? 'Nothing matches'
+                    : 'The vault is empty'
+            }
             description={
-              clientId
-                ? 'Store admin logins, service accounts, Wi-Fi keys, and BitLocker recovery keys here, encrypted.'
-                : 'Open a client to add passwords. Only clients where you have password access are listed.'
+              !actor.isStaff
+                ? 'Passwords your IT team shares with you will appear here.'
+                : clientId
+                  ? 'Store admin logins, service accounts, Wi-Fi keys, and BitLocker recovery keys here, encrypted.'
+                  : 'Open a client to add passwords. Only clients where you have password access are listed.'
             }
             action={
-              clientId && !search.archived ? (
+              clientId && !search.archived && actor.isStaff ? (
                 <Button onClick={() => setAdding(true)}>
                   <Plus /> Add password
                 </Button>
@@ -1115,6 +1141,11 @@ export function PasswordDetail() {
                   <Lock /> Restricted
                 </Badge>
               )}
+              {actor.isStaff && item.clientVisible && !item.restricted && (
+                <Badge tone="info">
+                  <Users /> Shared with client
+                </Badge>
+              )}
               {item.archived && <Badge tone="warning">Archived</Badge>}
             </h1>
             <p className="mt-1 text-sm text-muted">
@@ -1123,18 +1154,20 @@ export function PasswordDetail() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={archive}>
-            {item.archived ? <ArchiveRestore /> : <Archive />} {item.archived ? 'Restore' : 'Archive'}
-          </Button>
-          {!item.archived && (
-            <Button onClick={() => setEditing(true)}>
-              <Pencil /> Edit
+        {actor.isStaff && (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={archive}>
+              {item.archived ? <ArchiveRestore /> : <Archive />} {item.archived ? 'Restore' : 'Archive'}
             </Button>
-          )}
-        </div>
+            {!item.archived && (
+              <Button onClick={() => setEditing(true)}>
+                <Pencil /> Edit
+              </Button>
+            )}
+          </div>
+        )}
       </div>
-      {(item.reused > 0 || rotationOverdue(item) || (item.kind === 'login' && item.strength < 2)) && (
+      {actor.isStaff && (item.reused > 0 || rotationOverdue(item) || (item.kind === 'login' && item.strength < 2)) && (
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
           <div>
@@ -1200,49 +1233,53 @@ export function PasswordDetail() {
               {item.hasNotes && <SecretRow label="Notes" item={item} field="notes" mono={false} />}
             </div>
           </Card>
-          <Card>
-            <CardHeader title="Health" />
-            <dl className="grid gap-4 px-5 py-4 text-sm sm:grid-cols-3">
-              <div>
-                <dt className="text-xs text-muted">Strength</dt>
-                <dd className="mt-1">
-                  {item.kind === 'login' ? (
-                    <Badge tone={strengthTone[item.strength]}>{STRENGTH_LABELS[item.strength]}</Badge>
-                  ) : (
-                    '—'
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted">Reuse</dt>
-                <dd className="mt-1">
-                  {item.reused ? (
-                    <Badge tone="warning">Used {item.reused + 1} times</Badge>
-                  ) : (
-                    <Badge tone="success">Unique</Badge>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted">Rotation</dt>
-                <dd className="mt-1">
-                  {item.rotationDue ? (
-                    <span className={cn(rotationOverdue(item) && 'font-semibold text-danger')}>
-                      Due {formatDate(`${item.rotationDue}T12:00:00`)}
-                    </span>
-                  ) : (
-                    <span className="text-muted">No reminder</span>
-                  )}
-                </dd>
-              </div>
-            </dl>
-          </Card>
-          <AuditCard item={item} />
+          {actor.isStaff && (
+            <Card>
+              <CardHeader title="Health" />
+              <dl className="grid gap-4 px-5 py-4 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs text-muted">Strength</dt>
+                  <dd className="mt-1">
+                    {item.kind === 'login' ? (
+                      <Badge tone={strengthTone[item.strength]}>{STRENGTH_LABELS[item.strength]}</Badge>
+                    ) : (
+                      '—'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Reuse</dt>
+                  <dd className="mt-1">
+                    {item.reused ? (
+                      <Badge tone="warning">Used {item.reused + 1} times</Badge>
+                    ) : (
+                      <Badge tone="success">Unique</Badge>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Rotation</dt>
+                  <dd className="mt-1">
+                    {item.rotationDue ? (
+                      <span className={cn(rotationOverdue(item) && 'font-semibold text-danger')}>
+                        Due {formatDate(`${item.rotationDue}T12:00:00`)}
+                      </span>
+                    ) : (
+                      <span className="text-muted">No reminder</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </Card>
+          )}
+          {actor.isStaff && <AuditCard item={item} />}
         </div>
         <div className="space-y-6">
-          <RelatedPanel type="password" id={item.id} clientId={item.clientId} canEdit={!item.archived} />
-          {!item.archived && <SharesCard item={item} />}
-          {item.kind === 'login' && <HistoryCard item={item} />}
+          {actor.isStaff && (
+            <RelatedPanel type="password" id={item.id} clientId={item.clientId} canEdit={!item.archived} />
+          )}
+          {actor.isStaff && !item.archived && <SharesCard item={item} />}
+          {actor.isStaff && item.kind === 'login' && <HistoryCard item={item} />}
           {actor.isAdmin && item.restricted && <AccessCard item={item} />}
           <div className="flex gap-3 rounded-xl border border-border bg-surface-2 p-4 text-xs text-muted">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />

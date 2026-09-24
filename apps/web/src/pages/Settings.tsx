@@ -23,6 +23,7 @@ import {
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useEmailSettings, useNotificationSettings, useSave } from '@/lib/queries';
+import { ApiKeysCard, BrandingCard } from './SettingsExtra';
 
 const SECURITY_LABEL: Record<SmtpSecurity, string> = {
   starttls: 'STARTTLS (usually port 587)',
@@ -337,7 +338,11 @@ export function Settings() {
   const notifications = useNotificationSettings();
   return (
     <>
-      <PageHeader eyebrow="Administration" title="Settings" description="Email delivery, alerts, and log retention." />
+      <PageHeader
+        eyebrow="Administration"
+        title="Settings"
+        description="Email, alerts, log retention, branding, and API keys."
+      />
       <div className="grid max-w-3xl gap-6">
         {email.data ? (
           <EmailSettings key={JSON.stringify(email.data)} current={email.data} />
@@ -352,6 +357,8 @@ export function Settings() {
         ) : (
           <Skeleton className="h-48" />
         )}
+        <BrandingCard />
+        <ApiKeysCard />
       </div>
     </>
   );

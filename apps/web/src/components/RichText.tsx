@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EditorContent, useEditor, useEditorState, type Editor, type JSONContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
@@ -295,21 +295,32 @@ export function RichTextEditor({
   placeholder?: string;
   label: string;
 }) {
-  const editor = useEditor({
-    extensions: extensions(placeholder),
-    content: content as JSONContent,
-    injectCSS: false,
-    immediatelyRender: true,
-    editorProps: {
-      attributes: {
-        'aria-label': label,
-        role: 'textbox',
-        'aria-multiline': 'true',
-        class: 'min-h-[320px] px-5 py-4 focus:outline-none',
+  // Options must stay the same object across renders. TipTap re-applies changed options on every render, and
+  // ProseMirror then writes its stored selection back to the page, which can move a just-placed cursor.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  const [initialContent] = useState(content);
+  const options = useMemo(
+    () => ({
+      extensions: extensions(placeholder),
+      content: initialContent as JSONContent,
+      injectCSS: false,
+      immediatelyRender: true,
+      editorProps: {
+        attributes: {
+          'aria-label': label,
+          role: 'textbox',
+          'aria-multiline': 'true',
+          class: 'min-h-[320px] px-5 py-4 focus:outline-none',
+        },
       },
-    },
-    onUpdate: ({ editor: e }) => onChange(e.getJSON() as RichText),
-  });
+      onUpdate: ({ editor: e }: { editor: Editor }) => onChangeRef.current(e.getJSON() as RichText),
+    }),
+    [placeholder, label, initialContent],
+  );
+  const editor = useEditor(options);
   useEffect(() => () => editor?.destroy(), [editor]);
   if (!editor) return null;
   return (

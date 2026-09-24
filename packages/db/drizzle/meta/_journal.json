@@ -36,6 +36,20 @@
       "when": 1790209013671,
       "tag": "0004_admin_security",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790214148507,
+      "tag": "0005_api_and_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790218767964,
+      "tag": "0006_import_job_lock",
+      "breakpoints": true
     }
   ]
 }

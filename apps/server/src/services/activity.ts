@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import type { ActivityView, Actor } from '@atlas/shared';
+import { ROLE_INFO, type ActivityView, type Actor } from '@atlas/shared';
 import type { Scope } from './scope.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -37,14 +37,41 @@ export async function listActivity(
     conditions.push(or(...visible)!);
   }
   if (options.entityId) conditions.push(eq(schema.activity.entityId, options.entityId));
-  const rows = await scope.db
+  // Password entries (even their names) only show to people who can use that client's vault.
+  const vaultIds = [...(await scope.levels())].filter(([, level]) => level === 'edit_passwords').map(([id]) => id);
+  conditions.push(
+    vaultIds.length
+      ? or(ne(schema.activity.entityType, 'password'), inArray(schema.activity.clientId, vaultIds))!
+      : ne(schema.activity.entityType, 'password'),
+  );
+  // Restricted passwords only show to admins and the people listed on them (directly or through a group).
+  // This is part of the query, so the limit counts only rows the person may see.
+  if (!ROLE_INFO[scope.actor.role].admin) {
+    const me = scope.actor.id;
+    conditions.push(
+      or(
+        ne(schema.activity.entityType, 'password'),
+        sql`not exists (
+          select 1 from ${schema.passwords} p
+          where p.id = ${schema.activity.entityId} and p.restricted
+            and not exists (select 1 from ${schema.passwordAccess} pa where pa.password_id = p.id and pa.user_id = ${me})
+            and not exists (
+              select 1 from ${schema.passwordGroupAccess} pga
+              join ${schema.groupMembers} gm on gm.group_id = pga.group_id
+              where pga.password_id = p.id and gm.user_id = ${me}
+            )
+        )`,
+      )!,
+    );
+  }
+  const visible = await scope.db
     .select({ a: schema.activity, clientName: schema.clients.name })
     .from(schema.activity)
     .leftJoin(schema.clients, eq(schema.clients.id, schema.activity.clientId))
     .where(and(...conditions))
     .orderBy(desc(schema.activity.id))
     .limit(Math.min(options.limit ?? 50, 200));
-  return rows.map(({ a, clientName }) => ({
+  return visible.map(({ a, clientName }) => ({
     id: String(a.id),
     clientId: a.clientId,
     clientName,

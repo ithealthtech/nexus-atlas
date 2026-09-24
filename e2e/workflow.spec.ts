@@ -356,9 +356,12 @@ test.describe.serial('first run to restricted client access', () => {
       .getByRole('link', { name: /Harbor Dental Group/ })
       .first()
       .click();
-    await expect(
-      page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }),
-    ).toHaveCount(0);
+    // Client accounts only see passwords shared with them; none are yet, and names of others don't leak.
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
+    await expect(page.getByText('Nothing has been shared with you yet')).toBeVisible();
+    await expect(page.getByText('HDG-FW-01 admin')).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Activity' }).click();
+    await expect(page.getByText(/added a password/)).toHaveCount(0);
     await page.keyboard.press('Control+k');
     await page.getByRole('combobox').fill('firewall');
     await expect(page.getByRole('option', { name: /HDG-FW-01/ })).toBeVisible();
@@ -495,6 +498,92 @@ test.describe.serial('account security and administration', () => {
     await accessible(page);
     await page.goto('/reset-password');
     await expect(page.getByRole('heading', { name: 'This link is incomplete' })).toBeVisible();
+  });
+
+  test.afterAll(() => {
+    expect(problems).toEqual([]);
+  });
+});
+
+test.describe.serial('data in and out, and the client portal', () => {
+  test.setTimeout(90_000);
+
+  test('admin imports a CSV, creates an API key, brands Atlas, and exports a client', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Import & export');
+    await expect(page.getByRole('heading', { name: 'Import & export' })).toBeVisible();
+    await page.getByLabel('CSV file').setInputFiles({
+      name: 'clients.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('Client Name,Type,Notes\nCedar Ridge Credit Union,Customer,"Credit union, 4 branches"\n'),
+    });
+    await expect(page.getByText('clients.csv: 1 row.')).toBeVisible();
+    await page.getByRole('button', { name: 'Check the file' }).click();
+    await expect(page.getByText('1 row ready to import.')).toBeVisible();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Import 1 row' }).click();
+    await expect(page.getByText('Imported: 1 new, 0 updated.')).toBeVisible();
+
+    await nav(page, 'Settings');
+    await page.getByRole('button', { name: 'New key' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('ConnectWise sync');
+    await dialog.getByRole('button', { name: 'Create key' }).click();
+    await expect(dialog.getByText(/^atlas_[A-Za-z0-9]{10}_/)).toBeVisible();
+    await accessible(page);
+    await dialog.getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByText('ConnectWise sync')).toBeVisible();
+
+    await page.getByLabel('Accent colour').fill('#1d4ed8');
+    await page.getByRole('button', { name: 'Save branding' }).click();
+    await expect(page.getByText('Branding saved.')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.style.getPropertyValue('--primary'))).toBe('#1d4ed8');
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/settings-branding.png', fullPage: true });
+
+    await nav(page, 'Clients');
+    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    await page.getByRole('button', { name: 'Export' }).click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download zip' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^atlas-Harbor-Dental-Group-\d{4}-\d{2}-\d{2}\.zip$/);
+  });
+
+  test('a client viewer sees the passwords shared with their client, read-only', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Passwords');
+    await page
+      .getByRole('link', { name: /HDG-FW-01 admin/ })
+      .first()
+      .click();
+    await page.getByRole('button', { name: 'Edit' }).click();
+    await page.getByRole('dialog').getByLabel("Share with the client's own accounts").check();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Shared with client')).toBeVisible();
+
+    await page.context().clearCookies();
+    await page.goto('/');
+    await page.getByLabel('Email').fill('morgan@harbor.test');
+    await page.getByLabel('Password').fill('harbor reader pass 7');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.getByText('Your documentation, kept by our team.')).toBeVisible();
+    await nav(page, 'Clients');
+    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
+    await page.getByRole('link', { name: /HDG-FW-01 admin/ }).click();
+    await expect(page.getByRole('heading', { name: /HDG-FW-01 admin/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Show password' }).click();
+    // Harbor requires a reason for every reveal, including by its own contacts.
+    await page.getByRole('dialog').getByLabel('Reason').fill('Setting up the new office printer');
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('button', { name: 'Hide password' })).toBeVisible();
+    await accessible(page);
+    await page.screenshot({ path: 'test-results/screens/portal-password.png', fullPage: true });
   });
 
   test.afterAll(() => {

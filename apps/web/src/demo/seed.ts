@@ -239,6 +239,14 @@ export function seed() {
     },
     {
       clientId: harbor.id,
+      name: 'Front desk Wi-Fi',
+      username: 'HDG-Guest',
+      secret: 'Sea-Glass-Harbor-88',
+      changedDaysAgo: 45,
+      clientVisible: true,
+    },
+    {
+      clientId: harbor.id,
       name: 'HDG-DC-01 · C:',
       kind: 'bitlocker' as const,
       secret: '123456-234567-345678-456789-567890-678901-789012-890123',
@@ -271,6 +279,7 @@ export function seed() {
     totp: false,
     rotationDays: null as number | null,
     restricted: false,
+    clientVisible: false,
     ...x,
     changedAt: new Date(Date.now() - x.changedDaysAgo * DAY).toISOString(),
   }));

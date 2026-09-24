@@ -42,6 +42,11 @@
 - **Tamper evidence:** a database trigger chains every security event to the previous one with SHA-256, and another trigger refuses edits. **Verify now** on the Security log page recomputes the chain. A checkpoint of the newest event, signed with a key derived from the master key, is refreshed hourly and on each verification, so deleting the newest events is also detected. Someone with full database access can still rebuild the chain, but not the signed checkpoint without the master key.
 - **Retention and export:** security and password-activity logs can be kept forever (the default) or for 1–7 years, and exported as CSV (cells that spreadsheets would treat as formulas are neutralised).
 
+## API keys and client accounts
+
+- **API keys:** administrators create them and each key acts as its creator, limited to the scopes it was given (`read`, `write`, `passwords`) and to documentation and vault endpoints. Creating, revoking, and using keys are recorded. See [Data in and out](DATA.md#rest-api).
+- **Client accounts** see only the clients they're granted. They see a password only when staff share it with the client, never restricted ones, and reveals follow the same reason and access-history rules as staff.
+
 ## Coming later
 
 - **After v1:** Entra ID / Microsoft 365 single sign-on.

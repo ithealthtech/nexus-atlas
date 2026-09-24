@@ -6,6 +6,10 @@ import {
   passwordStrength,
   type AccessLevel,
   type ActivityView,
+  type ApiKeyView,
+  type Branding,
+  type CsvImportResult,
+  type ImportJobView,
   type ExpirationItem,
   type ItemType,
   type LayoutField,
@@ -149,6 +153,7 @@ const passwordView = (p: (typeof passwords)[0]) => ({
   changedAt: p.changedAt,
   rotationDue: rotationDue(p),
   restricted: p.restricted,
+  clientVisible: p.clientVisible,
   version: p.version,
   archived: p.archived,
   updatedAt: p.updatedAt,
@@ -732,6 +737,7 @@ on('POST', '/clients/:id/passwords', (m, b) => {
     totp: !!b.totp,
     rotationDays: (b.rotationDays as number) ?? null,
     restricted: !!b.restricted,
+    clientVisible: !!b.clientVisible,
     changedDaysAgo: 0,
     changedAt: now(),
     ...meta(),
@@ -927,6 +933,107 @@ on('GET', '/audit/export/:kind', (m) =>
         ...db.events.map((e) => [e.id, e.createdAt, e.actor, e.action, e.detail, e.ip]),
       ]),
 );
+
+// data in and out
+let branding: Branding = { accent: null, logo: null, portalWelcome: '' };
+let hudu: { url: string; hasKey: boolean } | null = null;
+const importJobs: ImportJobView[] = [];
+const apiKeys: ApiKeyView[] = [];
+on('GET', '/branding', () => branding);
+on('PUT', '/branding', (_m, b) => {
+  branding = { ...branding, ...(b as Partial<Branding>) };
+  event('Branding changed', branding.accent ?? 'Default colour');
+  return branding;
+});
+on('GET', '/api-keys', () => apiKeys);
+on('POST', '/api-keys', (_m, b) => {
+  const name = String(b.name ?? '').trim();
+  if (!name) throw new MockError(400, 'Name is required.');
+  const prefix = uuid().replace(/-/g, '').slice(0, 10);
+  const days = b.expiresDays === null ? null : Number(b.expiresDays ?? 365);
+  const key: ApiKeyView = {
+    id: uuid(),
+    name,
+    prefix,
+    scopes: (b.scopes as ApiKeyView['scopes']) ?? ['read'],
+    userName: db.owner.name,
+    expiresAt: days ? new Date(Date.now() + days * 86_400_000).toISOString() : null,
+    lastUsedAt: null,
+    lastUsedIp: '',
+    revoked: false,
+    createdAt: now(),
+  };
+  apiKeys.unshift(key);
+  event('API key created', name);
+  return { ...key, token: `atlas_${prefix}_demo-only-this-key-does-not-work-anywhere` };
+});
+on('DELETE', '/api-keys/:id', (m) => {
+  const key = find(apiKeys, m[1]!, 'API key');
+  key.revoked = true;
+  event('API key revoked', key.name);
+  return { ok: true };
+});
+on('GET', '/import/hudu', () => hudu);
+on('PUT', '/import/hudu', (_m, b) => {
+  const url = String(b.url ?? '').trim();
+  if (!/^https:\/\//.test(url)) throw new MockError(400, 'Use the https:// address of your Hudu site.');
+  return (hudu = { url, hasKey: true });
+});
+on('DELETE', '/import/hudu', () => ((hudu = null), { ok: true }));
+on('POST', '/import/hudu/preview', () => ({
+  companies: 38,
+  assetLayouts: 9,
+  assets: 612,
+  articles: 147,
+  passwords: 903,
+}));
+on('POST', '/import/hudu/run', () => notInDemo('Importing from a real Hudu site'));
+on('GET', '/import/jobs', () => importJobs);
+on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
+on('POST', '/import/csv', (_m, b) => {
+  const rows = (b.rows as Record<string, string>[]) ?? [];
+  const target = String(b.target);
+  if (!b.dryRun && target !== 'clients') notInDemo('Importing anything but clients');
+  const errors: CsvImportResult['errors'] = [];
+  let created = 0;
+  let updated = 0;
+  rows.forEach((r, i) => {
+    const name = (r.name ?? r.title ?? '').trim();
+    if (!name) return errors.push({ row: i + 2, message: 'Name is required.' });
+    if (target !== 'clients' && !db.clients.some((c) => c.name.toLowerCase() === (r.client ?? '').trim().toLowerCase()))
+      return errors.push({ row: i + 2, message: `No client named "${r.client ?? ''}".` });
+    const existing = target === 'clients' && db.clients.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (existing) updated++;
+    else created++;
+    if (b.dryRun || target !== 'clients' || existing) return;
+    const c = {
+      id: uuid(),
+      name,
+      type: r.type || 'Customer',
+      status: 'active' as const,
+      notes: r.notes ?? '',
+      requireRevealReason: false,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    db.clients.push(c);
+    record('Created', 'client', c.id, c.name, c.id);
+  });
+  if (!b.dryRun) {
+    importJobs.unshift({
+      id: uuid(),
+      source: 'csv',
+      status: 'done',
+      counts: { [target]: { created, updated, skipped: 0, failed: errors.length } },
+      messages: errors.map((e) => `Row ${e.row}: ${e.message}`),
+      startedByName: db.owner.name,
+      createdAt: now(),
+      finishedAt: now(),
+    });
+  }
+  return { created, updated, errors } satisfies CsvImportResult;
+});
+on('GET', '/clients/:id/export', () => notInDemo('Downloading a client export'));
 
 /** Answers an API request from memory, after a short delay so loading states show as they would for real. */
 export async function mockRequest(path: string, method: string, body: unknown): Promise<unknown> {

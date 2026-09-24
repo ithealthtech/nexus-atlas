@@ -1,6 +1,19 @@
 import { cn } from '@/lib/cn';
+import { useBranding } from '@/lib/branding';
 
 export function Logo({ className, compact }: { className?: string; compact?: boolean }) {
+  const branding = useBranding().data;
+  // A custom logo replaces the Atlas mark (Settings → Branding).
+  if (branding?.logo)
+    return (
+      <span className={cn('inline-flex items-center', className)}>
+        <img
+          src={branding.logo}
+          alt={branding.name}
+          className={cn('max-h-10 w-auto rounded-md object-contain', compact ? 'max-w-10' : 'max-w-44')}
+        />
+      </span>
+    );
   return (
     <span className={cn('inline-flex items-center gap-2.5 font-semibold', className)}>
       <svg viewBox="0 0 32 32" className="size-9 shrink-0" aria-hidden>
