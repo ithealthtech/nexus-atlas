@@ -609,6 +609,96 @@ test.describe.serial('data in and out, and the client portal', () => {
   });
 });
 
+test.describe.serial('accessibility sweep', () => {
+  test.setTimeout(180_000);
+
+  test('every screen passes WCAG 2.2 AA checks in light, dark, and phone layouts', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    const client = new URL(page.url()).pathname;
+    const screens = [
+      '/',
+      '/clients',
+      client,
+      `${client}/assets`,
+      `${client}/documents`,
+      `${client}/passwords`,
+      `${client}/contacts`,
+      `${client}/locations`,
+      `${client}/activity`,
+      '/assets',
+      '/documents',
+      '/passwords',
+      '/expirations',
+      '/account',
+      '/admin/users',
+      '/admin/groups',
+      '/admin/layouts',
+      '/admin/security',
+      '/admin/data',
+      '/admin/status',
+      '/admin/settings',
+    ];
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => {
+        document.documentElement.classList.toggle('dark', t === 'dark');
+      }, theme);
+      for (const path of screens) {
+        await page.goto(path);
+        await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+        if (theme === 'dark') await page.evaluate(() => document.documentElement.classList.add('dark'));
+        await accessible(page);
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const path of ['/', client, `${client}/passwords`, '/admin/status', '/admin/settings']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), path).toBeLessThanOrEqual(0);
+      await accessible(page);
+    }
+  });
+
+  test('works from the keyboard alone', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    // The first Tab reaches the skip link, which moves focus past the navigation.
+    await page.keyboard.press('Tab');
+    const skip = page.getByRole('link', { name: 'Skip to content' });
+    await expect(skip).toBeFocused();
+    await page.keyboard.press('Enter');
+    expect(
+      await page.evaluate(() => document.activeElement?.closest('main') !== null || location.hash === '#main'),
+    ).toBe(true);
+    // Ctrl+K opens search, results can be chosen with the arrow keys, and Escape returns focus.
+    await page.keyboard.press('Control+k');
+    const search = page.getByRole('dialog');
+    await expect(search).toBeVisible();
+    await page.keyboard.type('Harbor');
+    await expect(search.getByText('Harbor Dental Group').first()).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Harbor Dental Group' })).toBeVisible();
+    // Dialogs open from the keyboard, keep focus inside, and give it back when closed.
+    const edit = page.getByRole('button', { name: 'Edit client' });
+    await edit.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(edit).toBeFocused();
+  });
+
+  test.afterAll(() => {
+    expect(problems).toEqual([]);
+  });
+});
+
 async function signOut(page: Page) {
   await page.getByRole('button', { name: 'Account menu' }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
