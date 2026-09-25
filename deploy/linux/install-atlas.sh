@@ -17,6 +17,7 @@ PUBLIC_URL=""
 APP_DIR="/opt/msp-atlas"
 DATA_DIR="/var/lib/msp-atlas"
 CONF_DIR="/etc/msp-atlas"
+UPDATER_DIR="/var/lib/msp-atlas-updater"
 SERVICE_USER="atlas"
 DB_NAME="atlas"
 DB_USER="atlas"
@@ -93,6 +94,9 @@ log "Service account and folders"
 id "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$DATA_DIR" "$DATA_DIR/backups"
 install -d -m 0750 -o root -g "$SERVICE_USER" "$CONF_DIR"
+# The updater's folder is root's; Atlas can only read it, and write update requests to inbox/.
+install -d -m 0750 -o root -g "$SERVICE_USER" "$UPDATER_DIR"
+install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$UPDATER_DIR/inbox"
 
 log "Master key"
 if [[ ! -f "$KEY_FILE" ]]; then
@@ -129,6 +133,10 @@ SETTINGS[PORT]="$PORT"
 SETTINGS[TRUST_PROXY]=true
 SETTINGS[ATLAS_MASTER_KEY_FILE]="$KEY_FILE"
 SETTINGS[ATLAS_DATA_DIR]="$DATA_DIR"
+SETTINGS[ATLAS_UPDATER_DIR]="$UPDATER_DIR"
+if [[ "$REPO" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$ ]]; then
+  SETTINGS[ATLAS_UPDATE_REPO]="${BASH_REMATCH[1]%.git}"
+fi
 : "${SETTINGS[LOG_LEVEL]:=info}"
 umask 027
 { for k in $(printf '%s\n' "${!SETTINGS[@]}" | sort); do echo "$k=${SETTINGS[$k]}"; done; } > "$ENV_FILE.tmp"
@@ -140,6 +148,7 @@ BUILD_DIR="$(mktemp -d)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 git clone -q --depth 1 --branch "$ATLAS_VERSION" "$REPO" "$BUILD_DIR/src"
 ( cd "$BUILD_DIR/src" && npm ci --no-audit --no-fund && npm run build && npm prune --omit=dev --no-audit --no-fund )
+STARTED_AT="$(date '+%F %T')"
 systemctl stop msp-atlas 2>/dev/null || true
 rm -rf "$APP_DIR.new" && mv "$BUILD_DIR/src" "$APP_DIR.new"
 rm -rf "$APP_DIR.old"; [[ -d "$APP_DIR" ]] && mv "$APP_DIR" "$APP_DIR.old"
@@ -167,7 +176,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=$DATA_DIR
+ReadWritePaths=$DATA_DIR $UPDATER_DIR/inbox
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
@@ -175,8 +184,34 @@ RestrictSUIDSGID=true
 [Install]
 WantedBy=multi-user.target
 EOF
+
+log "Updater (Settings -> Updates)"
+# The units come from this (running, known-good) installer. The scripts they run are only replaced
+# with the new release's copies once it has passed the readiness check below.
+cat > /etc/systemd/system/msp-atlas-updater.path <<EOF
+[Unit]
+Description=Watch for MSP Atlas update requests
+
+[Path]
+PathExists=$UPDATER_DIR/inbox/request.json
+Unit=msp-atlas-updater.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+cat > /etc/systemd/system/msp-atlas-updater.service <<EOF
+[Unit]
+Description=Install a requested MSP Atlas update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/atlas-updater
+TimeoutStartSec=30min
+EOF
+
 systemctl daemon-reload
 systemctl enable --now msp-atlas
+systemctl enable --now msp-atlas-updater.path
 
 log "Caddy HTTPS proxy for $SITE_HOST"
 TLS_LINE=""
@@ -201,9 +236,28 @@ done
 [[ "${READY:-}" == 1 ]] || { journalctl -u msp-atlas -n 40 --no-pager; die "Atlas did not become ready."; }
 rm -rf "$APP_DIR.old"
 
+# Only now that the new release is up: install its installer and updater (an update that fails before this
+# point leaves the previous, working copies in place for the rollback and for later updates).
+# Prefer the copies shipped with the release; fall back to the ones beside this script. (Releases before
+# this one don't ship deploy/linux, and the updater runs this script as /usr/local/sbin/atlas-install.)
+SELF="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SELF")"
+INSTALL_SRC="$SELF"
+UPDATER_SRC="$SCRIPT_DIR/atlas-updater.sh"; [[ -f "$UPDATER_SRC" ]] || UPDATER_SRC="$SCRIPT_DIR/atlas-updater"
+if [[ -f "$APP_DIR/deploy/linux/atlas-updater.sh" ]]; then
+  INSTALL_SRC="$APP_DIR/deploy/linux/install-atlas.sh"
+  UPDATER_SRC="$APP_DIR/deploy/linux/atlas-updater.sh"
+fi
+# `install` replaces the file rather than rewriting it, so a running copy of this script isn't disturbed.
+for pair in "$INSTALL_SRC:/usr/local/sbin/atlas-install" "$UPDATER_SRC:/usr/local/sbin/atlas-updater"; do
+  src="${pair%%:*}"; dst="${pair#*:}"
+  [[ "$(readlink -f "$src")" == "$(readlink -f "$dst")" ]] || install -m 0755 -o root -g root "$src" "$dst"
+done
+printf 'REPO=%q\n' "$REPO" > "$CONF_DIR/updater.conf"; chmod 0644 "$CONF_DIR/updater.conf"
+
 echo
 echo "MSP Atlas $ATLAS_VERSION is running at $PUBLIC_URL"
-SETUP_LINE="$(journalctl -u msp-atlas --no-pager | grep -o 'First-run setup code: .*' | tail -1 || true)"
+SETUP_LINE="$(journalctl -u msp-atlas --no-pager --since "$STARTED_AT" | grep -o 'First-run setup code: .*' | tail -1 || true)"
 [[ -n "$SETUP_LINE" ]] && echo "$SETUP_LINE  (valid until the first account is created)"
 if [[ -n "${NEW_KEY:-}" ]]; then
   echo
