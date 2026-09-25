@@ -101,18 +101,22 @@ In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run res
 - **Older backups:** a backup from an older Atlas version is loaded at its own schema version, then upgraded.
 - **Security log:** the hash chain and signed checkpoint are kept, so **Verify now** passes after a restore.
 
-## Ubuntu without Docker
+## Ubuntu or Debian without Docker
 
-`deploy/linux/install-atlas.sh` installs everything on Ubuntu 22.04 or 24.04: Node.js 22 (NodeSource), PostgreSQL 16 (PGDG), and Caddy. It then builds Atlas from a release tag and runs it as a systemd service.
+`deploy/linux/install-atlas.sh` installs everything on Ubuntu 22.04 or 24.04, or Debian 12: Node.js 22 (NodeSource), PostgreSQL 16 (PGDG), and Caddy. It then builds Atlas and runs it as a systemd service. The same script works for every release: by default it installs the **newest published release**, so these commands never need a version number.
 
 ```bash
-sudo ./deploy/linux/install-atlas.sh --public-url https://atlas.example.com
+curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
+sudo bash install-atlas.sh --public-url https://atlas.example.com
 ```
+
+- **Choosing a version:** `--version latest` (the default) picks the highest `vX.Y.Z` release tag; pre-releases such as `v1.3.0-rc1` are never picked automatically. `--version v1.0.2` installs that release. A branch name such as `main` works for testing. The installed version is recorded in `/etc/msp-atlas/installed-version`.
+- **Help:** `sudo bash install-atlas.sh --help` lists every option.
 
 - **HTTPS:** Caddy gets a certificate for a DNS name automatically. For an IP address or a single-label name it uses a self-signed certificate (`tls internal`).
 - **Where things go:** code in `/opt/msp-atlas` (read-only to the service), data and backups in `/var/lib/msp-atlas`, settings (`atlas.env`) and the master key in `/etc/msp-atlas`. The database password is generated on the server and kept only in `atlas.env`.
 - **Service:** `msp-atlas` runs as the `atlas` system user on `127.0.0.1:4318`. The script prints the setup code; it's also in `journalctl -u msp-atlas`.
-- **Upgrading:** from **Updates** in Atlas (below), or `sudo atlas-install --version v1.0.2`. Settings, key, and database are kept.
+- **Upgrading:** from **Updates** in Atlas (below), or run `sudo atlas-install` (the installed copy of this script) to move to the newest release. Settings, key, and database are kept.
 - If the install-media (`cdrom`) apt source is still active, the script comments it out, since it breaks `apt-get update`.
 
 ### Updating from Atlas
