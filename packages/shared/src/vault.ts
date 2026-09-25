@@ -3,6 +3,76 @@ import { z } from 'zod';
 export const PASSWORD_KINDS = ['login', 'bitlocker'] as const;
 export type PasswordKind = (typeof PASSWORD_KINDS)[number];
 
+/** What a login is for. Stored when someone picks one; otherwise guessed from the name, username, and address. */
+export const PASSWORD_CATEGORIES = [
+  'domain',
+  'cloud',
+  'email',
+  'network',
+  'wifi',
+  'server',
+  'database',
+  'remote',
+  'application',
+  'vendor',
+  'website',
+  'device',
+  'other',
+] as const;
+export type PasswordCategory = (typeof PASSWORD_CATEGORIES)[number];
+export const PASSWORD_CATEGORY_LABELS: Record<PasswordCategory, string> = {
+  domain: 'Domain / Active Directory',
+  cloud: 'Microsoft 365 / cloud admin',
+  email: 'Email account',
+  network: 'Firewall / network device',
+  wifi: 'Wi-Fi',
+  server: 'Server / local admin',
+  database: 'Database',
+  remote: 'Remote access / VPN',
+  application: 'Application',
+  vendor: 'Vendor / portal',
+  website: 'Website / hosting / DNS',
+  device: 'Printer / camera / other device',
+  other: 'Other',
+};
+
+// First match wins, so the more specific kinds come first.
+const CATEGORY_RULES: [PasswordCategory, RegExp][] = [
+  ['wifi', /\b(wi-?fi|wlan|ssid|wireless|wpa2?|psk)\b/],
+  [
+    'cloud',
+    /(microsoft 365|office ?365|\bm365\b|\bo365\b|onmicrosoft|\bazure\b|\bentra\b|\bintune\b|google workspace|\bgcp\b|\baws\b|admin\.microsoft|portal\.azure)/,
+  ],
+  [
+    'domain',
+    /(\bdomain\b|active directory|\bad\b|\bdc\d*\b|\\\\|\b[a-z0-9-]+\\[a-z0-9._$-]+|\.local\b|\bldap\b|\bkrbtgt\b|\bdsrm\b)/,
+  ],
+  [
+    'network',
+    /\b(network|firewall|fortigate|fortinet|sonicwall|meraki|unifi|ubiquiti|pfsense|opnsense|watchguard|palo ?alto|cisco|aruba|switch|router|\bap\b|access point|mikrotik|juniper)\b/,
+  ],
+  ['remote', /\b(vpn|rdp|remote desktop|anydesk|teamviewer|screenconnect|splashtop|bomgar|citrix|rd ?gateway|ssh)\b/],
+  ['database', /\b(sql|mssql|mysql|postgres|oracle|mongodb|\bsa\b|database|\bdb\b)\b/],
+  [
+    'server',
+    /\b(server|local admin|localadmin|administrator|idrac|ilo|ipmi|esxi|vcenter|hyper-?v|vmware|proxmox|nas|synology|qnap)\b/,
+  ],
+  ['email', /\b(email|e-mail|mailbox|imap|smtp|pop3|exchange|gmail|outlook)\b/],
+  ['website', /\b(wordpress|cpanel|plesk|godaddy|namecheap|cloudflare|registrar|dns|hosting|web ?site|ftp|sftp)\b/],
+  ['device', /\b(printer|copier|mfp|camera|nvr|dvr|ups|pbx|phone system|door|alarm|thermostat)\b/],
+  ['vendor', /\b(vendor|portal|support|billing|account|supplier|isp|carrier|comcast|spectrum|at&t|verizon)\b/],
+  ['application', /\b(app|application|software|quickbooks|erp|crm|ehr|emr|dentrix|eaglesoft|line of business|lob)\b/],
+];
+
+/** Best guess at what a login is for, from its name, username, and address. */
+export function guessPasswordCategory(name: string, username = '', url = ''): PasswordCategory {
+  const text = `${name} ${username} ${url}`.toLowerCase();
+  for (const [category, rule] of CATEGORY_RULES) if (rule.test(text)) return category;
+  // An email-shaped username with nothing else to go on is usually a mailbox or cloud account.
+  if (/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(username.toLowerCase())) return 'email';
+  return 'other';
+}
+
 /** A BitLocker numerical recovery password: eight groups of six digits. */
 export const BITLOCKER_KEY = /^\d{6}(-\d{6}){7}$/;
 
@@ -30,6 +100,8 @@ const base = {
   rotationDays: z.number().int().min(1).max(3650).nullable().default(null),
   restricted: z.boolean().default(false),
   clientVisible: z.boolean().default(false),
+  // null: let Atlas guess from the name, username, and address.
+  category: z.enum(PASSWORD_CATEGORIES).nullable().default(null),
 };
 
 export const createPasswordSchema = z
@@ -48,6 +120,7 @@ export const updatePasswordSchema = z.object({
   rotationDays: z.number().int().min(1).max(3650).nullable().optional(),
   restricted: z.boolean().optional(),
   clientVisible: z.boolean().optional(),
+  category: z.enum(PASSWORD_CATEGORIES).nullable().optional(),
   version: z.number().int().positive(),
 });
 export const revealSchema = z.object({
@@ -98,6 +171,11 @@ export interface PasswordView {
   updatedAt: string;
   updatedByName: string | null;
   requireReason: boolean;
+  /** What the login is for: the one someone chose, or Atlas's guess (categoryGuessed). */
+  category: PasswordCategory;
+  categoryGuessed: boolean;
+  /** Assets this password is linked to, so similar logins can be told apart. */
+  linkedAssets: { id: string; name: string }[];
 }
 export interface PasswordHistoryView {
   id: string;
