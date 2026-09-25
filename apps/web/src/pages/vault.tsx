@@ -23,6 +23,7 @@ import {
   Share2,
   ShieldCheck,
   Timer,
+  UserRound,
   Users,
 } from 'lucide-react';
 import {
@@ -479,30 +480,108 @@ export function PasswordDialog({
 }
 
 // ---------------------------------------------------------------- list
-function QuickCopy({ item }: { item: PasswordView }) {
-  const reveal = useReveal();
+/** One icon button that runs `action` and briefly shows a check mark when it succeeds. */
+function QuickAction({
+  label,
+  icon: Icon,
+  action,
+}: {
+  label: string;
+  icon: typeof Copy;
+  action: () => Promise<string | null>;
+}) {
   const toast = useToast();
   const [done, setDone] = useState(false);
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label={`Copy password for ${item.name}`}
+      aria-label={label}
+      title={label}
       onClick={async () => {
         try {
-          const result = await reveal(item, { copy: true });
-          if (!result) return;
-          await copySecret(result.value);
+          const message = await action();
+          if (message === null) return;
           setDone(true);
           setTimeout(() => setDone(false), 1500);
-          toast('Password copied. The clipboard clears in 30 seconds.');
+          toast(message);
         } catch (e) {
-          toast((e as Error).message, 'error');
+          toast(
+            (e as Error).name === 'NotAllowedError'
+              ? 'The browser blocked copying. Click the page and try again, or allow clipboard access for this site.'
+              : (e as Error).message,
+            'error',
+          );
         }
       }}
     >
-      {done ? <Check className="text-success" /> : <Copy />}
+      {done ? <Check className="text-success" /> : <Icon />}
     </Button>
+  );
+}
+
+// Keeps each action in the same column on every row, even when a row doesn't have it.
+const Slot = () => <span className="inline-block size-9" aria-hidden />;
+
+/** Copy username / password / one-time code, and open the sign-in address, without opening the entry. */
+function QuickActions({ item }: { item: PasswordView }) {
+  const reveal = useReveal();
+  const bitlocker = item.kind === 'bitlocker';
+  const openable = !bitlocker && /^https?:\/\//i.test(item.url);
+  return (
+    <div className="flex items-center justify-end">
+      {item.username ? (
+        <QuickAction
+          label={`Copy ${bitlocker ? 'recovery key ID' : 'username'} for ${item.name}`}
+          icon={UserRound}
+          action={async () => {
+            // Usernames aren't secret: copied as-is, not cleared, not audited.
+            await navigator.clipboard.writeText(item.username);
+            return `${bitlocker ? 'Recovery key ID' : 'Username'} copied.`;
+          }}
+        />
+      ) : (
+        <Slot />
+      )}
+      <QuickAction
+        label={`Copy ${bitlocker ? 'recovery key' : 'password'} for ${item.name}`}
+        icon={Copy}
+        action={async () => {
+          const result = await reveal(item, { copy: true });
+          if (!result) return null;
+          await copySecret(result.value);
+          return `${bitlocker ? 'Recovery key' : 'Password'} copied. The clipboard clears in 30 seconds.`;
+        }}
+      />
+      {item.hasTotp ? (
+        <QuickAction
+          label={`Copy one-time code for ${item.name}`}
+          icon={Timer}
+          action={async () => {
+            const result = await reveal(item, { field: 'totp', copy: true }, 'Why do you need this one-time code?');
+            if (!result) return null;
+            await copySecret(result.value);
+            return `One-time code copied. It's valid for ${result.expiresIn ?? 30} more seconds.`;
+          }}
+        />
+      ) : (
+        <Slot />
+      )}
+      {openable ? (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${hostOf(item.url)} in a new tab`}
+          title={`Open ${hostOf(item.url)}`}
+          className="inline-grid size-9 place-items-center rounded-lg text-text-2 hover:bg-surface-3 hover:text-text [&_svg]:size-4"
+        >
+          <ExternalLink />
+        </a>
+      ) : (
+        <Slot />
+      )}
+    </div>
   );
 }
 
@@ -622,16 +701,16 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                   <th className="px-5 py-3 font-medium">Name</th>
                   {!clientId && <th className="hidden px-5 py-3 font-medium md:table-cell">Client</th>}
                   <th className="hidden px-5 py-3 font-medium sm:table-cell">Username</th>
-                  <th className="px-5 py-3 font-medium">Health</th>
-                  <th className="px-5 py-3">
-                    <span className="sr-only">Copy</span>
-                  </th>
+                  {/* On phones, health gives way so the quick actions fit without scrolling sideways. */}
+                  <th className="hidden px-5 py-3 font-medium sm:table-cell">Health</th>
+                  <th className="px-3 py-3 text-right font-medium">Quick actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.map((p) => (
                   <tr key={p.id} className="hover:bg-surface-2">
-                    <td className="px-5 py-3">
+                    {/* On phones the name takes whatever width the actions leave, and truncates. */}
+                    <td className="w-full max-w-0 py-3 pr-2 pl-4 sm:w-auto sm:max-w-none sm:px-5">
                       <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">
                         <span
                           className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
@@ -643,7 +722,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                         </span>
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 font-semibold hover:underline">
-                            {p.name}
+                            <span className="truncate">{p.name}</span>
                             {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
                           </span>
                           {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
@@ -668,7 +747,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                     <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
                       {p.username || <span className="font-sans text-muted">—</span>}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="hidden px-5 py-3 sm:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {p.kind === 'login' && (
                           <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
@@ -677,7 +756,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                         {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-right">{!p.archived && <QuickCopy item={p} />}</td>
+                    <td className="px-3 py-1.5">{!p.archived && <QuickActions item={p} />}</td>
                   </tr>
                 ))}
               </tbody>
