@@ -95,6 +95,35 @@ In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run res
 - **Older backups:** a backup from an older Atlas version is loaded at its own schema version, then upgraded.
 - **Security log:** the hash chain and signed checkpoint are kept, so **Verify now** passes after a restore.
 
+## Ubuntu without Docker
+
+`deploy/linux/install-atlas.sh` installs everything on Ubuntu 22.04 or 24.04: Node.js 22 (NodeSource), PostgreSQL 16 (PGDG), and Caddy. It then builds Atlas from a release tag and runs it as a systemd service.
+
+```bash
+sudo ./deploy/linux/install-atlas.sh --public-url https://atlas.example.com
+```
+
+- **HTTPS:** Caddy gets a certificate for a DNS name automatically. For an IP address or a single-label name it uses a self-signed certificate (`tls internal`).
+- **Where things go:** code in `/opt/msp-atlas` (read-only to the service), data and backups in `/var/lib/msp-atlas`, settings (`atlas.env`) and the master key in `/etc/msp-atlas`. The database password is generated on the server and kept only in `atlas.env`.
+- **Service:** `msp-atlas` runs as the `atlas` system user on `127.0.0.1:4318`. The script prints the setup code; it's also in `journalctl -u msp-atlas`.
+- **Upgrading:** from **Updates** in Atlas (below), or `sudo atlas-install --version v1.0.2`. Settings, key, and database are kept.
+- If the install-media (`cdrom`) apt source is still active, the script comments it out, since it breaks `apt-get update`.
+
+### Updating from Atlas
+
+**Administration → Updates** lists published releases on GitHub that are newer than the running version (`ATLAS_UPDATE_REPO`, default `ithealthtech/nexus-atlas`), with their release notes. Every administrator can see the page. On servers installed with the Linux script, an administrator can also install a release from it. That needs a fresh password confirmation and is recorded in the security log.
+
+Atlas never gets root rights. The steps are:
+
+1. Atlas writes the chosen tag to `/var/lib/msp-atlas-updater/inbox/request.json`. The inbox is the only part of the updater's folder that Atlas can write to.
+2. The `msp-atlas-updater.path` unit starts `/usr/local/sbin/atlas-updater` as root.
+3. The updater treats the request as untrusted. It accepts only a `vX.Y.Z` tag that exists on the repository.
+4. It takes a backup, then runs `atlas-install --version <tag>`.
+5. If the install fails after the code was swapped, it puts the previous code back and restarts Atlas. Database migrations are not rolled back; use the pre-update backup for that.
+6. It writes progress to `status.json`, and the full log to `last-update.log`, in `/var/lib/msp-atlas-updater`. The Updates page reads the status.
+
+Other installations, such as Docker or Windows, see the Updates page read-only and update the way they were deployed.
+
 ## Windows Server
 
 1. Install [Node.js 22 LTS](https://nodejs.org) and PostgreSQL 16, and create an empty database and user for Atlas.

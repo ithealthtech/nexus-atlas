@@ -5,11 +5,13 @@ import { schema } from '@atlas/db';
 import {
   ROLE_INFO,
   createPasswordSchema,
+  guessPasswordCategory,
   passwordAccessSchema,
   passwordStrength,
   revealSchema,
   shareSchema,
   updatePasswordSchema,
+  type PasswordCategory,
   type PasswordHistoryView,
   type PasswordKind,
   type PasswordView,
@@ -117,9 +119,40 @@ export class VaultService {
     return new Map(counts.map((c) => [c.fingerprint, Number(c.n)]));
   }
 
+  /** The non-archived assets each password is linked to (links are stored in either direction). */
+  private async linkedAssets(scope: Scope, ids: string[]) {
+    const out = new Map<string, { id: string; name: string }[]>();
+    if (!ids.length) return out;
+    const r = schema.relations;
+    const rows = await scope.db
+      .select({
+        passwordId: sql<string>`case when ${r.aType} = 'password' then ${r.aId} else ${r.bId} end`,
+        id: schema.assets.id,
+        name: schema.assets.name,
+      })
+      .from(r)
+      .innerJoin(
+        schema.assets,
+        sql`${schema.assets.id} = case when ${r.aType} = 'asset' then ${r.aId} else ${r.bId} end`,
+      )
+      .where(
+        and(
+          eq(r.orgId, scope.actor.orgId),
+          eq(schema.assets.archived, false),
+          sql`((${r.aType} = 'password' and ${r.bType} = 'asset' and ${inArray(r.aId, ids)})
+            or (${r.bType} = 'password' and ${r.aType} = 'asset' and ${inArray(r.bId, ids)}))`,
+        ),
+      )
+      .orderBy(asc(sql`lower(${schema.assets.name})`));
+    for (const row of rows)
+      out.set(row.passwordId, [...(out.get(row.passwordId) ?? []), { id: row.id, name: row.name }]);
+    return out;
+  }
+
   private view(
     r: { p: Row; clientName: string; requireReason: boolean; editor: string | null },
     reuse: Map<string, number>,
+    links: Map<string, { id: string; name: string }[]> = new Map(),
   ): PasswordView {
     const due = r.p.rotationDays
       ? new Date(r.p.changedAt.getTime() + r.p.rotationDays * 86_400_000).toISOString().slice(0, 10)
@@ -146,6 +179,9 @@ export class VaultService {
       updatedAt: r.p.updatedAt.toISOString(),
       updatedByName: r.editor,
       requireReason: r.requireReason,
+      category: (r.p.category as PasswordCategory | null) ?? guessPasswordCategory(r.p.name, r.p.username, r.p.url),
+      categoryGuessed: !r.p.category,
+      linkedAssets: links.get(r.p.id) ?? [],
     };
   }
 
@@ -202,7 +238,11 @@ export class VaultService {
       scope,
       visible.map((r) => r.p),
     );
-    return visible.map((r) => this.view(r, reuse));
+    const links = await this.linkedAssets(
+      scope,
+      visible.map((r) => r.p.id),
+    );
+    return visible.map((r) => this.view(r, reuse, links));
   }
 
   /** Portal: passwords shared with the client accounts of clients the actor can read. */
@@ -235,7 +275,8 @@ export class VaultService {
 
   async get(scope: Scope, id: string): Promise<PasswordView> {
     const row = await this.load(scope, id, true);
-    return this.view(row, this.isPortal(scope) ? new Map() : await this.reuseCounts(scope, [row.p]));
+    if (this.isPortal(scope)) return this.view(row, new Map());
+    return this.view(row, await this.reuseCounts(scope, [row.p]), await this.linkedAssets(scope, [row.p.id]));
   }
 
   // ---------- write ----------
@@ -253,6 +294,7 @@ export class VaultService {
       orgId: org,
       clientId,
       kind: body.kind,
+      category: body.kind === 'login' ? body.category : null,
       name: body.name,
       username: body.username,
       url: body.url,
@@ -308,6 +350,7 @@ export class VaultService {
       rotationDays: body.rotationDays,
       restricted: body.restricted,
       clientVisible: body.clientVisible,
+      category: p.kind === 'login' ? body.category : undefined,
       version: p.version + 1,
       updatedBy: scope.actor.id,
       updatedAt: new Date(),

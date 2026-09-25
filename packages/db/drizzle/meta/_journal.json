@@ -64,6 +64,13 @@
       "when": 1790222847293,
       "tag": "0008_search_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790301950266,
+      "tag": "0009_password_category",
+      "breakpoints": true
     }
   ]
 }

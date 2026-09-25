@@ -57,6 +57,7 @@ export async function startApp(
   extra: {
     huduFetch?: typeof fetch;
     domainLookup?: DomainLookup;
+    updateFetch?: typeof fetch;
     keys?: KeyProvider;
     /** An existing database (for example one a backup was restored into) instead of a fresh one. */
     database?: Awaited<ReturnType<typeof freshDatabase>>;
