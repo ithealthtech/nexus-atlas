@@ -186,23 +186,8 @@ WantedBy=multi-user.target
 EOF
 
 log "Updater (Settings -> Updates)"
-# Prefer the copies shipped with the release just built; fall back to the ones beside this script.
-# (Releases before this one don't ship deploy/linux, and the updater runs this script as
-# /usr/local/sbin/atlas-install, beside atlas-updater.)
-SELF="$(readlink -f "$0")"
-SCRIPT_DIR="$(dirname "$SELF")"
-INSTALL_SRC="$SELF"
-UPDATER_SRC="$SCRIPT_DIR/atlas-updater.sh"; [[ -f "$UPDATER_SRC" ]] || UPDATER_SRC="$SCRIPT_DIR/atlas-updater"
-if [[ -f "$APP_DIR/deploy/linux/atlas-updater.sh" ]]; then
-  INSTALL_SRC="$APP_DIR/deploy/linux/install-atlas.sh"
-  UPDATER_SRC="$APP_DIR/deploy/linux/atlas-updater.sh"
-fi
-# `install` replaces the file rather than rewriting it, so a running copy of this script isn't disturbed.
-for pair in "$INSTALL_SRC:/usr/local/sbin/atlas-install" "$UPDATER_SRC:/usr/local/sbin/atlas-updater"; do
-  src="${pair%%:*}"; dst="${pair#*:}"
-  [[ "$(readlink -f "$src")" == "$(readlink -f "$dst")" ]] || install -m 0755 -o root -g root "$src" "$dst"
-done
-printf 'REPO=%q\n' "$REPO" > "$CONF_DIR/updater.conf"; chmod 0644 "$CONF_DIR/updater.conf"
+# The units come from this (running, known-good) installer. The scripts they run are only replaced
+# with the new release's copies once it has passed the readiness check below.
 cat > /etc/systemd/system/msp-atlas-updater.path <<EOF
 [Unit]
 Description=Watch for MSP Atlas update requests
@@ -250,6 +235,25 @@ for _ in $(seq 1 60); do
 done
 [[ "${READY:-}" == 1 ]] || { journalctl -u msp-atlas -n 40 --no-pager; die "Atlas did not become ready."; }
 rm -rf "$APP_DIR.old"
+
+# Only now that the new release is up: install its installer and updater (an update that fails before this
+# point leaves the previous, working copies in place for the rollback and for later updates).
+# Prefer the copies shipped with the release; fall back to the ones beside this script. (Releases before
+# this one don't ship deploy/linux, and the updater runs this script as /usr/local/sbin/atlas-install.)
+SELF="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SELF")"
+INSTALL_SRC="$SELF"
+UPDATER_SRC="$SCRIPT_DIR/atlas-updater.sh"; [[ -f "$UPDATER_SRC" ]] || UPDATER_SRC="$SCRIPT_DIR/atlas-updater"
+if [[ -f "$APP_DIR/deploy/linux/atlas-updater.sh" ]]; then
+  INSTALL_SRC="$APP_DIR/deploy/linux/install-atlas.sh"
+  UPDATER_SRC="$APP_DIR/deploy/linux/atlas-updater.sh"
+fi
+# `install` replaces the file rather than rewriting it, so a running copy of this script isn't disturbed.
+for pair in "$INSTALL_SRC:/usr/local/sbin/atlas-install" "$UPDATER_SRC:/usr/local/sbin/atlas-updater"; do
+  src="${pair%%:*}"; dst="${pair#*:}"
+  [[ "$(readlink -f "$src")" == "$(readlink -f "$dst")" ]] || install -m 0755 -o root -g root "$src" "$dst"
+done
+printf 'REPO=%q\n' "$REPO" > "$CONF_DIR/updater.conf"; chmod 0644 "$CONF_DIR/updater.conf"
 
 echo
 echo "MSP Atlas $ATLAS_VERSION is running at $PUBLIC_URL"
