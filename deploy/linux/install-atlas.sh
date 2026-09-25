@@ -148,6 +148,7 @@ BUILD_DIR="$(mktemp -d)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 git clone -q --depth 1 --branch "$ATLAS_VERSION" "$REPO" "$BUILD_DIR/src"
 ( cd "$BUILD_DIR/src" && npm ci --no-audit --no-fund && npm run build && npm prune --omit=dev --no-audit --no-fund )
+STARTED_AT="$(date '+%F %T')"
 systemctl stop msp-atlas 2>/dev/null || true
 rm -rf "$APP_DIR.new" && mv "$BUILD_DIR/src" "$APP_DIR.new"
 rm -rf "$APP_DIR.old"; [[ -d "$APP_DIR" ]] && mv "$APP_DIR" "$APP_DIR.old"
@@ -186,11 +187,21 @@ EOF
 
 log "Updater (Settings -> Updates)"
 # Prefer the copies shipped with the release just built; fall back to the ones beside this script.
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-SRC_DIR="$APP_DIR/deploy/linux"; [[ -f "$SRC_DIR/atlas-updater.sh" ]] || SRC_DIR="$SCRIPT_DIR"
+# (Releases before this one don't ship deploy/linux, and the updater runs this script as
+# /usr/local/sbin/atlas-install, beside atlas-updater.)
+SELF="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SELF")"
+INSTALL_SRC="$SELF"
+UPDATER_SRC="$SCRIPT_DIR/atlas-updater.sh"; [[ -f "$UPDATER_SRC" ]] || UPDATER_SRC="$SCRIPT_DIR/atlas-updater"
+if [[ -f "$APP_DIR/deploy/linux/atlas-updater.sh" ]]; then
+  INSTALL_SRC="$APP_DIR/deploy/linux/install-atlas.sh"
+  UPDATER_SRC="$APP_DIR/deploy/linux/atlas-updater.sh"
+fi
 # `install` replaces the file rather than rewriting it, so a running copy of this script isn't disturbed.
-install -m 0755 -o root -g root "$SRC_DIR/install-atlas.sh" /usr/local/sbin/atlas-install
-install -m 0755 -o root -g root "$SRC_DIR/atlas-updater.sh" /usr/local/sbin/atlas-updater
+for pair in "$INSTALL_SRC:/usr/local/sbin/atlas-install" "$UPDATER_SRC:/usr/local/sbin/atlas-updater"; do
+  src="${pair%%:*}"; dst="${pair#*:}"
+  [[ "$(readlink -f "$src")" == "$(readlink -f "$dst")" ]] || install -m 0755 -o root -g root "$src" "$dst"
+done
 printf 'REPO=%q\n' "$REPO" > "$CONF_DIR/updater.conf"; chmod 0644 "$CONF_DIR/updater.conf"
 cat > /etc/systemd/system/msp-atlas-updater.path <<EOF
 [Unit]
@@ -242,7 +253,7 @@ rm -rf "$APP_DIR.old"
 
 echo
 echo "MSP Atlas $ATLAS_VERSION is running at $PUBLIC_URL"
-SETUP_LINE="$(journalctl -u msp-atlas --no-pager | grep -o 'First-run setup code: .*' | tail -1 || true)"
+SETUP_LINE="$(journalctl -u msp-atlas --no-pager --since "$STARTED_AT" | grep -o 'First-run setup code: .*' | tail -1 || true)"
 [[ -n "$SETUP_LINE" ]] && echo "$SETUP_LINE  (valid until the first account is created)"
 if [[ -n "${NEW_KEY:-}" ]]; then
   echo
