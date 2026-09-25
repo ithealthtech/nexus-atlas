@@ -22,6 +22,7 @@ import {
   Search,
   Share2,
   ShieldCheck,
+  Star,
   Timer,
   UserRound,
   Users,
@@ -480,6 +481,42 @@ export function PasswordDialog({
 }
 
 // ---------------------------------------------------------------- list
+/** A personal star: pins the password to your Favorites (nobody else sees it). */
+export function FavoriteButton({ item }: { item: PasswordView }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      const saved = await api<PasswordView>(`/passwords/${item.id}/favorite`, {
+        method: item.favorite ? 'DELETE' : 'PUT',
+        ...(item.favorite ? {} : { body: {} }),
+      });
+      queryClient.setQueryData(['password', item.id], saved);
+      await queryClient.invalidateQueries({ queryKey: ['passwords'] });
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const label = item.favorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`;
+  return (
+    <button
+      type="button"
+      onClick={() => void toggle()}
+      disabled={busy}
+      aria-pressed={item.favorite}
+      aria-label={label}
+      title={item.favorite ? 'Favorite' : 'Add to favorites'}
+      className="grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-3 hover:text-warning aria-pressed:text-warning disabled:opacity-60"
+    >
+      <Star className={cn('size-4', item.favorite && 'fill-current')} aria-hidden />
+    </button>
+  );
+}
+
 /** One icon button that runs `action` and briefly shows a check mark when it succeeds. */
 function QuickAction({
   label,
@@ -596,6 +633,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
   const [adding, setAdding] = useState(false);
+  const [show, setShow] = useState<'all' | 'favorites' | 'recent'>('all');
   const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
   const types = useMemo(() => {
@@ -603,25 +641,29 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
     for (const p of list.data ?? []) counts.set(typeOf(p), (counts.get(typeOf(p)) ?? 0) + 1);
     return counts;
   }, [list.data]);
-  const rows = useMemo(
-    () =>
-      (list.data ?? []).filter(
-        (p) =>
-          (!type || typeOf(p) === type) &&
-          [
-            p.name,
-            p.username,
-            p.url,
-            p.clientName,
-            PASSWORD_CATEGORY_LABELS[p.category],
-            ...p.linkedAssets.map((a) => a.name),
-          ]
-            .join(' ')
-            .toLowerCase()
-            .includes(query.trim().toLowerCase()),
-      ),
-    [list.data, query, type],
-  );
+  const rows = useMemo(() => {
+    const matching = (list.data ?? []).filter(
+      (p) =>
+        (show !== 'favorites' || p.favorite) &&
+        (show !== 'recent' || p.lastUsedAt) &&
+        (!type || typeOf(p) === type) &&
+        [
+          p.name,
+          p.username,
+          p.url,
+          p.clientName,
+          PASSWORD_CATEGORY_LABELS[p.category],
+          ...p.linkedAssets.map((a) => a.name),
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(query.trim().toLowerCase()),
+    );
+    // Recently used: most recent first, up to 25.
+    return show === 'recent'
+      ? matching.sort((a, b) => b.lastUsedAt!.localeCompare(a.lastUsedAt!)).slice(0, 25)
+      : matching;
+  }, [list.data, query, type, show]);
   if (clientId && client.data && !canUse)
     return (
       <Card>
@@ -657,6 +699,16 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               className="pl-9"
             />
           </label>
+          {actor.isStaff && (
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Show</span>
+              <Select value={show} onChange={(e) => setShow(e.target.value as typeof show)}>
+                <option value="all">All passwords</option>
+                <option value="favorites">Favorites</option>
+                <option value="recent">Recently used by me</option>
+              </Select>
+            </label>
+          )}
           {types.size > 1 && (
             <label className="w-full sm:w-auto">
               <span className="sr-only">Type</span>
@@ -710,38 +762,43 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                 {rows.map((p) => (
                   <tr key={p.id} className="hover:bg-surface-2">
                     {/* On phones the name takes whatever width the actions leave, and truncates. */}
-                    <td className="w-full max-w-0 py-3 pr-2 pl-4 sm:w-auto sm:max-w-none sm:px-5">
-                      <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">
-                        <span
-                          className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
-                          title={
-                            p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
-                          }
-                        >
-                          <PasswordIcon item={p} className="size-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5 font-semibold hover:underline">
-                            <span className="truncate">{p.name}</span>
-                            {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
+                    <td className="w-full max-w-0 py-3 pr-2 pl-2 sm:w-auto sm:max-w-none sm:pr-5 sm:pl-3">
+                      <div className="flex items-center gap-1">
+                        {actor.isStaff && <FavoriteButton item={p} />}
+                        <AppLink to={`/passwords/${p.id}`} className="flex min-w-0 items-center gap-3">
+                          <span
+                            className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
+                            title={
+                              p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
+                            }
+                          >
+                            <PasswordIcon item={p} className="size-4" />
                           </span>
-                          {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
-                          <span className="block truncate text-xs text-muted">
-                            {[
-                              p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category],
-                              p.kind === 'login' && p.url ? hostOf(p.url) : '',
-                              p.linkedAssets.length
-                                ? `on ${p.linkedAssets
-                                    .slice(0, 2)
-                                    .map((a) => a.name)
-                                    .join(', ')}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
-                                : '',
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5 font-semibold hover:underline">
+                              <span className="truncate">{p.name}</span>
+                              {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
+                            </span>
+                            {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
+                            <span className="block truncate text-xs text-muted">
+                              {[
+                                p.kind === 'bitlocker'
+                                  ? 'BitLocker recovery key'
+                                  : PASSWORD_CATEGORY_LABELS[p.category],
+                                p.kind === 'login' && p.url ? hostOf(p.url) : '',
+                                p.linkedAssets.length
+                                  ? `on ${p.linkedAssets
+                                      .slice(0, 2)
+                                      .map((a) => a.name)
+                                      .join(', ')}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </span>
                           </span>
-                        </span>
-                      </AppLink>
+                        </AppLink>
+                      </div>
                     </td>
                     {!clientId && <td className="hidden px-5 py-3 text-text-2 md:table-cell">{p.clientName}</td>}
                     <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
@@ -1294,6 +1351,7 @@ export function PasswordDetail() {
               {item.kind === 'bitlocker' ? 'BitLocker recovery key' : 'Password'}
             </p>
             <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
+              {actor.isStaff && <FavoriteButton item={item} />}
               {item.name}
               {item.restricted && (
                 <Badge>
