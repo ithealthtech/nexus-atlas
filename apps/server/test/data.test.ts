@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { unzipSync, strFromU8 } from 'fflate';
+import { loginAddress } from '../src/services/importers/hudu.js';
 import { OWNER, enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TEMP = 'temporary pass 1234';
@@ -73,7 +74,9 @@ function fakeHudu(options: { key?: string } = {}) {
         name: 'Firewall admin',
         username: 'admin',
         password: 'Hudu-Secret-9981!',
-        url: 'https://10.20.0.1',
+        // As Hudu sends them: `url` is Hudu's page for the password, `login_url` the site it signs in to.
+        url: 'https://itdr.huducloud.test/passwords/f3a9c2e1',
+        login_url: 'https://10.20.0.1',
         otp_secret: 'JBSWY3DPEHPK3PXP',
         password_folder_name: 'Network',
       },
@@ -198,6 +201,21 @@ describe('REST API keys', () => {
   });
 });
 
+describe('Hudu password addresses', () => {
+  const HUDU = 'https://itdr.huducloud.test';
+  it('uses the saved login address, never Hudu’s link to the password', () => {
+    expect(loginAddress({ login_url: 'https://portal.vendor.test', url: `${HUDU}/passwords/1` }, HUDU)).toBe(
+      'https://portal.vendor.test',
+    );
+    expect(loginAddress({ login_url: '', url: `${HUDU}/passwords/1` }, HUDU)).toBe('');
+    expect(loginAddress({ url: 'https://ITDR.huducloud.test/a/passwords/1' }, HUDU)).toBe('');
+    // Older Hudu versions without login_url: a non-Hudu address in url is still the site.
+    expect(loginAddress({ url: 'https://10.20.0.1' }, HUDU)).toBe('https://10.20.0.1');
+    expect(loginAddress({ url: '10.20.0.1:8443' }, HUDU)).toBe('10.20.0.1:8443');
+    expect(loginAddress({}, HUDU)).toBe('');
+  });
+});
+
 describe('Hudu import', () => {
   let t: TestApp;
   let owner: Browser;
@@ -274,6 +292,8 @@ describe('Hudu import', () => {
 
     const [password] = (await owner.call('GET', `/api/passwords?client=${harbor.id}`)).data;
     expect(password).toMatchObject({ name: 'Firewall admin', username: 'admin', hasTotp: true });
+    // The saved sign-in address, not Hudu's link to the password.
+    expect(password.url).toBe('https://10.20.0.1');
     expect((await owner.call('POST', `/api/passwords/${password.id}/reveal`, {})).data.value).toBe('Hudu-Secret-9981!');
 
     // Second run: updates, no duplicates.
