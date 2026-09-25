@@ -1,4 +1,5 @@
-// Re-wraps vault data keys and MFA secrets under the first (current) master key.
+// Re-wraps vault data keys, MFA secrets, and stored settings secrets (SMTP password, Microsoft 365 client
+// secret, Hudu API key) under the first (current) master key.
 // Use after putting a new key first in ATLAS_MASTER_KEY / the key file while keeping the old one listed.
 // Once this reports success, the old master key can be removed.
 import { join, resolve } from 'node:path';
@@ -7,6 +8,7 @@ import { connect, runMigrations, schema } from '@atlas/db';
 import { loadConfig } from '../config.js';
 import { loadKeyProvider, open, seal } from '../crypto/keys.js';
 import { VaultKeys } from '../crypto/vault-keys.js';
+import { SettingsService } from '../services/settings.js';
 
 const config = loadConfig();
 const master = loadKeyProvider({
@@ -27,5 +29,8 @@ for (const user of await database.db.select().from(schema.users).where(isNotNull
     .where(eq(schema.users.id, user.id));
   mfa++;
 }
-console.log(`Re-wrapped ${vault} vault key(s) and ${mfa} MFA secret(s) under master key ${master.keyId}.`);
+const settings = await new SettingsService(database.db, master).rewrapSecrets();
+console.log(
+  `Re-wrapped ${vault} vault key(s), ${mfa} MFA secret(s), and ${settings} email/import secret(s) under master key ${master.keyId}.`,
+);
 await database.close();

@@ -69,7 +69,15 @@ export function registerAdminRoutes(
     const orgId = admin(req);
     recent(req);
     const saved = await settings.saveSmtp(orgId, req.body);
-    await event(req, 'Email settings changed', saved.enabled ? `${saved.host}:${saved.port}` : 'Email off');
+    await event(
+      req,
+      'Email settings changed',
+      !saved.enabled
+        ? 'Email off'
+        : saved.method === 'graph'
+          ? `Microsoft 365 (Graph) app ${saved.clientId} in ${saved.tenantId}`
+          : `${saved.host}:${saved.port}`,
+    );
     return saved;
   });
   app.post('/api/settings/email/test', authed, async (req) => {

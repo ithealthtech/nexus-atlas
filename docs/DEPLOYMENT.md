@@ -28,7 +28,7 @@ The certificate is used only for the install step and is not stored in the image
 - **What the vault stores:** each organization's vault data key is kept only in encrypted form, under the master key, in `vault_keys`. Passwords, notes, and TOTP keys are encrypted with that data key.
 - **Rotating the master key:**
   1. Put the new key first and keep the old one after it (comma-separated in `ATLAS_MASTER_KEY`, or one per line in the key file). Restart.
-  2. Run `docker compose -f deploy/docker-compose.yml exec app npm run rewrap-keys -w @atlas/server`. This re-encrypts the vault data keys and MFA secrets under the new key and prints how many it changed.
+  2. Run `docker compose -f deploy/docker-compose.yml exec app npm run rewrap-keys -w @atlas/server`. This re-encrypts the vault data keys, MFA secrets, and the stored email and Hudu secrets (SMTP password, Microsoft 365 client secret, Hudu API key) under the new key and prints how many it changed.
   3. Remove the old key and restart. Keep a copy of it for as long as you keep backups made before the rotation: those backups are encrypted with it.
 
 ## Configuration
@@ -57,9 +57,15 @@ In development, with no key configured, Atlas creates `data/atlas-master.key` on
 
 Atlas sends password reset links, expiry alerts, and a Monday digest. An administrator sets it up under **Settings → Email**; nothing is needed in the environment.
 
-- **Microsoft 365:** choose the Microsoft 365 preset (`smtp.office365.com`, port 587, STARTTLS). Sign in as a licensed mailbox, or one with send-as rights for the From address. In the Microsoft 365 admin center, open that user → **Mail** → **Manage email apps** and turn on **Authenticated SMTP**. If the account uses MFA, use an app password. Microsoft plans to retire basic authentication for SMTP in Exchange Online; OAuth sign-in is planned for Atlas before then.
+- **Microsoft 365 (app registration), recommended:** Atlas signs in as an Entra app with OAuth2 (client credentials) and sends through Microsoft Graph, with no mailbox password and no SMTP sign-in.
+  1. In the Microsoft Entra admin center, go to **App registrations → New registration**. Choose single tenant and leave the redirect URI empty.
+  2. Under **API permissions**, add **Microsoft Graph → Application permissions → Mail.Send**, then select **Grant admin consent**.
+  3. Under **Certificates & secrets**, create a client secret. Note when it expires, and paste a new one into Atlas before then.
+  4. In Atlas, choose **Microsoft 365 (app registration)**. Enter the Directory (tenant) ID, the Application (client) ID, the secret's *value*, and the From address. The From address must be a mailbox in that tenant; Atlas sends as that mailbox.
+  5. Recommended: Mail.Send on its own lets the app send as *any* mailbox. Limit it to the From mailbox with an Exchange Online [application access policy](https://learn.microsoft.com/graph/auth-limit-mailbox-access) or RBAC for Applications.
+- **Microsoft 365 SMTP (legacy):** `smtp.office365.com`, port 587, STARTTLS, signed in as a mailbox that has **Authenticated SMTP** turned on. Microsoft is retiring basic authentication for SMTP in Exchange Online, so **System status** warns while this is in use. Switch to the app registration.
 - **Other providers or an internal relay:** choose **Other SMTP server** and enter the host, port, and encryption (STARTTLS on 587, TLS on 465, or none for a trusted relay).
-- The SMTP password is encrypted with the master key. **Send test** checks the saved settings and shows the server's error if it refuses.
+- The SMTP password and the client secret are encrypted with the master key. **Send test** checks the saved settings and shows the server's or Microsoft's error if the message is refused.
 - Alerts go to staff who can see the item and haven't turned them off on their account page. Each email goes out once per person per day (alerts) or week (digest), even with several Atlas servers.
 
 ## Bringing data in

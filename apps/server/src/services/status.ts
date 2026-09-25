@@ -160,6 +160,13 @@ export class StatusService {
         'Email is not set up',
         'Password resets and expiry alerts need email. See Settings → Email.',
       );
+    else if (smtp.method === 'smtp' && /(^|\.)office365\.com$|outlook\.com$/i.test(smtp.host))
+      add(
+        'email',
+        'warn',
+        'Email uses Microsoft 365 SMTP sign-in',
+        'Microsoft is retiring basic authentication for SMTP in Exchange Online. Switch to Microsoft 365 (app registration) under Settings → Email.',
+      );
     if (keys.keyIds.length > 1)
       add(
         'keys',
@@ -207,7 +214,7 @@ export class StatusService {
         nextAt,
         runs,
       },
-      email: { enabled: smtp.enabled, host: smtp.host },
+      email: { enabled: smtp.enabled, host: smtp.method === 'graph' ? 'Microsoft 365 (Graph)' : smtp.host },
       keys: { current: keys.keyId, loaded: keys.keyIds.length },
       audit: { events: events!.n, lastCheckpointAt: checkpoint?.at ?? null },
       background: { lastRunAt: notifier.lastRunAt?.toISOString() ?? null },

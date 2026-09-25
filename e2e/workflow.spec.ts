@@ -315,7 +315,12 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('dialog').getByLabel('Require a reason to view passwords').check();
     await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
     await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
-    await page.getByRole('link', { name: /HDG-FW-01 admin/ }).click();
+    // Wait for the list itself: until then, the overview's activity feed also links to this password.
+    await expect(page).toHaveURL(/\/passwords$/);
+    await page
+      .getByRole('table')
+      .getByRole('link', { name: /HDG-FW-01 admin/ })
+      .click();
     await page.getByRole('button', { name: 'Show password' }).click();
     await expect(page.getByRole('heading', { name: 'Why do you need this password?' })).toBeVisible();
     await page.getByRole('dialog').getByLabel('Reason').fill('Ticket 4411 firmware update');
@@ -476,15 +481,21 @@ test.describe.serial('account security and administration', () => {
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);
     await nav(page, 'Settings');
     await page.getByLabel('Send email from Atlas').check();
-    await page.getByLabel('Microsoft 365').check();
+    // The legacy SMTP preset still fills in Office 365's server.
+    await page.getByLabel('Microsoft 365 SMTP (legacy)', { exact: true }).check();
     await expect(page.getByLabel('SMTP server', { exact: true })).toHaveValue('smtp.office365.com');
     await expect(page.getByLabel('Port', { exact: true })).toHaveValue('587');
-    await page.getByLabel('Username', { exact: true }).fill('atlas@itdonerightnc.test');
-    await page.getByLabel('Password', { exact: true }).fill('app-password-for-smtp');
+    await expect(page.getByText('Microsoft is retiring basic authentication')).toBeVisible();
+    // The recommended way: an app registration, no mailbox password.
+    await page.getByLabel('Microsoft 365 (app registration)', { exact: true }).check();
+    await expect(page.getByLabel('SMTP server', { exact: true })).toBeHidden();
+    await page.getByLabel('Directory (tenant) ID').fill('11111111-2222-3333-4444-555555555555');
+    await page.getByLabel('Application (client) ID').fill('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    await page.getByLabel('Client secret').fill('app~secret~value~9981');
     await page.getByLabel('From address').fill('atlas@itdonerightnc.test');
     await page.getByRole('button', { name: 'Save email settings' }).click();
     await expect(page.getByText('Email settings saved')).toBeVisible();
-    await expect(page.getByText('Saved and encrypted. Leave empty to keep it.')).toBeVisible();
+    await expect(page.getByText('Saved and encrypted. Leave empty to keep it;')).toBeVisible();
     await accessible(page);
     await page.screenshot({ path: 'test-results/screens/settings.png', fullPage: true });
 
@@ -615,7 +626,11 @@ test.describe.serial('data in and out, and the client portal', () => {
     await nav(page, 'Clients');
     await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
     await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
-    await page.getByRole('link', { name: /HDG-FW-01 admin/ }).click();
+    await expect(page).toHaveURL(/\/passwords$/);
+    await page
+      .getByRole('table')
+      .getByRole('link', { name: /HDG-FW-01 admin/ })
+      .click();
     await expect(page.getByRole('heading', { name: /HDG-FW-01 admin/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Show password' }).click();

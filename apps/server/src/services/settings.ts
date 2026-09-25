@@ -6,6 +6,7 @@ import {
   type Branding,
   notificationSettingsSchema,
   smtpSettingsSchema,
+  type MailMethod,
   type NotificationSettings,
   type SmtpPreset,
   type SmtpSecurity,
@@ -14,9 +15,13 @@ import {
 import { open, seal, type KeyProvider } from '../crypto/keys.js';
 import { HttpError } from '../errors.js';
 
-/** SMTP settings as stored: the password is sealed with the master key. */
+/** Email settings as stored: the SMTP password and the Graph client secret are sealed with the master key. */
 interface StoredSmtp {
   enabled: boolean;
+  method: MailMethod;
+  tenantId: string;
+  clientId: string;
+  clientSecretSealed: string | null;
   preset: SmtpPreset;
   host: string;
   port: number;
@@ -39,14 +44,21 @@ interface StoredSettings {
   notifications?: NotificationSettings;
   auditCheckpoint?: AuditCheckpoint;
 }
-/** SMTP settings ready to connect with (password decrypted). */
-export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed'> {
+/** Email settings ready to send with (secrets decrypted). */
+export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientSecretSealed'> {
   password: string;
+  clientSecret: string;
 }
 
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
+const graphAad = (orgId: string) => `org|${orgId}|graph`;
 const DEFAULT_SMTP: StoredSmtp = {
   enabled: false,
+  // Settings saved before Graph support were SMTP.
+  method: 'smtp',
+  tenantId: '',
+  clientId: '',
+  clientSecretSealed: null,
   preset: 'custom',
   host: '',
   port: 587,
@@ -81,29 +93,64 @@ export class SettingsService {
       .where(eq(schema.orgs.id, orgId));
   }
 
+  /**
+   * Re-seals every organization's stored secrets (SMTP password, Microsoft 365 client secret, Hudu API key)
+   * under the current master key, for rotation (cli/rewrap-keys). `keys` must still hold the old key.
+   */
+  async rewrapSecrets(): Promise<number> {
+    let count = 0;
+    const reseal = (value: string | null | undefined, aad: string) => {
+      if (!value) return value ?? null;
+      count++;
+      return seal(this.keys, open(this.keys, value, aad), aad);
+    };
+    for (const { id } of await this.db.select({ id: schema.orgs.id }).from(schema.orgs)) {
+      const stored = await this.load(id);
+      if (stored.smtp)
+        await this.put(id, 'smtp', {
+          ...stored.smtp,
+          passwordSealed: reseal(stored.smtp.passwordSealed, smtpAad(id)),
+          clientSecretSealed: reseal(stored.smtp.clientSecretSealed, graphAad(id)),
+        });
+      if (stored.hudu)
+        await this.put(id, 'hudu', { ...stored.hudu, keySealed: reseal(stored.hudu.keySealed, `org|${id}|hudu`)! });
+    }
+    return count;
+  }
+
   async smtpView(orgId: string): Promise<SmtpSettingsView> {
-    const { passwordSealed, ...rest } = { ...DEFAULT_SMTP, ...(await this.load(orgId)).smtp };
-    return { ...rest, hasPassword: !!passwordSealed };
+    const { passwordSealed, clientSecretSealed, ...rest } = { ...DEFAULT_SMTP, ...(await this.load(orgId)).smtp };
+    return { ...rest, hasPassword: !!passwordSealed, hasClientSecret: !!clientSecretSealed };
   }
 
   async smtpConfig(orgId: string): Promise<SmtpConfig | null> {
-    const smtp = (await this.load(orgId)).smtp;
-    if (!smtp?.enabled || !smtp.host || !smtp.fromAddress) return null;
-    const { passwordSealed, ...rest } = smtp;
-    return { ...rest, password: passwordSealed ? open(this.keys, passwordSealed, smtpAad(orgId)) : '' };
+    const stored = (await this.load(orgId)).smtp;
+    if (!stored?.enabled) return null;
+    const smtp = { ...DEFAULT_SMTP, ...stored };
+    const ready = smtp.method === 'graph' ? smtp.tenantId && smtp.clientId && smtp.clientSecretSealed : smtp.host;
+    if (!ready || !smtp.fromAddress) return null;
+    const { passwordSealed, clientSecretSealed, ...rest } = smtp;
+    return {
+      ...rest,
+      password: passwordSealed ? open(this.keys, passwordSealed, smtpAad(orgId)) : '',
+      clientSecret: clientSecretSealed ? open(this.keys, clientSecretSealed, graphAad(orgId)) : '',
+    };
   }
 
   async saveSmtp(orgId: string, input: unknown): Promise<SmtpSettingsView> {
     const body = smtpSettingsSchema.parse(input);
     const current = { ...DEFAULT_SMTP, ...(await this.load(orgId)).smtp };
-    const passwordSealed =
-      body.password === undefined || body.password === null
-        ? current.passwordSealed
-        : body.password === ''
-          ? null
-          : seal(this.keys, body.password, smtpAad(orgId));
-    const { password: _password, ...rest } = body;
-    await this.put(orgId, 'smtp', { ...rest, passwordSealed });
+    // Omitted or null keeps what's stored; an empty string clears it.
+    const sealed = (value: string | null | undefined, stored: string | null, aad: string) =>
+      value === undefined || value === null ? stored : value === '' ? null : seal(this.keys, value, aad);
+    const passwordSealed = sealed(body.password, current.passwordSealed, smtpAad(orgId));
+    const clientSecretSealed = sealed(body.clientSecret, current.clientSecretSealed, graphAad(orgId));
+    if (body.enabled && body.method === 'graph' && !clientSecretSealed)
+      throw new HttpError(400, 'Enter the client secret from the app registration.', undefined, {
+        clientSecret: 'Enter the client secret from the app registration.',
+      });
+    const { password: _password, clientSecret: _secret, ...rest } = body;
+    await this.put(orgId, 'smtp', { ...rest, passwordSealed, clientSecretSealed });
     return this.smtpView(orgId);
   }
 
