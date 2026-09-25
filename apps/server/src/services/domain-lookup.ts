@@ -114,19 +114,26 @@ export class DomainLookup {
     return details;
   }
 
+  // A subdomain usually has no NS records of its own, so walk up to the zone that does.
   private async nameservers(domain: string): Promise<string[]> {
-    try {
-      const resolve = this.options.resolveNs ?? resolveNs;
-      const list = await Promise.race([
-        resolve(domain),
-        new Promise<string[]>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), this.options.timeoutMs ?? 5000).unref(),
-        ),
-      ]);
-      return [...new Set(list.map((n) => n.toLowerCase().replace(/\.$/, '')))].sort().slice(0, 13);
-    } catch {
-      return [];
+    const labels = domain.split('.');
+    for (let i = 0; i <= labels.length - 2 && i < 3; i++) {
+      try {
+        const resolve = this.options.resolveNs ?? resolveNs;
+        const list = await Promise.race([
+          resolve(labels.slice(i).join('.')),
+          new Promise<string[]>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), this.options.timeoutMs ?? 5000).unref(),
+          ),
+        ]);
+        if (list.length) return [...new Set(list.map((n) => n.toLowerCase().replace(/\.$/, '')))].sort().slice(0, 13);
+      } catch (error) {
+        // No NS records here (ENODATA/ENOTFOUND): try the parent. Anything else, give up.
+        const code = (error as { code?: string }).code;
+        if (code !== 'ENODATA' && code !== 'ENOTFOUND') return [];
+      }
     }
+    return [];
   }
 
   private get(url: string) {

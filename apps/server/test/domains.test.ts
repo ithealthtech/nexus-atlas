@@ -43,8 +43,9 @@ function fakeLookup(
       if (opts.registered && !url.endsWith(`/domain/${opts.registered}`)) return new Response('{}', { status: 404 });
       return new Response(JSON.stringify(opts.rdap ?? RDAP), { status: opts.status ?? 200 });
     }) as unknown as typeof fetch,
-    resolveNs: async () => {
+    resolveNs: async (name: string) => {
       if (opts.ns instanceof Error) throw opts.ns;
+      if (opts.registered && name !== opts.registered) throw Object.assign(new Error('no NS'), { code: 'ENODATA' });
       return opts.ns ?? ['NS2.Example-DNS.ns.cloudflare.com.', 'ns1.example-dns.ns.cloudflare.com'];
     },
   });
@@ -79,7 +80,10 @@ describe('DomainLookup', () => {
 
   it('asks for the registered name when given a subdomain, and caches the registry list', async () => {
     const { lookup, urls } = fakeLookup({ registered: 'example.co.uk' });
-    expect(await lookup.lookup('portal.example.co.uk')).toMatchObject({ registrar: 'Example Registrar, LLC' });
+    expect(await lookup.lookup('portal.example.co.uk')).toMatchObject({
+      registrar: 'Example Registrar, LLC',
+      dns_host: 'Cloudflare',
+    });
     await lookup.lookup('example.co.uk');
     expect(urls).toEqual([
       'https://data.iana.org/rdap/dns.json',
