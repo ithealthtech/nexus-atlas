@@ -22,11 +22,25 @@ const RDAP = {
   ],
 };
 
-function fakeLookup(opts: { rdap?: unknown; status?: number; ns?: string[] | Error } = {}) {
+const BOOTSTRAP = {
+  services: [
+    [
+      ['com', 'uk'],
+      ['http://rdap.registry.test/', 'https://rdap.registry.test/'],
+    ],
+  ],
+};
+
+function fakeLookup(
+  opts: { rdap?: unknown; status?: number; ns?: string[] | Error; registered?: string; bootstrap?: unknown } = {},
+) {
   const urls: string[] = [];
   const lookup = new DomainLookup({
     fetch: (async (url: string) => {
       urls.push(url);
+      if (url === 'https://data.iana.org/rdap/dns.json')
+        return new Response(JSON.stringify(opts.bootstrap ?? BOOTSTRAP));
+      if (opts.registered && !url.endsWith(`/domain/${opts.registered}`)) return new Response('{}', { status: 404 });
       return new Response(JSON.stringify(opts.rdap ?? RDAP), { status: opts.status ?? 200 });
     }) as unknown as typeof fetch,
     resolveNs: async () => {
@@ -59,7 +73,26 @@ describe('DomainLookup', () => {
       nameservers: 'ns1.example-dns.ns.cloudflare.com\nns2.example-dns.ns.cloudflare.com',
       dns_host: 'Cloudflare',
     });
-    expect(urls).toEqual(['https://rdap.org/domain/example.com']);
+    // Straight to the registry IANA lists for .com (its https address).
+    expect(urls).toEqual(['https://data.iana.org/rdap/dns.json', 'https://rdap.registry.test/domain/example.com']);
+  });
+
+  it('asks for the registered name when given a subdomain, and caches the registry list', async () => {
+    const { lookup, urls } = fakeLookup({ registered: 'example.co.uk' });
+    expect(await lookup.lookup('portal.example.co.uk')).toMatchObject({ registrar: 'Example Registrar, LLC' });
+    await lookup.lookup('example.co.uk');
+    expect(urls).toEqual([
+      'https://data.iana.org/rdap/dns.json',
+      'https://rdap.registry.test/domain/portal.example.co.uk',
+      'https://rdap.registry.test/domain/example.co.uk',
+      'https://rdap.registry.test/domain/example.co.uk',
+    ]);
+  });
+
+  it('falls back to rdap.org for a TLD IANA has no server for', async () => {
+    const { lookup, urls } = fakeLookup();
+    await lookup.lookup('example.dev');
+    expect(urls.at(-1)).toBe('https://rdap.org/domain/example.dev');
   });
 
   it('returns what it can when RDAP or DNS fail', async () => {

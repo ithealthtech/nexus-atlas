@@ -86,10 +86,13 @@ function registrarName(entities: unknown): string | undefined {
 }
 
 /**
- * Looks up a domain's registration (RDAP, via rdap.org's registry redirect) and DNS delegation.
+ * Looks up a domain's registration (RDAP, straight from the registry IANA lists for its TLD, or
+ * rdap.org when IANA has none) and its DNS delegation.
  * Never throws: parts that can't be found are simply missing from the result.
  */
 export class DomainLookup {
+  private bootstrap: { at: number; map: Map<string, string> } | null = null;
+
   constructor(
     private readonly options: {
       fetch?: typeof fetch;
@@ -126,14 +129,50 @@ export class DomainLookup {
     }
   }
 
+  private get(url: string) {
+    return (this.options.fetch ?? fetch)(url, {
+      // Some RDAP front ends refuse requests without a User-Agent.
+      headers: { Accept: 'application/rdap+json, application/json', 'User-Agent': 'msp-atlas (domain lookup)' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(this.options.timeoutMs ?? 8000),
+    });
+  }
+
+  /** IANA's list of each TLD's RDAP server, cached for a day. */
+  private async registryFor(tld: string): Promise<string | null> {
+    if (!this.bootstrap || Date.now() - this.bootstrap.at > 24 * 3600_000) {
+      try {
+        const res = await this.get('https://data.iana.org/rdap/dns.json');
+        const data = (await res.json()) as { services?: unknown };
+        const map = new Map<string, string>();
+        if (res.ok && Array.isArray(data.services))
+          for (const entry of data.services as unknown[]) {
+            if (!Array.isArray(entry) || !Array.isArray(entry[0]) || !Array.isArray(entry[1])) continue;
+            const url = (entry[1] as unknown[]).find((u) => typeof u === 'string' && u.startsWith('https://'));
+            if (typeof url === 'string')
+              for (const t of entry[0] as unknown[]) if (typeof t === 'string') map.set(t.toLowerCase(), url);
+          }
+        if (map.size) this.bootstrap = { at: Date.now(), map };
+      } catch {
+        // Fall back to rdap.org below.
+      }
+    }
+    return this.bootstrap?.map.get(tld) ?? null;
+  }
+
   private async rdap(domain: string): Promise<Pick<DomainDetails, 'registrar' | 'expires'>> {
     try {
-      const res = await (this.options.fetch ?? fetch)(`https://rdap.org/domain/${encodeURIComponent(domain)}`, {
-        headers: { Accept: 'application/rdap+json, application/json' },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(this.options.timeoutMs ?? 8000),
-      });
-      if (!res.ok) return {};
+      const labels = domain.split('.');
+      const registry = await this.registryFor(labels.at(-1)!);
+      const base = registry ? (registry.endsWith('/') ? registry : `${registry}/`) : 'https://rdap.org/';
+      // Registries only know registered names: for "www.shop.example.co.uk", try shorter names until one answers.
+      let res: Response | null = null;
+      for (let i = 0; i <= labels.length - 2 && i < 3; i++) {
+        const name = labels.slice(i).join('.');
+        res = await this.get(`${base}domain/${encodeURIComponent(name)}`);
+        if (res.status !== 404) break;
+      }
+      if (!res?.ok) return {};
       const data = (await res.json()) as { entities?: unknown; events?: unknown };
       const out: Pick<DomainDetails, 'registrar' | 'expires'> = {};
       const registrar = registrarName(data.entities);
