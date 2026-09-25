@@ -23,7 +23,7 @@ import {
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useEmailSettings, useNotificationSettings, useSave } from '@/lib/queries';
-import { ApiKeysCard, BrandingCard } from './SettingsExtra';
+import { ApiKeysCard } from './SettingsExtra';
 
 const SECURITY_LABEL: Record<SmtpSecurity, string> = {
   starttls: 'STARTTLS (usually port 587)',
@@ -464,7 +464,7 @@ export function Settings() {
         ) : (
           <Skeleton className="h-48" />
         )}
-        <BrandingCard />
+
         <ApiKeysCard />
       </div>
     </>

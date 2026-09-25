@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Branding } from '@atlas/shared';
+import { DEFAULT_BRANDING, type Branding } from '@atlas/shared';
 import { api } from './api';
 
 export type BrandingView = Branding & { name: string };
@@ -8,47 +8,153 @@ export type BrandingView = Branding & { name: string };
 export const useBranding = () =>
   useQuery({ queryKey: ['branding'], queryFn: () => api<BrandingView>('/branding'), staleTime: 5 * 60_000 });
 
-const luminance = (hex: string) => {
+const DEFAULT_TITLE = 'MSP Atlas';
+const DEFAULT_FAVICON = '/favicon.svg';
+
+/** WCAG relative luminance of a #rrggbb colour. */
+export const luminance = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map((i) => {
     const c = parseInt(hex.slice(i, i + 2), 16) / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 };
+/** WCAG contrast ratio between two #rrggbb colours (1–21). */
+export const contrast = (a: string, b: string) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+};
+/** Near-black or white, whichever reads better on `hex`. */
+export const readableOn = (hex: string) =>
+  contrast(hex, '#0c1a14') >= contrast(hex, '#ffffff') ? '#0c1a14' : '#ffffff';
 
-/**
- * Applies the organization's accent colour to the theme tokens. Set through the CSSOM (allowed by the strict CSP).
- * In dark mode the colour is lightened so it stays readable; text on it is black or white, whichever contrasts more.
- */
-export function applyBranding(accent: string | null) {
+const isDark = () => document.documentElement.classList.contains('dark');
+
+function setVars(vars: Record<string, string | null>) {
   const root = document.documentElement.style;
-  const props = ['--primary', '--primary-hover', '--primary-fg', '--primary-soft'];
-  if (!accent) {
-    props.forEach((p) => root.removeProperty(p));
-    return;
-  }
-  const dark = document.documentElement.classList.contains('dark');
-  const base = dark ? `color-mix(in oklab, ${accent} 65%, white)` : accent;
-  root.setProperty('--primary', base);
-  root.setProperty('--primary-hover', `color-mix(in oklab, ${base} 85%, ${dark ? 'white' : 'black'})`);
-  root.setProperty(
-    '--primary-soft',
-    `color-mix(in oklab, ${accent} ${dark ? '22%' : '12%'}, ${dark ? '#0f1512' : 'white'})`,
-  );
-  // White text needs a dark enough colour for 4.5:1 contrast (relative luminance below about 0.18).
-  const light = dark ? true : luminance(accent) > 0.18;
-  root.setProperty('--primary-fg', light ? '#0c1a14' : '#ffffff');
+  for (const [name, value] of Object.entries(vars))
+    if (value === null) root.removeProperty(name);
+    else root.setProperty(name, value);
 }
 
-/** Keeps the accent applied, including after the theme changes. */
-export function useApplyBranding() {
+function applyAccent(theme: Branding, dark: boolean) {
+  const accent = dark ? (theme.accentDark ?? theme.accent) : theme.accent;
+  if (!accent) {
+    setVars({ '--primary': null, '--primary-hover': null, '--primary-fg': null, '--primary-soft': null });
+    return;
+  }
+  // Without a dark-mode colour, the light one is lightened so it stays readable on dark surfaces.
+  const lightened = dark && !theme.accentDark;
+  const base = lightened ? `color-mix(in oklab, ${accent} 65%, white)` : accent;
+  setVars({
+    '--primary': base,
+    '--primary-hover': `color-mix(in oklab, ${base} 85%, ${dark ? 'white' : 'black'})`,
+    '--primary-soft': `color-mix(in oklab, ${accent} ${dark ? '22%' : '12%'}, ${dark ? '#0f1512' : 'white'})`,
+    '--primary-fg': lightened ? '#0c1a14' : readableOn(accent),
+  });
+}
+
+function applySidebar(theme: Branding, dark: boolean) {
+  const color = dark ? (theme.sidebarDark ?? theme.sidebar) : theme.sidebar;
+  if (!color) {
+    setVars({
+      '--sidebar': null,
+      '--sidebar-2': null,
+      '--sidebar-text': null,
+      '--sidebar-muted': null,
+      '--sidebar-active': null,
+    });
+    return;
+  }
+  // Text follows the sidebar's lightness, so a light sidebar gets dark text.
+  const ink = readableOn(color);
+  setVars({
+    '--sidebar': color,
+    '--sidebar-2': `color-mix(in oklab, ${color} 86%, ${ink})`,
+    '--sidebar-text': `color-mix(in oklab, ${ink} 84%, ${color})`,
+    '--sidebar-muted': `color-mix(in oklab, ${ink} 68%, ${color})`,
+    '--sidebar-active': ink,
+  });
+}
+
+function setFavicon(href: string) {
+  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.append(link);
+  }
+  if (link.getAttribute('href') !== href) {
+    link.href = href;
+    link.removeAttribute('type');
+  }
+}
+
+/**
+ * Applies a theme (Administration → Theme) to the page: colour tokens, layout options (data attributes that
+ * styles.css reads), favicon, and title. Set through the CSSOM and DOM, which the strict CSP allows.
+ */
+export function applyTheme(theme: Branding | null) {
+  const t = theme ?? DEFAULT_BRANDING;
+  const dark = isDark();
+  applyAccent(t, dark);
+  applySidebar(t, dark);
+  const html = document.documentElement;
+  html.dataset.font = t.fontScale;
+  html.dataset.radius = t.radius;
+  html.dataset.sidebar = t.sidebarWidth;
+  html.dataset.density = t.density;
+  html.dataset.nav = t.navStyle;
+  html.dataset.motion = t.motion ? 'on' : 'off';
+  setFavicon(t.favicon ?? DEFAULT_FAVICON);
+  document.title = t.browserTitle || t.brandName || DEFAULT_TITLE;
+}
+
+/** Tracks light/dark mode, so components can pick the right logo. */
+export function useDarkMode() {
+  return useSyncExternalStore(
+    (notify) => {
+      const observer = new MutationObserver(notify);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      return () => observer.disconnect();
+    },
+    isDark,
+    () => false,
+  );
+}
+
+// While an administrator edits the theme, the unsaved draft replaces the saved theme on every screen.
+let preview: Branding | null = null;
+const previewListeners = new Set<() => void>();
+export function setThemePreview(theme: Branding | null) {
+  preview = theme;
+  previewListeners.forEach((l) => l());
+}
+const usePreview = () =>
+  useSyncExternalStore(
+    (l) => {
+      previewListeners.add(l);
+      return () => {
+        previewListeners.delete(l);
+      };
+    },
+    () => preview,
+    () => null,
+  );
+
+/** The theme in effect: the unsaved preview while editing, otherwise the saved one. */
+export function useTheme(): BrandingView | undefined {
   const { data } = useBranding();
-  const accent = data?.accent ?? null;
+  const draft = usePreview();
+  return data && draft ? { ...data, ...draft } : data;
+}
+
+/** Keeps the theme in effect applied, including after switching between light and dark. */
+export function useApplyBranding() {
+  const theme = useTheme();
+  const dark = useDarkMode();
   useEffect(() => {
-    applyBranding(accent);
-    const observer = new MutationObserver(() => applyBranding(accent));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, [accent]);
-  return data;
+    if (theme) applyTheme(theme);
+  }, [theme, dark]);
+  return theme;
 }

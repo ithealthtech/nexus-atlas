@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, KeyRound, Palette, Plus, Trash2 } from 'lucide-react';
-import { API_KEY_SCOPES, API_KEY_SCOPE_LABELS, type ApiKeyScope, type ApiKeyView, type Branding } from '@atlas/shared';
+import { Check, Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
+import { API_KEY_SCOPES, API_KEY_SCOPE_LABELS, type ApiKeyScope, type ApiKeyView } from '@atlas/shared';
 import {
   Badge,
   Button,
@@ -13,134 +13,10 @@ import {
   FormError,
   Input,
   Select,
-  Textarea,
   useToast,
 } from '@/components/ui';
 import { api } from '@/lib/api';
-import { applyBranding, useBranding } from '@/lib/branding';
 import { formatDate, relativeTime } from '@/lib/format';
-
-export function BrandingCard() {
-  const toast = useToast();
-  const client = useQueryClient();
-  const current = useBranding().data;
-  const [accent, setAccent] = useState<string | null | undefined>(undefined);
-  const [logo, setLogo] = useState<string | null | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  if (!current) return null;
-  const color = accent === undefined ? current.accent : accent;
-  const image = logo === undefined ? current.logo : logo;
-  const pickLogo = (file: File | undefined) => {
-    setError(null);
-    if (!file) return;
-    if (!/^image\/(png|jpeg|svg\+xml)$/.test(file.type)) return setError('Use a PNG, JPEG, or SVG image.');
-    if (file.size > 150 * 1024) return setError('Use a logo under 150 KB.');
-    const reader = new FileReader();
-    reader.onload = () => setLogo(String(reader.result));
-    reader.readAsDataURL(file);
-  };
-  const save = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const welcome = String(new FormData(e.currentTarget).get('portalWelcome') ?? '');
-    setBusy(true);
-    setError(null);
-    try {
-      const body: Branding = { accent: color ?? null, logo: image ?? null, portalWelcome: welcome };
-      await api('/branding', { method: 'PUT', body });
-      await client.invalidateQueries({ queryKey: ['branding'] });
-      setAccent(undefined);
-      setLogo(undefined);
-      toast('Branding saved.');
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Card>
-      <CardHeader title="Branding" description="Your logo and colour, shown to your team and in the client portal." />
-      <form onSubmit={save} className="space-y-5 p-5" noValidate>
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Logo" help="PNG, JPEG, or SVG, under 150 KB. Wide logos work best.">
-            {(p) => (
-              <div className="space-y-2">
-                <div className="grid h-16 place-items-center rounded-lg border border-dashed border-border-strong bg-surface-2">
-                  {image ? (
-                    <img src={image} alt="Logo preview" className="max-h-12 max-w-48 object-contain" />
-                  ) : (
-                    <span className="text-xs text-muted">Using the Atlas logo</span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    {...p}
-                    type="file"
-                    accept="image/png,image/jpeg,image/svg+xml"
-                    className="pt-1.5"
-                    onChange={(e) => pickLogo(e.target.files?.[0])}
-                  />
-                  {image && (
-                    <Button variant="ghost" onClick={() => setLogo(null)}>
-                      Remove
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </Field>
-          <Field label="Accent colour" help="Buttons, links, and highlights. Text colour adjusts for contrast.">
-            {(p) => (
-              <div className="flex items-center gap-2">
-                <input
-                  {...p}
-                  type="color"
-                  value={color ?? '#205843'}
-                  onChange={(e) => {
-                    setAccent(e.target.value);
-                    applyBranding(e.target.value);
-                  }}
-                  className="h-10 w-14 cursor-pointer rounded-lg border border-border-strong bg-surface"
-                />
-                <code className="font-mono text-sm">{color ?? 'Default'}</code>
-                {color && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setAccent(null);
-                      applyBranding(null);
-                    }}
-                  >
-                    Use default
-                  </Button>
-                )}
-              </div>
-            )}
-          </Field>
-        </div>
-        <Field label="Client portal welcome" help="Shown to client contacts at the top of their dashboard.">
-          {(p) => (
-            <Textarea
-              {...p}
-              name="portalWelcome"
-              defaultValue={current.portalWelcome}
-              maxLength={500}
-              placeholder="Welcome! Here's the documentation we keep for you. Call us at (919) 555-0100 for help."
-            />
-          )}
-        </Field>
-        <FormError message={error} />
-        <div className="flex justify-end">
-          <Button type="submit" loading={busy}>
-            <Palette /> Save branding
-          </Button>
-        </div>
-      </form>
-    </Card>
-  );
-}
 
 function NewKeyDialog({ onClose }: { onClose: () => void }) {
   const client = useQueryClient();

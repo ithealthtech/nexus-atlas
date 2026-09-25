@@ -9,6 +9,7 @@ import { DEMO } from '@/lib/demo';
 import { ApiError, api } from '@/lib/api';
 import { useApplySession } from '@/lib/session';
 import { Logo } from '@/components/Logo';
+import { useTheme } from '@/lib/branding';
 
 type Stage = 'signin' | 'setup' | 'mfa' | 'password' | 'mfa-setup' | 'reset';
 
@@ -51,22 +52,33 @@ export function AuthScreen({
 }) {
   const apply = useApplySession();
   const done = (session: SessionView) => apply(session);
+  // Administration → Theme: headline, text, and background for this panel.
+  const theme = useTheme();
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
-      <aside className="relative hidden overflow-hidden bg-sidebar p-12 text-sidebar-text lg:flex lg:flex-col">
-        <Logo className="text-white" />
-        <div className="my-auto max-w-lg">
+      <aside
+        className="relative hidden overflow-hidden bg-sidebar bg-cover bg-center p-12 text-sidebar-text lg:flex lg:flex-col"
+        style={theme?.loginBackground ? { backgroundImage: `url("${theme.loginBackground}")` } : undefined}
+      >
+        {/* Keeps text readable over any photo. */}
+        {theme?.loginBackground && <div className="absolute inset-0 bg-sidebar/80" aria-hidden />}
+        <Logo className="relative text-sidebar-active" />
+        <div className="relative my-auto max-w-lg">
           <p className="mb-5 text-xs font-bold tracking-[0.18em] text-sidebar-muted uppercase">
             Documentation · Passwords · Clients
           </p>
-          <h1 className="text-5xl leading-[1.08] font-semibold tracking-tight text-white">
-            A clearer picture.
-            <br />
-            <span className="text-accent">For every client.</span>
+          <h1 className="text-5xl leading-[1.08] font-semibold tracking-tight text-sidebar-active">
+            {theme?.loginHeadline || (
+              <>
+                A clearer picture.
+                <br />
+                <span className="text-accent">For every client.</span>
+              </>
+            )}
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-sidebar-muted">
-            Infrastructure, procedures, and credentials in one secure, connected workspace for your team and the clients
-            you support.
+            {theme?.loginText ||
+              'Infrastructure, procedures, and credentials in one secure, connected workspace for your team and the clients you support.'}
           </p>
           <ul className="mt-10 space-y-4 text-sm">
             {[
@@ -86,7 +98,7 @@ export function AuthScreen({
             })}
           </ul>
         </div>
-        <p className="text-xs text-sidebar-muted">Self-hosted. Your data stays on your servers.</p>
+        <p className="relative text-xs text-sidebar-muted">Self-hosted. Your data stays on your servers.</p>
         <div
           className="pointer-events-none absolute -right-32 -bottom-32 size-96 rounded-full bg-accent/5"
           aria-hidden

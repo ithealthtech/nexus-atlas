@@ -8,6 +8,7 @@ import { ZodError } from 'zod';
 import { eq, sql } from 'drizzle-orm';
 import { schema, type DatabaseHandle } from '@atlas/db';
 import {
+  DEFAULT_BRANDING,
   changePasswordSchema,
   mfaSchema,
   reauthSchema,
@@ -559,22 +560,23 @@ export async function buildApp({
     await apiKeys.revoke(actorOf(req), req.params.id, req.ip);
     return { ok: true };
   });
-  // Public: the sign-in page shows the logo and accent colour too.
+  // Public: the sign-in pages are themed too (logo, colours, headline, background).
   app.get('/api/branding', async () => {
     const [org] = await db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs).limit(1);
-    return org
-      ? { name: org.name, ...(await settings.branding(org.id)) }
-      : { name: 'MSP Atlas', accent: null, logo: null, portalWelcome: '' };
+    return org ? { name: org.name, ...(await settings.branding(org.id)) } : { name: 'MSP Atlas', ...DEFAULT_BRANDING };
   });
-  app.put('/api/branding', authed, async (req) => {
+  // The theme carries its images inline (logos, favicon, sign-in background), so it may be larger than 1 MB.
+  app.put('/api/branding', { ...authed, bodyLimit: 3 * 1024 * 1024 }, async (req) => {
     requireAdmin(actorOf(req));
     const saved = await settings.saveBranding(actorOf(req).orgId, req.body);
     await db.insert(schema.securityEvents).values({
       orgId: actorOf(req).orgId,
       userId: actorOf(req).id,
       actor: actorOf(req).name,
-      action: 'Branding changed',
-      detail: saved.accent ?? 'Default colour',
+      action: 'Theme changed',
+      detail: [saved.brandName || 'Default name', saved.accent ?? 'default colour', `${saved.density} layout`].join(
+        ', ',
+      ),
       ip: req.ip,
     });
     return saved;

@@ -17,6 +17,7 @@ import {
   Moon,
   CalendarClock,
   ScrollText,
+  Palette,
   Settings2,
   UsersRound,
   Search,
@@ -53,7 +54,7 @@ function NavLink({
       to={to}
       onClick={onNavigate}
       activeOptions={{ exact: !!exact }}
-      className="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition-colors hover:bg-sidebar-2 data-[status=active]:bg-sidebar-2 data-[status=active]:font-semibold data-[status=active]:text-white"
+      className="nav-link group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition-colors hover:bg-sidebar-2 data-[status=active]:bg-sidebar-2 data-[status=active]:font-semibold data-[status=active]:text-sidebar-active"
     >
       <Icon className="size-[18px] text-sidebar-muted group-data-[status=active]:text-accent" aria-hidden />
       {label}
@@ -89,7 +90,7 @@ function UserMenu() {
       >
         <Avatar name={actor.name} size="sm" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-white">{actor.name}</span>
+          <span className="block truncate font-medium text-sidebar-active">{actor.name}</span>
           <span className="block truncate text-xs text-sidebar-muted">{actor.roleLabel}</span>
         </span>
         <ChevronsUpDown className="size-4 text-sidebar-muted" aria-hidden />
@@ -146,18 +147,18 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
   const actor = useActor();
   return (
     <div className="flex h-full flex-col bg-sidebar px-3 pt-5 pb-3">
-      <Link to="/" onClick={onNavigate} className="mb-6 px-2 text-white">
+      <Link to="/" onClick={onNavigate} className="mb-6 px-2 text-sidebar-active">
         <Logo />
       </Link>
       <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-sidebar-2 px-3 py-2.5">
         <span className="grid size-7 place-items-center rounded-md bg-sidebar-2 text-[11px] font-bold text-accent">
           {actor.organization.name.slice(0, 2).toUpperCase()}
         </span>
-        <span className="min-w-0 truncate text-sm font-medium text-white">{actor.organization.name}</span>
+        <span className="min-w-0 truncate text-sm font-medium text-sidebar-active">{actor.organization.name}</span>
       </div>
       <button
         onClick={onSearch}
-        className="mb-4 flex w-full items-center gap-2.5 rounded-lg bg-sidebar-2 px-3 py-2.5 text-left text-sm text-sidebar-muted hover:text-white"
+        className="mb-4 flex w-full items-center gap-2.5 rounded-lg bg-sidebar-2 px-3 py-2.5 text-left text-sm text-sidebar-muted hover:text-sidebar-active"
       >
         <Search className="size-4" aria-hidden />
         <span className="flex-1">Search…</span>
@@ -185,6 +186,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
             <NavLink to="/admin/data" icon={ArrowDownUp} label="Import & export" onNavigate={onNavigate} />
             <NavLink to="/admin/status" icon={Gauge} label="System status" onNavigate={onNavigate} />
             <NavLink to="/admin/updates" icon={ArrowUpCircle} label="Updates" onNavigate={onNavigate} />
+            <NavLink to="/admin/theme" icon={Palette} label="Theme" onNavigate={onNavigate} />
             <NavLink to="/admin/settings" icon={Settings2} label="Settings" onNavigate={onNavigate} />
           </>
         )}
@@ -200,14 +202,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   return (
-    <div className="min-h-screen lg:pl-64">
+    <div className="min-h-screen lg:pl-(--sidebar-width)">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:shadow"
       >
         Skip to content
       </a>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--sidebar-width) lg:block">
         <Sidebar onSearch={() => setSearching(true)} />
       </aside>
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden">
@@ -244,7 +246,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
             <button
               onClick={() => setOpen(false)}
-              className="absolute top-4 right-3 rounded-lg p-2 text-sidebar-muted hover:text-white"
+              className="absolute top-4 right-3 rounded-lg p-2 text-sidebar-muted hover:text-sidebar-active"
               aria-label="Close navigation"
             >
               <X className="size-5" />

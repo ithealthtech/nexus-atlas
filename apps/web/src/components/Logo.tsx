@@ -1,15 +1,17 @@
 import { cn } from '@/lib/cn';
-import { useBranding } from '@/lib/branding';
+import { useDarkMode, useTheme } from '@/lib/branding';
 
 export function Logo({ className, compact }: { className?: string; compact?: boolean }) {
-  const branding = useBranding().data;
-  // A custom logo replaces the Atlas mark (Settings → Branding).
-  if (branding?.logo)
+  const theme = useTheme();
+  const dark = useDarkMode();
+  // A custom logo replaces the Atlas mark (Administration → Theme); the dark one is used in dark mode.
+  const logo = (dark && theme?.logoDark) || theme?.logo;
+  if (logo)
     return (
       <span className={cn('inline-flex items-center', className)}>
         <img
-          src={branding.logo}
-          alt={branding.name}
+          src={logo}
+          alt={theme?.brandName || theme?.name}
           className={cn('max-h-10 w-auto rounded-md object-contain', compact ? 'max-w-10' : 'max-w-44')}
         />
       </span>
@@ -22,8 +24,10 @@ export function Logo({ className, compact }: { className?: string; compact?: boo
       </svg>
       {!compact && (
         <span className="leading-none">
-          <span className="block text-xl tracking-tight">atlas</span>
-          <span className="mt-1 block text-[9px] font-bold tracking-[0.2em] opacity-80">FOR MSPs</span>
+          <span className="block text-xl tracking-tight">{theme?.brandName || 'atlas'}</span>
+          <span className="mt-1 block text-[9px] font-bold tracking-[0.2em] opacity-80">
+            {theme?.tagline || 'FOR MSPs'}
+          </span>
         </span>
       )}
     </span>

@@ -30,6 +30,7 @@ import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
 import { Groups } from '@/pages/Groups';
 import { Settings } from '@/pages/Settings';
+import { Theme } from '@/pages/Theme';
 import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
@@ -225,6 +226,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/groups', component: adminOnly(Groups) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
