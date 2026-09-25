@@ -585,7 +585,8 @@ test.describe.serial('data in and out, and the client portal', () => {
     // Back to the default layout so later screenshots and checks use it.
     await page.getByLabel('Density').selectOption('comfortable');
     await page.getByRole('button', { name: 'Save theme' }).click();
-    await expect(page.getByText('Theme saved.')).toBeVisible();
+    // The first save's notification can still be showing, so check the newest one.
+    await expect(page.getByText('Theme saved.').last()).toBeVisible();
 
     await nav(page, 'Clients');
     await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
