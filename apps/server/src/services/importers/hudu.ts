@@ -28,6 +28,7 @@ type HuduCompany = {
   archived?: boolean;
 };
 type HuduLayoutField = {
+  id?: number;
   label: string;
   field_type: string;
   required?: boolean;
@@ -43,7 +44,13 @@ type HuduAsset = {
   primary_serial?: string | null;
   primary_model?: string | null;
   primary_manufacturer?: string | null;
-  fields?: { label: string; value: unknown }[];
+  primary_mail?: string | null;
+  // Hudu has sent a field's name as `label` or `caption`, sometimes with its layout field's id.
+  fields?: { label?: string | null; caption?: string | null; asset_layout_field_id?: number; value: unknown }[];
+  // Older API versions: one object per field, keyed by the label in snake_case.
+  custom_fields?: Record<string, unknown>[];
+  // Data synced by an integration (RMM, PSA, Microsoft 365). Often the only details a synced asset has.
+  cards?: { integrator_name?: string | null; sync_type?: string | null; data?: unknown }[];
   archived?: boolean;
 };
 type HuduArticle = {
@@ -142,13 +149,38 @@ const slug = (label: string) => {
   return /^[a-z]/.test(s) ? s : `f_${s || 'field'}`.slice(0, 40);
 };
 
-function mapLayout(layout: HuduLayout): { fields: LayoutField[]; byLabel: Map<string, LayoutField> } {
+/** Compares labels loosely: "Serial Number", " serial  number", and "serial_number" all match. */
+const norm = (label: string) =>
+  label
+    .toLowerCase()
+    .replace(/[_\s]+/g, ' ')
+    .trim();
+
+// Integration data that looks like a credential stays out of Atlas.
+const SECRET = /pass(word|phrase)?|secret|token|api.?key|private.?key|recovery|otp|pin$/i;
+
+type MappedLayout = {
+  fields: LayoutField[];
+  byLabel: Map<string, LayoutField>;
+  byId: Map<number, LayoutField>;
+  /** Labels (normalized) and ids of Password/ConfidentialText fields, which are never imported. */
+  excluded: Set<string | number>;
+};
+
+function mapLayout(layout: HuduLayout): MappedLayout {
   const used = new Set<string>();
   const fields: LayoutField[] = [];
   const byLabel = new Map<string, LayoutField>();
+  const byId = new Map<number, LayoutField>();
+  const excluded = new Set<string | number>();
   for (const f of [...(layout.fields ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))) {
     const type = FIELD_TYPES[f.field_type] ?? (f.field_type in FIELD_TYPES ? null : 'text');
-    if (!type || fields.length >= 60) continue;
+    if (!type) {
+      excluded.add(norm(f.label));
+      if (f.id !== undefined) excluded.add(f.id);
+      continue;
+    }
+    if (fields.length >= 60) continue;
     let key = slug(f.label);
     for (let n = 2; used.has(key); n++) key = `${slug(f.label).slice(0, 36)}_${n}`;
     used.add(key);
@@ -163,9 +195,98 @@ function mapLayout(layout: HuduLayout): { fields: LayoutField[]; byLabel: Map<st
       expires: type === 'date' && /expir|renew|warranty|end/i.test(f.label),
     };
     fields.push(field);
-    byLabel.set(f.label, field);
+    if (!byLabel.has(norm(f.label))) byLabel.set(norm(f.label), field);
+    if (f.id !== undefined) byId.set(f.id, field);
   }
-  return { fields, byLabel };
+  return { fields, byLabel, byId, excluded };
+}
+
+/** Flattens an integration card's data into "key: value" pairs (one level of nesting, no credentials). */
+function cardEntries(data: unknown, prefix = ''): [string, string][] {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
+  const out: [string, string][] = [];
+  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+    const name = prefix ? `${prefix} ${key}` : key;
+    if (SECRET.test(key) || value === null || value === undefined || value === '') continue;
+    if (Array.isArray(value)) {
+      const items = value.filter((v) => v !== null && typeof v !== 'object').map(String);
+      if (items.length) out.push([name, items.join(', ')]);
+    } else if (typeof value === 'object') {
+      if (!prefix) out.push(...cardEntries(value, name));
+    } else out.push([name, String(value)]);
+  }
+  return out.slice(0, 80);
+}
+
+/**
+ * Gathers everything Hudu knows about an asset into layout fields and notes: its own fields (matched by
+ * layout field id, then loosely by label), older `custom_fields`, the primary email, and integration cards.
+ * Integration data fills fields that are still blank; anything that doesn't fit a field goes into notes.
+ */
+function assetDetails(a: HuduAsset, layout: MappedLayout) {
+  const fields: Record<string, unknown> = {};
+  const labels = new Map<string, string>();
+  const extra: string[] = [];
+  const unmatched = new Set<string>();
+  const put = (target: LayoutField, raw: unknown, overwrite: boolean) => {
+    labels.set(target.key, target.label);
+    if (!overwrite && fields[target.key] !== undefined) return true;
+    const value = fieldValue(target, raw);
+    if (value === undefined) return false;
+    fields[target.key] = value;
+    return true;
+  };
+  const present = (raw: unknown) => raw !== null && raw !== undefined && raw !== '';
+
+  for (const f of a.fields ?? []) {
+    const label = (f.label ?? f.caption ?? '').trim();
+    if (layout.excluded.has(norm(label)) || (f.asset_layout_field_id && layout.excluded.has(f.asset_layout_field_id)))
+      continue;
+    const target =
+      (f.asset_layout_field_id !== undefined && layout.byId.get(f.asset_layout_field_id)) ||
+      layout.byLabel.get(norm(label));
+    if (target) put(target, f.value, true);
+    else if (present(f.value) && label) {
+      unmatched.add(label);
+      extra.push(`${label}: ${htmlToText(String(f.value)).slice(0, 500)}`);
+    }
+  }
+  for (const entry of a.custom_fields ?? [])
+    for (const [key, value] of Object.entries(entry ?? {})) {
+      if (layout.excluded.has(norm(key)) || !present(value)) continue;
+      const target = layout.byLabel.get(norm(key));
+      if (!target || !put(target, value, false))
+        extra.push(`${key.replace(/_/g, ' ')}: ${String(value).slice(0, 500)}`);
+    }
+
+  if (a.primary_mail) {
+    const email = [...layout.byLabel.values()].find((f) => f.type === 'email' || /e-?mail/i.test(f.label));
+    if (!email || !put(email, a.primary_mail, false)) extra.push(`Email: ${a.primary_mail}`);
+  }
+
+  const cards: string[] = [];
+  for (const card of a.cards ?? []) {
+    const entries = cardEntries(card.data);
+    if (!entries.length) continue;
+    const lines: string[] = [];
+    for (const [key, value] of entries) {
+      const target = layout.byLabel.get(norm(key));
+      if (!target || !put(target, value, false)) lines.push(`${key.replace(/_/g, ' ')}: ${value.slice(0, 500)}`);
+    }
+    if (lines.length) cards.push([`From ${card.integrator_name || 'an integration'}:`, ...lines].join('\n'));
+  }
+
+  const notes = [
+    a.primary_manufacturer && `Manufacturer: ${a.primary_manufacturer}`,
+    a.primary_model && `Model: ${a.primary_model}`,
+    a.primary_serial && `Serial: ${a.primary_serial}`,
+    ...extra,
+    ...cards,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 19000);
+  return { fields, labels, notes, unmatched };
 }
 
 function fieldValue(field: LayoutField, raw: unknown): unknown {
@@ -295,10 +416,15 @@ export async function runHuduImport(
   }
 
   // Asset layouts
-  const layoutMap = new Map<number, { id: string; byLabel: Map<string, LayoutField> }>();
+  const layoutMap = new Map<number, MappedLayout & { id: string; name: string }>();
   for (const l of await client.layouts()) {
-    const { fields, byLabel } = mapLayout(l);
-    const body = { name: `${l.name}`.slice(0, 80), icon: 'box', description: 'Imported from Hudu', fields };
+    const mapped = mapLayout(l);
+    const body = {
+      name: `${l.name}`.slice(0, 80),
+      icon: 'box',
+      description: 'Imported from Hudu',
+      fields: mapped.fields,
+    };
     const id = await run.upsert(
       'layouts',
       l.id,
@@ -306,8 +432,10 @@ export async function runHuduImport(
       async () => (await layouts.create(actor, body)).id,
       async (existing) => void (await layouts.update(actor, existing, body)),
     );
-    if (id) layoutMap.set(l.id, { id, byLabel });
+    if (id) layoutMap.set(l.id, { ...mapped, id, name: l.name });
   }
+  // Field names on assets that no layout field matched, per layout, reported once at the end.
+  const unmatchedByLayout = new Map<string, Set<string>>();
 
   // Assets
   for (const a of (await client.assets()).filter((x) => !x.archived)) {
@@ -318,22 +446,12 @@ export async function runHuduImport(
       run.note(`asset "${a.name}": its company or layout wasn't imported.`);
       continue;
     }
-    const fields: Record<string, unknown> = {};
-    const labels = new Map<string, string>();
-    for (const f of a.fields ?? []) {
-      const target = layout.byLabel.get(f.label);
-      if (!target) continue;
-      const value = fieldValue(target, f.value);
-      if (value !== undefined) fields[target.key] = value;
-      labels.set(target.key, target.label);
+    const { fields, labels, notes, unmatched } = assetDetails(a, layout);
+    if (unmatched.size) {
+      const seen = unmatchedByLayout.get(layout.name) ?? new Set<string>();
+      for (const label of unmatched) seen.add(label);
+      unmatchedByLayout.set(layout.name, seen);
     }
-    const notes = [
-      a.primary_manufacturer && `Manufacturer: ${a.primary_manufacturer}`,
-      a.primary_model && `Model: ${a.primary_model}`,
-      a.primary_serial && `Serial: ${a.primary_serial}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
     const name = a.name.slice(0, 200) || `Asset ${a.id}`;
     await run.upsert(
       'assets',
@@ -353,6 +471,11 @@ export async function runHuduImport(
       },
     );
   }
+  for (const [layoutName, labels] of unmatchedByLayout)
+    run.note(
+      `${layoutName}: ${[...labels].slice(0, 10).join(', ')}${labels.size > 10 ? ` and ${labels.size - 10} more` : ''} ` +
+        `didn't match a field in the layout, so their values were kept in each asset's notes.`,
+    );
 
   // Articles
   for (const a of (await client.articles()).filter((x) => !x.archived)) {
