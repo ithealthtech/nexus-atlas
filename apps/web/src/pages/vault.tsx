@@ -531,7 +531,9 @@ const Slot = () => <span className="inline-block size-9" aria-hidden />;
 function useQuickShare() {
   const ask = useAskReason();
   const queryClient = useQueryClient();
-  return async (item: PasswordView): Promise<string | null> => {
+  // Shown when the browser won't let us copy: the link's key exists nowhere else, so it must not be lost.
+  const [manual, setManual] = useState<string | null>(null);
+  const share = async (item: PasswordView): Promise<string | null> => {
     let reason = '';
     if (item.requireReason) {
       const given = await ask('Why are you sharing this password?');
@@ -539,23 +541,43 @@ function useQuickShare() {
       reason = given;
     }
     const link = await createShareLink(item, { maxViews: 1, hours: 24, reason });
-    // The link is the secret now; copy it as-is (not auto-cleared) so it can be pasted into an email or ticket.
-    await navigator.clipboard.writeText(link);
     await Promise.all(
       ['password-shares', 'password-audit'].map((k) => queryClient.invalidateQueries({ queryKey: [k, item.id] })),
     );
+    try {
+      // The link is the secret now; copy it as-is (not auto-cleared) so it can be pasted into an email or ticket.
+      await navigator.clipboard.writeText(link);
+    } catch {
+      setManual(link);
+      return null;
+    }
     return 'One-time link copied. It opens once and expires in 24 hours.';
   };
+  const dialog = manual && (
+    <Dialog
+      open
+      onClose={() => setManual(null)}
+      title="Copy the one-time link"
+      description="Your browser didn't allow copying automatically. Copy this link now: it can't be shown again. It opens once and expires in 24 hours."
+      footer={<Button onClick={() => setManual(null)}>Done</Button>}
+    >
+      <Field label="Share link">
+        {(p) => <Input {...p} readOnly value={manual} onFocus={(e) => e.currentTarget.select()} autoFocus />}
+      </Field>
+    </Dialog>
+  );
+  return { share, dialog };
 }
 
 function QuickActions({ item }: { item: PasswordView }) {
   const reveal = useReveal();
   const actor = useActor();
-  const quickShare = useQuickShare();
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
   const bitlocker = item.kind === 'bitlocker';
   const openable = !bitlocker && /^https?:\/\//i.test(item.url);
   return (
     <div className="flex items-center justify-end">
+      {quickShareDialog}
       {item.username ? (
         <QuickAction
           label={`Copy ${bitlocker ? 'recovery key ID' : 'username'} for ${item.name}`}
@@ -1027,7 +1049,7 @@ function AuditCard({ item }: { item: PasswordView }) {
 function SharesCard({ item }: { item: PasswordView }) {
   const { data } = useShares(item.id);
   const [sharing, setSharing] = useState(false);
-  const quickShare = useQuickShare();
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
   const [quickBusy, setQuickBusy] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -1099,6 +1121,7 @@ function SharesCard({ item }: { item: PasswordView }) {
         </ul>
       )}
       {sharing && <ShareDialog item={item} onClose={() => setSharing(false)} />}
+      {quickShareDialog}
     </Card>
   );
 }
