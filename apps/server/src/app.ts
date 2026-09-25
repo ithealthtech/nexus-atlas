@@ -25,6 +25,7 @@ import { ClientService } from './services/clients.js';
 import { ensureDefaultLayouts } from './services/layouts.js';
 import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
+import { DomainLookup } from './services/domain-lookup.js';
 import { registerVaultRoutes } from './routes/vault.js';
 import { VaultKeys } from './crypto/vault-keys.js';
 import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
@@ -58,6 +59,8 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Replaces fetch for Hudu imports (tests use a fake Hudu). */
   huduFetch?: typeof fetch;
+  /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
+  domainLookup?: DomainLookup;
   /** Replaces fetch for the GitHub release check (tests use fake releases). */
   updateFetch?: typeof fetch;
 }
@@ -106,6 +109,7 @@ export async function buildApp({
   storage,
   mailTransport = defaultTransport,
   huduFetch,
+  domainLookup,
   updateFetch,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
@@ -495,6 +499,7 @@ export async function buildApp({
     authed,
     storage: files,
     maxUploadBytes,
+    domains: domainLookup ?? (config.NODE_ENV === 'test' ? undefined : new DomainLookup()),
   });
 
   const vault = registerVaultRoutes(app, {

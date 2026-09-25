@@ -1,17 +1,36 @@
 #!/usr/bin/env bash
-# Installs MSP Atlas on Ubuntu 22.04/24.04 without Docker:
-#   Node.js 22 (NodeSource), PostgreSQL 16 (PGDG), Caddy (HTTPS reverse proxy),
-#   an `atlas` system user, a systemd service, and Atlas built from a release tag.
+# MSP Atlas installer and upgrader for Ubuntu 22.04/24.04 and Debian 12, without Docker.
+# Installs Node.js 22 (NodeSource), PostgreSQL 16 (PGDG), and Caddy (HTTPS), then builds Atlas from a
+# release and runs it as a systemd service with nightly backups and the web updater.
 #
-# Usage (as root or with sudo):
-#   sudo ./install-atlas.sh --public-url https://192.168.1.220            # IP: Caddy self-signed cert
-#   sudo ./install-atlas.sh --public-url https://atlas.yourmsp.com        # DNS: real certificate
-#   sudo ./install-atlas.sh --version v1.0.2                               # upgrade, keeps settings/key/db
+# One script for every release: by default it installs the newest published release.
 #
-# Safe to re-run. Existing settings, master key, database password, and data are kept.
+#   curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
+#   sudo bash install-atlas.sh --public-url https://atlas.yourmsp.com
+#
+# Safe to re-run: existing settings, master key, database password, and data are kept.
 set -euo pipefail
 
-ATLAS_VERSION="v1.0.1"
+usage() {
+  cat <<'EOF'
+Usage: sudo bash install-atlas.sh [options]
+
+  --public-url URL   Address people use (https:// only). A DNS name gets a real certificate;
+                     an IP address gets a self-signed one. Default: kept from the last install,
+                     otherwise https://<this server's IP>.
+  --version VERSION  latest (default): the newest published release.
+                     Or a release tag such as v1.0.2, or a branch such as main (testing only).
+  --repo URL         Git repository to install from (default: the official Atlas repository).
+  -h, --help         Show this help.
+
+Examples:
+  sudo bash install-atlas.sh --public-url https://atlas.yourmsp.com   # first install, newest release
+  sudo bash install-atlas.sh                                          # upgrade to the newest release
+  sudo bash install-atlas.sh --version v1.0.2                         # a specific release
+EOF
+}
+
+ATLAS_VERSION="latest"
 REPO="https://github.com/ithealthtech/nexus-atlas.git"
 PUBLIC_URL=""
 APP_DIR="/opt/msp-atlas"
@@ -25,11 +44,11 @@ PORT="4318"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version) ATLAS_VERSION="$2"; shift 2 ;;
-    --public-url) PUBLIC_URL="$2"; shift 2 ;;
-    --repo) REPO="$2"; shift 2 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; exit 2 ;;
+    --version) ATLAS_VERSION="${2:?--version needs a value}"; shift 2 ;;
+    --public-url) PUBLIC_URL="${2:?--public-url needs a value}"; shift 2 ;;
+    --repo) REPO="${2:?--repo needs a value}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
@@ -38,7 +57,10 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Run as root (sudo $0 ...)."
 . /etc/os-release
-[[ "$ID" == "ubuntu" ]] || die "Ubuntu is required (found $ID)."
+case "$ID:${VERSION_ID:-}" in
+  ubuntu:22.04 | ubuntu:24.04 | debian:12) ;;
+  *) die "Supported systems: Ubuntu 22.04 or 24.04, Debian 12 (found ${PRETTY_NAME:-$ID})." ;;
+esac
 
 ENV_FILE="$CONF_DIR/atlas.env"
 KEY_FILE="$CONF_DIR/master.key"
@@ -63,6 +85,21 @@ if grep -qsE '^deb .*(cdrom:|file:///cdrom)' /etc/apt/sources.list; then
 fi
 apt-get update -q
 apt-get install -yq ca-certificates curl gnupg git openssl debian-keyring debian-archive-keyring apt-transport-https
+
+log "Choosing the Atlas version"
+# Releases are tags like v1.2.3 (a leading v is optional). "latest" is the highest one; pre-release tags
+# (v1.3.0-rc1) are never picked automatically. Anything else must exist as a tag or branch.
+REMOTE_TAGS="$(git ls-remote --tags --refs "$REPO" | sed 's#.*refs/tags/##')" || die "Can't reach $REPO."
+if [[ "$ATLAS_VERSION" == latest ]]; then
+  ATLAS_VERSION="$(grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' <<<"$REMOTE_TAGS" | sort -V | tail -n 1 || true)"
+  [[ -n "$ATLAS_VERSION" ]] || die "No published release was found on $REPO."
+elif ! grep -qxF "$ATLAS_VERSION" <<<"$REMOTE_TAGS"; then
+  git ls-remote --exit-code --heads "$REPO" "$ATLAS_VERSION" >/dev/null \
+    || die "\"$ATLAS_VERSION\" isn't a release or branch on $REPO. Releases: $(grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' <<<"$REMOTE_TAGS" | sort -V | tail -n 5 | tr '\n' ' ')"
+  echo "Note: $ATLAS_VERSION is a branch, not a release. Use it for testing only."
+fi
+INSTALLED="$(cat "$CONF_DIR/installed-version" 2>/dev/null || true)"
+echo "Installing $ATLAS_VERSION${INSTALLED:+ (currently $INSTALLED)}."
 
 log "PostgreSQL 16 (PGDG repository)"
 if ! dpkg -s postgresql-16 >/dev/null 2>&1; then
@@ -256,6 +293,7 @@ done
 printf 'REPO=%q\n' "$REPO" > "$CONF_DIR/updater.conf"; chmod 0644 "$CONF_DIR/updater.conf"
 
 echo
+echo "$ATLAS_VERSION" > "$CONF_DIR/installed-version"; chmod 0644 "$CONF_DIR/installed-version"
 echo "MSP Atlas $ATLAS_VERSION is running at $PUBLIC_URL"
 SETUP_LINE="$(journalctl -u msp-atlas --no-pager --since "$STARTED_AT" | grep -o 'First-run setup code: .*' | tail -1 || true)"
 [[ -n "$SETUP_LINE" ]] && echo "$SETUP_LINE  (valid until the first account is created)"

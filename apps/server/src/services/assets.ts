@@ -3,6 +3,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { schema } from '@atlas/db';
 import { assetSchema, updateAssetSchema, type AssetView, type LayoutField, type RevisionView } from '@atlas/shared';
 import { HttpError } from '../errors.js';
+import type { DomainLookup } from './domain-lookup.js';
 import { recordActivity } from './activity.js';
 import { validateFields, type LayoutService } from './layouts.js';
 import { getRevision, listRevisions, snapshot } from './revisions.js';
@@ -11,8 +12,43 @@ import { isUuid, type Scope } from './scope.js';
 type Snapshot = { name: string; status: AssetView['status']; fields: Record<string, unknown>; notes: string };
 const editor = alias(schema.users, 'editor');
 
+// Domains-layout fields a lookup can fill, with the field type each needs.
+const DETECTED: Record<string, LayoutField['type'][]> = {
+  registrar: ['text'],
+  expires: ['date', 'text'],
+  nameservers: ['textarea', 'text'],
+  dns_host: ['text'],
+};
+const blank = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
+
 export class AssetService {
-  constructor(private readonly layouts: LayoutService) {}
+  constructor(
+    private readonly layouts: LayoutService,
+    private readonly domains?: DomainLookup,
+  ) {}
+
+  /**
+   * For the built-in Domains layout, fills blank fields (registrar, expiry, name servers, DNS host)
+   * from the asset's name. Never overwrites what someone entered, and never blocks a save.
+   */
+  private async detect(layout: { key: string; fields: unknown }, name: string, fields: Record<string, unknown>) {
+    if (!this.domains || layout.key !== 'domain') return fields;
+    const layoutFields = layout.fields as LayoutField[];
+    const targets = layoutFields.filter((f) => DETECTED[f.key]?.includes(f.type) && blank(fields[f.key]));
+    if (!targets.length) return fields;
+    const found = await this.domains.lookup(name);
+    if (!found) return fields;
+    const merged = { ...fields };
+    for (const f of targets) {
+      const value = found[f.key as keyof typeof found];
+      if (value) merged[f.key] = value;
+    }
+    try {
+      return validateFields(layoutFields, merged);
+    } catch {
+      return fields;
+    }
+  }
 
   private select(scope: Scope) {
     return scope.db
@@ -91,7 +127,7 @@ export class AssetService {
     const body = assetSchema.parse(input);
     const layout = await this.layouts.get(scope.actor, body.layoutId);
     if (layout.archived) throw new HttpError(400, 'That asset layout is archived.');
-    const fields = validateFields(layout.fields as LayoutField[], body.fields);
+    const fields = await this.detect(layout, body.name, validateFields(layout.fields as LayoutField[], body.fields));
     const id = await scope.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(schema.assets)
@@ -136,10 +172,15 @@ export class AssetService {
         'conflict',
       );
     const layout = await this.layouts.get(scope.actor, current.layoutId);
+    const name = body.name ?? current.name;
     const next: Snapshot = {
-      name: body.name ?? current.name,
+      name,
       status: body.status ?? current.status,
-      fields: body.fields ? validateFields(layout.fields as LayoutField[], body.fields) : current.fields,
+      fields: await this.detect(
+        layout,
+        name,
+        body.fields ? validateFields(layout.fields as LayoutField[], body.fields) : current.fields,
+      ),
       notes: body.notes ?? current.notes,
     };
     await scope.db.transaction(async (tx) => {
