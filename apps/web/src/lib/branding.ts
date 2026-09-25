@@ -11,6 +11,9 @@ export const useBranding = () =>
 const DEFAULT_TITLE = 'MSP Atlas';
 const DEFAULT_FAVICON = '/favicon.svg';
 const ATLAS_LIME = '#c4e99a';
+// Atlas's own sidebar colours (styles.css), for checking a custom accent against them.
+const DEFAULT_SIDEBAR = '#132b24';
+const DEFAULT_SIDEBAR_DARK = '#0b1411';
 
 /** WCAG relative luminance of a #rrggbb colour. */
 export const luminance = (hex: string) => {
@@ -57,14 +60,17 @@ function applyAccent(theme: Branding, dark: boolean) {
 
 function applySidebar(theme: Branding, dark: boolean) {
   const color = dark ? (theme.sidebarDark ?? theme.sidebar) : theme.sidebar;
+  const accent = dark ? (theme.accentDark ?? theme.accent) : theme.accent;
   if (!color) {
+    // Default sidebar: its colours stay, but a custom accent still shows on it when it's visible enough.
+    const sidebar = dark ? DEFAULT_SIDEBAR_DARK : DEFAULT_SIDEBAR;
     setVars({
       '--sidebar': null,
       '--sidebar-2': null,
       '--sidebar-text': null,
       '--sidebar-muted': null,
       '--sidebar-active': null,
-      '--sidebar-accent': null,
+      '--sidebar-accent': accent && contrast(accent, sidebar) >= 3 ? accent : null,
     });
     return;
   }
@@ -72,7 +78,6 @@ function applySidebar(theme: Branding, dark: boolean) {
   const ink = readableOn(color);
   // The active icon and bar need 3:1 against the sidebar (WCAG non-text contrast): the org's accent if it
   // manages that, else Atlas's lime, else plain text colour.
-  const accent = dark ? (theme.accentDark ?? theme.accent) : theme.accent;
   const sidebarAccent = [accent, ATLAS_LIME].find((c) => c && contrast(c, color) >= 3) ?? ink;
   setVars({
     '--sidebar': color,
@@ -101,7 +106,7 @@ function setFavicon(href: string) {
  * Applies a theme (Administration → Theme) to the page: colour tokens, layout options (data attributes that
  * styles.css reads), favicon, and title. Set through the CSSOM and DOM, which the strict CSP allows.
  */
-export function applyTheme(theme: Branding | null) {
+export function applyTheme(theme: Branding | null, orgName = '') {
   const t = theme ?? DEFAULT_BRANDING;
   const dark = isDark();
   applyAccent(t, dark);
@@ -114,7 +119,8 @@ export function applyTheme(theme: Branding | null) {
   html.dataset.nav = t.navStyle;
   html.dataset.motion = t.motion ? 'on' : 'off';
   setFavicon(t.favicon ?? DEFAULT_FAVICON);
-  document.title = t.browserTitle || t.brandName || DEFAULT_TITLE;
+  // Blank fields fall back to the organization's name, then to the product name.
+  document.title = t.browserTitle || t.brandName || orgName || DEFAULT_TITLE;
 }
 
 /** Tracks light/dark mode, so components can pick the right logo. */
@@ -161,7 +167,7 @@ export function useApplyBranding() {
   const theme = useTheme();
   const dark = useDarkMode();
   useEffect(() => {
-    if (theme) applyTheme(theme);
+    if (theme) applyTheme(theme, theme.name);
   }, [theme, dark]);
   return theme;
 }

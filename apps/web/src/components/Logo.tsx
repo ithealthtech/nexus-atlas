@@ -24,7 +24,7 @@ export function Logo({ className, compact }: { className?: string; compact?: boo
       </svg>
       {!compact && (
         <span className="leading-none">
-          <span className="block text-xl tracking-tight">{theme?.brandName || 'atlas'}</span>
+          <span className="block text-xl tracking-tight">{theme?.brandName || theme?.name || 'atlas'}</span>
           <span className="mt-1 block text-[9px] font-bold tracking-[0.2em] opacity-80">
             {theme?.tagline || 'FOR MSPs'}
           </span>

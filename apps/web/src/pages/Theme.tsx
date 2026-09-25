@@ -25,7 +25,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { api, type ApiError } from '@/lib/api';
-import { contrast, readableOn, setThemePreview, useBranding } from '@/lib/branding';
+import { contrast, readableOn, setThemePreview, useBranding, useDarkMode } from '@/lib/branding';
 
 const LABELS = {
   fontScale: { small: 'Small', default: 'Default', large: 'Large' },
@@ -479,26 +479,34 @@ function ImageField({
 
 /** Warns before saving colours that would make text hard to read (WCAG AA: 4.5:1 for normal text). */
 function ContrastChecks({ theme }: { theme: Branding }) {
-  const accent = theme.accent ?? ATLAS.accent;
-  const sidebar = theme.sidebar ?? ATLAS.sidebar;
-  const checks: { ok: boolean; text: ReactNode }[] = [
-    {
-      ok: contrast(accent, readableOn(accent)) >= 4.5,
-      text: `Button text on the accent: ${contrast(accent, readableOn(accent)).toFixed(1)}:1`,
-    },
-    {
-      ok: contrast(accent, '#ffffff') >= 4.5,
-      text: `Accent-coloured links on white: ${contrast(accent, '#ffffff').toFixed(1)}:1${
-        contrast(accent, '#ffffff') < 4.5 ? ' (pick a darker accent)' : ''
-      }`,
-    },
-    {
-      ok: contrast(sidebar, readableOn(sidebar)) >= 7,
-      text: `Sidebar text: ${contrast(sidebar, readableOn(sidebar)).toFixed(1)}:1${
-        contrast(sidebar, readableOn(sidebar)) < 7 ? ' (mid-tone sidebars leave less room; pick lighter or darker)' : ''
-      }`,
-    },
-  ];
+  // Check the colours in effect for the current mode: dark mode uses the dark-mode fields when set.
+  const dark = useDarkMode();
+  const accent = dark ? (theme.accentDark ?? (theme.accent ? null : ATLAS.accentDark)) : (theme.accent ?? ATLAS.accent);
+  const sidebar = dark ? (theme.sidebarDark ?? theme.sidebar ?? ATLAS.sidebarDark) : (theme.sidebar ?? ATLAS.sidebar);
+  // Links sit on the page surface: white in light mode, Atlas's dark surface in dark mode.
+  const surface = dark ? '#14201c' : '#ffffff';
+  const checks: { ok: boolean; text: ReactNode }[] = [];
+  if (accent)
+    checks.push(
+      {
+        ok: contrast(accent, readableOn(accent)) >= 4.5,
+        text: `Button text on the accent: ${contrast(accent, readableOn(accent)).toFixed(1)}:1`,
+      },
+      {
+        ok: contrast(accent, surface) >= 4.5,
+        text: `Accent-coloured links on the ${dark ? 'dark ' : ''}page: ${contrast(accent, surface).toFixed(1)}:1${
+          contrast(accent, surface) < 4.5 ? ` (pick a ${dark ? 'lighter' : 'darker'} accent)` : ''
+        }`,
+      },
+    );
+  // Without a dark-mode accent, Atlas lightens the light one for dark mode, which keeps it readable.
+  else checks.push({ ok: true, text: 'Accent: lightened automatically for dark mode.' });
+  checks.push({
+    ok: contrast(sidebar, readableOn(sidebar)) >= 7,
+    text: `Sidebar text: ${contrast(sidebar, readableOn(sidebar)).toFixed(1)}:1${
+      contrast(sidebar, readableOn(sidebar)) < 7 ? ' (mid-tone sidebars leave less room; pick lighter or darker)' : ''
+    }`,
+  });
   return (
     <ul className="space-y-1.5 border-t border-border px-5 py-4 text-sm" aria-label="Readability checks">
       {checks.map((c, i) => (
@@ -512,8 +520,8 @@ function ContrastChecks({ theme }: { theme: Branding }) {
         </li>
       ))}
       <li className="flex items-center gap-2 text-xs text-muted">
-        <Palette className="size-3.5" aria-hidden /> Checked against WCAG 2.2 AA. Switch to dark mode to review the
-        dark-mode colours.
+        <Palette className="size-3.5" aria-hidden /> Checked against WCAG 2.2 AA. Showing the {dark ? 'dark' : 'light'}
+        -mode colours; switch modes to check the others.
       </li>
     </ul>
   );
