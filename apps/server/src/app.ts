@@ -28,7 +28,7 @@ import { DomainLookup } from './services/domain-lookup.js';
 import { registerVaultRoutes } from './routes/vault.js';
 import { VaultKeys } from './crypto/vault-keys.js';
 import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
-import { MailService, smtpTransport, type MailTransport } from './services/mail.js';
+import { MailService, defaultTransport, type MailTransport } from './services/mail.js';
 import { SettingsService } from './services/settings.js';
 import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
@@ -106,7 +106,7 @@ export async function buildApp({
   keys,
   setupCode = '',
   storage,
-  mailTransport = smtpTransport,
+  mailTransport = defaultTransport,
   huduFetch,
   updateFetch,
   domainLookup,

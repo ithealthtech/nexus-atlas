@@ -34,7 +34,7 @@ const SECURITY_LABEL: Record<SmtpSecurity, string> = {
 function EmailSettings({ current }: { current: SmtpSettingsView }) {
   const actor = useActor();
   const toast = useToast();
-  const [form, setForm] = useState({ ...current, password: '' });
+  const [form, setForm] = useState({ ...current, password: '', clientSecret: '' });
   const [error, setError] = useState<ApiError | null>(null);
   const [testTo, setTestTo] = useState(actor.email);
   const [testing, setTesting] = useState(false);
@@ -45,12 +45,17 @@ function EmailSettings({ current }: { current: SmtpSettingsView }) {
   );
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
-  const choosePreset = (preset: SmtpPreset) => {
-    const p = SMTP_PRESETS[preset];
+  // Microsoft 365 via Graph is its own choice; the SMTP presets fill in the server details.
+  type Service = 'graph' | SmtpPreset;
+  const service: Service = form.method === 'graph' ? 'graph' : form.preset;
+  const chooseService = (next: Service) => {
+    if (next === 'graph') return setForm((f) => ({ ...f, method: 'graph' }));
+    const p = SMTP_PRESETS[next];
     setForm((f) => ({
       ...f,
-      preset,
-      ...(preset === 'm365'
+      method: 'smtp',
+      preset: next,
+      ...(next === 'm365'
         ? { host: p.host, port: p.port, security: p.security, fromAddress: f.fromAddress || f.username }
         : {}),
     }));
@@ -58,9 +63,9 @@ function EmailSettings({ current }: { current: SmtpSettingsView }) {
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    const { hasPassword: _hasPassword, password, ...rest } = form;
+    const { hasPassword: _hasPassword, hasClientSecret: _hasSecret, password, clientSecret, ...rest } = form;
     try {
-      await save.mutateAsync({ ...rest, ...(password ? { password } : {}) });
+      await save.mutateAsync({ ...rest, ...(password ? { password } : {}), ...(clientSecret ? { clientSecret } : {}) });
       toast(form.enabled ? 'Email settings saved. Send a test to check them.' : 'Email settings saved.');
     } catch (err) {
       setError(err as ApiError);
@@ -78,7 +83,13 @@ function EmailSettings({ current }: { current: SmtpSettingsView }) {
       setTesting(false);
     }
   };
-  const m365 = form.preset === 'm365';
+  const m365 = service === 'm365';
+  const graph = service === 'graph';
+  const SERVICES: [Service, string][] = [
+    ['graph', 'Microsoft 365 (app registration)'],
+    ['m365', 'Microsoft 365 SMTP (legacy)'],
+    ['custom', SMTP_PRESETS.custom.label],
+  ];
   return (
     <Card>
       <CardHeader title="Email" description="Used for password reset links, expiry alerts, and the weekly digest." />
@@ -91,110 +102,200 @@ function EmailSettings({ current }: { current: SmtpSettingsView }) {
         />
         <fieldset className="space-y-2">
           <legend className="text-[13px] font-semibold">Mail service</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(Object.keys(SMTP_PRESETS) as SmtpPreset[]).map((p) => (
+          <div className="grid gap-2 sm:grid-cols-3">
+            {SERVICES.map(([value, label]) => (
               <label
-                key={p}
+                key={value}
                 className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 text-sm font-semibold has-checked:border-primary has-checked:bg-primary-soft/60"
               >
                 <input
                   type="radio"
-                  name="preset"
-                  checked={form.preset === p}
-                  onChange={() => choosePreset(p)}
+                  name="service"
+                  checked={service === value}
+                  onChange={() => chooseService(value)}
                   className="accent-(--primary)"
                 />
-                {SMTP_PRESETS[p].label}
+                {label}
               </label>
             ))}
           </div>
         </fieldset>
-        {m365 && (
+        {graph && (
           <div className="flex gap-3 rounded-lg bg-info-soft p-3.5 text-sm text-text-2">
             <Info className="size-5 shrink-0 text-info" aria-hidden />
+            <div className="space-y-1.5">
+              <p>
+                Atlas signs in as an <strong>app registration</strong> (OAuth2) and sends through Microsoft Graph. No
+                mailbox password or SMTP sign-in is involved.
+              </p>
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>
+                  In the Microsoft Entra admin center, open <strong>App registrations → New registration</strong>{' '}
+                  (single tenant, no redirect URI).
+                </li>
+                <li>
+                  Under <strong>API permissions</strong>, add{' '}
+                  <strong>Microsoft Graph → Application permissions → Mail.Send</strong>, then{' '}
+                  <strong>Grant admin consent</strong>.
+                </li>
+                <li>
+                  Under <strong>Certificates &amp; secrets</strong>, create a client secret and paste its <em>value</em>{' '}
+                  below. Note when it expires.
+                </li>
+                <li>
+                  Recommended: limit the app to the From mailbox with an Exchange Online application access policy or
+                  RBAC for Applications, so it can't send as anyone else.
+                </li>
+              </ol>
+            </div>
+          </div>
+        )}
+        {m365 && (
+          <div className="flex gap-3 rounded-lg bg-warning-soft p-3.5 text-sm text-text-2">
+            <Info className="size-5 shrink-0 text-warning" aria-hidden />
             <p>
-              Sign in as a licensed mailbox (or one with send-as rights for the From address). In the Microsoft 365
-              admin center, turn on <strong>Authenticated SMTP</strong> for that mailbox. If the account uses MFA, use
-              an app password.
+              Microsoft is retiring basic authentication for SMTP in Exchange Online. Use{' '}
+              <strong>Microsoft 365 (app registration)</strong> instead. Until then: sign in as a licensed mailbox, turn
+              on <strong>Authenticated SMTP</strong> for it, and use an app password if it has MFA.
             </p>
           </div>
         )}
-        <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
-          <Field label="SMTP server" error={error?.fields?.host}>
-            {(p) => (
-              <Input
-                {...p}
-                value={form.host}
-                onChange={(e) => set('host', e.target.value)}
-                placeholder="smtp.example.com"
-                readOnly={m365}
-              />
-            )}
-          </Field>
-          <Field label="Port" error={error?.fields?.port}>
-            {(p) => (
-              <Input
-                {...p}
-                type="number"
-                min={1}
-                max={65535}
-                value={form.port}
-                onChange={(e) => set('port', Number(e.target.value))}
-                readOnly={m365}
-              />
-            )}
-          </Field>
-        </div>
-        <Field label="Encryption">
-          {(p) => (
-            <Select
-              {...p}
-              value={form.security}
-              onChange={(e) => set('security', e.target.value as SmtpSecurity)}
-              disabled={m365}
+        {graph && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Directory (tenant) ID" error={error?.fields?.tenantId}>
+                {(p) => (
+                  <Input
+                    {...p}
+                    value={form.tenantId}
+                    onChange={(e) => set('tenantId', e.target.value)}
+                    placeholder="00000000-0000-0000-0000-000000000000"
+                    autoComplete="off"
+                    className="font-mono"
+                  />
+                )}
+              </Field>
+              <Field label="Application (client) ID" error={error?.fields?.clientId}>
+                {(p) => (
+                  <Input
+                    {...p}
+                    value={form.clientId}
+                    onChange={(e) => set('clientId', e.target.value)}
+                    placeholder="00000000-0000-0000-0000-000000000000"
+                    autoComplete="off"
+                    className="font-mono"
+                  />
+                )}
+              </Field>
+            </div>
+            <Field
+              label="Client secret"
+              error={error?.fields?.clientSecret}
+              help={
+                current.hasClientSecret
+                  ? 'Saved and encrypted. Leave empty to keep it; paste a new one before it expires.'
+                  : 'The secret’s value (not its ID). Stored encrypted with the master key.'
+              }
             >
-              {(Object.keys(SECURITY_LABEL) as SmtpSecurity[]).map((s) => (
-                <option key={s} value={s}>
-                  {SECURITY_LABEL[s]}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
+              {(p) => (
+                <Input
+                  {...p}
+                  type="password"
+                  value={form.clientSecret}
+                  onChange={(e) => set('clientSecret', e.target.value)}
+                  autoComplete="new-password"
+                  placeholder={current.hasClientSecret ? '••••••••' : ''}
+                />
+              )}
+            </Field>
+          </>
+        )}
+        {!graph && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
+              <Field label="SMTP server" error={error?.fields?.host}>
+                {(p) => (
+                  <Input
+                    {...p}
+                    value={form.host}
+                    onChange={(e) => set('host', e.target.value)}
+                    placeholder="smtp.example.com"
+                    readOnly={m365}
+                  />
+                )}
+              </Field>
+              <Field label="Port" error={error?.fields?.port}>
+                {(p) => (
+                  <Input
+                    {...p}
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={form.port}
+                    onChange={(e) => set('port', Number(e.target.value))}
+                    readOnly={m365}
+                  />
+                )}
+              </Field>
+            </div>
+            <Field label="Encryption">
+              {(p) => (
+                <Select
+                  {...p}
+                  value={form.security}
+                  onChange={(e) => set('security', e.target.value as SmtpSecurity)}
+                  disabled={m365}
+                >
+                  {(Object.keys(SECURITY_LABEL) as SmtpSecurity[]).map((s) => (
+                    <option key={s} value={s}>
+                      {SECURITY_LABEL[s]}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Username"
+                help={
+                  m365
+                    ? 'The mailbox address, e.g. atlas@yourdomain.com'
+                    : 'Leave empty if the server needs no sign-in.'
+                }
+              >
+                {(p) => (
+                  <Input
+                    {...p}
+                    value={form.username}
+                    onChange={(e) => set('username', e.target.value)}
+                    autoComplete="off"
+                  />
+                )}
+              </Field>
+              <Field
+                label="Password"
+                help={current.hasPassword ? 'Saved and encrypted. Leave empty to keep it.' : 'Stored encrypted.'}
+              >
+                {(p) => (
+                  <Input
+                    {...p}
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => set('password', e.target.value)}
+                    autoComplete="new-password"
+                    placeholder={current.hasPassword ? '••••••••' : ''}
+                  />
+                )}
+              </Field>
+            </div>
+          </>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
-            label="Username"
-            help={
-              m365 ? 'The mailbox address, e.g. atlas@yourdomain.com' : 'Leave empty if the server needs no sign-in.'
-            }
+            label="From address"
+            error={error?.fields?.fromAddress}
+            help={graph ? 'A mailbox in this tenant. Messages are sent as this mailbox.' : undefined}
           >
-            {(p) => (
-              <Input
-                {...p}
-                value={form.username}
-                onChange={(e) => set('username', e.target.value)}
-                autoComplete="off"
-              />
-            )}
-          </Field>
-          <Field
-            label="Password"
-            help={current.hasPassword ? 'Saved and encrypted. Leave empty to keep it.' : 'Stored encrypted.'}
-          >
-            {(p) => (
-              <Input
-                {...p}
-                type="password"
-                value={form.password}
-                onChange={(e) => set('password', e.target.value)}
-                autoComplete="new-password"
-                placeholder={current.hasPassword ? '••••••••' : ''}
-              />
-            )}
-          </Field>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="From address" error={error?.fields?.fromAddress}>
             {(p) => (
               <Input
                 {...p}
@@ -209,7 +310,13 @@ function EmailSettings({ current }: { current: SmtpSettingsView }) {
             {(p) => <Input {...p} value={form.fromName} onChange={(e) => set('fromName', e.target.value)} />}
           </Field>
         </div>
-        <FormError message={error && !error.fields?.host && !error.fields?.fromAddress ? error.message : null} />
+        <FormError
+          message={
+            error && !['host', 'fromAddress', 'tenantId', 'clientId', 'clientSecret'].some((k) => error.fields?.[k])
+              ? error.message
+              : null
+          }
+        />
         <div className="flex justify-end">
           <Button type="submit" loading={save.isPending}>
             Save email settings
