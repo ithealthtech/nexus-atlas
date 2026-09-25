@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { HttpError } from '../errors.js';
+import { GraphMailer } from './mail-graph.js';
 import type { SettingsService, SmtpConfig } from './settings.js';
 
 export interface MailMessage {
@@ -41,6 +42,12 @@ export const smtpTransport: MailTransport = async (smtp, message) => {
     transporter.close();
   }
 };
+
+const graph = new GraphMailer();
+
+/** Sends with the configured method: Microsoft Graph (app registration) or SMTP. */
+export const defaultTransport: MailTransport = (config, message) =>
+  config.method === 'graph' ? graph.send(config, message) : smtpTransport(config, message);
 
 const escape = (value: string) =>
   value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -101,7 +108,12 @@ export class MailService {
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message.slice(0, 200) : 'unknown error';
-      throw new HttpError(502, `The mail server did not accept the message: ${detail}`);
+      throw new HttpError(
+        502,
+        smtp.method === 'graph'
+          ? `Microsoft 365 did not accept the message: ${detail}`
+          : `The mail server did not accept the message: ${detail}`,
+      );
     }
   }
 }

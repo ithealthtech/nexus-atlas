@@ -187,6 +187,10 @@ const users = db.users.map((u) => ({
 const groups = [...db.groups];
 let smtp = {
   enabled: true,
+  method: 'graph',
+  tenantId: 'itdoneright.onmicrosoft.com',
+  clientId: '3f2b8c1e-5d4a-4e7b-9c6d-0a1b2c3d4e5f',
+  hasClientSecret: true,
   preset: 'm365',
   host: 'smtp.office365.com',
   port: 587,
@@ -906,9 +910,17 @@ on('DELETE', '/groups/:id', (m) => {
 });
 on('GET', '/settings/email', () => smtp);
 on('PUT', '/settings/email', (_m, b) => {
-  const { password, ...rest } = b;
-  smtp = { ...smtp, ...(rest as typeof smtp), hasPassword: smtp.hasPassword || !!password };
-  event('Email settings changed', smtp.enabled ? `${smtp.host}:${smtp.port}` : 'Email off');
+  const { password, clientSecret, ...rest } = b;
+  smtp = {
+    ...smtp,
+    ...(rest as typeof smtp),
+    hasPassword: smtp.hasPassword || !!password,
+    hasClientSecret: smtp.hasClientSecret || !!clientSecret,
+  };
+  event(
+    'Email settings changed',
+    !smtp.enabled ? 'Email off' : smtp.method === 'graph' ? 'Microsoft 365 (Graph)' : `${smtp.host}:${smtp.port}`,
+  );
   return smtp;
 });
 on('POST', '/settings/email/test', () => notInDemo('Sending email'));

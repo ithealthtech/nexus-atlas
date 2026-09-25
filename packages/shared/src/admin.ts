@@ -79,9 +79,36 @@ export const SMTP_PRESETS = {
 } as const;
 export type SmtpPreset = keyof typeof SMTP_PRESETS;
 
+/**
+ * How email is sent. `graph`: Microsoft Graph sendMail with an Entra app registration (OAuth2 client
+ * credentials, application permission Mail.Send); Microsoft is retiring SMTP basic auth for Exchange Online.
+ * `smtp`: any SMTP server.
+ */
+export const MAIL_METHODS = ['graph', 'smtp'] as const;
+export type MailMethod = (typeof MAIL_METHODS)[number];
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const smtpSettingsSchema = z
   .object({
     enabled: z.boolean().default(false),
+    method: z.enum(MAIL_METHODS).default('smtp'),
+    // Directory (tenant) ID, or the tenant's domain (contoso.onmicrosoft.com).
+    tenantId: z
+      .string()
+      .trim()
+      .max(253)
+      .refine(
+        (v) => v === '' || GUID.test(v) || /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(v),
+        'Enter the Directory (tenant) ID from the app registration.',
+      )
+      .default(''),
+    clientId: z
+      .string()
+      .trim()
+      .refine((v) => v === '' || GUID.test(v), 'Enter the Application (client) ID from the app registration.')
+      .default(''),
+    // Omitted or null keeps the stored secret; an empty string clears it.
+    clientSecret: z.string().max(512).nullable().optional(),
     preset: z.enum(['m365', 'custom']).default('custom'),
     host: z
       .string()
@@ -97,12 +124,28 @@ export const smtpSettingsSchema = z
     fromAddress: z.union([z.literal(''), emailSchema]).default(''),
     fromName: z.string().trim().max(80).default('MSP Atlas'),
   })
-  .refine((s) => !s.enabled || (s.host && s.fromAddress), {
-    message: 'Enter the server and the From address to turn email on.',
+  .refine((s) => !s.enabled || s.fromAddress, {
+    message: 'Enter the From address to turn email on.',
+    path: ['fromAddress'],
+  })
+  .refine((s) => !s.enabled || s.method !== 'smtp' || s.host, {
+    message: 'Enter the server to turn email on.',
     path: ['host'],
+  })
+  .refine((s) => !s.enabled || s.method !== 'graph' || s.tenantId, {
+    message: 'Enter the Directory (tenant) ID.',
+    path: ['tenantId'],
+  })
+  .refine((s) => !s.enabled || s.method !== 'graph' || s.clientId, {
+    message: 'Enter the Application (client) ID.',
+    path: ['clientId'],
   });
 export interface SmtpSettingsView {
   enabled: boolean;
+  method: MailMethod;
+  tenantId: string;
+  clientId: string;
+  hasClientSecret: boolean;
   preset: SmtpPreset;
   host: string;
   port: number;
