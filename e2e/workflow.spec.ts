@@ -315,7 +315,9 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('dialog').getByLabel('Require a reason to view passwords').check();
     await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
     await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
-    await page.getByRole('link', { name: /HDG-FW-01 admin/ }).click();
+    // Wait for the list itself: until then, the overview's activity feed also links to this password.
+    await expect(page).toHaveURL(/\/passwords$/);
+    await page.getByRole('table').getByRole('link', { name: /HDG-FW-01 admin/ }).click();
     await page.getByRole('button', { name: 'Show password' }).click();
     await expect(page.getByRole('heading', { name: 'Why do you need this password?' })).toBeVisible();
     await page.getByRole('dialog').getByLabel('Reason').fill('Ticket 4411 firmware update');
