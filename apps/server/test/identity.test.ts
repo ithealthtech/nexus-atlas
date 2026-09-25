@@ -60,7 +60,12 @@ describe('identity', () => {
     const { b, r } = await signIn(t.app, OWNER.email.toUpperCase(), OWNER.password);
     expect(r.data.stage).toBe('mfa');
     expect((await b.call('GET', '/api/clients')).status).toBe(403);
-    expect((await b.call('POST', '/api/session/mfa', { code: totp(secret) })).status).toBe(400);
+    // Replay the exact code enrollment consumed; totp(secret) alone drifts to a fresh step if 30s rolls over.
+    const {
+      rows: [{ mfa_last_step: enrolledStep }],
+    } = await t.handle.pool.query('select mfa_last_step from users');
+    expect(Number(enrolledStep)).toBeGreaterThan(0);
+    expect((await b.call('POST', '/api/session/mfa', { code: totp(secret, Number(enrolledStep)) })).status).toBe(400);
     const ok = await b.call('POST', '/api/session/mfa', { code: totp(secret, totpStep() + 1) });
     expect(ok.data.stage).toBe('active');
     expect((await b.call('DELETE', '/api/session')).status).toBe(200);
