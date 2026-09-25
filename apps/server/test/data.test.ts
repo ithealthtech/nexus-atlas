@@ -300,6 +300,11 @@ describe('Hudu import', () => {
     // Hudu's folder sets the type, and the password stays linked to the asset it was attached to.
     expect(password).toMatchObject({ category: 'network', categoryGuessed: false });
     expect(password.linkedAssets.map((a: { name: string }) => a.name)).toEqual(['HDG-FW-01']);
+    // ...and it's filed in a folder of the same name.
+    expect(password.folderName).toBe('Network');
+    expect((await owner.call('GET', `/api/clients/${harbor.id}/password-folders`)).data).toEqual([
+      expect.objectContaining({ name: 'Network', count: 1 }),
+    ]);
     expect((await owner.call('POST', `/api/passwords/${password.id}/reveal`, {})).data.value).toBe('Hudu-Secret-9981!');
 
     // Second run: updates, no duplicates.
