@@ -569,12 +569,23 @@ test.describe.serial('data in and out, and the client portal', () => {
     await dialog.getByRole('button', { name: 'Done' }).click();
     await expect(page.getByText('ConnectWise sync')).toBeVisible();
 
-    await page.getByLabel('Accent colour').fill('#1d4ed8');
-    await page.getByRole('button', { name: 'Save branding' }).click();
-    await expect(page.getByText('Branding saved.')).toBeVisible();
+    // Theme: edits preview live everywhere, and only apply for others once saved.
+    await nav(page, 'Theme');
+    await page.getByLabel('Brand name').fill('IT Done Right');
+    await page.getByLabel('Accent', { exact: true }).fill('#1d4ed8');
+    await page.getByLabel('Density').selectOption('compact');
     expect(await page.evaluate(() => document.documentElement.style.getPropertyValue('--primary'))).toBe('#1d4ed8');
+    expect(await page.evaluate(() => document.documentElement.dataset.density)).toBe('compact');
+    await expect(page.getByText('Unsaved changes.')).toBeVisible();
+    await page.getByRole('button', { name: 'Save theme' }).click();
+    await expect(page.getByText('Theme saved.')).toBeVisible();
+    await expect(page).toHaveTitle('IT Done Right');
     await accessible(page);
-    await page.screenshot({ path: 'test-results/screens/settings-branding.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/screens/theme.png', fullPage: true });
+    // Back to the default layout so later screenshots and checks use it.
+    await page.getByLabel('Density').selectOption('comfortable');
+    await page.getByRole('button', { name: 'Save theme' }).click();
+    await expect(page.getByText('Theme saved.')).toBeVisible();
 
     await nav(page, 'Clients');
     await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
