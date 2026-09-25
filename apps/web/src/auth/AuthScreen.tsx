@@ -72,7 +72,7 @@ export function AuthScreen({
               <>
                 A clearer picture.
                 <br />
-                <span className="text-accent">For every client.</span>
+                <span className="text-sidebar-accent">For every client.</span>
               </>
             )}
           </h1>
@@ -89,7 +89,7 @@ export function AuthScreen({
               const I = Icon as typeof ShieldCheck;
               return (
                 <li key={i} className="flex items-center gap-3">
-                  <span className="grid size-8 place-items-center rounded-lg bg-sidebar-2 text-accent">
+                  <span className="grid size-8 place-items-center rounded-lg bg-sidebar-2 text-sidebar-accent">
                     <I className="size-4" aria-hidden />
                   </span>
                   {text as string}

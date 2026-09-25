@@ -10,6 +10,7 @@ export const useBranding = () =>
 
 const DEFAULT_TITLE = 'MSP Atlas';
 const DEFAULT_FAVICON = '/favicon.svg';
+const ATLAS_LIME = '#c4e99a';
 
 /** WCAG relative luminance of a #rrggbb colour. */
 export const luminance = (hex: string) => {
@@ -63,17 +64,23 @@ function applySidebar(theme: Branding, dark: boolean) {
       '--sidebar-text': null,
       '--sidebar-muted': null,
       '--sidebar-active': null,
+      '--sidebar-accent': null,
     });
     return;
   }
   // Text follows the sidebar's lightness, so a light sidebar gets dark text.
   const ink = readableOn(color);
+  // The active icon and bar need 3:1 against the sidebar (WCAG non-text contrast): the org's accent if it
+  // manages that, else Atlas's lime, else plain text colour.
+  const accent = dark ? (theme.accentDark ?? theme.accent) : theme.accent;
+  const sidebarAccent = [accent, ATLAS_LIME].find((c) => c && contrast(c, color) >= 3) ?? ink;
   setVars({
     '--sidebar': color,
     '--sidebar-2': `color-mix(in oklab, ${color} 86%, ${ink})`,
     '--sidebar-text': `color-mix(in oklab, ${ink} 84%, ${color})`,
     '--sidebar-muted': `color-mix(in oklab, ${ink} 68%, ${color})`,
     '--sidebar-active': ink,
+    '--sidebar-accent': sidebarAccent,
   });
 }
 

@@ -26,6 +26,8 @@
   --sidebar-muted: #8ea597;
   /* Text on the active navigation item; the theme sets it for contrast with a custom sidebar colour. */
   --sidebar-active: #ffffff;
+  /* Accent on sidebar surfaces (active icon, bar); the theme swaps it when the default would be too faint. */
+  --sidebar-accent: var(--accent);
   --sidebar-width: 16rem;
   --danger: #a3301f;
   --danger-soft: #fdeeeb;
@@ -91,6 +93,7 @@
   --color-sidebar-text: var(--sidebar-text);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-accent: var(--sidebar-accent);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
@@ -174,12 +177,12 @@
 /* Active navigation styles. Unlayered so they override the default (filled) utilities. */
 html[data-nav='bar'] .nav-link[data-status='active'] {
   background: transparent;
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 var(--sidebar-accent);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
 }
 html[data-nav='subtle'] .nav-link[data-status='active'] {
   background: transparent;
-  color: var(--accent);
+  color: var(--sidebar-accent);
 }
 
 @keyframes toast-in {

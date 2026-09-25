@@ -56,7 +56,7 @@ function NavLink({
       activeOptions={{ exact: !!exact }}
       className="nav-link group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition-colors hover:bg-sidebar-2 data-[status=active]:bg-sidebar-2 data-[status=active]:font-semibold data-[status=active]:text-sidebar-active"
     >
-      <Icon className="size-[18px] text-sidebar-muted group-data-[status=active]:text-accent" aria-hidden />
+      <Icon className="size-[18px] text-sidebar-muted group-data-[status=active]:text-sidebar-accent" aria-hidden />
       {label}
     </Link>
   );
@@ -151,7 +151,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         <Logo />
       </Link>
       <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-sidebar-2 px-3 py-2.5">
-        <span className="grid size-7 place-items-center rounded-md bg-sidebar-2 text-[11px] font-bold text-accent">
+        <span className="grid size-7 place-items-center rounded-md bg-sidebar-2 text-[11px] font-bold text-sidebar-accent">
           {actor.organization.name.slice(0, 2).toUpperCase()}
         </span>
         <span className="min-w-0 truncate text-sm font-medium text-sidebar-active">{actor.organization.name}</span>
