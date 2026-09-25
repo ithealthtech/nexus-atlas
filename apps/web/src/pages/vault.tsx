@@ -506,7 +506,12 @@ function QuickAction({
           setTimeout(() => setDone(false), 1500);
           toast(message);
         } catch (e) {
-          toast((e as Error).message, 'error');
+          toast(
+            (e as Error).name === 'NotAllowedError'
+              ? 'The browser blocked copying. Click the page and try again, or allow clipboard access for this site.'
+              : (e as Error).message,
+            'error',
+          );
         }
       }}
     >
@@ -696,14 +701,16 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                   <th className="px-5 py-3 font-medium">Name</th>
                   {!clientId && <th className="hidden px-5 py-3 font-medium md:table-cell">Client</th>}
                   <th className="hidden px-5 py-3 font-medium sm:table-cell">Username</th>
-                  <th className="px-5 py-3 font-medium">Health</th>
+                  {/* On phones, health gives way so the quick actions fit without scrolling sideways. */}
+                  <th className="hidden px-5 py-3 font-medium sm:table-cell">Health</th>
                   <th className="px-3 py-3 text-right font-medium">Quick actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.map((p) => (
                   <tr key={p.id} className="hover:bg-surface-2">
-                    <td className="px-5 py-3">
+                    {/* On phones the name takes whatever width the actions leave, and truncates. */}
+                    <td className="w-full max-w-0 py-3 pr-2 pl-4 sm:w-auto sm:max-w-none sm:px-5">
                       <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">
                         <span
                           className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
@@ -715,7 +722,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                         </span>
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 font-semibold hover:underline">
-                            {p.name}
+                            <span className="truncate">{p.name}</span>
                             {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
                           </span>
                           {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
@@ -740,7 +747,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                     <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
                       {p.username || <span className="font-sans text-muted">—</span>}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="hidden px-5 py-3 sm:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {p.kind === 'login' && (
                           <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
