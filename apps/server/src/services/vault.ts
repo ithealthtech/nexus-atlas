@@ -230,16 +230,24 @@ export class VaultService {
     await this.requireVaultClient(scope, clientId);
     const f = schema.passwordFolders;
     const rows = await scope.db
-      .select({
-        id: f.id,
-        clientId: f.clientId,
-        name: f.name,
-        count: sql<number>`(select count(*)::int from ${schema.passwords} p where p.folder_id = ${f.id} and not p.archived)`,
-      })
+      .select({ id: f.id, clientId: f.clientId, name: f.name })
       .from(f)
       .where(and(eq(f.orgId, scope.actor.orgId), eq(f.clientId, clientId)))
       .orderBy(asc(sql`lower(${f.name})`));
-    return rows;
+    // Active passwords in each folder.
+    const counts = await scope.db
+      .select({ folderId: schema.passwords.folderId, n: count() })
+      .from(schema.passwords)
+      .where(
+        and(
+          eq(schema.passwords.orgId, scope.actor.orgId),
+          eq(schema.passwords.clientId, clientId),
+          eq(schema.passwords.archived, false),
+        ),
+      )
+      .groupBy(schema.passwords.folderId);
+    const byFolder = new Map(counts.map((c) => [c.folderId, Number(c.n)]));
+    return rows.map((r) => ({ ...r, count: byFolder.get(r.id) ?? 0 }));
   }
 
   private async folderRow(scope: Scope, folderId: string) {
@@ -255,7 +263,9 @@ export class VaultService {
   }
 
   private duplicate(error: unknown): never {
-    if ((error as { code?: string }).code === '23505')
+    // Unique violation; the pg error may be wrapped by drizzle.
+    const e = error as { code?: string; cause?: { code?: string } };
+    if (e.code === '23505' || e.cause?.code === '23505')
       throw new HttpError(409, 'This client already has a folder with that name.', undefined, {
         name: 'This client already has a folder with that name.',
       });

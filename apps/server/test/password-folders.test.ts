@@ -63,15 +63,18 @@ describe('password folders', () => {
 
   it('needs password access to the client', async () => {
     const network = (await folder(harbor, 'Network')).data;
-    await owner.call('POST', '/api/users', {
+    const created = await owner.call('POST', '/api/users', {
       email: 'reader@atlas.test',
       name: 'Rita Reader',
       password: TEMP,
       role: 'technician',
       grants: [{ clientId: harbor, level: 'edit' }],
     });
+    expect(created.status, JSON.stringify(created.data)).toBe(201);
     const { b: reader } = await signIn(t.app, 'reader@atlas.test', TEMP);
-    await reader.call('POST', '/api/account/password', { current: TEMP, next: 'reader new pass 12' });
+    // (A new password may not contain the person's name or email.)
+    const changed = await reader.call('POST', '/api/account/password', { current: TEMP, next: 'folder tech pass 7' });
+    expect(changed.status, JSON.stringify(changed.data)).toBe(200);
     await enroll(reader);
     expect((await reader.call('GET', `/api/clients/${harbor}/password-folders`)).status).toBe(403);
     expect((await reader.call('POST', `/api/clients/${harbor}/password-folders`, { name: 'X' })).status).toBe(403);
