@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] - 2026-09-25
+
+### Added
+
+- **Theme manager:** Administration → Theme sets your brand name, tagline, browser title, favicon, and light and dark logos; accent and sidebar colours (with separate dark-mode colours, automatic text contrast, and readability checks before saving); text size, density, corners, sidebar width, navigation highlight style, and animations; and the sign-in page's headline, text, and background image. Changes preview live across Atlas until you save. It replaces the Branding card in Settings. (#21)
+
 ## [1.0.2] - 2026-09-25
 
 ### Added
