@@ -538,6 +538,8 @@ export const passwords = pgTable(
       .notNull()
       .references(() => clients.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull().default('login'),
+    // PASSWORD_CATEGORIES, or null to show a guess from the name, username, and URL.
+    category: text('category'),
     name: text('name').notNull(),
     // Username and URL stay searchable; secrets below are ciphertext only.
     username: text('username').notNull().default(''),

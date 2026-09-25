@@ -58,3 +58,38 @@ export interface SystemStatus {
   audit: { events: number; lastCheckpointAt: string | null };
   background: { lastRunAt: string | null };
 }
+
+// Updates: newer Atlas releases from GitHub, and the server-side updater that installs them.
+
+export interface ReleaseView {
+  tag: string;
+  version: string;
+  name: string;
+  notes: string;
+  url: string;
+  publishedAt: string;
+}
+
+export type UpdateState = 'idle' | 'requested' | 'running' | 'succeeded' | 'failed';
+
+export interface UpdateRun {
+  state: UpdateState;
+  tag: string | null;
+  requestedBy: string | null;
+  requestedAt: string | null;
+  finishedAt: string | null;
+  message: string | null;
+}
+
+export interface UpdateInfo {
+  current: string;
+  repo: string;
+  checkedAt: string | null;
+  /** Why the release list couldn't be fetched, if it couldn't. */
+  checkError: string | null;
+  /** Releases newer than the running version, newest first. */
+  available: ReleaseView[];
+  /** Whether this server has the updater installed (Linux installs from deploy/linux). */
+  canApply: boolean;
+  run: UpdateRun;
+}
