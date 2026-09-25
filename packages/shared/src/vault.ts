@@ -49,7 +49,7 @@ const CATEGORY_RULES: [PasswordCategory, RegExp][] = [
   ],
   [
     'network',
-    /\b(network|firewall|fortigate|fortinet|sonicwall|meraki|unifi|ubiquiti|pfsense|opnsense|watchguard|palo ?alto|cisco|aruba|switch|router|\bap\b|access point|mikrotik|juniper)\b/,
+    /\b(network|firewall|fw|fortigate|fortinet|sonicwall|meraki|unifi|ubiquiti|pfsense|opnsense|watchguard|palo ?alto|cisco|aruba|switch|router|\bap\b|access point|mikrotik|juniper)\b/,
   ],
   ['remote', /\b(vpn|rdp|remote desktop|anydesk|teamviewer|screenconnect|splashtop|bomgar|citrix|rd ?gateway|ssh)\b/],
   ['database', /\b(sql|mssql|mysql|postgres|oracle|mongodb|\bsa\b|database|\bdb\b)\b/],
