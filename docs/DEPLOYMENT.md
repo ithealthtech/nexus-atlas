@@ -28,7 +28,7 @@ The certificate is used only for the install step and is not stored in the image
 - **What the vault stores:** each organization's vault data key is kept only in encrypted form, under the master key, in `vault_keys`. Passwords, notes, and TOTP keys are encrypted with that data key.
 - **Rotating the master key:**
   1. Put the new key first and keep the old one after it (comma-separated in `ATLAS_MASTER_KEY`, or one per line in the key file). Restart.
-  2. Run `docker compose -f deploy/docker-compose.yml exec app npm run rewrap-keys -w @atlas/server`. This re-encrypts the vault data keys and MFA secrets under the new key and prints how many it changed.
+  2. Run `docker compose -f deploy/docker-compose.yml exec app npm run rewrap-keys -w @atlas/server`. This re-encrypts the vault data keys, MFA secrets, and the stored email and Hudu secrets (SMTP password, Microsoft 365 client secret, Hudu API key) under the new key and prints how many it changed.
   3. Remove the old key and restart. Keep a copy of it for as long as you keep backups made before the rotation: those backups are encrypted with it.
 
 ## Configuration

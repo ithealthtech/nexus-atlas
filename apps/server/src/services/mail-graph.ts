@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SmtpConfig } from './settings.js';
 import type { SendArgs } from './mail.js';
 
@@ -7,7 +8,8 @@ import type { SendArgs } from './mail.js';
  * the sending mailbox with an Exchange application access policy or RBAC for Applications.
  */
 export class GraphMailer {
-  // Tokens last about an hour; reuse one per app registration until shortly before it expires.
+  // Tokens last about an hour; reuse one per app registration *and secret* until shortly before it expires,
+  // so saving a new secret (or a mistyped one) is tried at once rather than an hour later.
   private tokens = new Map<string, { token: string; expires: number }>();
 
   constructor(
@@ -15,8 +17,13 @@ export class GraphMailer {
     private readonly now: () => number = Date.now,
   ) {}
 
+  private cacheKey(config: SmtpConfig) {
+    const secret = createHash('sha256').update(config.clientSecret).digest('hex').slice(0, 16);
+    return `${config.tenantId}|${config.clientId}|${secret}`;
+  }
+
   private async token(config: SmtpConfig) {
-    const key = `${config.tenantId}|${config.clientId}`;
+    const key = this.cacheKey(config);
     const cached = this.tokens.get(key);
     if (cached && cached.expires > this.now() + 60_000) return cached.token;
     const res = await this.fetcher(
@@ -69,7 +76,7 @@ export class GraphMailer {
     );
     if (res.status === 202) return;
     const body = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
-    if (res.status === 401) this.tokens.delete(`${config.tenantId}|${config.clientId}`);
+    if (res.status === 401) this.tokens.delete(this.cacheKey(config));
     const hint =
       res.status === 403
         ? ' Check the app has the Mail.Send application permission with admin consent, and may send as this mailbox.'

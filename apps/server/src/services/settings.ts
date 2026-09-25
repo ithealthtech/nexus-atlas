@@ -93,6 +93,31 @@ export class SettingsService {
       .where(eq(schema.orgs.id, orgId));
   }
 
+  /**
+   * Re-seals every organization's stored secrets (SMTP password, Microsoft 365 client secret, Hudu API key)
+   * under the current master key, for rotation (cli/rewrap-keys). `keys` must still hold the old key.
+   */
+  async rewrapSecrets(): Promise<number> {
+    let count = 0;
+    const reseal = (value: string | null | undefined, aad: string) => {
+      if (!value) return value ?? null;
+      count++;
+      return seal(this.keys, open(this.keys, value, aad), aad);
+    };
+    for (const { id } of await this.db.select({ id: schema.orgs.id }).from(schema.orgs)) {
+      const stored = await this.load(id);
+      if (stored.smtp)
+        await this.put(id, 'smtp', {
+          ...stored.smtp,
+          passwordSealed: reseal(stored.smtp.passwordSealed, smtpAad(id)),
+          clientSecretSealed: reseal(stored.smtp.clientSecretSealed, graphAad(id)),
+        });
+      if (stored.hudu)
+        await this.put(id, 'hudu', { ...stored.hudu, keySealed: reseal(stored.hudu.keySealed, `org|${id}|hudu`)! });
+    }
+    return count;
+  }
+
   async smtpView(orgId: string): Promise<SmtpSettingsView> {
     const { passwordSealed, clientSecretSealed, ...rest } = { ...DEFAULT_SMTP, ...(await this.load(orgId)).smtp };
     return { ...rest, hasPassword: !!passwordSealed, hasClientSecret: !!clientSecretSealed };

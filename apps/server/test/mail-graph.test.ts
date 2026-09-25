@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
+import { staticKeyProvider } from '../src/crypto/keys.js';
 import { GraphMailer } from '../src/services/mail-graph.js';
-import type { SmtpConfig } from '../src/services/settings.js';
+import { SettingsService, type SmtpConfig } from '../src/services/settings.js';
 import { setupOwner, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TENANT = '11111111-2222-3333-4444-555555555555';
@@ -65,6 +67,18 @@ describe('GraphMailer', () => {
     now = 3_550_000; // under a minute left: fetch a new one
     await mailer.send(CONFIG, MESSAGE);
     expect(ms.calls.filter((c) => c.url.includes('login.microsoftonline.com'))).toHaveLength(2);
+  });
+
+  it('signs in again as soon as the client secret changes', async () => {
+    const ms = fakeMicrosoft();
+    const mailer = new GraphMailer(ms.fetcher);
+    await mailer.send(CONFIG, MESSAGE);
+    await mailer.send({ ...CONFIG, clientSecret: 'replacement~secret' }, MESSAGE);
+    const tokens = ms.calls.filter((c) => c.url.includes('login.microsoftonline.com'));
+    expect(tokens.map((c) => new URLSearchParams(String(c.init.body)).get('client_secret'))).toEqual([
+      SECRET,
+      'replacement~secret',
+    ]);
   });
 
   it('explains sign-in and permission failures', async () => {
@@ -155,5 +169,23 @@ describe('Microsoft 365 email settings', () => {
     });
     const checks = (await owner.call('GET', '/api/status')).data.checks as { id: string; title: string }[];
     expect(checks.find((c) => c.id === 'email')?.title).toBe('Email uses Microsoft 365 SMTP sign-in');
+  });
+
+  it('re-wraps the client secret, SMTP password, and Hudu key when the master key rotates', async () => {
+    // The app's master key isn't exposed to tests, so check the mechanism with its own keys.
+    const oldKey = randomBytes(32);
+    const newKey = randomBytes(32);
+    const orgId = (await t.handle.pool.query('select id from orgs')).rows[0].id as string;
+    const before = new SettingsService(t.handle.db, staticKeyProvider([oldKey]));
+    await before.saveSmtp(orgId, { ...GRAPH, clientSecret: SECRET, password: 'smtp-password-1' });
+    await before.saveHudu(orgId, { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+
+    expect(await new SettingsService(t.handle.db, staticKeyProvider([newKey, oldKey])).rewrapSecrets()).toBe(3);
+
+    // Only the new key is needed now.
+    const after = new SettingsService(t.handle.db, staticKeyProvider([newKey]));
+    expect(await after.smtpConfig(orgId)).toMatchObject({ clientSecret: SECRET, password: 'smtp-password-1' });
+    expect((await after.hudu(orgId))?.apiKey).toBe('hudu-key-1234567890');
+    await expect(new SettingsService(t.handle.db, staticKeyProvider([oldKey])).smtpConfig(orgId)).rejects.toThrow();
   });
 });
