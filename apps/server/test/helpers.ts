@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.js';
 import { staticKeyProvider, type KeyProvider } from '../src/crypto/keys.js';
 import { totp } from '../src/identity/totp.js';
 import type { SendArgs } from '../src/services/mail.js';
+import type { DomainLookup } from '../src/services/domain-lookup.js';
 
 export const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5432/postgres';
 export const SETUP_CODE = 'test-setup-code-123';
@@ -56,6 +57,7 @@ export async function startApp(
   extra: {
     huduFetch?: typeof fetch;
     updateFetch?: typeof fetch;
+    domainLookup?: DomainLookup;
     keys?: KeyProvider;
     /** An existing database (for example one a backup was restored into) instead of a fresh one. */
     database?: Awaited<ReturnType<typeof freshDatabase>>;
