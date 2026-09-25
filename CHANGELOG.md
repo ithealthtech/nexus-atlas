@@ -2,6 +2,22 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-09-25
+
+### Added
+
+- **Linux installer:** `deploy/linux/install-atlas.sh` installs Atlas on Ubuntu 22.04/24.04 or Debian 12 without Docker (Node.js 22, PostgreSQL 16, Caddy for HTTPS, a hardened systemd service, nightly backups). One script for every release: it installs the newest release by default, and re-running it upgrades. (#10, #19)
+- **Updates:** Administration → Updates lists newer releases with their notes. On servers installed with the Linux script, an administrator can install one from there: a root-owned updater backs up, installs, and rolls back on failure. (#11)
+- **Microsoft 365 email with an app registration:** sends through Microsoft Graph with OAuth2 (Mail.Send), replacing SMTP sign-in, which Microsoft is retiring for Exchange Online. System status warns while Microsoft 365 SMTP is still in use. (#16)
+- **Domains assets fill themselves in:** saving a Domains asset looks up its registrar, expiry, name servers, and DNS host (RDAP and DNS), filling only blank fields. A "Refresh from domain" button re-checks. (#12)
+- **Password types:** each login has a type (Domain, Microsoft 365, firewall, Wi-Fi, server, and more), guessed from its name, username, and address until you choose one. The list shows the type, the sign-in host, and linked assets, and can be filtered by type. (#15)
+- **Quick actions:** copy the username, password, or current one-time code, or open the sign-in address, straight from the password list. (#17)
+
+### Fixed
+
+- **Hudu import:** assets now bring over their details, including data synced by integrations (RMM, PSA, Microsoft 365), fields with differently written labels, and People email addresses, not just their names. Passwords get the address saved in Hudu instead of Hudu's own link to the password, and keep their folder as a type and their link to the asset. (#14, #15, #18)
+- **Key rotation:** `rewrap-keys` now also re-encrypts the SMTP password and Hudu API key (and the new Microsoft 365 client secret). (#16)
+
 ## [1.0.1] - 2026-09-24
 
 ### Added
