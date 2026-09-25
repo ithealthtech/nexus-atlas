@@ -25,7 +25,17 @@ import {
   Timer,
   Users,
 } from 'lucide-react';
-import { STRENGTH_LABELS, passwordStrength, type PasswordKind, type PasswordView, type UserView } from '@atlas/shared';
+import {
+  PASSWORD_CATEGORIES,
+  PASSWORD_CATEGORY_LABELS,
+  STRENGTH_LABELS,
+  passwordStrength,
+  type PasswordCategory,
+  type PasswordKind,
+  type PasswordView,
+  type UserView,
+} from '@atlas/shared';
+import { PasswordIcon, hostOf } from '@/lib/password-categories';
 import {
   Badge,
   Button,
@@ -206,6 +216,7 @@ export function PasswordDialog({
       rotationDays: rotation ? Number(rotation) : null,
       ...(actor.isAdmin ? { restricted: form.get('restricted') === 'on' } : {}),
       clientVisible: form.get('clientVisible') === 'on',
+      ...(kind === 'login' ? { category: text('category') || null } : {}),
     };
     // On edit, secrets are sent only when changed, so unrevealed values are never round-tripped.
     if (!item || secret) body.secret = secret;
@@ -306,6 +317,27 @@ export function PasswordDialog({
             )}
           </Field>
         </div>
+        {kind === 'login' && (
+          <Field
+            label="Type"
+            help="What this login is for. Left on automatic, Atlas guesses from the name, username, and address."
+            error={error?.fields?.category}
+          >
+            {(p) => (
+              <Select {...p} name="category" defaultValue={item && !item.categoryGuessed ? item.category : ''}>
+                <option value="">
+                  Automatic
+                  {item?.categoryGuessed ? ` (${PASSWORD_CATEGORY_LABELS[item.category]})` : ''}
+                </option>
+                {PASSWORD_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {PASSWORD_CATEGORY_LABELS[c]}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
         <Field
           label={kind === 'bitlocker' ? 'Recovery key' : item ? 'New password' : 'Password'}
           error={error?.fields?.secret}
@@ -483,13 +515,33 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const canUse = clientId ? client.data?.access === 'edit_passwords' || !actor.isStaff : true;
   const list = usePasswords({ client: clientId, archived: search.archived });
   const [query, setQuery] = useState('');
+  const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
   const [adding, setAdding] = useState(false);
+  const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
+  // Only offer the types that are actually in the list.
+  const types = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of list.data ?? []) counts.set(typeOf(p), (counts.get(typeOf(p)) ?? 0) + 1);
+    return counts;
+  }, [list.data]);
   const rows = useMemo(
     () =>
-      (list.data ?? []).filter((p) =>
-        `${p.name} ${p.username} ${p.url} ${p.clientName}`.toLowerCase().includes(query.trim().toLowerCase()),
+      (list.data ?? []).filter(
+        (p) =>
+          (!type || typeOf(p) === type) &&
+          [
+            p.name,
+            p.username,
+            p.url,
+            p.clientName,
+            PASSWORD_CATEGORY_LABELS[p.category],
+            ...p.linkedAssets.map((a) => a.name),
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
       ),
-    [list.data, query],
+    [list.data, query, type],
   );
   if (clientId && client.data && !canUse)
     return (
@@ -522,10 +574,25 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by name, username, or address…"
+              placeholder="Filter by name, username, address, or asset…"
               className="pl-9"
             />
           </label>
+          {types.size > 1 && (
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Type</span>
+              <Select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+                <option value="">All types</option>
+                {[...PASSWORD_CATEGORIES, 'bitlocker' as const]
+                  .filter((c) => types.has(c))
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[c]} ({types.get(c)})
+                    </option>
+                  ))}
+              </Select>
+            </label>
+          )}
           {actor.isStaff && (
             <Button
               variant="ghost"
@@ -566,20 +633,33 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                   <tr key={p.id} className="hover:bg-surface-2">
                     <td className="px-5 py-3">
                       <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">
-                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning">
-                          {p.kind === 'bitlocker' ? (
-                            <HardDrive className="size-4" aria-hidden />
-                          ) : (
-                            <KeyRound className="size-4" aria-hidden />
-                          )}
+                        <span
+                          className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
+                          title={
+                            p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
+                          }
+                        >
+                          <PasswordIcon item={p} className="size-4" />
                         </span>
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 font-semibold hover:underline">
                             {p.name}
                             {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
                           </span>
+                          {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
                           <span className="block truncate text-xs text-muted">
-                            {p.kind === 'bitlocker' ? 'BitLocker recovery key' : p.url || 'Login'}
+                            {[
+                              p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category],
+                              p.kind === 'login' && p.url ? hostOf(p.url) : '',
+                              p.linkedAssets.length
+                                ? `on ${p.linkedAssets
+                                    .slice(0, 2)
+                                    .map((a) => a.name)
+                                    .join(', ')}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
+                                : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </span>
                         </span>
                       </AppLink>
