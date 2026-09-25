@@ -239,6 +239,33 @@ export async function encryptShare(payload: SharedPayload): Promise<{ ciphertext
   combined.set(data, iv.length);
   return { ciphertext: b64url(combined), key: b64url(rawKey) };
 }
+
+/**
+ * Creates a one-time share link for a password: reveals it (audited), encrypts it in the browser, and stores only
+ * the ciphertext. The decryption key is after the # in the link, so it never reaches the server.
+ */
+export async function createShareLink(
+  item: Pick<PasswordView, 'id' | 'name' | 'username' | 'url' | 'kind'>,
+  options: { maxViews: number; hours: number; reason: string },
+): Promise<string> {
+  const { value } = await api<{ value: string }>(`/passwords/${item.id}/reveal`, {
+    method: 'POST',
+    body: { reason: options.reason || 'Creating a share link' },
+  });
+  const { ciphertext, key } = await encryptShare({
+    name: item.name,
+    username: item.username,
+    url: item.url,
+    secret: value,
+    kind: item.kind,
+  });
+  const share = await api<{ token: string }>(`/passwords/${item.id}/shares`, {
+    method: 'POST',
+    body: { ciphertext, maxViews: options.maxViews, expiresHours: options.hours, reason: options.reason },
+  });
+  return `${location.origin}/share/${share.token}#${key}`;
+}
+
 export async function decryptShare(ciphertext: string, key: string): Promise<SharedPayload> {
   const bytes = fromB64url(ciphertext);
   const cryptoKey = await crypto.subtle.importKey('raw', fromB64url(key), 'AES-GCM', false, ['decrypt']);
