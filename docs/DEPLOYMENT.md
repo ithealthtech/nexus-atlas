@@ -95,6 +95,20 @@ In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run res
 - **Older backups:** a backup from an older Atlas version is loaded at its own schema version, then upgraded.
 - **Security log:** the hash chain and signed checkpoint are kept, so **Verify now** passes after a restore.
 
+## Ubuntu without Docker
+
+`deploy/linux/install-atlas.sh` installs everything on Ubuntu 22.04 or 24.04: Node.js 22 (NodeSource), PostgreSQL 16 (PGDG), and Caddy. It then builds Atlas from a release tag and runs it as a systemd service.
+
+```bash
+sudo ./deploy/linux/install-atlas.sh --public-url https://atlas.example.com
+```
+
+- **HTTPS:** Caddy gets a certificate for a DNS name automatically. For an IP address or a single-label name it uses a self-signed certificate (`tls internal`).
+- **Where things go:** code in `/opt/msp-atlas` (read-only to the service), data and backups in `/var/lib/msp-atlas`, settings (`atlas.env`) and the master key in `/etc/msp-atlas`. The database password is generated on the server and kept only in `atlas.env`.
+- **Service:** `msp-atlas` runs as the `atlas` system user on `127.0.0.1:4318`. The script prints the setup code; it's also in `journalctl -u msp-atlas`.
+- **Upgrading:** `sudo ./deploy/linux/install-atlas.sh --version v1.0.2`. Settings, key, and database are kept.
+- If the install-media (`cdrom`) apt source is still active, the script comments it out, since it breaks `apt-get update`.
+
 ## Windows Server
 
 1. Install [Node.js 22 LTS](https://nodejs.org) and PostgreSQL 16, and create an empty database and user for Atlas.
