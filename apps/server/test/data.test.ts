@@ -129,7 +129,8 @@ describe('REST API keys', () => {
     expect(read.status).toBe(201);
     expect(read.data.token).toMatch(/^atlas_[A-Za-z0-9]{10}_[A-Za-z0-9_-]{43}$/);
     const list = (await owner.call('GET', '/api/api-keys')).data;
-    expect(JSON.stringify(list)).not.toContain(read.data.token.split('_')[2]);
+    // The secret is base64url, so it can contain '_' itself: take everything after the key ID.
+    expect(JSON.stringify(list)).not.toContain(read.data.token.split('_').slice(2).join('_'));
     const stored = await t.handle.db.execute(sql`select secret_hash from api_keys`);
     expect(JSON.stringify(stored.rows)).not.toContain(read.data.token);
 
