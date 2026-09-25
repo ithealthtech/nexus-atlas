@@ -81,20 +81,58 @@ export interface CsvImportResult {
   errors: { row: number; message: string }[];
 }
 
-// ---------- branding ----------
+// ---------- branding and theme ----------
+// Set by administrators under Administration → Theme; one theme for the whole organization (staff, client
+// portal, and sign-in pages). Every field defaults, so settings saved before the theme manager still load.
+const hex = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex color like #1f6f4a.')
+  .nullable()
+  .default(null);
+// Images are stored as data: URLs (base64 is about 4/3 of the file size).
+const image = (types: string, kb: number, what: string) =>
+  z
+    .string()
+    .max(Math.ceil((kb * 1024 * 4) / 3) + 64, `Use ${what} under ${kb} KB.`)
+    .regex(
+      new RegExp(`^data:image\\/(${types});base64,[A-Za-z0-9+/=]+$`),
+      `That file type isn't supported for ${what}.`,
+    )
+    .nullable()
+    .default(null);
+
+export const THEME_FONT_SCALES = ['small', 'default', 'large'] as const;
+export const THEME_RADII = ['square', 'default', 'round'] as const;
+export const THEME_SIDEBAR_WIDTHS = ['narrow', 'default', 'wide'] as const;
+export const THEME_DENSITIES = ['comfortable', 'compact'] as const;
+export const THEME_NAV_STYLES = ['filled', 'bar', 'subtle'] as const;
+
 export const brandingSchema = z.object({
-  accent: z
-    .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex color like #1f6f4a.')
-    .nullable()
-    .default(null),
-  // A small PNG, JPEG, or SVG as a data: URL.
-  logo: z
-    .string()
-    .max(200_000, 'Use a logo under 150 KB.')
-    .regex(/^data:image\/(png|jpeg|svg\+xml);base64,[A-Za-z0-9+/=]+$/, 'Upload a PNG, JPEG, or SVG image.')
-    .nullable()
-    .default(null),
+  // Identity
+  brandName: z.string().trim().max(60).default(''),
+  tagline: z.string().trim().max(80).default(''),
+  browserTitle: z.string().trim().max(60).default(''),
+  logo: image('png|jpeg|svg\\+xml', 150, 'a logo'),
+  logoDark: image('png|jpeg|svg\\+xml', 150, 'a logo'),
+  favicon: image('png|svg\\+xml|x-icon|vnd\\.microsoft\\.icon', 50, 'a favicon'),
+  // Colours (null = Atlas default). Text on them is chosen automatically for contrast.
+  accent: hex,
+  accentDark: hex,
+  sidebar: hex,
+  sidebarDark: hex,
+  // Sign-in pages
+  loginHeadline: z.string().trim().max(80).default(''),
+  loginText: z.string().trim().max(300).default(''),
+  loginBackground: image('png|jpeg|webp', 400, 'a background image'),
+  // Client portal
   portalWelcome: z.string().trim().max(500).default(''),
+  // Layout
+  fontScale: z.enum(THEME_FONT_SCALES).default('default'),
+  radius: z.enum(THEME_RADII).default('default'),
+  sidebarWidth: z.enum(THEME_SIDEBAR_WIDTHS).default('default'),
+  density: z.enum(THEME_DENSITIES).default('comfortable'),
+  navStyle: z.enum(THEME_NAV_STYLES).default('filled'),
+  motion: z.boolean().default(true),
 });
 export type Branding = z.infer<typeof brandingSchema>;
+export const DEFAULT_BRANDING: Branding = brandingSchema.parse({});

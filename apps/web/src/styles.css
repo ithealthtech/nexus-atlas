@@ -24,6 +24,11 @@
   --sidebar-2: #1c3a30;
   --sidebar-text: #cfdcd3;
   --sidebar-muted: #8ea597;
+  /* Text on the active navigation item; the theme sets it for contrast with a custom sidebar colour. */
+  --sidebar-active: #ffffff;
+  /* Accent on sidebar surfaces (active icon, bar); the theme swaps it when the default would be too faint. */
+  --sidebar-accent: var(--accent);
+  --sidebar-width: 16rem;
   --danger: #a3301f;
   --danger-soft: #fdeeeb;
   --warning: #7f5b0e;
@@ -87,6 +92,8 @@
   --color-sidebar-2: var(--sidebar-2);
   --color-sidebar-text: var(--sidebar-text);
   --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-accent: var(--sidebar-accent);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
@@ -126,6 +133,56 @@
       transition-duration: 0.01ms !important;
     }
   }
+
+  /* ---- Theme layout options (Administration → Theme), set as data attributes on <html> ---- */
+  /* Everything is sized in rem, so the root font size scales the whole interface. */
+  html[data-font='small'] {
+    font-size: 93.75%;
+  }
+  html[data-font='large'] {
+    font-size: 106.25%;
+  }
+  /* Tailwind derives every padding, gap, and margin from --spacing. */
+  html[data-density='compact'] {
+    --spacing: 0.21rem;
+  }
+  html[data-radius='square'] {
+    --radius-sm: 1px;
+    --radius-md: 2px;
+    --radius-lg: 3px;
+    --radius-xl: 4px;
+    --radius-2xl: 6px;
+  }
+  html[data-radius='round'] {
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.25rem;
+  }
+  html[data-sidebar='narrow'] {
+    --sidebar-width: 14rem;
+  }
+  html[data-sidebar='wide'] {
+    --sidebar-width: 18rem;
+  }
+  html[data-motion='off'] *,
+  html[data-motion='off'] *::before,
+  html[data-motion='off'] *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Active navigation styles. Unlayered so they override the default (filled) utilities. */
+html[data-nav='bar'] .nav-link[data-status='active'] {
+  background: transparent;
+  box-shadow: inset 3px 0 0 var(--sidebar-accent);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+html[data-nav='subtle'] .nav-link[data-status='active'] {
+  background: transparent;
+  color: var(--sidebar-accent);
 }
 
 @keyframes toast-in {

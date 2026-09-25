@@ -1,6 +1,7 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  DEFAULT_BRANDING,
   LEVEL_INFO,
   ROLE_INFO,
   guessPasswordCategory,
@@ -971,14 +972,14 @@ on('GET', '/audit/export/:kind', (m) =>
 );
 
 // data in and out
-let branding: Branding = { accent: null, logo: null, portalWelcome: '' };
+let branding: Branding = { ...DEFAULT_BRANDING };
 let hudu: { url: string; hasKey: boolean } | null = null;
 const importJobs: ImportJobView[] = [];
 const apiKeys: ApiKeyView[] = [];
-on('GET', '/branding', () => branding);
+on('GET', '/branding', () => ({ name: 'IT Done Right', ...branding }));
 on('PUT', '/branding', (_m, b) => {
   branding = { ...branding, ...(b as Partial<Branding>) };
-  event('Branding changed', branding.accent ?? 'Default colour');
+  event('Theme changed', [branding.brandName || 'Default name', branding.accent ?? 'default colour'].join(', '));
   return branding;
 });
 on('GET', '/api-keys', () => apiKeys);
