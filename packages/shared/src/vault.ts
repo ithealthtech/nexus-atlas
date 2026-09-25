@@ -57,9 +57,10 @@ const CATEGORY_RULES: [PasswordCategory, RegExp][] = [
     'server',
     /\b(server|local admin|localadmin|administrator|idrac|ilo|ipmi|esxi|vcenter|hyper-?v|vmware|proxmox|nas|synology|qnap)\b/,
   ],
+  // Before email: "Copier scan-to-email" is the copier's login, not a mailbox.
+  ['device', /\b(printer|copier|mfp|camera|nvr|dvr|ups|pbx|phone system|door|alarm|thermostat)\b/],
   ['email', /\b(email|e-mail|mailbox|imap|smtp|pop3|exchange|gmail|outlook)\b/],
   ['website', /\b(wordpress|cpanel|plesk|godaddy|namecheap|cloudflare|registrar|dns|hosting|web ?site|ftp|sftp)\b/],
-  ['device', /\b(printer|copier|mfp|camera|nvr|dvr|ups|pbx|phone system|door|alarm|thermostat)\b/],
   ['vendor', /\b(vendor|portal|support|billing|account|supplier|isp|carrier|comcast|spectrum|at&t|verizon)\b/],
   ['application', /\b(app|application|software|quickbooks|erp|crm|ehr|emr|dentrix|eaglesoft|line of business|lob)\b/],
 ];

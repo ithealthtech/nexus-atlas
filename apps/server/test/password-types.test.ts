@@ -21,7 +21,7 @@ describe('guessPasswordCategory', () => {
     ['Spectrum business portal', '', '', 'vendor'],
     ['Front desk', 'frontdesk@harbordental.test', '', 'email'],
     ['Thing', '', '', 'other'],
-  ])('%s → %s', (name, username, url, expected) => {
+  ])('%s', (name, username, url, expected) => {
     expect(guessPasswordCategory(name, username, url)).toBe(expected);
   });
 });
