@@ -67,6 +67,9 @@ type HuduPassword = {
   name: string;
   username?: string | null;
   password?: string | null;
+  // The address saved on the password (the site to sign in to).
+  login_url?: string | null;
+  // Hudu's own link to this password's page, not the sign-in address.
   url?: string | null;
   description?: string | null;
   otp_secret?: string | null;
@@ -82,7 +85,7 @@ const MAX_PAGES = 4000;
 
 export class HuduClient {
   constructor(
-    private readonly baseUrl: string,
+    readonly baseUrl: string,
     private readonly apiKey: string,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
@@ -343,6 +346,23 @@ async function saveTolerant<T>(
   }
 }
 
+/**
+ * The sign-in address saved on a Hudu password: `login_url`. Hudu's `url` is its own link to the password's
+ * page, so it's used only when there's no `login_url` and it doesn't point at the Hudu instance itself.
+ */
+export function loginAddress(p: Pick<HuduPassword, 'login_url' | 'url'>, huduBaseUrl: string): string {
+  const login = (p.login_url ?? '').trim();
+  if (login) return login;
+  const url = (p.url ?? '').trim();
+  if (!url) return '';
+  try {
+    if (new URL(url).host.toLowerCase() === new URL(huduBaseUrl).host.toLowerCase()) return '';
+  } catch {
+    // Not an absolute URL, so not a link to Hudu.
+  }
+  return url;
+}
+
 export async function previewHudu(client: HuduClient): Promise<HuduPreview> {
   const [companies, layouts, assets, articles, passwords] = await Promise.all([
     client.companies(),
@@ -516,12 +536,13 @@ export async function runHuduImport(
       continue;
     }
     const totp = (p.otp_secret ?? '').replace(/\s+/g, '').toUpperCase();
+    const address = loginAddress(p, client.baseUrl);
     const body = {
       name,
       username: (p.username ?? '').slice(0, 254),
-      url: p.url && /^https?:\/\//i.test(p.url) ? p.url.slice(0, 2000) : '',
+      url: /^https?:\/\//i.test(address) ? address.slice(0, 2000) : '',
       secret: p.password.slice(0, 4096),
-      notes: [htmlToText(p.description ?? ''), p.url && !/^https?:\/\//i.test(p.url) ? `Address: ${p.url}` : '']
+      notes: [htmlToText(p.description ?? ''), address && !/^https?:\/\//i.test(address) ? `Address: ${address}` : '']
         .filter(Boolean)
         .join('\n')
         .slice(0, 20000),
