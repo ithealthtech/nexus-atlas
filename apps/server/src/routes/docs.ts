@@ -6,6 +6,7 @@ import { HttpError } from '../errors.js';
 import { listActivity } from '../services/activity.js';
 import { AssetService } from '../services/assets.js';
 import { AttachmentService } from '../services/attachments.js';
+import type { DomainLookup } from '../services/domain-lookup.js';
 import { DocumentService } from '../services/documents.js';
 import { LayoutService, ensureDefaultLayouts } from '../services/layouts.js';
 import { contacts, locations } from '../services/people.js';
@@ -25,11 +26,18 @@ const flag = (value: unknown) => value === 'true' || value === '1';
 
 export function registerDocumentationRoutes(
   app: FastifyInstance,
-  deps: { db: Database; authed: { onRequest: onRequestHookHandler }; storage: FileStorage; maxUploadBytes: number },
+  deps: {
+    db: Database;
+    authed: { onRequest: onRequestHookHandler };
+    storage: FileStorage;
+    maxUploadBytes: number;
+    domains?: DomainLookup;
+  },
 ) {
   const { db, authed } = deps;
   const layouts = new LayoutService(db);
-  const assets = new AssetService(layouts);
+  // Saves from the app fill blank Domains fields from the domain itself; imports don't look anything up.
+  const assets = new AssetService(layouts, deps.domains);
   const documents = new DocumentService();
   const relations = new RelationService();
   const attachments = new AttachmentService(deps.storage, deps.maxUploadBytes);
@@ -61,6 +69,15 @@ export function registerDocumentationRoutes(
   app.post<{ Params: Params }>('/api/clients/:id/assets', authed, async (req, reply) =>
     reply.status(201).send(await assets.create(scopeOf(req), req.params.id, req.body)),
   );
+  // "Refresh from domain" in the asset form: looks the domain up without saving anything.
+  app.post<{ Body: { domain?: unknown } }>('/api/domains/lookup', authed, async (req) => {
+    const domain = req.body?.domain;
+    if (typeof domain !== 'string' || domain.length > 300) throw new HttpError(400, 'Enter a domain name.');
+    if (!deps.domains) throw new HttpError(503, 'Domain lookups are not available on this server.');
+    const details = await deps.domains.lookup(domain);
+    if (!details) throw new HttpError(400, 'That is not a domain name, for example example.com.');
+    return details;
+  });
   app.get<{ Params: Params }>('/api/assets/:id', authed, async (req) => assets.get(scopeOf(req), req.params.id));
   app.patch<{ Params: Params }>('/api/assets/:id', authed, async (req) =>
     assets.update(scopeOf(req), req.params.id, req.body),
