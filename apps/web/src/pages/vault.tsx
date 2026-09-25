@@ -9,6 +9,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Folder,
   Eye,
   EyeOff,
   HardDrive,
@@ -23,6 +24,7 @@ import {
   Share2,
   ShieldCheck,
   Timer,
+  Trash2,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -32,6 +34,7 @@ import {
   STRENGTH_LABELS,
   passwordStrength,
   type PasswordCategory,
+  type PasswordFolderView,
   type PasswordKind,
   type PasswordView,
   type UserView,
@@ -70,6 +73,7 @@ import {
   useAskReason,
   usePassword,
   usePasswordAudit,
+  usePasswordFolders,
   usePasswordHistory,
   usePasswords,
   useReveal,
@@ -200,6 +204,7 @@ export function PasswordDialog({
   const queryClient = useQueryClient();
   const reveal = useReveal();
   const [kind, setKind] = useState<PasswordKind>(item?.kind ?? 'login');
+  const folders = usePasswordFolders(clientId).data ?? [];
   const [secret, setSecret] = useState('');
   const [showSecret, setShowSecret] = useState(!item);
   const [generating, setGenerating] = useState(false);
@@ -218,6 +223,7 @@ export function PasswordDialog({
       ...(actor.isAdmin ? { restricted: form.get('restricted') === 'on' } : {}),
       clientVisible: form.get('clientVisible') === 'on',
       ...(kind === 'login' ? { category: text('category') || null } : {}),
+      folderId: text('folderId') || null,
     };
     // On edit, secrets are sent only when changed, so unrevealed values are never round-tripped.
     if (!item || secret) body.secret = secret;
@@ -234,7 +240,7 @@ export function PasswordDialog({
         : await api<PasswordView>(`/clients/${clientId}/passwords`, { method: 'POST', body: { ...body, kind } });
       queryClient.setQueryData(['password', saved.id], saved);
       await Promise.all(
-        ['passwords', 'password-history', 'password-audit', 'activity'].map((k) =>
+        ['passwords', 'password-history', 'password-audit', 'password-folders', 'activity'].map((k) =>
           queryClient.invalidateQueries({ queryKey: [k] }),
         ),
       );
@@ -339,6 +345,24 @@ export function PasswordDialog({
             )}
           </Field>
         )}
+        <Field
+          label="Folder"
+          help={
+            folders.length ? undefined : 'This client has no folders yet. Add them with Folders in the password list.'
+          }
+          error={error?.fields?.folderId}
+        >
+          {(p) => (
+            <Select {...p} name="folderId" defaultValue={item?.folderId ?? ''}>
+              <option value="">No folder</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
         <Field
           label={kind === 'bitlocker' ? 'Recovery key' : item ? 'New password' : 'Password'}
           error={error?.fields?.secret}
@@ -596,6 +620,10 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
   const [adding, setAdding] = useState(false);
+  // Folders belong to one client, so they're offered inside a client (to staff with password access).
+  const folders = usePasswordFolders(clientId && actor.isStaff ? clientId : undefined).data ?? [];
+  const [folder, setFolder] = useState(''); // '' all, 'none' unfiled, or a folder id
+  const [managingFolders, setManagingFolders] = useState(false);
   const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
   const types = useMemo(() => {
@@ -608,6 +636,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
       (list.data ?? []).filter(
         (p) =>
           (!type || typeOf(p) === type) &&
+          (!folder || (folder === 'none' ? !p.folderId : p.folderId === folder)) &&
           [
             p.name,
             p.username,
@@ -620,7 +649,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             .toLowerCase()
             .includes(query.trim().toLowerCase()),
       ),
-    [list.data, query, type],
+    [list.data, query, type, folder],
   );
   if (clientId && client.data && !canUse)
     return (
@@ -671,6 +700,25 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                   ))}
               </Select>
             </label>
+          )}
+          {folders.length > 0 && (
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Folder</span>
+              <Select value={folder} onChange={(e) => setFolder(e.target.value)}>
+                <option value="">All folders</option>
+                <option value="none">No folder</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} ({f.count})
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
+          {clientId && canUse && actor.isStaff && (
+            <Button variant="ghost" size="sm" onClick={() => setManagingFolders(true)}>
+              <Folder /> Folders
+            </Button>
           )}
           {actor.isStaff && (
             <Button
@@ -728,6 +776,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                           {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
                           <span className="block truncate text-xs text-muted">
                             {[
+                              p.folderName ? `${p.folderName} folder` : '',
                               p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category],
                               p.kind === 'login' && p.url ? hostOf(p.url) : '',
                               p.linkedAssets.length
@@ -792,9 +841,146 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
         )}
       </Card>
       {adding && clientId && <PasswordDialog clientId={clientId} onClose={() => setAdding(false)} />}
+      {managingFolders && clientId && (
+        <FoldersDialog clientId={clientId} folders={folders} onClose={() => setManagingFolders(false)} />
+      )}
     </>
   );
 }
+/** Create, rename, and delete one client's password folders. Deleting a folder unfiles its passwords. */
+function FoldersDialog({
+  clientId,
+  folders,
+  onClose,
+}: {
+  clientId: string;
+  folders: PasswordFolderView[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async (action: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await Promise.all(['password-folders', 'passwords'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
+      toast(done);
+      return true;
+    } catch (e) {
+      setError((e as ApiError).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = async (e: FormEvent) => {
+    e.preventDefault();
+    const value = name.trim();
+    if (!value) return;
+    if (
+      await run(
+        () => api(`/clients/${clientId}/password-folders`, { method: 'POST', body: { name: value } }),
+        `${value} added.`,
+      )
+    )
+      setName('');
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Folders"
+      description="Folders organize this client's passwords. Deleting one keeps its passwords; they just have no folder."
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      <form onSubmit={add} className="mb-4 flex gap-2">
+        <label className="flex-1">
+          <span className="sr-only">New folder name</span>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="New folder name" />
+        </label>
+        <Button type="submit" loading={busy && !editing} disabled={!name.trim()}>
+          <Plus /> Add
+        </Button>
+      </form>
+      {folders.length ? (
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {folders.map((f) => (
+            <li key={f.id} className="flex items-center gap-2 px-3 py-2">
+              <Folder className="size-4 shrink-0 text-muted" aria-hidden />
+              {editing?.id === f.id ? (
+                <form
+                  className="flex flex-1 gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (
+                      await run(
+                        () => api(`/password-folders/${f.id}`, { method: 'PATCH', body: { name: editing.name } }),
+                        'Folder renamed.',
+                      )
+                    )
+                      setEditing(null);
+                  }}
+                >
+                  <label className="flex-1">
+                    <span className="sr-only">Folder name</span>
+                    <Input
+                      autoFocus
+                      value={editing.name}
+                      maxLength={80}
+                      onChange={(e) => setEditing({ id: f.id, name: e.target.value })}
+                    />
+                  </label>
+                  <Button type="submit" size="sm" loading={busy}>
+                    Save
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>
+                    Cancel
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {f.name} <span className="text-muted">({f.count})</span>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Rename ${f.name}`}
+                    title="Rename"
+                    onClick={() => setEditing({ id: f.id, name: f.name })}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Delete ${f.name}`}
+                    title="Delete"
+                    onClick={() =>
+                      confirm(`Delete the folder ${f.name}? Its ${f.count} password(s) stay, without a folder.`) &&
+                      void run(() => api(`/password-folders/${f.id}`, { method: 'DELETE' }), `${f.name} deleted.`)
+                    }
+                  >
+                    <Trash2 />
+                  </Button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">No folders yet.</p>
+      )}
+      <FormError message={error} />
+    </Dialog>
+  );
+}
+
 export function ClientPasswords() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
   return <PasswordsView clientId={clientId} />;

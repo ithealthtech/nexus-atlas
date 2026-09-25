@@ -1,6 +1,13 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PasswordHistoryView, PasswordView, RevealResult, ShareView, VaultAuditView } from '@atlas/shared';
+import type {
+  PasswordFolderView,
+  PasswordHistoryView,
+  PasswordView,
+  RevealResult,
+  ShareView,
+  VaultAuditView,
+} from '@atlas/shared';
 import { Button, Dialog, Field, Input } from '@/components/ui';
 import { ApiError, api } from './api';
 
@@ -11,6 +18,12 @@ export const usePasswords = (filter: { client?: string; archived?: boolean }) =>
       api<PasswordView[]>(
         `/passwords?${new URLSearchParams(Object.entries({ client: filter.client ?? '', archived: filter.archived ? 'true' : '' }).filter(([, v]) => v))}`,
       ),
+  });
+export const usePasswordFolders = (clientId: string | undefined) =>
+  useQuery({
+    queryKey: ['password-folders', clientId],
+    queryFn: () => api<PasswordFolderView[]>(`/clients/${clientId}/password-folders`),
+    enabled: !!clientId,
   });
 export const usePassword = (id: string) =>
   useQuery({ queryKey: ['password', id], queryFn: () => api<PasswordView>(`/passwords/${id}`) });
