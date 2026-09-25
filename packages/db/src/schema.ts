@@ -657,6 +657,21 @@ export const vaultAudit = pgTable(
   (t) => [index('vault_audit_item').on(t.passwordId, t.createdAt), index('vault_audit_org').on(t.orgId, t.createdAt)],
 );
 
+// Passwords a person pinned for quick access (per person, not shared).
+export const passwordFavorites = pgTable(
+  'password_favorites',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    createdAt: created(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.passwordId] })],
+);
+
 // ---------------------------------------------------------------- M3b: API, imports
 
 // REST API keys. Only a SHA-256 hash of the secret is stored; the prefix identifies the key in lists and logs.

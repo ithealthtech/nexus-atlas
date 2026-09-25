@@ -36,6 +36,13 @@ export function registerVaultRoutes(
   app.post<{ Params: Params }>('/api/passwords/:id/archive', authed, async (req) =>
     vault.setArchived(scopeOf(req), req.params.id, archiveSchema.parse(req.body).archived, req.ip),
   );
+  // Favorites are personal: they change nothing for anyone else, so no audit entry.
+  app.put<{ Params: Params }>('/api/passwords/:id/favorite', authed, async (req) =>
+    vault.setFavorite(scopeOf(req), req.params.id, true),
+  );
+  app.delete<{ Params: Params }>('/api/passwords/:id/favorite', authed, async (req) =>
+    vault.setFavorite(scopeOf(req), req.params.id, false),
+  );
   app.post<{ Params: Params }>('/api/passwords/:id/reveal', authed, async (req) =>
     vault.reveal(scopeOf(req), req.params.id, req.body, req.ip),
   );

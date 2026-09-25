@@ -35,6 +35,9 @@ const conflict = () =>
   new HttpError(409, 'Someone else changed this password entry. Reload before saving.', 'conflict');
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const REVEAL_ACTIONS = { secret: 'Revealed password', notes: 'Viewed notes', totp: 'Viewed one-time code' } as const;
+// Audit actions that count as "using" a password, for Recently used (plus creating a share link).
+const USED_ACTIONS = ['Revealed password', 'Copied password', 'Viewed one-time code', 'Viewed notes'] as const;
+type Personal = { favorites: Set<string>; lastUsed: Map<string, string> };
 
 export class VaultService {
   constructor(private readonly keys: VaultKeys) {}
@@ -153,6 +156,7 @@ export class VaultService {
     r: { p: Row; clientName: string; requireReason: boolean; editor: string | null },
     reuse: Map<string, number>,
     links: Map<string, { id: string; name: string }[]> = new Map(),
+    mine: Personal = { favorites: new Set(), lastUsed: new Map() },
   ): PasswordView {
     const due = r.p.rotationDays
       ? new Date(r.p.changedAt.getTime() + r.p.rotationDays * 86_400_000).toISOString().slice(0, 10)
@@ -182,7 +186,51 @@ export class VaultService {
       category: (r.p.category as PasswordCategory | null) ?? guessPasswordCategory(r.p.name, r.p.username, r.p.url),
       categoryGuessed: !r.p.category,
       linkedAssets: links.get(r.p.id) ?? [],
+      favorite: mine.favorites.has(r.p.id),
+      lastUsedAt: mine.lastUsed.get(r.p.id) ?? null,
     };
+  }
+
+  /** The viewer's own favorites and when they last used each password (revealed, copied, or shared). */
+  private async personal(scope: Scope, ids: string[]): Promise<Personal> {
+    if (!ids.length) return { favorites: new Set(), lastUsed: new Map() };
+    const favorites = await scope.db
+      .select({ id: schema.passwordFavorites.passwordId })
+      .from(schema.passwordFavorites)
+      .where(
+        and(eq(schema.passwordFavorites.userId, scope.actor.id), inArray(schema.passwordFavorites.passwordId, ids)),
+      );
+    const a = schema.vaultAudit;
+    const used = await scope.db
+      .select({ id: a.passwordId, at: sql<Date>`max(${a.createdAt})` })
+      .from(a)
+      .where(
+        and(
+          eq(a.orgId, scope.actor.orgId),
+          eq(a.actorId, scope.actor.id),
+          inArray(a.passwordId, ids),
+          sql`(${inArray(a.action, [...USED_ACTIONS])} or ${a.action} like 'Created a share link%')`,
+        ),
+      )
+      .groupBy(a.passwordId);
+    return {
+      favorites: new Set(favorites.map((f) => f.id)),
+      lastUsed: new Map(used.map((u) => [u.id!, new Date(u.at).toISOString()])),
+    };
+  }
+
+  async setFavorite(scope: Scope, id: string, favorite: boolean): Promise<PasswordView> {
+    const { p } = await this.load(scope, id);
+    if (favorite)
+      await scope.db
+        .insert(schema.passwordFavorites)
+        .values({ userId: scope.actor.id, passwordId: p.id })
+        .onConflictDoNothing();
+    else
+      await scope.db
+        .delete(schema.passwordFavorites)
+        .where(and(eq(schema.passwordFavorites.userId, scope.actor.id), eq(schema.passwordFavorites.passwordId, p.id)));
+    return this.get(scope, id);
   }
 
   private async audit(scope: Scope, row: Pick<Row, 'id' | 'clientId' | 'name'>, action: string, reason = '', ip = '') {
@@ -242,7 +290,11 @@ export class VaultService {
       scope,
       visible.map((r) => r.p.id),
     );
-    return visible.map((r) => this.view(r, reuse, links));
+    const mine = await this.personal(
+      scope,
+      visible.map((r) => r.p.id),
+    );
+    return visible.map((r) => this.view(r, reuse, links, mine));
   }
 
   /** Portal: passwords shared with the client accounts of clients the actor can read. */
@@ -276,7 +328,12 @@ export class VaultService {
   async get(scope: Scope, id: string): Promise<PasswordView> {
     const row = await this.load(scope, id, true);
     if (this.isPortal(scope)) return this.view(row, new Map());
-    return this.view(row, await this.reuseCounts(scope, [row.p]), await this.linkedAssets(scope, [row.p.id]));
+    return this.view(
+      row,
+      await this.reuseCounts(scope, [row.p]),
+      await this.linkedAssets(scope, [row.p.id]),
+      await this.personal(scope, [row.p.id]),
+    );
   }
 
   // ---------- write ----------

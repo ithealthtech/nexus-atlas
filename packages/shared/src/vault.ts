@@ -177,6 +177,10 @@ export interface PasswordView {
   categoryGuessed: boolean;
   /** Assets this password is linked to, so similar logins can be told apart. */
   linkedAssets: { id: string; name: string }[];
+  /** Pinned by the person viewing (not shared with others). */
+  favorite: boolean;
+  /** When the person viewing last revealed, copied, or shared it. */
+  lastUsedAt: string | null;
 }
 export interface PasswordHistoryView {
   id: string;

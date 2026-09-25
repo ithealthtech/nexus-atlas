@@ -71,6 +71,13 @@
       "when": 1790301950266,
       "tag": "0009_password_category",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790350416045,
+      "tag": "0010_password_favorites",
+      "breakpoints": true
     }
   ]
 }
