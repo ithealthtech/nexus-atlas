@@ -11,6 +11,8 @@ import {
   revealSchema,
   shareSchema,
   updatePasswordSchema,
+  bulkPasswordSchema,
+  type BulkPasswordResult,
   type PasswordCategory,
   type PasswordHistoryView,
   type PasswordKind,
@@ -420,6 +422,39 @@ export class VaultService {
       title: p.name,
     });
     return this.get(scope, id);
+  }
+
+  /** Applies one change to many passwords. Each goes through the normal single-item path, so
+   *  permissions, audit and activity are identical; failures are reported, not fatal. */
+  async bulk(scope: Scope, input: unknown, ip: string): Promise<BulkPasswordResult> {
+    const body = bulkPasswordSchema.parse(input);
+    const result: BulkPasswordResult = { updated: 0, failed: [] };
+    for (const id of new Set(body.ids)) {
+      let name: string | null = null;
+      try {
+        const { p } = await this.load(scope, id);
+        name = p.name;
+        if (body.action === 'archive' || body.action === 'restore') {
+          const archived = body.action === 'archive';
+          if (p.archived !== archived) await this.setArchived(scope, id, archived, ip);
+        } else if (body.action === 'rotation') {
+          if (p.rotationDays !== body.rotationDays)
+            await this.update(scope, id, { rotationDays: body.rotationDays, version: p.version }, ip);
+        } else if (body.action === 'clientVisible') {
+          if (p.clientVisible !== body.clientVisible)
+            await this.update(scope, id, { clientVisible: body.clientVisible, version: p.version }, ip);
+        } else if (body.action === 'category') {
+          if (p.kind !== 'login') throw new HttpError(400, 'Only logins have a category.');
+          if (p.category !== body.category)
+            await this.update(scope, id, { category: body.category, version: p.version }, ip);
+        }
+        result.updated++;
+      } catch (e) {
+        if (!(e instanceof HttpError)) throw e;
+        result.failed.push({ id, name: e.status === 404 ? null : name, error: e.message });
+      }
+    }
+    return result;
   }
 
   // ---------- reveal ----------

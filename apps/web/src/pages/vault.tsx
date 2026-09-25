@@ -31,6 +31,8 @@ import {
   PASSWORD_CATEGORY_LABELS,
   STRENGTH_LABELS,
   passwordStrength,
+  type BulkPasswordInput,
+  type BulkPasswordResult,
   type PasswordCategory,
   type PasswordKind,
   type PasswordView,
@@ -585,6 +587,138 @@ function QuickActions({ item }: { item: PasswordView }) {
   );
 }
 
+const ROTATION_CHOICES = [30, 60, 90, 180, 365];
+type BulkChange = BulkPasswordInput extends infer T ? (T extends unknown ? Omit<T, 'ids'> : never) : never;
+
+/** Actions for the selected rows. Each password is checked on the server; any it skips are listed. */
+function BulkBar({
+  items,
+  archivedView,
+  onDone,
+}: {
+  items: PasswordView[];
+  archivedView: boolean;
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const run = async (change: BulkChange, verb: string) => {
+    setBusy(true);
+    try {
+      const res = await api<BulkPasswordResult>('/passwords/bulk', {
+        method: 'POST',
+        body: { ...change, ids: items.map((p) => p.id) },
+      });
+      await queryClient.invalidateQueries({ queryKey: ['passwords'] });
+      await queryClient.invalidateQueries({ queryKey: ['password'] });
+      const noun = (k: number) => (k === 1 ? '1 password' : `${k} passwords`);
+      if (res.failed.length)
+        toast(
+          `${verb} ${noun(res.updated)}. Skipped ${noun(res.failed.length)}: ${res.failed
+            .map((f) => `${f.name ?? 'unavailable'} (${f.error})`)
+            .join('; ')}`,
+          'error',
+        );
+      else toast(`${verb} ${noun(res.updated)}.`);
+      onDone();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const logins = items.filter((p) => p.kind === 'login').length;
+  return (
+    <div
+      role="region"
+      aria-label="Bulk actions"
+      className="flex flex-wrap items-center gap-2 border-b border-border bg-primary-soft px-4 py-2.5 text-sm"
+    >
+      <span className="mr-auto font-medium">{items.length} selected</span>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={busy}
+        onClick={() =>
+          void run({ action: archivedView ? 'restore' : 'archive' }, archivedView ? 'Restored' : 'Archived')
+        }
+      >
+        {archivedView ? <ArchiveRestore /> : <Archive />} {archivedView ? 'Restore' : 'Archive'}
+      </Button>
+      <label>
+        <span className="sr-only">Change rotation</span>
+        <Select
+          value=""
+          disabled={busy}
+          className="h-8 w-auto"
+          onChange={(e) =>
+            void run(
+              { action: 'rotation', rotationDays: e.target.value === 'off' ? null : Number(e.target.value) },
+              'Updated rotation for',
+            )
+          }
+        >
+          <option value="" disabled>
+            Rotation…
+          </option>
+          {ROTATION_CHOICES.map((d) => (
+            <option key={d} value={d}>
+              Every {d} days
+            </option>
+          ))}
+          <option value="off">No rotation</option>
+        </Select>
+      </label>
+      <label>
+        <span className="sr-only">Change client portal sharing</span>
+        <Select
+          value=""
+          disabled={busy}
+          className="h-8 w-auto"
+          onChange={(e) =>
+            void run(
+              { action: 'clientVisible', clientVisible: e.target.value === 'share' },
+              e.target.value === 'share' ? 'Shared' : 'Stopped sharing',
+            )
+          }
+        >
+          <option value="" disabled>
+            Client portal…
+          </option>
+          <option value="share">Share with client</option>
+          <option value="hide">Stop sharing</option>
+        </Select>
+      </label>
+      {logins > 0 && (
+        <label>
+          <span className="sr-only">Change type</span>
+          <Select
+            value=""
+            disabled={busy}
+            className="h-8 w-auto"
+            onChange={(e) =>
+              void run({ action: 'category', category: e.target.value as PasswordCategory }, 'Changed the type of')
+            }
+          >
+            <option value="" disabled>
+              Type…
+            </option>
+            {PASSWORD_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {PASSWORD_CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </Select>
+        </label>
+      )}
+      <Button size="sm" variant="ghost" disabled={busy} onClick={onDone}>
+        Clear
+      </Button>
+    </div>
+  );
+}
+
 export function PasswordsView({ clientId }: { clientId?: string }) {
   const search = useSearch({ strict: false }) as { archived?: boolean };
   const go = useGo();
@@ -596,6 +730,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
   const [adding, setAdding] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
   const types = useMemo(() => {
@@ -622,6 +757,16 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
       ),
     [list.data, query, type],
   );
+  // Only what's on screen can be selected, so a filter change quietly narrows the selection.
+  const chosen = rows.filter((p) => selected.has(p.id));
+  const allChosen = rows.length > 0 && chosen.length === rows.length;
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   if (clientId && client.data && !canUse)
     return (
       <Card>
@@ -687,6 +832,9 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             </Button>
           )}
         </div>
+        {actor.isStaff && chosen.length > 0 && (
+          <BulkBar items={chosen} archivedView={!!search.archived} onDone={() => setSelected(new Set())} />
+        )}
         {list.isLoading ? (
           <div className="space-y-3 p-5">
             {[0, 1, 2].map((i) => (
@@ -698,6 +846,20 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             <table className="w-full text-left text-sm">
               <thead className="bg-surface-2 text-xs text-muted">
                 <tr>
+                  {actor.isStaff && (
+                    <th className="w-0 py-3 pl-4">
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded accent-(--primary)"
+                        aria-label="Select all shown passwords"
+                        checked={allChosen}
+                        ref={(el) => {
+                          if (el) el.indeterminate = chosen.length > 0 && !allChosen;
+                        }}
+                        onChange={() => setSelected(allChosen ? new Set() : new Set(rows.map((p) => p.id)))}
+                      />
+                    </th>
+                  )}
                   <th className="px-5 py-3 font-medium">Name</th>
                   {!clientId && <th className="hidden px-5 py-3 font-medium md:table-cell">Client</th>}
                   <th className="hidden px-5 py-3 font-medium sm:table-cell">Username</th>
@@ -708,7 +870,18 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.map((p) => (
-                  <tr key={p.id} className="hover:bg-surface-2">
+                  <tr key={p.id} className={cn('hover:bg-surface-2', selected.has(p.id) && 'bg-surface-2')}>
+                    {actor.isStaff && (
+                      <td className="w-0 py-3 pl-4">
+                        <input
+                          type="checkbox"
+                          className="size-4 rounded accent-(--primary)"
+                          aria-label={`Select ${p.name}`}
+                          checked={selected.has(p.id)}
+                          onChange={() => toggle(p.id)}
+                        />
+                      </td>
+                    )}
                     {/* On phones the name takes whatever width the actions leave, and truncates. */}
                     <td className="w-full max-w-0 py-3 pr-2 pl-4 sm:w-auto sm:max-w-none sm:px-5">
                       <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">

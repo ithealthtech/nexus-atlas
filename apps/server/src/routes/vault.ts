@@ -33,6 +33,7 @@ export function registerVaultRoutes(
   app.patch<{ Params: Params }>('/api/passwords/:id', authed, async (req) =>
     vault.update(scopeOf(req), req.params.id, req.body, req.ip),
   );
+  app.post('/api/passwords/bulk', authed, async (req) => vault.bulk(scopeOf(req), req.body, req.ip));
   app.post<{ Params: Params }>('/api/passwords/:id/archive', authed, async (req) =>
     vault.setArchived(scopeOf(req), req.params.id, archiveSchema.parse(req.body).archived, req.ip),
   );
