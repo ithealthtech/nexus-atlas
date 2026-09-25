@@ -20,6 +20,8 @@ function watch(page: Page) {
   page.on('pageerror', (e) => problems.push(e.message));
 }
 async function accessible(page: Page) {
+  // Check the finished page: rows that arrive after the heading would otherwise be measured half-rendered.
+  await page.waitForLoadState('networkidle');
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze();
   expect(
     results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target} — ${n.failureSummary}`).join(', ')}`),
@@ -474,15 +476,21 @@ test.describe.serial('account security and administration', () => {
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);
     await nav(page, 'Settings');
     await page.getByLabel('Send email from Atlas').check();
-    await page.getByLabel('Microsoft 365').check();
+    // The legacy SMTP preset still fills in Office 365's server.
+    await page.getByLabel('Microsoft 365 SMTP (legacy)', { exact: true }).check();
     await expect(page.getByLabel('SMTP server', { exact: true })).toHaveValue('smtp.office365.com');
     await expect(page.getByLabel('Port', { exact: true })).toHaveValue('587');
-    await page.getByLabel('Username', { exact: true }).fill('atlas@itdonerightnc.test');
-    await page.getByLabel('Password', { exact: true }).fill('app-password-for-smtp');
+    await expect(page.getByText('Microsoft is retiring basic authentication')).toBeVisible();
+    // The recommended way: an app registration, no mailbox password.
+    await page.getByLabel('Microsoft 365 (app registration)', { exact: true }).check();
+    await expect(page.getByLabel('SMTP server', { exact: true })).toBeHidden();
+    await page.getByLabel('Directory (tenant) ID').fill('11111111-2222-3333-4444-555555555555');
+    await page.getByLabel('Application (client) ID').fill('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    await page.getByLabel('Client secret').fill('app~secret~value~9981');
     await page.getByLabel('From address').fill('atlas@itdonerightnc.test');
     await page.getByRole('button', { name: 'Save email settings' }).click();
     await expect(page.getByText('Email settings saved')).toBeVisible();
-    await expect(page.getByText('Saved and encrypted. Leave empty to keep it.')).toBeVisible();
+    await expect(page.getByText('Saved and encrypted. Leave empty to keep it;')).toBeVisible();
     await accessible(page);
     await page.screenshot({ path: 'test-results/screens/settings.png', fullPage: true });
 
@@ -663,16 +671,17 @@ test.describe.serial('accessibility sweep', () => {
       '/admin/settings',
     ];
     for (const theme of ['light', 'dark'] as const) {
-      await page.evaluate((t) => {
-        document.documentElement.classList.toggle('dark', t === 'dark');
-      }, theme);
+      // Choose the theme the way a person does (it's saved and applied as each page loads), rather than
+      // flipping the class after load, which raced with rows still rendering in the other theme's colours.
+      await page.evaluate((t) => localStorage.setItem('atlas-theme', t), theme);
       for (const path of screens) {
         await page.goto(path);
         await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-        if (theme === 'dark') await page.evaluate(() => document.documentElement.classList.add('dark'));
+        await expect(page.locator('html')).toHaveClass(theme === 'dark' ? /\bdark\b/ : /^(?!.*\bdark\b)/);
         await accessible(page);
       }
     }
+    await page.evaluate(() => localStorage.removeItem('atlas-theme'));
     await page.setViewportSize({ width: 390, height: 844 });
     for (const path of ['/', client, `${client}/passwords`, '/admin/status', '/admin/settings']) {
       await page.goto(path);
