@@ -15,7 +15,7 @@ const API_ROUTES = [
   /^\/api\/clients(\/|$|\?)/,
   /^\/api\/(assets|documents|folders|contacts|locations|layouts|items|search|activity|passwords|expirations)(\/|$|\?)/,
 ];
-const PASSWORD_ROUTE = /^\/api\/(passwords|clients\/[^/]+\/passwords)(\/|$|\?)/;
+const PASSWORD_ROUTE = /^\/api\/(passwords|clients\/[^/]+\/password(s|-folders))(\/|$|\?)/;
 
 export interface KeyPrincipal {
   keyId: string;

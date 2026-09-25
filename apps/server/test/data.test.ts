@@ -145,6 +145,10 @@ describe('REST API keys', () => {
     expect(clients.json().map((c: { name: string }) => c.name)).toEqual(['Harbor Dental Group']);
     expect((await v1('POST', '/clients', read.data.token, { name: 'Nope' })).statusCode).toBe(403);
     expect((await v1('GET', '/passwords', read.data.token)).statusCode).toBe(403);
+    // Password folders are part of the vault, so they need the passwords scope too.
+    expect((await v1('GET', `/clients/${clients.json()[0].id}/password-folders`, read.data.token)).statusCode).toBe(
+      403,
+    );
     expect((await v1('GET', '/users', read.data.token)).statusCode).toBe(403);
     expect((await v1('GET', '/settings/email', read.data.token)).statusCode).toBe(403);
     // A browser session can't be used on /api/v1, and a key can't be used on /api.

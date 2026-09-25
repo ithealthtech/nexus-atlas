@@ -205,6 +205,7 @@ export function PasswordDialog({
   const reveal = useReveal();
   const [kind, setKind] = useState<PasswordKind>(item?.kind ?? 'login');
   const folders = usePasswordFolders(clientId).data ?? [];
+  const [folderId, setFolderId] = useState(item?.folderId ?? '');
   const [secret, setSecret] = useState('');
   const [showSecret, setShowSecret] = useState(!item);
   const [generating, setGenerating] = useState(false);
@@ -353,8 +354,12 @@ export function PasswordDialog({
           error={error?.fields?.folderId}
         >
           {(p) => (
-            <Select {...p} name="folderId" defaultValue={item?.folderId ?? ''}>
+            // Controlled, and the current folder is always an option, so a slow folder list can't unfile it.
+            <Select {...p} name="folderId" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
               <option value="">No folder</option>
+              {item?.folderId && !folders.some((f) => f.id === item.folderId) && (
+                <option value={item.folderId}>{item.folderName}</option>
+              )}
               {folders.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}
@@ -621,8 +626,14 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
   const [adding, setAdding] = useState(false);
   // Folders belong to one client, so they're offered inside a client (to staff with password access).
-  const folders = usePasswordFolders(clientId && actor.isStaff ? clientId : undefined).data ?? [];
-  const [folder, setFolder] = useState(''); // '' all, 'none' unfiled, or a folder id
+  const folderQuery = usePasswordFolders(clientId && actor.isStaff ? clientId : undefined);
+  const folders = folderQuery.data ?? [];
+  const [chosenFolder, setFolder] = useState(''); // '' all, 'none' unfiled, or a folder id
+  // A folder deleted while it's the filter drops back to all, so the list never looks empty for no reason.
+  const folder =
+    chosenFolder && chosenFolder !== 'none' && folderQuery.isSuccess && !folders.some((f) => f.id === chosenFolder)
+      ? ''
+      : chosenFolder;
   const [managingFolders, setManagingFolders] = useState(false);
   const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
