@@ -5,6 +5,9 @@ import { HttpError } from '../errors.js';
 
 const TAG = /^v?(\d+)\.(\d+)\.(\d+)$/;
 const CACHE_MS = 60 * 60 * 1000;
+// Longer than msp-atlas-updater.service's 30-minute TimeoutStartSec.
+const RUNNING_STALE_MS = 45 * 60 * 1000;
+const REQUEST_STALE_MS = 10 * 60 * 1000;
 
 /** Compares two x.y.z versions (a leading "v" is ignored). */
 export function compareVersions(a: string, b: string) {
@@ -98,19 +101,36 @@ export class UpdateService {
     const status = await readJson(join(dir, 'status.json'));
     const request = await readJson(join(dir, 'inbox', 'request.json'));
     const text = (v: unknown) => (typeof v === 'string' ? v.slice(0, 2000) : null);
+    const age = (v: unknown) => {
+      const at = typeof v === 'string' ? Date.parse(v) : NaN;
+      return Number.isNaN(at) ? null : this.now() - at;
+    };
     const states = ['running', 'succeeded', 'failed'] as const;
+    // The updater refreshes updatedAt as it goes and never runs longer than its systemd timeout, so a
+    // "running" status this old was left by a run that was killed outright (for example by a reboot).
+    // Updaters from before updatedAt existed only give the request time; with neither, assume it's live.
+    const runningAge = age(status?.updatedAt) ?? age(status?.requestedAt);
+    const staleRunning = status?.state === 'running' && runningAge !== null && runningAge > RUNNING_STALE_MS;
     // A pending request that the updater hasn't picked up yet.
-    if (request && !(status && status.state === 'running')) {
-      return {
+    if (request && !(status?.state === 'running' && !staleRunning)) {
+      const run: UpdateRun = {
         ...IDLE,
         state: 'requested',
         tag: text(request.tag),
         requestedBy: text(request.requestedBy),
         requestedAt: text(request.requestedAt),
       };
+      // The updater starts within seconds; a request still waiting after this long never will be.
+      if ((age(request.requestedAt) ?? Infinity) > REQUEST_STALE_MS)
+        return {
+          ...run,
+          state: 'failed',
+          message: "The server's updater didn't pick up this request. Check the msp-atlas-updater.path unit.",
+        };
+      return run;
     }
     if (status && states.includes(status.state as (typeof states)[number])) {
-      return {
+      const run: UpdateRun = {
         state: status.state as UpdateRun['state'],
         tag: text(status.tag),
         requestedBy: text(status.requestedBy),
@@ -118,6 +138,14 @@ export class UpdateService {
         finishedAt: text(status.finishedAt),
         message: text(status.message),
       };
+      if (staleRunning)
+        return {
+          ...run,
+          state: 'failed',
+          message:
+            'The update stopped without finishing (the server may have restarted). Check that Atlas is on the version you expect, then try again.',
+        };
+      return run;
     }
     return IDLE;
   }

@@ -100,6 +100,56 @@ describe('UpdateService', () => {
     expect((await service.run()).state).toBe('idle');
   });
 
+  it("doesn't let a run that died, or a request nobody picked up, block updates forever", async () => {
+    const now = Date.parse('2026-09-25T12:00:00Z');
+    const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+    const service = new UpdateService({
+      repo: 'o/r',
+      current: '1.0.1',
+      dir,
+      fetch: fakeGitHub([release('v1.0.2')]).fn,
+      now: () => now,
+    });
+    const status = (s: object) => writeFileSync(join(dir, 'status.json'), JSON.stringify(s));
+
+    status({ state: 'running', tag: 'v1.0.2', updatedAt: ago(5) });
+    expect((await service.run()).state).toBe('running');
+    await expect(service.request('v1.0.2', 'Owner')).rejects.toThrow(/already in progress/);
+
+    // Killed outright (reboot, kill -9): nothing wrote a final status.
+    status({ state: 'running', tag: 'v1.0.2', updatedAt: ago(50) });
+    expect(await service.run()).toMatchObject({ state: 'failed', message: expect.stringMatching(/stopped/) });
+    // An updater from before updatedAt existed: fall back to the request time; with neither, assume live.
+    status({ state: 'running', tag: 'v1.0.2', requestedAt: ago(50) });
+    expect((await service.run()).state).toBe('failed');
+    status({ state: 'running', tag: 'v1.0.2' });
+    expect((await service.run()).state).toBe('running');
+
+    // A stale run no longer blocks a new request, which then shows as waiting.
+    status({ state: 'running', tag: 'v1.0.2', updatedAt: ago(50) });
+    expect((await service.request('v1.0.2', 'Owner')).state).toBe('requested');
+    expect((await service.run()).state).toBe('requested');
+
+    // A request no updater picked up in 10 minutes is reported, and can be replaced.
+    writeFileSync(
+      join(dir, 'inbox', 'request.json'),
+      JSON.stringify({ tag: 'v1.0.2', requestedBy: 'Owner', requestedAt: ago(11) }),
+    );
+    expect(await service.run()).toMatchObject({ state: 'failed', message: expect.stringMatching(/didn't pick up/) });
+    expect((await service.request('v1.0.2', 'Owner')).state).toBe('requested');
+  });
+
+  it('offers releases tagged without a leading v, like the updater accepts', async () => {
+    const service = new UpdateService({
+      repo: 'o/r',
+      current: '1.0.1',
+      dir,
+      fetch: fakeGitHub([release('1.0.2')]).fn,
+    });
+    expect((await service.info()).available.map((r) => r.tag)).toEqual(['1.0.2']);
+    expect((await service.request('1.0.2', 'Owner')).tag).toBe('1.0.2');
+  });
+
   it('refuses to request without an updater', async () => {
     const service = new UpdateService({ repo: 'o/r', current: '1.0.1', fetch: fakeGitHub([release('v1.0.2')]).fn });
     await expect(service.request('v1.0.2', 'Owner')).rejects.toThrow(/no updater/);
