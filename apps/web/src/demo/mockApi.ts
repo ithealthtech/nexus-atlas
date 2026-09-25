@@ -3,7 +3,9 @@
 import {
   LEVEL_INFO,
   ROLE_INFO,
+  guessPasswordCategory,
   passwordStrength,
+  type PasswordCategory,
   type AccessLevel,
   type ActivityView,
   type ApiKeyView,
@@ -107,6 +109,11 @@ const contacts = [...db.contacts];
 const locations = [...db.locations];
 const relations: { id: string; a: { type: ItemType; id: string }; b: { type: ItemType; id: string }; note: string }[] =
   [];
+// Sample links: a password named after an asset ("HDG-FW-01 admin") is linked to it.
+for (const p of db.passwords)
+  for (const a of db.assets)
+    if (a.clientId === p.clientId && p.name.startsWith(`${a.name} `))
+      relations.push({ id: uuid(), a: { type: 'asset', id: a.id }, b: { type: 'password', id: p.id }, note: '' });
 for (const a of assets) snapshot(a.id, 1, a as unknown as Json);
 for (const d of documents) snapshot(d.id, 1, d as unknown as Json);
 for (const a of assets.slice(0, 4)) record('Updated', 'asset', a.id, a.name, a.clientId);
@@ -162,6 +169,19 @@ const passwordView = (p: (typeof passwords)[0]) => ({
   updatedAt: p.updatedAt,
   updatedByName: p.updatedByName,
   requireReason: !!db.clients.find((c) => c.id === p.clientId)?.requireRevealReason,
+  ...(() => {
+    const chosen = (p as { category?: PasswordCategory | null }).category ?? null;
+    return {
+      category: chosen ?? guessPasswordCategory(p.name, p.username, p.url),
+      categoryGuessed: !chosen,
+    };
+  })(),
+  linkedAssets: relations
+    .filter((r) => (r.a.type === 'password' && r.a.id === p.id) || (r.b.type === 'password' && r.b.id === p.id))
+    .map((r) => (r.a.type === 'asset' ? r.a.id : r.b.type === 'asset' ? r.b.id : null))
+    .map((id) => assets.find((a) => a.id === id && !a.archived))
+    .filter((a) => !!a)
+    .map((a) => ({ id: a.id, name: a.name })),
 });
 const audit = (p: (typeof passwords)[0], action: string, reason = '') =>
   vaultAudit.unshift({
@@ -736,6 +756,7 @@ on('POST', '/clients/:id/passwords', (m, b) => {
     id: uuid(),
     clientId: m[1]!,
     kind: (b.kind as 'login') ?? 'login',
+    category: (b.category as PasswordCategory | null) ?? null,
     name: String(b.name ?? '').trim(),
     username: String(b.username ?? ''),
     url: String(b.url ?? ''),

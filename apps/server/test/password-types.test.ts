@@ -11,6 +11,7 @@ describe('guessPasswordCategory', () => {
     ['Guest SSID', '', '', 'wifi'],
     ['FortiGate 60F', 'admin', 'https://10.20.0.1:8443', 'network'],
     ['Meraki dashboard', '', '', 'network'],
+    ['HDG-FW-01 admin', 'admin', '', 'network'],
     ['Server local admin', 'administrator', '', 'server'],
     ['iDRAC HDG-HV01', 'root', '', 'server'],
     ['SQL sa', 'sa', '', 'database'],
