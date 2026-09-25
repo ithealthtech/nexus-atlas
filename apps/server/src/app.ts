@@ -24,6 +24,7 @@ import { ClientService } from './services/clients.js';
 import { ensureDefaultLayouts } from './services/layouts.js';
 import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
+import { DomainLookup } from './services/domain-lookup.js';
 import { registerVaultRoutes } from './routes/vault.js';
 import { VaultKeys } from './crypto/vault-keys.js';
 import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
@@ -55,6 +56,8 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Replaces fetch for Hudu imports (tests use a fake Hudu). */
   huduFetch?: typeof fetch;
+  /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
+  domainLookup?: DomainLookup;
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
@@ -101,6 +104,7 @@ export async function buildApp({
   storage,
   mailTransport = smtpTransport,
   huduFetch,
+  domainLookup,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     // The versioned REST API (/api/v1/…) serves the same routes as the app, authenticated by API key.
@@ -489,6 +493,7 @@ export async function buildApp({
     authed,
     storage: files,
     maxUploadBytes,
+    domains: domainLookup ?? (config.NODE_ENV === 'test' ? undefined : new DomainLookup()),
   });
 
   const vault = registerVaultRoutes(app, {

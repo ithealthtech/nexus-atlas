@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, ArrowLeft, Pencil, Plus, Search, Server } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, Pencil, Plus, RefreshCw, Search, Server } from 'lucide-react';
 import { ASSET_STATUSES, atLeast, type AssetView, type LayoutField, type LayoutView } from '@atlas/shared';
 import {
   Badge,
@@ -151,6 +151,13 @@ export function AssetDialog({
             )}
           </Field>
         </div>
+        {layout.key === 'domain' && (
+          <DomainRefresh
+            onFound={(found) => setValues((all) => ({ ...all, ...found }))}
+            onError={(message) => toast(message, 'error')}
+            fieldKeys={layout.fields.map((f) => f.key)}
+          />
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           {layout.fields.map((f) => (
             <div key={f.key} className={cn((f.type === 'textarea' || f.type === 'multiselect') && 'sm:col-span-2')}>
@@ -174,6 +181,44 @@ export function AssetDialog({
         />
       </form>
     </Dialog>
+  );
+}
+
+// Domains: blank fields are filled from the domain when saved; this re-detects all of them now.
+function DomainRefresh({
+  fieldKeys,
+  onFound,
+  onError,
+}: {
+  fieldKeys: string[];
+  onFound: (fields: Record<string, string>) => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const refresh = async (button: HTMLButtonElement) => {
+    const name = (button.form?.elements.namedItem('name') as HTMLInputElement | null)?.value ?? '';
+    if (!name.trim()) return onError('Enter the domain as the name first, for example example.com.');
+    setBusy(true);
+    try {
+      const found = await api<Record<string, string>>('/domains/lookup', { method: 'POST', body: { domain: name } });
+      const fields = Object.fromEntries(
+        Object.entries(found).filter(([k, v]) => k !== 'domain' && v && fieldKeys.includes(k)),
+      );
+      if (!Object.keys(fields).length) onError(`Nothing was found for ${found.domain}.`);
+      else onFound(fields);
+    } catch (err) {
+      onError((err as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
+      <span>Blank fields are filled in from the domain when you save.</span>
+      <Button variant="secondary" size="sm" loading={busy} onClick={(e) => void refresh(e.currentTarget)}>
+        <RefreshCw /> Refresh from domain
+      </Button>
+    </div>
   );
 }
 
