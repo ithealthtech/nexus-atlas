@@ -1,11 +1,12 @@
 import type { Database } from '@atlas/db';
-import type { Actor, FieldType, HuduPreview, LayoutField } from '@atlas/shared';
+import { guessPasswordCategory, type Actor, type FieldType, type HuduPreview, type LayoutField } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
 import { DocumentService } from '../documents.js';
 import { LayoutService } from '../layouts.js';
 import { locations } from '../people.js';
+import { RelationService } from '../relations.js';
 import { Scope } from '../scope.js';
 import type { VaultService } from '../vault.js';
 import { ImportRun } from './common.js';
@@ -69,6 +70,10 @@ type HuduPassword = {
   url?: string | null;
   description?: string | null;
   otp_secret?: string | null;
+  password_folder_name?: string | null;
+  // The asset a password is attached to in Hudu, if any.
+  passwordable_type?: string | null;
+  passwordable_id?: number | null;
   archived?: boolean;
 };
 
@@ -372,6 +377,7 @@ export async function runHuduImport(
   const layouts = new LayoutService(db);
   const assets = new AssetService(layouts);
   const documents = new DocumentService();
+  const relations = new RelationService();
 
   // Companies
   const companyToClient = new Map<number, string>();
@@ -438,6 +444,7 @@ export async function runHuduImport(
   const unmatchedByLayout = new Map<string, Set<string>>();
 
   // Assets
+  const assetToAtlas = new Map<number, string>();
   for (const a of (await client.assets()).filter((x) => !x.archived)) {
     const clientId = companyToClient.get(a.company_id);
     const layout = layoutMap.get(a.asset_layout_id);
@@ -453,7 +460,7 @@ export async function runHuduImport(
       unmatchedByLayout.set(layout.name, seen);
     }
     const name = a.name.slice(0, 200) || `Asset ${a.id}`;
-    await run.upsert(
+    const assetId = await run.upsert(
       'assets',
       a.id,
       name,
@@ -470,6 +477,7 @@ export async function runHuduImport(
         );
       },
     );
+    if (assetId) assetToAtlas.set(a.id, assetId);
   }
   for (const [layoutName, labels] of unmatchedByLayout)
     run.note(
@@ -519,16 +527,31 @@ export async function runHuduImport(
         .slice(0, 20000),
       totp: /^[A-Z2-7]{16,128}=*$/.test(totp) ? totp : '',
     };
+    // Hudu's folder often says what a login is for ("Network", "M365"); fall back to Atlas's own guess.
+    const fromFolder = p.password_folder_name ? guessPasswordCategory(p.password_folder_name) : 'other';
+    const category = fromFolder !== 'other' ? fromFolder : null;
     if (totp && !body.totp) run.note(`password "${name}": the one-time code key wasn't valid and was left out.`);
-    await run.upsert(
+    const passwordId = await run.upsert(
       'passwords',
       p.id,
       name,
-      async () => (await vault.create(scope, clientId, body, 'import')).id,
+      async () => (await vault.create(scope, clientId, { ...body, category }, 'import')).id,
       async (existing) => {
         const current = await vault.get(scope, existing);
-        await vault.update(scope, existing, { ...body, version: current.version }, 'import');
+        // Keep a type someone chose in Atlas; only fill it when it's still a guess.
+        const keep = current.categoryGuessed ? { category } : {};
+        await vault.update(scope, existing, { ...body, ...keep, version: current.version }, 'import');
       },
     );
+    // Link the password to the asset it was attached to in Hudu.
+    const assetId =
+      p.passwordable_type === 'Asset' && p.passwordable_id ? assetToAtlas.get(p.passwordable_id) : undefined;
+    if (passwordId && assetId) {
+      try {
+        await relations.add(scope, 'password', passwordId, { type: 'asset', id: assetId });
+      } catch {
+        run.note(`password "${name}": couldn't be linked to its asset.`);
+      }
+    }
   }
 }

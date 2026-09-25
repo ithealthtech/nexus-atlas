@@ -76,6 +76,8 @@ function fakeHudu(options: { key?: string } = {}) {
         url: 'https://10.20.0.1',
         otp_secret: 'JBSWY3DPEHPK3PXP',
         password_folder_name: 'Network',
+        passwordable_type: 'Asset',
+        passwordable_id: 501,
       },
       { id: 3002, company_id: null, name: 'Orphan', password: 'x' },
     ],
@@ -274,6 +276,9 @@ describe('Hudu import', () => {
 
     const [password] = (await owner.call('GET', `/api/passwords?client=${harbor.id}`)).data;
     expect(password).toMatchObject({ name: 'Firewall admin', username: 'admin', hasTotp: true });
+    // Hudu's folder sets the type, and the password stays linked to the asset it was attached to.
+    expect(password).toMatchObject({ category: 'network', categoryGuessed: false });
+    expect(password.linkedAssets.map((a: { name: string }) => a.name)).toEqual(['HDG-FW-01']);
     expect((await owner.call('POST', `/api/passwords/${password.id}/reveal`, {})).data.value).toBe('Hudu-Secret-9981!');
 
     // Second run: updates, no duplicates.
