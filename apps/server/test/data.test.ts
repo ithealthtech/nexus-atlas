@@ -326,6 +326,95 @@ describe('Hudu import', () => {
     expect(preview.status).toBe(400);
     expect(preview.data.error).toContain('rejected the API key');
   });
+
+  it('brings over integration-synced and loosely labelled asset details, not just names', async () => {
+    hudu.data.asset_layouts!.push(
+      {
+        id: 8,
+        name: 'Computer Assets',
+        fields: [
+          { id: 81, label: 'Operating System', field_type: 'Text', position: 1 },
+          { id: 82, label: 'IP Address', field_type: 'Text', position: 2 },
+          { id: 83, label: 'Assigned User', field_type: 'Text', position: 3 },
+          { id: 84, label: 'Warranty Expiration', field_type: 'Date', position: 4 },
+          { id: 85, label: 'Local Admin', field_type: 'Password', position: 5 },
+        ],
+      },
+      {
+        id: 9,
+        name: 'People',
+        fields: [
+          { id: 91, label: 'Title', field_type: 'Text', position: 1 },
+          { id: 92, label: 'Email', field_type: 'Email', position: 2 },
+          { id: 93, label: 'Phone', field_type: 'Phone', position: 3 },
+        ],
+      },
+    );
+    hudu.data.assets!.push(
+      {
+        id: 601,
+        company_id: 1,
+        asset_layout_id: 8,
+        name: 'HDG-WS-014',
+        primary_manufacturer: 'Dell',
+        primary_serial: 'ABC1234',
+        // Labels differ in case/spacing, one only has a caption, one only the layout field id.
+        fields: [
+          { label: 'operating  system', value: 'Windows 11 Pro' },
+          { caption: 'Assigned User', value: 'Dana Reyes' },
+          { asset_layout_field_id: 84, label: 'Warranty (renamed)', value: '2027-06-30' },
+          { label: 'Local Admin', value: 'never-import-this' },
+          { label: 'Rack Unit', value: 'U12' },
+        ],
+        cards: [
+          {
+            integrator_name: 'NinjaOne',
+            data: {
+              ip_address: '10.20.4.14',
+              last_seen: '2026-09-24T10:00:00Z',
+              cpu: { model: 'Intel i7-1365U', cores: 10 },
+              bitlocker_recovery_key: 'never-import-this-either',
+              disks: ['C: 512 GB'],
+            },
+          },
+        ],
+      },
+      {
+        id: 602,
+        company_id: 1,
+        asset_layout_id: 9,
+        name: 'Dana Reyes',
+        primary_mail: 'dana@harbordental.test',
+        custom_fields: [{ title: 'Office Manager' }, { phone: '919-555-0142' }],
+      },
+    );
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(job.status, JSON.stringify(job)).toBe('done');
+    expect(job.counts.assets).toMatchObject({ created: 3, failed: 0 });
+    expect(job.messages.join('\n')).toContain('Computer Assets: Rack Unit didn');
+
+    const all = (await owner.call('GET', '/api/assets')).data as { id: string; name: string }[];
+    const get = async (name: string) =>
+      (await owner.call('GET', `/api/assets/${all.find((a) => a.name === name)!.id}`)).data;
+
+    const pc = await get('HDG-WS-014');
+    expect(pc.fields).toEqual({
+      operating_system: 'Windows 11 Pro',
+      assigned_user: 'Dana Reyes',
+      warranty_expiration: '2027-06-30',
+      ip_address: '10.20.4.14',
+    });
+    expect(pc.notes).toContain('Manufacturer: Dell');
+    expect(pc.notes).toContain('Rack Unit: U12');
+    expect(pc.notes).toContain('From NinjaOne:');
+    expect(pc.notes).toContain('cpu model: Intel i7-1365U');
+    expect(pc.notes).toContain('disks: C: 512 GB');
+    expect(JSON.stringify(pc)).not.toContain('never-import-this');
+
+    const person = await get('Dana Reyes');
+    expect(person.fields).toEqual({ title: 'Office Manager', email: 'dana@harbordental.test', phone: '919-555-0142' });
+  });
 });
 
 describe('CSV import and export', () => {
