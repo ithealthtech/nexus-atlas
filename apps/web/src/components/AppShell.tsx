@@ -28,6 +28,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { ClientPicker } from '@/components/ClientPicker';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Avatar } from '@/components/ui';
 import { Logo } from '@/components/Logo';
@@ -150,12 +151,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
       <Link to="/" onClick={onNavigate} className="mb-6 px-2 text-sidebar-active">
         <Logo />
       </Link>
-      <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-sidebar-2 px-3 py-2.5">
-        <span className="grid size-7 place-items-center rounded-md bg-sidebar-2 text-[11px] font-bold text-sidebar-accent">
-          {actor.organization.name.slice(0, 2).toUpperCase()}
-        </span>
-        <span className="min-w-0 truncate text-sm font-medium text-sidebar-active">{actor.organization.name}</span>
-      </div>
+      <ClientPicker orgName={actor.organization.name} onNavigate={onNavigate} />
       <button
         onClick={onSearch}
         className="mb-4 flex w-full items-center gap-2.5 rounded-lg bg-sidebar-2 px-3 py-2.5 text-left text-sm text-sidebar-muted hover:text-sidebar-active"
