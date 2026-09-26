@@ -561,6 +561,39 @@ on('PATCH', '/layouts/:id', (m, b) => {
 });
 
 // assets
+// Duplicates: the demo shows a sample group (like Hudu and ConnectWise both importing a device); merging is off.
+on('GET', '/duplicates', () => {
+  const first = assets.find((a) => !a.archived);
+  if (!first) return [];
+  const layoutName = (id: string) => db.layouts.find((l) => l.id === id)?.name ?? 'Asset';
+  return [
+    {
+      type: 'assets',
+      name: first.name,
+      clientId: first.clientId,
+      clientName: clientName(first.clientId),
+      items: [
+        {
+          id: first.id,
+          name: first.name,
+          detail: layoutName(first.layoutId),
+          filled: 6,
+          createdAt: first.updatedAt,
+          updatedAt: first.updatedAt,
+        },
+        {
+          id: `${first.id}-hudu-copy`,
+          name: first.name.toUpperCase(),
+          detail: 'Computer Assets (from Hudu)',
+          filled: 11,
+          createdAt: first.updatedAt,
+          updatedAt: first.updatedAt,
+        },
+      ],
+    },
+  ];
+});
+on('POST', '/duplicates/merge', () => notInDemo('Merging duplicates'));
 on('GET', '/assets', (_m, _b, q) =>
   assets
     .filter(

@@ -39,6 +39,7 @@ import { NotFound } from '@/pages/NotFound';
 import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
+import { Duplicates } from '@/pages/Duplicates';
 import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
 import './styles.css';
@@ -228,6 +229,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
