@@ -47,6 +47,17 @@ interface StoredSettings {
   notifications?: NotificationSettings;
   auditCheckpoint?: AuditCheckpoint;
   cwRmm?: StoredCwRmm;
+  /** A pending "erase all data" request, during its waiting period. */
+  erase?: EraseRequest;
+}
+export interface EraseRequest {
+  requestedAt: string;
+  /** Not before this can the owner confirm. */
+  confirmableAt: string;
+  /** After this the request lapses and must be made again. */
+  expiresAt: string;
+  requestedBy: string;
+  requestedByName: string;
 }
 export interface StoredCwRmm {
   region: CwRmmRegion;
@@ -272,6 +283,19 @@ export class SettingsService {
       .update(schema.orgs)
       .set({ settings: sql`${schema.orgs.settings} - 'cwRmm'` })
       .where(eq(schema.orgs.id, orgId));
+  }
+
+  async eraseRequest(orgId: string): Promise<EraseRequest | null> {
+    return (await this.load(orgId)).erase ?? null;
+  }
+
+  async saveEraseRequest(orgId: string, request: EraseRequest | null) {
+    if (request) await this.put(orgId, 'erase', request);
+    else
+      await this.db
+        .update(schema.orgs)
+        .set({ settings: sql`${schema.orgs.settings} - 'erase'` })
+        .where(eq(schema.orgs.id, orgId));
   }
 
   async auditCheckpoint(orgId: string): Promise<AuditCheckpoint | undefined> {
