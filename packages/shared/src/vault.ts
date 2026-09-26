@@ -88,7 +88,7 @@ const totpSecret = z
 
 const expiryDate = z
   .string()
-  .regex(/^d{4}-d{2}-d{2}$/, 'Choose a valid date.')
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a valid date.')
   .refine((d) => !Number.isNaN(Date.parse(d)) && new Date(d).toISOString().startsWith(d), 'Choose a valid date.');
 
 const base = {
