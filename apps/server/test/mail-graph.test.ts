@@ -89,7 +89,7 @@ describe('GraphMailer', () => {
       ),
     });
     await expect(new GraphMailer(badSecret.fetcher).send(CONFIG, MESSAGE)).rejects.toThrow(
-      /^Sign-in to Microsoft failed: AADSTS7000215: Invalid client secret provided\.$/,
+      /^Sign-in to Microsoft failed: AADSTS7000215: Invalid client secret provided\. Paste the secret’s Value from Certificates & secrets, not its Secret ID\.$/,
     );
     const noPermission = fakeMicrosoft({
       send: () =>

@@ -84,11 +84,18 @@ export function registerAdminRoutes(
     const orgId = admin(req);
     const { to } = testEmailSchema.parse(req.body ?? {});
     const [org] = await db.select({ name: schema.orgs.name }).from(schema.orgs).where(eq(schema.orgs.id, orgId));
-    await mail.send(orgId, org!.name, {
-      to,
-      subject: 'MSP Atlas test email',
-      paragraphs: ['Email from MSP Atlas is working. Password resets and expiry alerts will be sent this way.'],
-    });
+    try {
+      await mail.send(orgId, org!.name, {
+        to,
+        subject: 'MSP Atlas test email',
+        paragraphs: ['Email from MSP Atlas is working. Password resets and expiry alerts will be sent this way.'],
+      });
+    } catch (error) {
+      // The reason comes from the mail provider and never contains the secret; keep it for troubleshooting.
+      req.log.warn({ reason: (error as Error).message }, 'Test email failed');
+      await event(req, 'Test email failed', (error as Error).message);
+      throw error;
+    }
     await event(req, 'Test email sent', to);
     return { ok: true };
   });
