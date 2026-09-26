@@ -86,6 +86,17 @@ const totpSecret = z
     'Enter the authenticator setup key (letters A–Z and digits 2–7), or leave it empty.',
   );
 
+/** A labelled extra value. On edit, a secret field may omit `value` to keep what's stored. */
+export const customFieldSchema = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().min(1, 'Give the field a label.').max(100),
+  secret: z.boolean().default(false),
+  value: z.string().max(5000).optional(),
+});
+export type CustomFieldInput = z.input<typeof customFieldSchema>;
+export const MAX_CUSTOM_FIELDS = 30;
+const customFields = z.array(customFieldSchema).max(MAX_CUSTOM_FIELDS);
+
 const base = {
   name: z.string().trim().min(1, 'Name is required.').max(200),
   username: z.string().trim().max(254).default(''),
@@ -103,6 +114,7 @@ const base = {
   clientVisible: z.boolean().default(false),
   // null: let Atlas guess from the name, username, and address.
   category: z.enum(PASSWORD_CATEGORIES).nullable().default(null),
+  customFields: customFields.default([]),
   // A folder of the same client, or null for none.
   folderId: z.string().uuid().nullable().default(null),
 };
@@ -124,6 +136,7 @@ export const updatePasswordSchema = z.object({
   restricted: z.boolean().optional(),
   clientVisible: z.boolean().optional(),
   category: z.enum(PASSWORD_CATEGORIES).nullable().optional(),
+  customFields: customFields.optional(),
   folderId: z.string().uuid().nullable().optional(),
   version: z.number().int().positive(),
 });
@@ -149,7 +162,9 @@ export const bulkPasswordSchema = z.discriminatedUnion('action', [
 export type BulkPasswordInput = z.infer<typeof bulkPasswordSchema>;
 export type BulkPasswordResult = { updated: number; failed: { id: string; name: string | null; error: string }[] };
 export const revealSchema = z.object({
-  field: z.enum(['secret', 'notes', 'totp']).default('secret'),
+  field: z.enum(['secret', 'notes', 'totp', 'custom']).default('secret'),
+  // Which custom field, when `field` is 'custom'.
+  fieldId: z.string().uuid().optional(),
   reason: z.string().trim().max(300).default(''),
   copy: z.boolean().default(false),
 });
@@ -201,6 +216,8 @@ export interface PasswordView {
   categoryGuessed: boolean;
   /** Assets this password is linked to, so similar logins can be told apart. */
   linkedAssets: { id: string; name: string }[];
+  /** A secret field's value is null here; reveal it with field 'custom' and its id. */
+  customFields: { id: string; label: string; secret: boolean; value: string | null }[];
   folderId: string | null;
   folderName: string | null;
   /** Pinned by the person viewing (not shared with others). */

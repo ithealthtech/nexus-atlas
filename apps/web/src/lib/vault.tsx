@@ -109,7 +109,7 @@ export function useReveal() {
   const reveal = useCallback(
     async (
       item: Pick<PasswordView, 'id' | 'requireReason'>,
-      body: { field?: 'secret' | 'notes' | 'totp'; copy?: boolean; historyId?: string },
+      body: { field?: 'secret' | 'notes' | 'totp' | 'custom'; fieldId?: string; copy?: boolean; historyId?: string },
       label = 'Why do you need this password?',
     ) => {
       let reason = '';
@@ -124,7 +124,7 @@ export function useReveal() {
       try {
         return await api<RevealResult>(path, {
           method: 'POST',
-          body: { field: body.field ?? 'secret', copy: body.copy ?? false, reason },
+          body: { field: body.field ?? 'secret', fieldId: body.fieldId, copy: body.copy ?? false, reason },
         });
       } catch (e) {
         if (e instanceof ApiError && e.code === 'reason_required') {
@@ -132,7 +132,7 @@ export function useReveal() {
           if (given === null) return null;
           return api<RevealResult>(path, {
             method: 'POST',
-            body: { field: body.field ?? 'secret', copy: body.copy ?? false, reason: given },
+            body: { field: body.field ?? 'secret', fieldId: body.fieldId, copy: body.copy ?? false, reason: given },
           });
         }
         throw e;

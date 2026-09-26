@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import {
   PASSWORD_CATEGORIES,
+  MAX_CUSTOM_FIELDS,
   PASSWORD_CATEGORY_LABELS,
   STRENGTH_LABELS,
   passwordStrength,
@@ -194,6 +195,77 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
 }
 
 // ---------------------------------------------------------------- form
+type EditableField = { key: string; id?: string; label: string; secret: boolean; value: string };
+
+/** Extra labelled values: a tenant ID, a PIN, a recovery email. Hidden ones are encrypted like the password. */
+function CustomFieldsEditor({
+  fields,
+  onChange,
+  error,
+}: {
+  fields: EditableField[];
+  onChange: (fields: EditableField[]) => void;
+  error?: string;
+}) {
+  const set = (key: string, patch: Partial<EditableField>) =>
+    onChange(fields.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Custom fields</legend>
+      {fields.map((f, i) => (
+        <div
+          key={f.key}
+          className="grid gap-2 rounded-lg border border-border p-2.5 sm:grid-cols-[10rem_minmax(0,1fr)_auto_auto] sm:items-center"
+        >
+          <Input
+            aria-label={`Field ${i + 1} label`}
+            value={f.label}
+            onChange={(e) => set(f.key, { label: e.target.value })}
+            placeholder="Label"
+            maxLength={100}
+          />
+          <Input
+            aria-label={`${f.label || `Field ${i + 1}`} value`}
+            value={f.value}
+            onChange={(e) => set(f.key, { value: e.target.value })}
+            type={f.secret ? 'password' : 'text'}
+            autoComplete="off"
+            maxLength={5000}
+            placeholder={f.id && f.secret ? 'Unchanged, type to replace' : 'Value'}
+          />
+          <label className="flex items-center gap-2 text-sm text-text-2">
+            <input
+              type="checkbox"
+              className="size-4 rounded accent-(--primary)"
+              checked={f.secret}
+              onChange={(e) => set(f.key, { secret: e.target.checked })}
+            />
+            Hidden
+          </label>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Remove ${f.label || `field ${i + 1}`}`}
+            onClick={() => onChange(fields.filter((x) => x.key !== f.key))}
+          >
+            <X />
+          </Button>
+        </div>
+      ))}
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {fields.length < MAX_CUSTOM_FIELDS && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange([...fields, { key: crypto.randomUUID(), label: '', secret: false, value: '' }])}
+        >
+          <Plus /> Add a field
+        </Button>
+      )}
+    </fieldset>
+  );
+}
+
 /** Adds and removes asset links so they match `next`; returns a message if any link couldn't be changed. */
 async function syncAssetLinks(passwordId: string, before: string[], next: string[]): Promise<string | null> {
   const add = next.filter((id) => !before.includes(id));
@@ -316,6 +388,10 @@ export function PasswordDialog({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fields, setFields] = useState<EditableField[]>(
+    item?.customFields.map((f) => ({ key: f.id, id: f.id, label: f.label, secret: f.secret, value: f.value ?? '' })) ??
+      [],
+  );
   const [assetIds, setAssetIds] = useState<string[]>(item?.linkedAssets.map((a) => a.id) ?? []);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -330,6 +406,13 @@ export function PasswordDialog({
       ...(actor.isAdmin ? { restricted: form.get('restricted') === 'on' } : {}),
       clientVisible: form.get('clientVisible') === 'on',
       ...(kind === 'login' ? { category: text('category') || null } : {}),
+      // An existing secret left empty keeps its stored value.
+      customFields: fields.map((f) => ({
+        ...(f.id ? { id: f.id } : {}),
+        label: f.label,
+        secret: f.secret,
+        ...(f.id && f.secret && !f.value ? {} : { value: f.value }),
+      })),
       folderId: text('folderId') || null,
     };
     // On edit, secrets are sent only when changed, so unrevealed values are never round-tripped.
@@ -586,6 +669,7 @@ export function PasswordDialog({
             )}
           </Field>
         )}
+        <CustomFieldsEditor fields={fields} onChange={setFields} error={error?.fields?.customFields} />
         <AssetLinksField clientId={item?.clientId ?? clientId} value={assetIds} onChange={setAssetIds} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Rotate every" help="Flags it for change when due.">
@@ -1512,11 +1596,13 @@ function SecretRow({
   label,
   item,
   field,
+  fieldId,
   mono = true,
 }: {
   label: string;
   item: PasswordView;
-  field: 'secret' | 'notes';
+  field: 'secret' | 'notes' | 'custom';
+  fieldId?: string;
   mono?: boolean;
 }) {
   const reveal = useReveal();
@@ -1530,7 +1616,7 @@ function SecretRow({
   }, [value]);
   const run = async (copy: boolean) => {
     try {
-      const result = await reveal(item, { field, copy });
+      const result = await reveal(item, { field, fieldId, copy });
       if (!result) return;
       if (copy) {
         await copySecret(result.value);
@@ -1563,7 +1649,7 @@ function SecretRow({
       >
         {value ? <EyeOff /> : <Eye />}
       </Button>
-      {field === 'secret' && (
+      {field !== 'notes' && (
         <Button variant="ghost" size="icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => run(true)}>
           <Copy />
         </Button>
@@ -2099,6 +2185,28 @@ export function PasswordDetail() {
                     <ExternalLink className="size-4" />
                   </a>
                 </div>
+              )}
+              {item.customFields.map((f) =>
+                f.secret ? (
+                  <SecretRow key={f.id} label={f.label} item={item} field="custom" fieldId={f.id} />
+                ) : (
+                  <div key={f.id} className="flex items-center gap-3 px-5 py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-muted">{f.label}</p>
+                      <p className="mt-0.5 text-sm break-all whitespace-pre-wrap">{f.value}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Copy ${f.label}`}
+                      onClick={() =>
+                        navigator.clipboard.writeText(f.value ?? '').then(() => toast(`${f.label} copied.`))
+                      }
+                    >
+                      <Copy />
+                    </Button>
+                  </div>
+                ),
               )}
               {item.hasNotes && <SecretRow label="Notes" item={item} field="notes" mono={false} />}
             </div>

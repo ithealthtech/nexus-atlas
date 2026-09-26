@@ -110,6 +110,7 @@ export async function exportClient(
             secret: secretById.get(p.id)?.secret ?? '',
             notesText: secretById.get(p.id)?.notes ?? '',
             totpKey: secretById.get(p.id)?.totp ?? '',
+            customFields: secretById.get(p.id)?.customFields ?? p.customFields,
           }
         : {}),
     })),

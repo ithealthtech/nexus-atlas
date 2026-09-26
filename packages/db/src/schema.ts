@@ -566,6 +566,11 @@ export const passwords = pgTable(
     secret: text('secret').notNull(),
     notes: text('notes'),
     totp: text('totp'),
+    // Extra labelled values. A secret field's value is ciphertext; the others are plain text.
+    customFields: jsonb('custom_fields')
+      .$type<{ id: string; label: string; secret: boolean; value: string }[]>()
+      .notNull()
+      .default([]),
     // Keyed hash of the secret, used only to spot reuse within the organization.
     fingerprint: text('fingerprint').notNull(),
     strength: integer('strength').notNull().default(0),
