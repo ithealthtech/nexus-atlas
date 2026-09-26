@@ -78,7 +78,25 @@ const DEVICE_ID_KEYS = [
   'agentId',
   'id',
 ];
-const SITE_ID_KEYS = ['siteId', 'siteID', 'site_id', 'site.id', 'site.siteId'];
+/**
+ * The device inside a details response: the body itself when it is the device, else the record carrying this
+ * device's ID (for example under data, or in a one-item list). Its own lists, like network interfaces, are
+ * fields of the device, not the device.
+ */
+function deviceObject(body: unknown, id: string): Json {
+  const isObject = (v: unknown): v is Json => !!v && typeof v === 'object' && !Array.isArray(v);
+  if (isObject(body) && text(body, ...DEVICE_ID_KEYS)) return body;
+  const match = recordsOf(body).find((r) => text(r, ...DEVICE_ID_KEYS) === id);
+  if (match) return match;
+  if (isObject(body)) {
+    const inner = Object.values(body).filter(isObject);
+    if (inner.length === 1) return inner[0]!;
+    return body;
+  }
+  return {};
+}
+
+const SITE_ID_KEYS =['siteId', 'siteID', 'site_id', 'site.id', 'site.siteId'];
 const DETAIL_CONCURRENCY = 4;
 
 /** Maps a device record (summary merged with details) onto Atlas's fields, reading whichever names are present. */
@@ -424,7 +442,7 @@ export class CwRmmClient {
               'GET',
               `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(siteId)}/endpoints/${encodeURIComponent(id)}`,
             );
-            detail = (recordsOf(body)[0] ?? (body && typeof body === 'object' && !Array.isArray(body) ? body : {})) as Json;
+            detail = deviceObject(body, id);
           } catch (error) {
             if (!(error instanceof HttpError)) throw error;
             detailNote = error.message.replace(/^ConnectWise RMM /, '').slice(0, 120);
