@@ -95,9 +95,30 @@ describe('GraphMailer', () => {
       send: () =>
         Response.json({ error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } }, { status: 403 }),
     });
+    // Only Delegated permissions granted: the app-only token carries no roles.
     await expect(new GraphMailer(noPermission.fetcher).send(CONFIG, MESSAGE)).rejects.toThrow(
-      /ErrorAccessDenied: Access is denied\. Check the app has the Mail\.Send application permission/,
+      /ErrorAccessDenied: Access is denied\. The app’s token has no Mail\.Send application permission\..*Delegated doesn’t work/,
     );
+    // With Mail.Send in the token, the refusal must come from a mailbox restriction.
+    const jwt = (roles: string[]) => `x.${Buffer.from(JSON.stringify({ roles })).toString('base64url')}.y`;
+    const restricted = fakeMicrosoft({
+      token: Response.json({ access_token: jwt(['Mail.Send']), expires_in: 3599 }),
+      send: () =>
+        Response.json({ error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } }, { status: 403 }),
+    });
+    await expect(new GraphMailer(restricted.fetcher).send(CONFIG, MESSAGE)).rejects.toThrow(
+      /The app has Mail\.Send, so an Exchange application access policy/,
+    );
+  });
+
+  it('gets a new token after a refusal, so a permission fixed in Entra applies at once', async () => {
+    let status = 403;
+    const ms = fakeMicrosoft({ send: () => new Response('{}', { status }) });
+    const mailer = new GraphMailer(ms.fetcher);
+    await expect(mailer.send(CONFIG, MESSAGE)).rejects.toThrow();
+    status = 202;
+    await mailer.send(CONFIG, MESSAGE);
+    expect(ms.calls.filter((c) => c.url.includes('login.microsoftonline.com'))).toHaveLength(2);
   });
 
   it('forgets a token Graph rejects', async () => {
