@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-09-26
+
+### Fixed
+
+- **ConnectWise RMM sync:** no longer gets the API key locked (423) by signing in on every request; one sign-in is shared and ConnectWise's slow-down responses are retried. Device lists that ConnectWise rejected (400) now try the other request formats ConnectWise uses and keep the one your tenant accepts, and sync errors include ConnectWise's own explanation. (#47)
+
 ## [1.1.0] - 2026-09-26
 
 ### Added
