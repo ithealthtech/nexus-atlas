@@ -171,7 +171,7 @@ describe('ConnectWise RMM sync', () => {
       name: 'Tess Tech',
       password: 'temporary pass 1234',
       role: 'technician',
-      grants: [],
+      allClients: true,
     });
     expect(user.status, JSON.stringify(user.data)).toBe(201);
     const { b: tech } = await signIn(t.app, 'tess@atlas.test', 'temporary pass 1234');
