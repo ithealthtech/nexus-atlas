@@ -51,12 +51,34 @@ const text = (o: Json, ...keys: string[]) => {
   return typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
 };
 /** The list inside a response, whatever it's called. */
-const listOf = (body: unknown): Json[] => {
+const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices'];
+const listOf = (body: unknown, depth = 0): Json[] => {
   if (Array.isArray(body)) return body as Json[];
-  if (body && typeof body === 'object')
-    for (const key of ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices'])
-      if (Array.isArray((body as Json)[key])) return (body as Json)[key] as Json[];
+  if (!body || typeof body !== 'object' || depth > 3) return [];
+  const obj = body as Json;
+  for (const key of LIST_KEYS) if (Array.isArray(obj[key])) return obj[key] as Json[];
+  // Otherwise the first list of records anywhere inside (for example { data: { endpoints: [...] } }).
+  for (const value of Object.values(obj)) {
+    if (Array.isArray(value) && value.some((v) => v && typeof v === 'object')) return value as Json[];
+    const nested = listOf(value, depth + 1);
+    if (nested.length) return nested;
+  }
   return [];
+};
+/** A response's field names (never values), two levels deep, for diagnosing an unexpected shape. */
+const shapeOf = (body: unknown): string => {
+  if (Array.isArray(body)) return `a list of ${body.length}`;
+  if (!body || typeof body !== 'object') return typeof body;
+  return Object.entries(body as Json)
+    .map(([k, v]) =>
+      Array.isArray(v)
+        ? `${k}[${v.length}]`
+        : v && typeof v === 'object'
+          ? `${k}{${Object.keys(v as Json).slice(0, 8).join(',')}}`
+          : k,
+    )
+    .slice(0, 12)
+    .join(', ');
 };
 
 /** ConnectWise's own explanation of an error, trimmed for a job message. */
@@ -106,6 +128,8 @@ export interface RmmDevice {
 
 /** Talks to the ConnectWise Asio platform API with an OAuth client-credentials token. */
 export class CwRmmClient {
+  /** What the last device list looked like, for a job note when a company comes back empty. */
+  lastDeviceList = '';
   // One client (and so one token) per set of credentials, shared by every request and sync: signing in for
   // each page load gets the key locked.
   private static shared = new WeakMap<typeof fetch, Map<string, CwRmmClient>>();
@@ -213,7 +237,7 @@ export class CwRmmClient {
       );
     if (!res.ok)
       throw new HttpError(
-        res.status === 400 ? 400 : 502,
+        res.status === 400 || res.status === 404 ? res.status : 502,
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
     return res.json();
@@ -270,23 +294,47 @@ export class CwRmmClient {
 
   private async devicePages(companyId: string, siteIds: string[], shape: DeviceQuery): Promise<RmmDevice[]> {
     const out: RmmDevice[] = [];
+    // Only lists that aren't already limited to the company need filtering; a device's own company ID may use
+    // a different numbering than the company list, so trusting it elsewhere could drop every device.
+    const filter = shape.kind === 'v1' || shape.resourceType === 'partner';
+    const via = shape.kind === 'v2' ? `v2 by ${shape.resourceType}` : 'v1 list';
+    let seen = 0;
+    let otherCompany = 0;
+    this.lastDeviceList = `${via}: no response`;
     for (let cursor = 0, pages = 0; pages < 500; pages++) {
       const query = `limit=${shape.limit}&cursor=${cursor}`;
-      const body =
-        shape.kind === 'v2'
-          ? await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
-              resourceType: shape.resourceType,
-              resources:
-                shape.resourceType === 'site' ? siteIds : shape.resourceType === 'partner' ? [] : [companyId],
-            })
-          : await this.call('GET', `/api/platform/v1/device/endpoints?${query}&clientId=${encodeURIComponent(companyId)}`);
+      let body: unknown;
+      try {
+        body =
+          shape.kind === 'v2'
+            ? await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
+                resourceType: shape.resourceType,
+                resources:
+                  shape.resourceType === 'site' ? siteIds : shape.resourceType === 'partner' ? [] : [companyId],
+              })
+            : await this.call(
+                'GET',
+                `/api/platform/v1/device/endpoints?${query}&clientId=${encodeURIComponent(companyId)}`,
+              );
+      } catch (error) {
+        // ConnectWise answers "resource not found" (404) for a company with no devices, or past the last page. A
+        // request it can't read gets 400, so a 404 still means the request itself was accepted.
+        if (error instanceof HttpError && error.status === 404) {
+          if (!pages) this.lastDeviceList = `${via}: resource not found`;
+          break;
+        }
+        throw error;
+      }
       const page = listOf(body);
+      seen += page.length;
       for (const d of page) {
         const id = text(d, 'endpointId', 'id', 'deviceId');
         if (!id) continue;
-        // The v1 list may ignore the filter; keep only this company's devices.
         const owner = text(d, 'companyId', 'clientId', 'company.id', 'client.id');
-        if (owner && owner !== companyId) continue;
+        if (filter && owner && owner !== companyId) {
+          otherCompany++;
+          continue;
+        }
         const hostname = text(d, 'hostName', 'hostname', 'system.hostName', 'computerName');
         out.push({
           id,
@@ -303,10 +351,14 @@ export class CwRmmClient {
           serial: text(d, 'serialNumber', 'system.serialNumber', 'hardware.serialNumber', 'bios.serialNumber'),
         });
       }
+      if (!pages)
+        this.lastDeviceList = `${via}: response fields ${shapeOf(body)}; ${page.length} records on the first page`;
       const next = Number(pick((body ?? {}) as Json, 'nextCursor', 'pageInfo.nextCursor', 'next'));
       if (page.length < shape.limit) break;
       cursor = Number.isFinite(next) && next > cursor ? next : cursor + page.length;
     }
+    if (seen && !out.length)
+      this.lastDeviceList += `; ${otherCompany} belonged to another company, ${seen - otherCompany} had no device ID`;
     return out;
   }
 }
@@ -416,6 +468,8 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
       run.note(`Company ${companyId}: ${error instanceof HttpError ? error.message : 'could not be read.'}`);
       continue;
     }
+    // Field names only (never values), so an unexpected response can be diagnosed from the job log.
+    if (!devices.length) run.note(`Company ${companyId}: no devices listed (${client.lastDeviceList}).`);
     const siteNames = new Map<string, string>();
     for (const s of sites) {
       siteNames.set(s.id, s.name);

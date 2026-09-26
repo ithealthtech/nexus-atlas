@@ -63,6 +63,7 @@ function fakeAsio() {
       const limit = Number(url.searchParams.get('limit'));
       const cursor = Number(url.searchParams.get('cursor'));
       const all = state.devices.get(company) ?? [];
+      if (!all.length) return json({ message: 'resource not found' }, 404);
       return json({ endpoints: all.slice(cursor, cursor + limit) });
     }
     return json({}, 404);
@@ -239,5 +240,41 @@ describe('ConnectWise RMM device-list errors', () => {
     expect(error.message).toContain('v2 by site: invalid request');
     // The sync adds "Company <id>: " before it; the whole line must fit the 800-character job message.
     expect(`Company ${'0'.repeat(36)}: ${error.message}`.length).toBeLessThanOrEqual(800);
+  });
+});
+
+describe('ConnectWise RMM companies without devices', () => {
+  it('treats "resource not found" as no devices, not a failure', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const fetcher = (async (input: string | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      const { resourceType, resources } = JSON.parse(String(init?.body));
+      if (resourceType !== 'client') return Response.json({ message: 'invalid resource type' }, { status: 400 });
+      if (resources[0] === 'empty') return Response.json({ message: 'resource not found' }, { status: 404 });
+      return Response.json({ endpoints: [{ endpointId: 'e1', friendlyName: 'PC-1' }] });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    expect(await client.devices('empty')).toEqual([]);
+    expect((await client.devices('full')).map((d) => d.name)).toEqual(['PC-1']);
+  });
+});
+
+describe('ConnectWise RMM response shapes', () => {
+  it('finds devices nested deeper in the response, and describes an empty one by field names only', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    let body: unknown = { data: { endpoints: [{ endpointId: 'e1', friendlyName: 'PC-1', clientId: 12345 }] } };
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      return Response.json(body);
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    // A device's own client ID in another numbering doesn't drop it when the list is already per company.
+    expect((await client.devices('company-uuid')).map((d) => d.name)).toEqual(['PC-1']);
+    body = { total: 0, secretish: 'value-not-shown', paging: { cursor: 0 } };
+    expect(await client.devices('company-uuid')).toEqual([]);
+    expect(client.lastDeviceList).toContain('response fields total, secretish, paging{cursor}');
+    expect(client.lastDeviceList).not.toContain('value-not-shown');
   });
 });
