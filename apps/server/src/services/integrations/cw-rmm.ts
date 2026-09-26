@@ -18,6 +18,8 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
 };
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
 const RETRY_MS = 2000;
+// Four attempts at this length, plus the lead-in, stay within an import job message (800 characters).
+const ATTEMPT_CHARS = 140;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Json = Record<string, unknown>;
@@ -251,16 +253,15 @@ export class CwRmmClient {
         // Only a rejected request is worth trying another shape for.
         if (!(error instanceof HttpError && error.status === 400)) throw error;
         const said = /ConnectWise said: (.*)$/.exec(error.message)?.[1] ?? error.message;
-        tried.push(`${shape.kind === 'v2' ? `v2 by ${shape.resourceType}` : 'v1 list'}: ${said}`);
+        // Each attempt gets its own share of the job message, so a long answer can't hide a later one.
+        const short = said.length > ATTEMPT_CHARS ? `${said.slice(0, ATTEMPT_CHARS - 1)}…` : said;
+        tried.push(`${shape.kind === 'v2' ? `v2 by ${shape.resourceType}` : 'v1 list'}: ${short}`);
       }
     }
     // Every shape's answer, so one message shows whether it's the request or the key's permissions.
     throw new HttpError(
       400,
-      `ConnectWise RMM wouldn't list devices. Check the API key has the Devices read permission. Tried ${tried.join('; ')}`.slice(
-        0,
-        600,
-      ),
+      `ConnectWise RMM wouldn't list devices. Check the API key has the Devices read permission. Tried ${tried.join('; ')}`,
     );
   }
 

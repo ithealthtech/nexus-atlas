@@ -223,3 +223,20 @@ describe('ConnectWise RMM client', () => {
     );
   });
 });
+
+describe('ConnectWise RMM device-list errors', () => {
+  it('keeps every attempt in the message, however long each answer is', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      if (url.pathname.startsWith('/api/platform/v1/device'))
+        return Response.json({ message: 'access denied' }, { status: 403 });
+      return Response.json({ message: `invalid request ${'x'.repeat(190)}` }, { status: 400 });
+    }) as typeof fetch;
+    const error = await new CwRmmClient('na', 'id', 'secret', fetcher).devices('a', ['s1']).catch((e: Error) => e);
+    expect(error.message).toContain('v1 list: access denied');
+    expect(error.message).toContain('v2 by sites: invalid request');
+    expect(error.message.length).toBeLessThanOrEqual(800);
+  });
+});
