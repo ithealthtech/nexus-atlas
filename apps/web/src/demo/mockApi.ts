@@ -131,6 +131,7 @@ const docSummary = (d: (typeof documents)[0]) => {
 
 // ---------- vault ----------
 const passwords = db.passwords.map((p) => ({ ...p, ...meta(), updatedAt: p.changedAt }));
+const passwordFolders: { id: string; clientId: string; name: string }[] = [];
 const history = new Map<string, { id: string; secret: string; changedByName: string; createdAt: string }[]>();
 const access = new Map<string, { userIds: string[]; groupIds: string[] }>();
 const shares: {
@@ -148,7 +149,25 @@ const shares: {
 const vaultAudit: Json[] = [];
 const rotationDue = (p: (typeof passwords)[0]) =>
   p.rotationDays ? new Date(Date.parse(p.changedAt) + p.rotationDays * 86_400_000).toISOString().slice(0, 10) : null;
+type MockField = { id: string; label: string; secret: boolean; value: string };
+const customFields = new Map<string, MockField[]>();
+const saveFields = (id: string, input: unknown) => {
+  const before = customFields.get(id) ?? [];
+  customFields.set(
+    id,
+    (input as { id?: string; label: string; secret?: boolean; value?: string }[]).map((f) => {
+      const old = before.find((o) => o.id === f.id);
+      return { id: old?.id ?? uuid(), label: f.label, secret: !!f.secret, value: f.value ?? old?.value ?? '' };
+    }),
+  );
+};
+// Personal to the demo user: their stars and when they last used each password.
+const favorites = new Set<string>();
+const lastUsed = new Map<string, string>();
 const passwordView = (p: (typeof passwords)[0]) => ({
+  favorite: favorites.has(p.id),
+  lastUsedAt: lastUsed.get(p.id) ?? null,
+  customFields: (customFields.get(p.id) ?? []).map((f) => ({ ...f, value: f.secret ? null : f.value })),
   id: p.id,
   clientId: p.clientId,
   clientName: clientName(p.clientId)!,
@@ -184,6 +203,8 @@ const passwordView = (p: (typeof passwords)[0]) => ({
     .map((id) => assets.find((a) => a.id === id && !a.archived))
     .filter((a) => !!a)
     .map((a) => ({ id: a.id, name: a.name })),
+  folderId: (p as { folderId?: string | null }).folderId ?? null,
+  folderName: passwordFolders.find((f) => f.id === (p as { folderId?: string | null }).folderId)?.name ?? null,
 });
 const audit = (p: (typeof passwords)[0], action: string, reason = '') =>
   vaultAudit.unshift({
@@ -759,6 +780,7 @@ on('POST', '/clients/:id/passwords', (m, b) => {
     clientId: m[1]!,
     kind: (b.kind as 'login') ?? 'login',
     category: (b.category as PasswordCategory | null) ?? null,
+    folderId: (b.folderId as string | null) ?? null,
     name: String(b.name ?? '').trim(),
     username: String(b.username ?? ''),
     url: String(b.url ?? ''),
@@ -776,13 +798,46 @@ on('POST', '/clients/:id/passwords', (m, b) => {
   };
   if (!p.name || !p.secret) throw new MockError(400, 'Name and password are required.');
   passwords.push(p);
+  if (Array.isArray(b.customFields)) saveFields(p.id, b.customFields);
   record('Added a password', 'password', p.id, p.name, p.clientId);
   return passwordView(p);
 });
 on('GET', '/passwords/:id', (m) => passwordView(find(passwords, m[1]!, 'Password')));
+const folderView = (f: (typeof passwordFolders)[0]) => ({
+  ...f,
+  count: passwords.filter((p) => (p as { folderId?: string | null }).folderId === f.id && !p.archived).length,
+});
+on('GET', '/clients/:id/password-folders', (m) =>
+  passwordFolders
+    .filter((f) => f.clientId === m[1])
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(folderView),
+);
+on('POST', '/clients/:id/password-folders', (m, b) => {
+  const name = String(b.name ?? '').trim();
+  if (!name) throw new MockError(400, 'Name the folder.');
+  if (passwordFolders.some((f) => f.clientId === m[1] && f.name.toLowerCase() === name.toLowerCase()))
+    throw new MockError(409, 'This client already has a folder with that name.');
+  const f = { id: uuid(), clientId: m[1]!, name };
+  passwordFolders.push(f);
+  return folderView(f);
+});
+on('PATCH', '/password-folders/:id', (m, b) => {
+  const f = find(passwordFolders, m[1]!, 'Folder');
+  f.name = String(b.name ?? f.name).trim() || f.name;
+  return folderView(f);
+});
+on('DELETE', '/password-folders/:id', (m) => {
+  const i = passwordFolders.findIndex((f) => f.id === m[1]);
+  if (i >= 0) passwordFolders.splice(i, 1);
+  for (const p of passwords)
+    if ((p as { folderId?: string | null }).folderId === m[1]) Object.assign(p, { folderId: null });
+  return { ok: true };
+});
 on('PATCH', '/passwords/:id', (m, b) => {
   const p = find(passwords, m[1]!, 'Password');
-  const { version: _v, secret, totp, ...changes } = b;
+  const { version: _v, secret, totp, customFields: fields, ...changes } = b;
+  if (Array.isArray(fields)) saveFields(p.id, fields);
   if (typeof secret === 'string' && secret !== p.secret) {
     history.set(p.id, [
       { id: uuid(), secret: p.secret, changedByName: db.owner.name, createdAt: now() },
@@ -797,9 +852,32 @@ on('PATCH', '/passwords/:id', (m, b) => {
   record('Updated', 'password', p.id, p.name, p.clientId);
   return passwordView(p);
 });
+on('POST', '/passwords/bulk', (_m, b) => {
+  let updated = 0;
+  for (const id of b.ids as string[]) {
+    const p = find(passwords, id, 'Password') as (typeof passwords)[0] & { category?: PasswordCategory | null };
+    if (b.action === 'archive' || b.action === 'restore') p.archived = b.action === 'archive';
+    else if (b.action === 'rotation') p.rotationDays = b.rotationDays as number | null;
+    else if (b.action === 'clientVisible') p.clientVisible = !!b.clientVisible;
+    else if (b.action === 'category') p.category = b.category as PasswordCategory | null;
+    audit(p, b.action === 'archive' ? 'Archived' : b.action === 'restore' ? 'Restored' : 'Edited details', '');
+    updated++;
+  }
+  return { updated, failed: [] };
+});
 on('POST', '/passwords/:id/archive', (m, b) => {
   const p = find(passwords, m[1]!, 'Password');
   p.archived = !!b.archived;
+  return passwordView(p);
+});
+on('PUT', '/passwords/:id/favorite', (m) => {
+  const p = find(passwords, m[1]!, 'Password');
+  favorites.add(p.id);
+  return passwordView(p);
+});
+on('DELETE', '/passwords/:id/favorite', (m) => {
+  const p = find(passwords, m[1]!, 'Password');
+  favorites.delete(p.id);
   return passwordView(p);
 });
 on('POST', '/passwords/:id/reveal', (m, b) => {
@@ -814,6 +892,8 @@ on('POST', '/passwords/:id/reveal', (m, b) => {
       : `Revealed ${field === 'secret' ? 'password' : field}`,
     String(b.reason ?? ''),
   );
+  lastUsed.set(p.id, new Date().toISOString());
+  if (field === 'custom') return { value: customFields.get(p.id)?.find((f) => f.id === b.fieldId)?.value ?? '' };
   if (field === 'totp')
     return {
       value: String(Math.floor(Math.random() * 1e6)).padStart(6, '0'),

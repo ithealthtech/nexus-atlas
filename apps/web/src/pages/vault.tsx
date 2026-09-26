@@ -9,6 +9,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Folder,
   Eye,
   EyeOff,
   HardDrive,
@@ -20,20 +21,28 @@ import {
   Plus,
   RefreshCw,
   Search,
+  X,
   Share2,
   ShieldCheck,
+  Star,
   Timer,
+  Trash2,
   UserRound,
   Users,
 } from 'lucide-react';
 import {
   PASSWORD_CATEGORIES,
+  MAX_CUSTOM_FIELDS,
   PASSWORD_CATEGORY_LABELS,
   STRENGTH_LABELS,
   passwordStrength,
+  type BulkPasswordInput,
+  type BulkPasswordResult,
   type PasswordCategory,
+  type PasswordFolderView,
   type PasswordKind,
   type PasswordView,
+  type RelationView,
   type UserView,
 } from '@atlas/shared';
 import { PasswordIcon, hostOf } from '@/lib/password-categories';
@@ -61,15 +70,20 @@ import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
-import { useClient, useClients, useUsers, useGroups } from '@/lib/queries';
+import { useAssets, useClient, useClients, useUsers, useGroups } from '@/lib/queries';
 import {
   DEFAULT_GENERATOR,
+  GENERATOR_PRESETS,
   copySecret,
-  encryptShare,
+  createShareLink,
   generatePassword,
+  loadGeneratorOptions,
+  presetFor,
+  saveGeneratorOptions,
   useAskReason,
   usePassword,
   usePasswordAudit,
+  usePasswordFolders,
   usePasswordHistory,
   usePasswords,
   useReveal,
@@ -103,13 +117,17 @@ function StrengthMeter({ value }: { value: string }) {
 }
 
 function Generator({ onUse }: { onUse: (value: string) => void }) {
-  const [options, setOptions] = useState<GeneratorOptions>(DEFAULT_GENERATOR);
-  const [value, setValue] = useState(() => generatePassword(DEFAULT_GENERATOR));
+  const [options, setOptions] = useState<GeneratorOptions>(loadGeneratorOptions);
+  const [value, setValue] = useState(() => generatePassword(options));
   const update = (patch: Partial<GeneratorOptions>) => {
     const next = { ...options, ...patch };
+    // Switching into PIN mode starts from a PIN-sized length; leaving it restores a sensible one.
+    if (patch.mode === 'pin' && options.mode !== 'pin') next.length = 6;
+    if (patch.mode && patch.mode !== 'pin' && options.mode === 'pin') next.length = DEFAULT_GENERATOR.length;
     setOptions(next);
     setValue(generatePassword(next));
   };
+  const preset = presetFor(options);
   return (
     <div className="space-y-3 rounded-xl border border-border bg-surface-2 p-4">
       <div className="flex items-center gap-2">
@@ -127,13 +145,36 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
         >
           <RefreshCw />
         </Button>
-        <Button size="sm" onClick={() => onUse(value)}>
+        <Button
+          size="sm"
+          onClick={() => {
+            saveGeneratorOptions(options);
+            onUse(value);
+          }}
+        >
           Use
         </Button>
       </div>
+      <div role="group" aria-label="Presets" className="flex flex-wrap gap-1.5">
+        {GENERATOR_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            aria-pressed={preset === p.id}
+            title={p.hint}
+            onClick={() => {
+              setOptions(p.options);
+              setValue(generatePassword(p.options));
+            }}
+            className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-2 hover:bg-surface-3 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:text-text"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
         <div role="group" aria-label="Generator type" className="flex gap-1 rounded-lg bg-surface-3 p-1">
-          {(['characters', 'passphrase'] as const).map((mode) => (
+          {(['characters', 'passphrase', 'pin'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -141,11 +182,24 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
               onClick={() => update({ mode })}
               className="rounded-md px-2.5 py-1 text-xs font-medium capitalize aria-pressed:bg-surface aria-pressed:shadow-sm"
             >
-              {mode}
+              {mode === 'pin' ? 'PIN' : mode}
             </button>
           ))}
         </div>
-        {options.mode === 'characters' ? (
+        {options.mode === 'pin' ? (
+          <label className="flex items-center gap-2">
+            Digits
+            <input
+              type="range"
+              min={4}
+              max={12}
+              value={options.length}
+              onChange={(e) => update({ length: Number(e.target.value) })}
+              className="accent-(--primary)"
+            />
+            <span className="w-6 tabular-nums">{options.length}</span>
+          </label>
+        ) : options.mode === 'characters' ? (
           <>
             <label className="flex items-center gap-2">
               Length
@@ -186,6 +240,177 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
 }
 
 // ---------------------------------------------------------------- form
+type EditableField = { key: string; id?: string; label: string; secret: boolean; value: string };
+
+/** Extra labelled values: a tenant ID, a PIN, a recovery email. Hidden ones are encrypted like the password. */
+function CustomFieldsEditor({
+  fields,
+  onChange,
+  error,
+}: {
+  fields: EditableField[];
+  onChange: (fields: EditableField[]) => void;
+  error?: string;
+}) {
+  const set = (key: string, patch: Partial<EditableField>) =>
+    onChange(fields.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Custom fields</legend>
+      {fields.map((f, i) => (
+        <div
+          key={f.key}
+          className="grid gap-2 rounded-lg border border-border p-2.5 sm:grid-cols-[10rem_minmax(0,1fr)_auto_auto] sm:items-center"
+        >
+          <Input
+            aria-label={`Field ${i + 1} label`}
+            value={f.label}
+            onChange={(e) => set(f.key, { label: e.target.value })}
+            placeholder="Label"
+            maxLength={100}
+          />
+          <Input
+            aria-label={`${f.label || `Field ${i + 1}`} value`}
+            value={f.value}
+            onChange={(e) => set(f.key, { value: e.target.value })}
+            type={f.secret ? 'password' : 'text'}
+            autoComplete="off"
+            maxLength={5000}
+            placeholder={f.id && f.secret ? 'Unchanged, type to replace' : 'Value'}
+          />
+          <label className="flex items-center gap-2 text-sm text-text-2">
+            <input
+              type="checkbox"
+              className="size-4 rounded accent-(--primary)"
+              checked={f.secret}
+              onChange={(e) => set(f.key, { secret: e.target.checked })}
+            />
+            Hidden
+          </label>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Remove ${f.label || `field ${i + 1}`}`}
+            onClick={() => onChange(fields.filter((x) => x.key !== f.key))}
+          >
+            <X />
+          </Button>
+        </div>
+      ))}
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {fields.length < MAX_CUSTOM_FIELDS && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange([...fields, { key: crypto.randomUUID(), label: '', secret: false, value: '' }])}
+        >
+          <Plus /> Add a field
+        </Button>
+      )}
+    </fieldset>
+  );
+}
+
+/** Adds and removes asset links so they match `next`; returns a message if any link couldn't be changed. */
+async function syncAssetLinks(passwordId: string, before: string[], next: string[]): Promise<string | null> {
+  const add = next.filter((id) => !before.includes(id));
+  const remove = before.filter((id) => !next.includes(id));
+  if (!add.length && !remove.length) return null;
+  const base = `/items/password/${passwordId}/relations`;
+  const failed: string[] = [];
+  for (const id of add)
+    await api(base, { method: 'POST', body: { type: 'asset', id } }).catch((e: Error) => failed.push(e.message));
+  if (remove.length) {
+    const links = await api<RelationView[]>(base);
+    for (const link of links.filter((l) => l.type === 'asset' && remove.includes(l.id)))
+      await api(`${base}/${link.relationId}`, { method: 'DELETE' }).catch((e: Error) => failed.push(e.message));
+  }
+  return failed.length ? `Saved, but some asset links didn't change: ${[...new Set(failed)].join(' ')}` : null;
+}
+
+/** Pick the client's assets this password belongs to (a firewall, a server, a tenant…). */
+function AssetLinksField({
+  clientId,
+  value,
+  onChange,
+}: {
+  clientId: string;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const assets = useAssets({ client: clientId });
+  const [query, setQuery] = useState('');
+  const all = assets.data ?? [];
+  const chosen = value.map((id) => all.find((a) => a.id === id) ?? { id, name: 'Asset', layoutName: '' });
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? all.filter((a) => !value.includes(a.id) && `${a.name} ${a.layoutName}`.toLowerCase().includes(q)).slice(0, 8)
+    : [];
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Linked assets</legend>
+      {chosen.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5" aria-label="Linked assets">
+          {chosen.map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center gap-1 rounded-full bg-surface-3 py-0.5 pr-1 pl-2.5 text-xs font-medium"
+            >
+              {a.name}
+              <button
+                type="button"
+                className="grid size-5 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-text"
+                aria-label={`Unlink ${a.name}`}
+                onClick={() => onChange(value.filter((id) => id !== a.id))}
+              >
+                <X className="size-3" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className="relative block">
+        <span className="sr-only">Find an asset to link</span>
+        <Search
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+          aria-hidden
+        />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={all.length ? 'Find an asset to link…' : 'This client has no assets yet'}
+          disabled={!all.length}
+          className="pl-9"
+          autoComplete="off"
+        />
+      </label>
+      {q && (
+        <ul className="max-h-48 overflow-y-auto rounded-lg border border-border" aria-label="Matching assets">
+          {matches.length ? (
+            matches.map((a) => (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-surface-2"
+                  onClick={() => {
+                    onChange([...value, a.id]);
+                    setQuery('');
+                  }}
+                >
+                  <span className="truncate font-medium">{a.name}</span>
+                  <span className="shrink-0 text-xs text-muted">{a.layoutName}</span>
+                </button>
+              </li>
+            ))
+          ) : (
+            <li className="px-3 py-2 text-sm text-muted">No matching assets.</li>
+          )}
+        </ul>
+      )}
+    </fieldset>
+  );
+}
+
 export function PasswordDialog({
   clientId,
   item,
@@ -201,11 +426,18 @@ export function PasswordDialog({
   const queryClient = useQueryClient();
   const reveal = useReveal();
   const [kind, setKind] = useState<PasswordKind>(item?.kind ?? 'login');
+  const folders = usePasswordFolders(clientId).data ?? [];
+  const [folderId, setFolderId] = useState(item?.folderId ?? '');
   const [secret, setSecret] = useState('');
   const [showSecret, setShowSecret] = useState(!item);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fields, setFields] = useState<EditableField[]>(
+    item?.customFields.map((f) => ({ key: f.id, id: f.id, label: f.label, secret: f.secret, value: f.value ?? '' })) ??
+      [],
+  );
+  const [assetIds, setAssetIds] = useState<string[]>(item?.linkedAssets.map((a) => a.id) ?? []);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -220,6 +452,14 @@ export function PasswordDialog({
       ...(actor.isAdmin ? { restricted: form.get('restricted') === 'on' } : {}),
       clientVisible: form.get('clientVisible') === 'on',
       ...(kind === 'login' ? { category: text('category') || null } : {}),
+      // An existing secret left empty keeps its stored value.
+      customFields: fields.map((f) => ({
+        ...(f.id ? { id: f.id } : {}),
+        label: f.label,
+        secret: f.secret,
+        ...(f.id && f.secret && !f.value ? {} : { value: f.value }),
+      })),
+      folderId: text('folderId') || null,
     };
     // On edit, secrets are sent only when changed, so unrevealed values are never round-tripped.
     if (!item || secret) body.secret = secret;
@@ -234,11 +474,19 @@ export function PasswordDialog({
             body: { ...body, version: item.version },
           })
         : await api<PasswordView>(`/clients/${clientId}/passwords`, { method: 'POST', body: { ...body, kind } });
+      const linkFailed = await syncAssetLinks(saved.id, item?.linkedAssets.map((a) => a.id) ?? [], assetIds);
+      if (linkFailed) toast(linkFailed, 'error');
       queryClient.setQueryData(['password', saved.id], saved);
       await Promise.all(
-        ['passwords', 'password-history', 'password-audit', 'activity'].map((k) =>
-          queryClient.invalidateQueries({ queryKey: [k] }),
-        ),
+        [
+          'passwords',
+          'password',
+          'password-history',
+          'password-audit',
+          'password-folders',
+          'activity',
+          'relations',
+        ].map((k) => queryClient.invalidateQueries({ queryKey: [k] })),
       );
       toast(item ? 'Saved.' : `${saved.name} saved to the vault.`);
       onClose();
@@ -341,6 +589,28 @@ export function PasswordDialog({
             )}
           </Field>
         )}
+        <Field
+          label="Folder"
+          help={
+            folders.length ? undefined : 'This client has no folders yet. Add them with Folders in the password list.'
+          }
+          error={error?.fields?.folderId}
+        >
+          {(p) => (
+            // Controlled, and the current folder is always an option, so a slow folder list can't unfile it.
+            <Select {...p} name="folderId" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+              <option value="">No folder</option>
+              {item?.folderId && !folders.some((f) => f.id === item.folderId) && (
+                <option value={item.folderId}>{item.folderName}</option>
+              )}
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
         <Field
           label={kind === 'bitlocker' ? 'Recovery key' : item ? 'New password' : 'Password'}
           error={error?.fields?.secret}
@@ -445,6 +715,8 @@ export function PasswordDialog({
             )}
           </Field>
         )}
+        <CustomFieldsEditor fields={fields} onChange={setFields} error={error?.fields?.customFields} />
+        <AssetLinksField clientId={item?.clientId ?? clientId} value={assetIds} onChange={setAssetIds} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Rotate every"
@@ -494,6 +766,42 @@ export function PasswordDialog({
 }
 
 // ---------------------------------------------------------------- list
+/** A personal star: pins the password to your Favorites (nobody else sees it). */
+export function FavoriteButton({ item }: { item: PasswordView }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      const saved = await api<PasswordView>(`/passwords/${item.id}/favorite`, {
+        method: item.favorite ? 'DELETE' : 'PUT',
+        ...(item.favorite ? {} : { body: {} }),
+      });
+      queryClient.setQueryData(['password', item.id], saved);
+      await queryClient.invalidateQueries({ queryKey: ['passwords'] });
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const label = item.favorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`;
+  return (
+    <button
+      type="button"
+      onClick={() => void toggle()}
+      disabled={busy}
+      aria-pressed={item.favorite}
+      aria-label={label}
+      title={item.favorite ? 'Favorite' : 'Add to favorites'}
+      className="grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-3 hover:text-warning aria-pressed:text-warning disabled:opacity-60"
+    >
+      <Star className={cn('size-4', item.favorite && 'fill-current')} aria-hidden />
+    </button>
+  );
+}
+
 /** One icon button that runs `action` and briefly shows a check mark when it succeeds. */
 function QuickAction({
   label,
@@ -538,12 +846,60 @@ function QuickAction({
 const Slot = () => <span className="inline-block size-9" aria-hidden />;
 
 /** Copy username / password / one-time code, and open the sign-in address, without opening the entry. */
+/**
+ * Quick share: one click makes a one-time link (one view, 24 hours) and copies it, for sending to someone who
+ * doesn't sign in to Atlas. The full Share dialog on the password page offers other limits.
+ */
+function useQuickShare() {
+  const ask = useAskReason();
+  const queryClient = useQueryClient();
+  // Shown when the browser won't let us copy: the link's key exists nowhere else, so it must not be lost.
+  const [manual, setManual] = useState<string | null>(null);
+  const share = async (item: PasswordView): Promise<string | null> => {
+    let reason = '';
+    if (item.requireReason) {
+      const given = await ask('Why are you sharing this password?');
+      if (given === null) return null;
+      reason = given;
+    }
+    const link = await createShareLink(item, { maxViews: 1, hours: 24, reason });
+    await Promise.all(
+      ['password-shares', 'password-audit'].map((k) => queryClient.invalidateQueries({ queryKey: [k, item.id] })),
+    );
+    try {
+      // The link is the secret now; copy it as-is (not auto-cleared) so it can be pasted into an email or ticket.
+      await navigator.clipboard.writeText(link);
+    } catch {
+      setManual(link);
+      return null;
+    }
+    return 'One-time link copied. It opens once and expires in 24 hours.';
+  };
+  const dialog = manual && (
+    <Dialog
+      open
+      onClose={() => setManual(null)}
+      title="Copy the one-time link"
+      description="Your browser didn't allow copying automatically. Copy this link now: it can't be shown again. It opens once and expires in 24 hours."
+      footer={<Button onClick={() => setManual(null)}>Done</Button>}
+    >
+      <Field label="Share link">
+        {(p) => <Input {...p} readOnly value={manual} onFocus={(e) => e.currentTarget.select()} autoFocus />}
+      </Field>
+    </Dialog>
+  );
+  return { share, dialog };
+}
+
 function QuickActions({ item }: { item: PasswordView }) {
   const reveal = useReveal();
+  const actor = useActor();
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
   const bitlocker = item.kind === 'bitlocker';
   const openable = !bitlocker && /^https?:\/\//i.test(item.url);
   return (
     <div className="flex items-center justify-end">
+      {quickShareDialog}
       {item.username ? (
         <QuickAction
           label={`Copy ${bitlocker ? 'recovery key ID' : 'username'} for ${item.name}`}
@@ -581,6 +937,15 @@ function QuickActions({ item }: { item: PasswordView }) {
       ) : (
         <Slot />
       )}
+      {actor.isStaff ? (
+        <QuickAction
+          label={`Quick share ${item.name}: copy a one-time link`}
+          icon={Share2}
+          action={() => quickShare(item)}
+        />
+      ) : (
+        <Slot />
+      )}
       {openable ? (
         <a
           href={item.url}
@@ -599,6 +964,198 @@ function QuickActions({ item }: { item: PasswordView }) {
   );
 }
 
+const ROTATION_CHOICES = [30, 60, 90, 180, 365];
+type BulkChange = BulkPasswordInput extends infer T ? (T extends unknown ? Omit<T, 'ids'> : never) : never;
+
+/** Actions for the selected rows. Each password is checked on the server; any it skips are listed. */
+function BulkBar({
+  items,
+  archivedView,
+  onDone,
+}: {
+  items: PasswordView[];
+  archivedView: boolean;
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const run = async (change: BulkChange, verb: string) => {
+    setBusy(true);
+    try {
+      const res = await api<BulkPasswordResult>('/passwords/bulk', {
+        method: 'POST',
+        body: { ...change, ids: items.map((p) => p.id) },
+      });
+      await queryClient.invalidateQueries({ queryKey: ['passwords'] });
+      await queryClient.invalidateQueries({ queryKey: ['password'] });
+      const noun = (k: number) => (k === 1 ? '1 password' : `${k} passwords`);
+      if (res.failed.length)
+        toast(
+          `${verb} ${noun(res.updated)}. Skipped ${noun(res.failed.length)}: ${res.failed
+            .map((f) => `${f.name ?? 'unavailable'} (${f.error})`)
+            .join('; ')}`,
+          'error',
+        );
+      else toast(`${verb} ${noun(res.updated)}.`);
+      onDone();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const logins = items.filter((p) => p.kind === 'login').length;
+  return (
+    <div
+      role="region"
+      aria-label="Bulk actions"
+      className="flex flex-wrap items-center gap-2 border-b border-border bg-primary-soft px-4 py-2.5 text-sm"
+    >
+      <span className="mr-auto font-medium">{items.length} selected</span>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={busy}
+        onClick={() =>
+          void run({ action: archivedView ? 'restore' : 'archive' }, archivedView ? 'Restored' : 'Archived')
+        }
+      >
+        {archivedView ? <ArchiveRestore /> : <Archive />} {archivedView ? 'Restore' : 'Archive'}
+      </Button>
+      <label>
+        <span className="sr-only">Change rotation</span>
+        <Select
+          value=""
+          disabled={busy}
+          className="h-8 w-auto"
+          onChange={(e) =>
+            void run(
+              { action: 'rotation', rotationDays: e.target.value === 'off' ? null : Number(e.target.value) },
+              'Updated rotation for',
+            )
+          }
+        >
+          <option value="" disabled>
+            Rotation…
+          </option>
+          {ROTATION_CHOICES.map((d) => (
+            <option key={d} value={d}>
+              Every {d} days
+            </option>
+          ))}
+          <option value="off">No rotation</option>
+        </Select>
+      </label>
+      <label>
+        <span className="sr-only">Change client portal sharing</span>
+        <Select
+          value=""
+          disabled={busy}
+          className="h-8 w-auto"
+          onChange={(e) =>
+            void run(
+              { action: 'clientVisible', clientVisible: e.target.value === 'share' },
+              e.target.value === 'share' ? 'Shared' : 'Stopped sharing',
+            )
+          }
+        >
+          <option value="" disabled>
+            Client portal…
+          </option>
+          <option value="share">Share with client</option>
+          <option value="hide">Stop sharing</option>
+        </Select>
+      </label>
+      {logins > 0 && (
+        <label>
+          <span className="sr-only">Change type</span>
+          <Select
+            value=""
+            disabled={busy}
+            className="h-8 w-auto"
+            onChange={(e) =>
+              void run({ action: 'category', category: e.target.value as PasswordCategory }, 'Changed the type of')
+            }
+          >
+            <option value="" disabled>
+              Type…
+            </option>
+            {PASSWORD_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {PASSWORD_CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </Select>
+        </label>
+      )}
+      <Button size="sm" variant="ghost" disabled={busy} onClick={onDone}>
+        Clear
+      </Button>
+    </div>
+  );
+}
+
+// ---------- list sorting and grouping (remembered per browser) ----------
+type ListSort = 'name' | 'client' | 'type' | 'recent' | 'attention';
+type ListGroup = 'none' | 'client' | 'type';
+type ListView = { sort: ListSort; group: ListGroup };
+const SORT_LABELS: Record<ListSort, string> = {
+  name: 'Name',
+  client: 'Client',
+  type: 'Type',
+  recent: 'Recently changed',
+  attention: 'Needs attention first',
+};
+const LIST_VIEW_KEY = 'atlas-password-list';
+function loadListView(): ListView {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LIST_VIEW_KEY) ?? '{}') as Partial<ListView>;
+    return {
+      sort: saved.sort && saved.sort in SORT_LABELS ? saved.sort : 'name',
+      group: saved.group === 'client' || saved.group === 'type' ? saved.group : 'none',
+    };
+  } catch {
+    return { sort: 'name', group: 'none' };
+  }
+}
+function saveListView(view: ListView) {
+  try {
+    localStorage.setItem(LIST_VIEW_KEY, JSON.stringify(view));
+  } catch {
+    /* Storage can be blocked; the choice still applies until the page reloads. */
+  }
+}
+const typeLabel = (p: PasswordView) =>
+  p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category];
+/** Higher is worse: rotation overdue, then reused, then weak. */
+const attention = (p: PasswordView) =>
+  (rotationOverdue(p) ? 4 : 0) + (p.reused > 0 ? 2 : 0) + (p.kind === 'login' && p.strength < 2 ? 1 : 0);
+const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+function sortPasswords(items: PasswordView[], sort: ListSort) {
+  const name = (a: PasswordView, b: PasswordView) => byText(a.name, b.name);
+  const compare: Record<ListSort, (a: PasswordView, b: PasswordView) => number> = {
+    name,
+    client: (a, b) => byText(a.clientName, b.clientName) || name(a, b),
+    type: (a, b) => byText(typeLabel(a), typeLabel(b)) || name(a, b),
+    recent: (a, b) => b.updatedAt.localeCompare(a.updatedAt) || name(a, b),
+    attention: (a, b) => attention(b) - attention(a) || name(a, b),
+  };
+  return [...items].sort(compare[sort]);
+}
+/** Keeps the sort order inside each group; groups themselves are alphabetical. */
+function groupPasswords(items: PasswordView[], group: ListGroup) {
+  if (group === 'none') return [{ key: 'all', label: null as string | null, items }];
+  const map = new Map<string, PasswordView[]>();
+  for (const p of items) {
+    const label = group === 'client' ? p.clientName : typeLabel(p);
+    map.set(label, [...(map.get(label) ?? []), p]);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => byText(a, b))
+    .map(([label, groupItems]) => ({ key: label, label: label as string | null, items: groupItems }));
+}
+
 export function PasswordsView({ clientId }: { clientId?: string }) {
   const search = useSearch({ strict: false }) as { archived?: boolean };
   const go = useGo();
@@ -610,6 +1167,26 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
   const [adding, setAdding] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [show, setShow] = useState<'all' | 'favorites' | 'recent'>('all');
+  // Folders belong to one client, so they're offered inside a client (to staff with password access).
+  const folderQuery = usePasswordFolders(clientId && actor.isStaff ? clientId : undefined);
+  const folders = folderQuery.data ?? [];
+  const [chosenFolder, setFolder] = useState(''); // '' all, 'none' unfiled, or a folder id
+  // A folder deleted while it's the filter drops back to all, so the list never looks empty for no reason.
+  const folder =
+    chosenFolder && chosenFolder !== 'none' && folderQuery.isSuccess && !folders.some((f) => f.id === chosenFolder)
+      ? ''
+      : chosenFolder;
+  const [managingFolders, setManagingFolders] = useState(false);
+  const [view, setView] = useState<ListView>(loadListView);
+  const changeView = (next: Partial<ListView>) => {
+    const merged = { ...view, ...next };
+    setView(merged);
+    saveListView(merged);
+  };
+  // Grouping by client makes no sense inside one client.
+  const groupBy = clientId && view.group === 'client' ? 'none' : view.group;
   const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
   const types = useMemo(() => {
@@ -621,7 +1198,10 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
     () =>
       (list.data ?? []).filter(
         (p) =>
+          (show !== 'favorites' || p.favorite) &&
+          (show !== 'recent' || p.lastUsedAt) &&
           (!type || typeOf(p) === type) &&
+          (!folder || (folder === 'none' ? !p.folderId : p.folderId === folder)) &&
           [
             p.name,
             p.username,
@@ -634,8 +1214,29 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             .toLowerCase()
             .includes(query.trim().toLowerCase()),
       ),
-    [list.data, query, type],
+    [list.data, query, type, folder, show],
   );
+  // Recently used: most recent first, up to 25, whatever the chosen sort.
+  const groups = useMemo(
+    () =>
+      groupPasswords(
+        show === 'recent'
+          ? [...rows].sort((a, b) => b.lastUsedAt!.localeCompare(a.lastUsedAt!)).slice(0, 25)
+          : sortPasswords(rows, view.sort),
+        groupBy,
+      ),
+    [rows, view.sort, groupBy, show],
+  );
+  // Only what's on screen can be selected, so a filter change quietly narrows the selection.
+  const chosen = rows.filter((p) => selected.has(p.id));
+  const allChosen = rows.length > 0 && chosen.length === rows.length;
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   if (clientId && client.data && !canUse)
     return (
       <Card>
@@ -671,6 +1272,16 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               className="pl-9"
             />
           </label>
+          {actor.isStaff && (
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Show</span>
+              <Select value={show} onChange={(e) => setShow(e.target.value as typeof show)}>
+                <option value="all">All passwords</option>
+                <option value="favorites">Favorites</option>
+                <option value="recent">Recently used by me</option>
+              </Select>
+            </label>
+          )}
           {types.size > 1 && (
             <label className="w-full sm:w-auto">
               <span className="sr-only">Type</span>
@@ -686,6 +1297,45 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               </Select>
             </label>
           )}
+          {folders.length > 0 && (
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Folder</span>
+              <Select value={folder} onChange={(e) => setFolder(e.target.value)}>
+                <option value="">All folders</option>
+                <option value="none">No folder</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} ({f.count})
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
+          {clientId && canUse && actor.isStaff && (
+            <Button variant="ghost" size="sm" onClick={() => setManagingFolders(true)}>
+              <Folder /> Folders
+            </Button>
+          )}
+          <label className="w-full sm:w-auto">
+            <span className="sr-only">Sort</span>
+            <Select value={view.sort} onChange={(e) => changeView({ sort: e.target.value as ListSort })}>
+              {Object.entries(SORT_LABELS)
+                .filter(([k]) => !(clientId && k === 'client'))
+                .map(([k, label]) => (
+                  <option key={k} value={k}>
+                    Sort: {label}
+                  </option>
+                ))}
+            </Select>
+          </label>
+          <label className="w-full sm:w-auto">
+            <span className="sr-only">Group by</span>
+            <Select value={groupBy} onChange={(e) => changeView({ group: e.target.value as ListGroup })}>
+              <option value="none">No grouping</option>
+              {!clientId && <option value="client">Group by client</option>}
+              <option value="type">Group by type</option>
+            </Select>
+          </label>
           {actor.isStaff && (
             <Button
               variant="ghost"
@@ -701,6 +1351,9 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             </Button>
           )}
         </div>
+        {actor.isStaff && chosen.length > 0 && (
+          <BulkBar items={chosen} archivedView={!!search.archived} onDone={() => setSelected(new Set())} />
+        )}
         {list.isLoading ? (
           <div className="space-y-3 p-5">
             {[0, 1, 2].map((i) => (
@@ -712,6 +1365,20 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
             <table className="w-full text-left text-sm">
               <thead className="bg-surface-2 text-xs text-muted">
                 <tr>
+                  {actor.isStaff && (
+                    <th className="w-0 py-3 pl-4">
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded accent-(--primary)"
+                        aria-label="Select all shown passwords"
+                        checked={allChosen}
+                        ref={(el) => {
+                          if (el) el.indeterminate = chosen.length > 0 && !allChosen;
+                        }}
+                        onChange={() => setSelected(allChosen ? new Set() : new Set(rows.map((p) => p.id)))}
+                      />
+                    </th>
+                  )}
                   <th className="px-5 py-3 font-medium">Name</th>
                   {!clientId && <th className="hidden px-5 py-3 font-medium md:table-cell">Client</th>}
                   <th className="hidden px-5 py-3 font-medium sm:table-cell">Username</th>
@@ -720,60 +1387,88 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                   <th className="px-3 py-3 text-right font-medium">Quick actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((p) => (
-                  <tr key={p.id} className="hover:bg-surface-2">
-                    {/* On phones the name takes whatever width the actions leave, and truncates. */}
-                    <td className="w-full max-w-0 py-3 pr-2 pl-4 sm:w-auto sm:max-w-none sm:px-5">
-                      <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">
-                        <span
-                          className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
-                          title={
-                            p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
-                          }
-                        >
-                          <PasswordIcon item={p} className="size-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5 font-semibold hover:underline">
-                            <span className="truncate">{p.name}</span>
-                            {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
-                          </span>
-                          {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
-                          <span className="block truncate text-xs text-muted">
-                            {[
-                              p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category],
-                              p.kind === 'login' && p.url ? hostOf(p.url) : '',
-                              p.linkedAssets.length
-                                ? `on ${p.linkedAssets
-                                    .slice(0, 2)
-                                    .map((a) => a.name)
-                                    .join(', ')}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
-                                : '',
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </span>
-                        </span>
-                      </AppLink>
-                    </td>
-                    {!clientId && <td className="hidden px-5 py-3 text-text-2 md:table-cell">{p.clientName}</td>}
-                    <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
-                      {p.username || <span className="font-sans text-muted">—</span>}
-                    </td>
-                    <td className="hidden px-5 py-3 sm:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {p.kind === 'login' && (
-                          <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
-                        )}
-                        {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
-                        {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5">{!p.archived && <QuickActions item={p} />}</td>
-                  </tr>
-                ))}
-              </tbody>
+              {groups.map((g) => (
+                <tbody key={g.key} className="divide-y divide-border border-b border-border last:border-b-0">
+                  {g.label !== null && (
+                    <tr className="bg-surface-2/60">
+                      <th colSpan={6} scope="rowgroup" className="px-5 py-2 text-xs font-semibold text-text-2">
+                        {g.label} <span className="font-normal text-muted">({g.items.length})</span>
+                      </th>
+                    </tr>
+                  )}
+                  {g.items.map((p) => (
+                    <tr key={p.id} className={cn('hover:bg-surface-2', selected.has(p.id) && 'bg-surface-2')}>
+                      {actor.isStaff && (
+                        <td className="w-0 py-3 pl-4">
+                          <input
+                            type="checkbox"
+                            className="size-4 rounded accent-(--primary)"
+                            aria-label={`Select ${p.name}`}
+                            checked={selected.has(p.id)}
+                            onChange={() => toggle(p.id)}
+                          />
+                        </td>
+                      )}
+                      {/* On phones the name takes whatever width the actions leave, and truncates. */}
+                      <td className="w-full max-w-0 py-3 pr-2 pl-2 sm:w-auto sm:max-w-none sm:pr-5 sm:pl-3">
+                        <div className="flex items-center gap-1">
+                          {actor.isStaff && <FavoriteButton item={p} />}
+                          <AppLink to={`/passwords/${p.id}`} className="flex min-w-0 items-center gap-3">
+                            <span
+                              className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
+                              title={
+                                p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
+                              }
+                            >
+                              <PasswordIcon item={p} className="size-4" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="flex items-center gap-1.5 font-semibold hover:underline">
+                                <span className="truncate">{p.name}</span>
+                                {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
+                              </span>
+                              {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
+                              <span className="block truncate text-xs text-muted">
+                                {[
+                                  p.folderName ? `${p.folderName} folder` : '',
+                                  p.kind === 'bitlocker'
+                                    ? 'BitLocker recovery key'
+                                    : PASSWORD_CATEGORY_LABELS[p.category],
+                                  p.kind === 'login' && p.url ? hostOf(p.url) : '',
+                                  p.linkedAssets.length
+                                    ? `on ${p.linkedAssets
+                                        .slice(0, 2)
+                                        .map((a) => a.name)
+                                        .join(
+                                          ', ',
+                                        )}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
+                                    : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </span>
+                            </span>
+                          </AppLink>
+                        </div>
+                      </td>
+                      {!clientId && <td className="hidden px-5 py-3 text-text-2 md:table-cell">{p.clientName}</td>}
+                      <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
+                        {p.username || <span className="font-sans text-muted">—</span>}
+                      </td>
+                      <td className="hidden px-5 py-3 sm:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {p.kind === 'login' && (
+                            <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
+                          )}
+                          {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
+                          {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">{!p.archived && <QuickActions item={p} />}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         ) : (
@@ -806,9 +1501,146 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
         )}
       </Card>
       {adding && clientId && <PasswordDialog clientId={clientId} onClose={() => setAdding(false)} />}
+      {managingFolders && clientId && (
+        <FoldersDialog clientId={clientId} folders={folders} onClose={() => setManagingFolders(false)} />
+      )}
     </>
   );
 }
+/** Create, rename, and delete one client's password folders. Deleting a folder unfiles its passwords. */
+function FoldersDialog({
+  clientId,
+  folders,
+  onClose,
+}: {
+  clientId: string;
+  folders: PasswordFolderView[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async (action: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await Promise.all(['password-folders', 'passwords'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
+      toast(done);
+      return true;
+    } catch (e) {
+      setError((e as ApiError).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = async (e: FormEvent) => {
+    e.preventDefault();
+    const value = name.trim();
+    if (!value) return;
+    if (
+      await run(
+        () => api(`/clients/${clientId}/password-folders`, { method: 'POST', body: { name: value } }),
+        `${value} added.`,
+      )
+    )
+      setName('');
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Folders"
+      description="Folders organize this client's passwords. Deleting one keeps its passwords; they just have no folder."
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      <form onSubmit={add} className="mb-4 flex gap-2">
+        <label className="flex-1">
+          <span className="sr-only">New folder name</span>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="New folder name" />
+        </label>
+        <Button type="submit" loading={busy && !editing} disabled={!name.trim()}>
+          <Plus /> Add
+        </Button>
+      </form>
+      {folders.length ? (
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {folders.map((f) => (
+            <li key={f.id} className="flex items-center gap-2 px-3 py-2">
+              <Folder className="size-4 shrink-0 text-muted" aria-hidden />
+              {editing?.id === f.id ? (
+                <form
+                  className="flex flex-1 gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (
+                      await run(
+                        () => api(`/password-folders/${f.id}`, { method: 'PATCH', body: { name: editing.name } }),
+                        'Folder renamed.',
+                      )
+                    )
+                      setEditing(null);
+                  }}
+                >
+                  <label className="flex-1">
+                    <span className="sr-only">Folder name</span>
+                    <Input
+                      autoFocus
+                      value={editing.name}
+                      maxLength={80}
+                      onChange={(e) => setEditing({ id: f.id, name: e.target.value })}
+                    />
+                  </label>
+                  <Button type="submit" size="sm" loading={busy}>
+                    Save
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>
+                    Cancel
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {f.name} <span className="text-muted">({f.count})</span>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Rename ${f.name}`}
+                    title="Rename"
+                    onClick={() => setEditing({ id: f.id, name: f.name })}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Delete ${f.name}`}
+                    title="Delete"
+                    onClick={() =>
+                      confirm(`Delete the folder ${f.name}? Its ${f.count} password(s) stay, without a folder.`) &&
+                      void run(() => api(`/password-folders/${f.id}`, { method: 'DELETE' }), `${f.name} deleted.`)
+                    }
+                  >
+                    <Trash2 />
+                  </Button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">No folders yet.</p>
+      )}
+      <FormError message={error} />
+    </Dialog>
+  );
+}
+
 export function ClientPasswords() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
   return <PasswordsView clientId={clientId} />;
@@ -822,11 +1654,13 @@ function SecretRow({
   label,
   item,
   field,
+  fieldId,
   mono = true,
 }: {
   label: string;
   item: PasswordView;
-  field: 'secret' | 'notes';
+  field: 'secret' | 'notes' | 'custom';
+  fieldId?: string;
   mono?: boolean;
 }) {
   const reveal = useReveal();
@@ -840,7 +1674,7 @@ function SecretRow({
   }, [value]);
   const run = async (copy: boolean) => {
     try {
-      const result = await reveal(item, { field, copy });
+      const result = await reveal(item, { field, fieldId, copy });
       if (!result) return;
       if (copy) {
         await copySecret(result.value);
@@ -873,7 +1707,7 @@ function SecretRow({
       >
         {value ? <EyeOff /> : <Eye />}
       </Button>
-      {field === 'secret' && (
+      {field !== 'notes' && (
         <Button variant="ghost" size="icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => run(true)}>
           <Copy />
         </Button>
@@ -1006,6 +1840,8 @@ function AuditCard({ item }: { item: PasswordView }) {
 function SharesCard({ item }: { item: PasswordView }) {
   const { data } = useShares(item.id);
   const [sharing, setSharing] = useState(false);
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
+  const [quickBusy, setQuickBusy] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
   const active = (data ?? []).filter(
@@ -1016,9 +1852,28 @@ function SharesCard({ item }: { item: PasswordView }) {
       <CardHeader
         title="Share links"
         actions={
-          <Button variant="ghost" size="sm" onClick={() => setSharing(true)}>
-            <Share2 /> Share
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              loading={quickBusy}
+              onClick={async () => {
+                setQuickBusy(true);
+                try {
+                  const done = await quickShare(item);
+                  if (done) toast(done);
+                } catch (e) {
+                  toast((e as Error).message, 'error');
+                } finally {
+                  setQuickBusy(false);
+                }
+              }}
+            >
+              <Share2 /> Quick share
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSharing(true)}>
+              More options
+            </Button>
+          </div>
         }
       />
       {!active.length ? (
@@ -1057,6 +1912,7 @@ function SharesCard({ item }: { item: PasswordView }) {
         </ul>
       )}
       {sharing && <ShareDialog item={item} onClose={() => setSharing(false)} />}
+      {quickShareDialog}
     </Card>
   );
 }
@@ -1080,23 +1936,7 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
         if (given === null) return;
         reason = given;
       }
-      const { value } = await api<{ value: string }>(`/passwords/${item.id}/reveal`, {
-        method: 'POST',
-        body: { reason: reason || 'Creating a share link' },
-      });
-      // Encrypted here; the server only ever sees ciphertext. The key goes after # and never reaches the server.
-      const { ciphertext, key } = await encryptShare({
-        name: item.name,
-        username: item.username,
-        url: item.url,
-        secret: value,
-        kind: item.kind,
-      });
-      const share = await api<{ token: string }>(`/passwords/${item.id}/shares`, {
-        method: 'POST',
-        body: { ciphertext, maxViews, expiresHours: hours, reason },
-      });
-      setLink(`${location.origin}/share/${share.token}#${key}`);
+      setLink(await createShareLink(item, { maxViews, hours, reason }));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['password-shares', item.id] }),
         queryClient.invalidateQueries({ queryKey: ['password-audit', item.id] }),
@@ -1308,6 +2148,7 @@ export function PasswordDetail() {
               {item.kind === 'bitlocker' ? 'BitLocker recovery key' : 'Password'}
             </p>
             <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
+              {actor.isStaff && <FavoriteButton item={item} />}
               {item.name}
               {item.restricted && (
                 <Badge>
@@ -1404,6 +2245,28 @@ export function PasswordDetail() {
                     <ExternalLink className="size-4" />
                   </a>
                 </div>
+              )}
+              {item.customFields.map((f) =>
+                f.secret ? (
+                  <SecretRow key={f.id} label={f.label} item={item} field="custom" fieldId={f.id} />
+                ) : (
+                  <div key={f.id} className="flex items-center gap-3 px-5 py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-muted">{f.label}</p>
+                      <p className="mt-0.5 text-sm break-all whitespace-pre-wrap">{f.value}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Copy ${f.label}`}
+                      onClick={() =>
+                        navigator.clipboard.writeText(f.value ?? '').then(() => toast(`${f.label} copied.`))
+                      }
+                    >
+                      <Copy />
+                    </Button>
+                  </div>
+                ),
               )}
               {item.hasNotes && <SecretRow label="Notes" item={item} field="notes" mono={false} />}
             </div>

@@ -1,6 +1,6 @@
 {
-  "id": "e18fddc5-86bb-411d-94af-3b8b5feb7d20",
-  "prevId": "365df24c-2278-4119-8002-3ee78e73b764",
+  "id": "397def6f-4b07-49bb-adac-a7e2d23b7ab3",
+  "prevId": "e18fddc5-86bb-411d-94af-3b8b5feb7d20",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2555,6 +2555,73 @@
           "columns": [
             "password_id",
             "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.password_favorites": {
+      "name": "password_favorites",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_id": {
+          "name": "password_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "password_favorites_user_id_users_id_fk": {
+          "name": "password_favorites_user_id_users_id_fk",
+          "tableFrom": "password_favorites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "password_favorites_password_id_passwords_id_fk": {
+          "name": "password_favorites_password_id_passwords_id_fk",
+          "tableFrom": "password_favorites",
+          "tableTo": "passwords",
+          "columnsFrom": [
+            "password_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "password_favorites_user_id_password_id_pk": {
+          "name": "password_favorites_user_id_password_id_pk",
+          "columns": [
+            "user_id",
+            "password_id"
           ]
         }
       },
