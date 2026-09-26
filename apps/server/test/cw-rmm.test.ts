@@ -170,6 +170,58 @@ describe('ConnectWise RMM sync', () => {
     expect((await owner.call('GET', '/api/integrations/cw-rmm')).data.lastSyncAt).not.toBeNull();
   });
 
+  it('updates a same-named asset that is already there instead of adding a copy', async () => {
+    asio.state.devices.set('c1', [
+      { endpointId: 'e1', siteId: 's1', friendlyName: 'HDG-DC-01', hostName: 'hdg-dc-01', ipAddress: '10.0.0.5' },
+      { endpointId: 'e2', siteId: 's1', friendlyName: 'HDG-WS-02', hostName: 'hdg-ws-02', ipAddress: '10.0.0.6' },
+    ]);
+    await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    // Like a Hudu import: another layout, with differently named fields.
+    const hudu = (
+      await owner.call('POST', '/api/layouts', {
+        name: 'Computer Assets',
+        icon: 'box',
+        fields: [
+          { key: 'host', label: 'Host name', type: 'text' },
+          { key: 'addr', label: 'IP address', type: 'ip' },
+          { key: 'notes_extra', label: 'Owner', type: 'text' },
+        ],
+      })
+    ).data.id;
+    const dc = (
+      await owner.call('POST', `/api/clients/${harbor}/assets`, {
+        layoutId: hudu,
+        name: 'HDG-DC-01',
+        fields: { notes_extra: 'Front office' },
+      })
+    ).data;
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [{ companyId: 'c1', action: 'link', clientId: harbor }],
+    });
+
+    const first = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(first.messages.join(' ')).toContain('1 device matched an asset already in Atlas');
+    const all = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as { id: string; name: string }[];
+    expect(all.map((a) => a.name).sort()).toEqual(['HDG-DC-01', 'HDG-WS-02']);
+    const updated = (await owner.call('GET', `/api/assets/${dc.id}`)).data;
+    expect(updated.fields).toEqual({ notes_extra: 'Front office', host: 'hdg-dc-01', addr: '10.0.0.5' });
+
+    // A copy an earlier sync made is folded into the asset that was already there.
+    const ws = all.find((a) => a.name === 'HDG-WS-02')!;
+    const old = (
+      await owner.call('POST', `/api/clients/${harbor}/assets`, { layoutId: hudu, name: 'HDG-WS-02', fields: {} })
+    ).data;
+    const second = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(second.messages.join(' ')).toContain('1 copy from earlier syncs archived');
+    expect((await owner.call('GET', `/api/assets/${ws.id}`)).data.archived).toBe(true);
+    expect((await owner.call('GET', `/api/assets/${old.id}`)).data.fields).toMatchObject({ host: 'hdg-ws-02' });
+    // Stays settled on the next run: nothing new is archived or copied.
+    const third = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(third.messages.join(' ')).not.toContain('archived');
+    expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
+  });
+
   it('is for administrators only', async () => {
     await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
     const user = await owner.call('POST', '/api/users', {

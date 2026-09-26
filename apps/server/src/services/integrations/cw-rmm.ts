@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { cwRmmMappingSchema, type Actor, type CwRmmCompany, type CwRmmRegion } from '@atlas/shared';
+import { cwRmmMappingSchema, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
@@ -537,6 +537,82 @@ export class CwRmmClient {
   }
 }
 
+// Which fields of another layout can take a device value: its own key, or a label that means the same thing.
+const FIELD_LABELS: Record<string, RegExp> = {
+  type: /^(device )?type$|^kind$|^category$/,
+  hostname: /host ?name|computer name|machine name|device name/,
+  ip_address: /\bip\b|ip address|ipv4/,
+  mac_address: /\bmac\b/,
+  manufacturer: /manufacturer|make|vendor/,
+  model: /^model$|model (name|number)/,
+  serial_number: /serial|service tag/,
+  operating_system: /operating system|^os$|os version/,
+  location: /^location$|^site$/,
+};
+
+/** The device values another layout can hold, keyed by that layout's own fields; values that don't fit are left out. */
+export function fitFields(layoutFields: LayoutField[], values: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (!value) continue;
+    const target =
+      layoutFields.find((f) => f.key === key) ??
+      layoutFields.find((f) => FIELD_LABELS[key]?.test(f.label.trim().toLowerCase()));
+    if (!target || target.key in out) continue;
+    if (['text', 'textarea', 'ip', 'url'].includes(target.type)) {
+      if (target.type === 'url' && !/^https?:\/\//i.test(value)) continue;
+      out[target.key] = value;
+    } else if (target.type === 'select') {
+      const option = target.options.find((o) => o.toLowerCase() === value.toLowerCase());
+      if (option) out[target.key] = option;
+    }
+  }
+  return out;
+}
+
+/** Non-archived assets in a client by lower-cased name, with how many device fields each one's layout can take. */
+async function sameNameCandidates(db: Database, orgId: string, clientId: string) {
+  const layouts = await db
+    .select({ id: schema.assetLayouts.id, fields: schema.assetLayouts.fields })
+    .from(schema.assetLayouts)
+    .where(eq(schema.assetLayouts.orgId, orgId));
+  const layoutFields = new Map(layouts.map((l) => [l.id, l.fields as LayoutField[]]));
+  const probe = Object.fromEntries(Object.keys(FIELD_LABELS).map((k) => [k, k === 'type' ? '' : 'x']));
+  const rows = await db
+    .select({
+      id: schema.assets.id,
+      name: schema.assets.name,
+      layoutId: schema.assets.layoutId,
+      createdAt: schema.assets.createdAt,
+    })
+    .from(schema.assets)
+    .where(
+      and(eq(schema.assets.orgId, orgId), eq(schema.assets.clientId, clientId), eq(schema.assets.archived, false)),
+    );
+  const byName = new Map<string, { id: string; layoutId: string; createdAt: Date; fit: number }[]>();
+  for (const r of rows) {
+    const fit = Object.keys(fitFields(layoutFields.get(r.layoutId) ?? [], probe)).length;
+    const key = r.name.trim().toLowerCase();
+    byName.set(key, [...(byName.get(key) ?? []), { id: r.id, layoutId: r.layoutId, createdAt: r.createdAt, fit }]);
+  }
+  return { byName, layoutFields };
+}
+
+/** Asset IDs already linked to a ConnectWise RMM device. */
+async function claimedByRmm(db: Database, orgId: string) {
+  const rows = await db
+    .select({ id: schema.externalRefs.entityId })
+    .from(schema.externalRefs)
+    .where(
+      and(
+        eq(schema.externalRefs.orgId, orgId),
+        eq(schema.externalRefs.source, 'cw-rmm'),
+        eq(schema.externalRefs.kind, 'assets'),
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
+}
+
 /** Maps the RMM's device type onto the Configurations layout's Type options. */
 export function deviceType(d: Pick<RmmDevice, 'type' | 'os'>): string {
   const t = `${d.type} ${d.os}`.toLowerCase();
@@ -629,6 +705,10 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
   if (!linked.length) run.note('No ConnectWise RMM companies are linked to Atlas clients yet.');
   const seen = new Set<string>();
   const complete: string[] = [];
+  // Assets already linked to an RMM device, so two devices never land on one asset.
+  const claimed = await claimedByRmm(db, actor.orgId);
+  let matched = 0;
+  let folded = 0;
   for (const [companyId, clientId] of linked) {
     let sites: RmmSite[];
     let devices: RmmDevice[];
@@ -666,6 +746,16 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
         async (existing) => void (await locations.update(scope, existing, body)),
       );
     }
+    // Assets already in this client (from Hudu, a CSV, or typed in) that a device may be, by name or hostname:
+    // the existing asset is updated instead of a copy being made.
+    const existing = await sameNameCandidates(db, actor.orgId, clientId);
+    const match = (d: RmmDevice, except?: string) =>
+      [d.name, d.hostname]
+        .filter(Boolean)
+        .flatMap((n) => existing.byName.get(n.toLowerCase()) ?? [])
+        .filter((a) => a.id !== except && a.layoutId !== layout.id && !claimed.has(a.id))
+        // The asset whose layout takes the most of the device's fields, then the oldest.
+        .sort((a, b) => b.fit - a.fit || a.createdAt.getTime() - b.createdAt.getTime())[0];
     for (const d of devices) {
       seen.add(d.id);
       const fields = {
@@ -680,26 +770,71 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
         location: (siteNames.get(d.siteId) ?? '').slice(0, 500),
       };
       const name = d.name.slice(0, 200);
+      /** Writes the device's values into an asset of another layout, where that layout's fields can take them. */
+      const updateOther = async (id: string) => {
+        const current = await assets.get(scope, id);
+        const fitted = fitFields(existing.layoutFields.get(current.layoutId) ?? [], fields);
+        const merged = { ...current.fields, ...fitted };
+        if (current.archived) await assets.setArchived(scope, id, false);
+        if (JSON.stringify(merged) !== JSON.stringify(current.fields))
+          await assets.update(scope, id, { fields: merged, version: current.version }, 'Synced from ConnectWise RMM');
+        claimed.add(id);
+      };
       await run.upsert(
         'assets',
         d.id,
         name,
-        async () =>
-          (await assets.create(scope, clientId, { layoutId: layout.id, name, fields, notes: 'Synced from ConnectWise RMM.' }))
-            .id,
-        async (existing) => {
-          const current = await assets.get(scope, existing);
+        async () => {
+          const other = match(d);
+          if (other) {
+            await updateOther(other.id);
+            matched++;
+            return other.id;
+          }
+          return (
+            await assets.create(scope, clientId, {
+              layoutId: layout.id,
+              name,
+              fields,
+              notes: 'Synced from ConnectWise RMM.',
+            })
+          ).id;
+        },
+        async (existingId) => {
+          const current = await assets.get(scope, existingId);
+          if (current.layoutId !== layout.id) return updateOther(existingId);
+          // A copy an earlier sync made beside an asset that was already there: move the link to that asset and
+          // archive the copy (it can be restored).
+          const other = match(d, existingId);
+          if (other) {
+            await updateOther(other.id);
+            await run.remember('assets', d.id, other.id);
+            if (!current.archived) await assets.setArchived(scope, existingId, true);
+            folded++;
+            return;
+          }
           // Fields Atlas users added stay; the RMM's own values are refreshed.
           const merged = { ...current.fields, ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)) };
-          if (current.archived) await assets.setArchived(scope, existing, false);
+          if (current.archived) await assets.setArchived(scope, existingId, false);
           if (current.name !== name || JSON.stringify(merged) !== JSON.stringify(current.fields))
-            await assets.update(scope, existing, { name, fields: merged, version: current.version }, 'Synced from ConnectWise RMM');
+            await assets.update(
+              scope,
+              existingId,
+              { name, fields: merged, version: current.version },
+              'Synced from ConnectWise RMM',
+            );
         },
       );
     }
     complete.push(clientId);
   }
 
+  if (matched)
+    run.note(`${matched} device${matched === 1 ? '' : 's'} matched an asset already in Atlas by name, and updated it.`);
+  if (folded)
+    run.note(
+      `${folded} copy${folded === 1 ? '' : 'ies'} from earlier syncs archived; their devices now update the same-named asset that was already there.`,
+    );
   if (client.lastDeviceFields) run.note(`ConnectWise device ${client.lastDeviceFields}.`);
 
   // Archive devices removed from the RMM, within the companies read in full.
@@ -714,6 +849,8 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
           eq(schema.externalRefs.source, 'cw-rmm'),
           eq(schema.externalRefs.kind, 'assets'),
           inArray(schema.assets.clientId, complete),
+          // Only the sync's own Configurations assets: an existing asset it matched and updated is never archived.
+          eq(schema.assets.layoutId, layout.id),
         ),
       );
     let archived = 0;
