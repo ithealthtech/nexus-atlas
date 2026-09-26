@@ -103,6 +103,8 @@ const base = {
   clientVisible: z.boolean().default(false),
   // null: let Atlas guess from the name, username, and address.
   category: z.enum(PASSWORD_CATEGORIES).nullable().default(null),
+  // A folder of the same client, or null for none.
+  folderId: z.string().uuid().nullable().default(null),
 };
 
 export const createPasswordSchema = z
@@ -122,8 +124,30 @@ export const updatePasswordSchema = z.object({
   restricted: z.boolean().optional(),
   clientVisible: z.boolean().optional(),
   category: z.enum(PASSWORD_CATEGORIES).nullable().optional(),
+  folderId: z.string().uuid().nullable().optional(),
   version: z.number().int().positive(),
 });
+/** One change applied to many passwords at once; each password is still checked on its own. */
+export const bulkPasswordSchema = z.discriminatedUnion('action', [
+  z.object({ ids: z.array(z.string().uuid()).min(1).max(500), action: z.enum(['archive', 'restore']) }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('rotation'),
+    rotationDays: z.number().int().min(1).max(3650).nullable(),
+  }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('clientVisible'),
+    clientVisible: z.boolean(),
+  }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('category'),
+    category: z.enum(PASSWORD_CATEGORIES).nullable(),
+  }),
+]);
+export type BulkPasswordInput = z.infer<typeof bulkPasswordSchema>;
+export type BulkPasswordResult = { updated: number; failed: { id: string; name: string | null; error: string }[] };
 export const revealSchema = z.object({
   field: z.enum(['secret', 'notes', 'totp']).default('secret'),
   reason: z.string().trim().max(300).default(''),
@@ -177,6 +201,12 @@ export interface PasswordView {
   categoryGuessed: boolean;
   /** Assets this password is linked to, so similar logins can be told apart. */
   linkedAssets: { id: string; name: string }[];
+  folderId: string | null;
+  folderName: string | null;
+  /** Pinned by the person viewing (not shared with others). */
+  favorite: boolean;
+  /** When the person viewing last revealed, copied, or shared it. */
+  lastUsedAt: string | null;
 }
 export interface PasswordHistoryView {
   id: string;
@@ -223,3 +253,12 @@ export function passwordStrength(value: string): number {
   return bits < 28 ? 0 : bits < 40 ? 1 : bits < 60 ? 2 : bits < 80 ? 3 : 4;
 }
 export const STRENGTH_LABELS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'] as const;
+
+// ---------- folders ----------
+export const passwordFolderSchema = z.object({ name: z.string().trim().min(1, 'Name the folder.').max(80) });
+export interface PasswordFolderView {
+  id: string;
+  clientId: string;
+  name: string;
+  count: number;
+}

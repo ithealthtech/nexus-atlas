@@ -26,6 +26,19 @@ export function registerVaultRoutes(
     vault.list(scopeOf(req), { clientId: req.query.client || undefined, archived: req.query.archived === 'true' }),
   );
   app.get('/api/passwords/rotation-due', authed, async (req) => vault.rotationDue(scopeOf(req)));
+  // Folders: one client's, open to anyone with password access to it.
+  app.get<{ Params: Params }>('/api/clients/:id/password-folders', authed, async (req) =>
+    vault.folders(scopeOf(req), req.params.id),
+  );
+  app.post<{ Params: Params }>('/api/clients/:id/password-folders', authed, async (req, reply) =>
+    reply.status(201).send(await vault.createFolder(scopeOf(req), req.params.id, req.body)),
+  );
+  app.patch<{ Params: Params }>('/api/password-folders/:id', authed, async (req) =>
+    vault.renameFolder(scopeOf(req), req.params.id, req.body),
+  );
+  app.delete<{ Params: Params }>('/api/password-folders/:id', authed, async (req) =>
+    vault.deleteFolder(scopeOf(req), req.params.id),
+  );
   app.post<{ Params: Params }>('/api/clients/:id/passwords', authed, async (req, reply) =>
     reply.status(201).send(await vault.create(scopeOf(req), req.params.id, req.body, req.ip)),
   );
@@ -33,8 +46,16 @@ export function registerVaultRoutes(
   app.patch<{ Params: Params }>('/api/passwords/:id', authed, async (req) =>
     vault.update(scopeOf(req), req.params.id, req.body, req.ip),
   );
+  app.post('/api/passwords/bulk', authed, async (req) => vault.bulk(scopeOf(req), req.body, req.ip));
   app.post<{ Params: Params }>('/api/passwords/:id/archive', authed, async (req) =>
     vault.setArchived(scopeOf(req), req.params.id, archiveSchema.parse(req.body).archived, req.ip),
+  );
+  // Favorites are personal: they change nothing for anyone else, so no audit entry.
+  app.put<{ Params: Params }>('/api/passwords/:id/favorite', authed, async (req) =>
+    vault.setFavorite(scopeOf(req), req.params.id, true),
+  );
+  app.delete<{ Params: Params }>('/api/passwords/:id/favorite', authed, async (req) =>
+    vault.setFavorite(scopeOf(req), req.params.id, false),
   );
   app.post<{ Params: Params }>('/api/passwords/:id/reveal', authed, async (req) =>
     vault.reveal(scopeOf(req), req.params.id, req.body, req.ip),

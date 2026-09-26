@@ -527,6 +527,23 @@ export const vaultKeys = pgTable(
   (t) => [index('vault_keys_org').on(t.orgId)],
 );
 
+// Folders organize one client's passwords (one level; a password is in at most one folder).
+export const passwordFolders = pgTable(
+  'password_folders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('password_folders_name').on(t.clientId, sql`lower(${t.name})`)],
+);
+
 export const passwords = pgTable(
   'passwords',
   {
@@ -540,6 +557,8 @@ export const passwords = pgTable(
     kind: text('kind').notNull().default('login'),
     // PASSWORD_CATEGORIES, or null to show a guess from the name, username, and URL.
     category: text('category'),
+    // Deleting a folder leaves its passwords in place, just unfiled.
+    folderId: uuid('folder_id').references(() => passwordFolders.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     // Username and URL stay searchable; secrets below are ciphertext only.
     username: text('username').notNull().default(''),
@@ -655,6 +674,21 @@ export const vaultAudit = pgTable(
     createdAt: created(),
   },
   (t) => [index('vault_audit_item').on(t.passwordId, t.createdAt), index('vault_audit_org').on(t.orgId, t.createdAt)],
+);
+
+// Passwords a person pinned for quick access (per person, not shared).
+export const passwordFavorites = pgTable(
+  'password_favorites',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    createdAt: created(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.passwordId] })],
 );
 
 // ---------------------------------------------------------------- M3b: API, imports
