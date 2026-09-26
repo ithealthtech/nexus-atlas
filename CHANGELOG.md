@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.5] - 2026-09-26
+
+### Fixed
+
+- **ConnectWise RMM sync:** devices are read from every category in ConnectWise's response (platform, network, and others) and from records that hold their own device list, with more device ID names recognised. If records still lack an ID, the job note names their fields (never values). (#57)
+
 ## [1.1.4] - 2026-09-26
 
 ### Fixed
