@@ -367,7 +367,7 @@ function fieldFor(layout: MappedLayout, name: string): LayoutField | undefined {
 }
 
 /** "cpuSpeed" → "CPU speed", "manufacturer name" → "Manufacturer name", "os_type" → "OS type". */
-function readableLabel(name: string): string {
+export function readableLabel(name: string): string {
   const label = name
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[_\s]+/g, ' ')

@@ -10,6 +10,7 @@ import { locations } from '../people.js';
 import { Scope } from '../scope.js';
 import type { SettingsService, StoredCwRmm } from '../settings.js';
 import { ImportRun } from '../importers/common.js';
+import { readableLabel } from '../importers/hudu.js';
 
 export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
   na: 'https://openapi.service.itsupport247.net',
@@ -178,7 +179,58 @@ function mapDevice(id: string, companyId: string, siteId: string, record: Json):
       'baseBoard.serialNumber',
       'serial',
     ),
+    extra: extraValues(d),
   };
+}
+
+// Values the named fields above already carry; everything else ConnectWise sends is kept as its own field.
+const MAPPED = new Set(
+  [
+    'hostName',
+    'hostname',
+    'deviceName',
+    'computerName',
+    'machineName',
+    'systemName',
+    'friendlyName',
+    'name',
+    'displayName',
+    'endpointName',
+    'ipAddress',
+    'localIpAddress',
+    'macAddress',
+    'endpointType',
+    'osName',
+    'operatingSystem',
+    'manufacturer',
+    'model',
+    'serialNumber',
+    'serial',
+  ].map((k) => k.toLowerCase()),
+);
+const CATEGORIES = new Set(['platform', 'network', 'cloud']);
+
+/** Every other value in a device record, as [label, value]: nested objects flattened, lists of values joined. */
+function extraValues(record: Json, prefix = '', depth = 0): [string, string][] {
+  const out: [string, string][] = [];
+  for (const [key, value] of Object.entries(record)) {
+    if (value === null || value === undefined || value === '') continue;
+    // The category object's fields were read as the device's own, so they aren't prefixed with it.
+    if (!prefix && CATEGORIES.has(key) && typeof value === 'object' && !Array.isArray(value)) continue;
+    if (!prefix && MAPPED.has(key.toLowerCase())) continue;
+    const label = prefix ? `${prefix} ${key}` : key;
+    if (Array.isArray(value)) {
+      const items = value.filter((v) => v !== null && typeof v !== 'object').map(String);
+      if (items.length) out.push([readableLabel(label), items.join(', ').slice(0, 2000)]);
+      else if (depth < 2)
+        value
+          .filter((v): v is Json => !!v && typeof v === 'object')
+          .forEach((v, i) => out.push(...extraValues(v, value.length > 1 ? `${label} ${i + 1}` : label, depth + 1)));
+    } else if (typeof value === 'object') {
+      if (depth < 2) out.push(...extraValues(value as Json, label, depth + 1));
+    } else out.push([readableLabel(label), String(value).slice(0, 2000)]);
+  }
+  return out.slice(0, 150);
 }
 
 /**
@@ -257,6 +309,8 @@ export interface RmmDevice {
   manufacturer: string;
   model: string;
   serial: string;
+  /** Everything else ConnectWise sent about the device, as [label, value]. */
+  extra: [string, string][];
 }
 
 /** Talks to the ConnectWise Asio platform API with an OAuth client-credentials token. */
@@ -625,6 +679,63 @@ async function ensureDeviceFields(
   return next;
 }
 
+/**
+ * Makes sure a layout has a field for each label (matched by label, loosely, or by its key), adding text fields
+ * for the rest within the field limit. Returns label → field key; `cache` is kept current.
+ */
+async function ensureLabelledFields(
+  layouts: LayoutService,
+  actor: Actor,
+  layoutId: string,
+  cache: Map<string, LayoutField[]>,
+  labels: string[],
+): Promise<Map<string, string>> {
+  const loose = (l: string) => l.trim().toLowerCase().replace(/[_\s]+/g, ' ');
+  const current = cache.get(layoutId) ?? ((await layouts.get(actor, layoutId)).fields as LayoutField[]);
+  const used = new Set(current.map((f) => f.key));
+  const added: LayoutField[] = [];
+  const keys = new Map<string, string>();
+  for (const label of labels) {
+    const found =
+      [...current, ...added].find((f) => loose(f.label) === loose(label)) ??
+      [...current, ...added].find((f) => f.key === slugKey(label));
+    if (found) {
+      keys.set(label, found.key);
+      continue;
+    }
+    if (current.length + added.length >= MAX_LAYOUT_FIELDS) continue;
+    let key = slugKey(label);
+    for (let n = 2; used.has(key); n++) key = `${slugKey(label).slice(0, 36)}_${n}`;
+    used.add(key);
+    added.push({
+      key,
+      label,
+      type: 'text',
+      required: false,
+      options: [],
+      help: 'Added by the ConnectWise RMM sync.',
+      showInList: false,
+      expires: false,
+    });
+    keys.set(label, key);
+  }
+  if (added.length) {
+    const next = [...current, ...added];
+    await layouts.update(actor, layoutId, { fields: next });
+    cache.set(layoutId, next);
+  }
+  return keys;
+}
+
+/** A field key from a label: lowercase letters, digits, and underscores, starting with a letter. */
+const slugKey = (label: string) =>
+  `f_${label}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^f_(?=[a-z])/, '')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40) || 'field';
+
 /** Non-archived assets in a client by lower-cased name, with how many device fields each one's layout can take. */
 async function sameNameCandidates(db: Database, orgId: string, clientId: string) {
   const layouts = await db
@@ -840,6 +951,17 @@ export async function runCwRmmSync(
         location: (siteNames.get(d.siteId) ?? '').slice(0, 500),
       };
       const name = d.name.slice(0, 200);
+      /** Everything else the RMM sent, keyed by the layout's own fields; fields it lacks are added to it. */
+      const extras = async (layoutId: string) => {
+        const keys = await ensureLabelledFields(
+          layoutService,
+          actor,
+          layoutId,
+          existing.layoutFields,
+          d.extra.map(([label]) => label),
+        );
+        return Object.fromEntries(d.extra.flatMap(([label, value]) => (keys.has(label) ? [[keys.get(label)!, value]] : [])));
+      };
       /** Writes the device's values into an asset of another layout, where that layout's fields can take them. */
       const updateOther = async (id: string) => {
         const current = await assets.get(scope, id);
@@ -852,7 +974,7 @@ export async function runCwRmmSync(
           fields,
         );
         const fitted = fitFields(layoutFields, fields);
-        const merged = { ...current.fields, ...fitted };
+        const merged = { ...current.fields, ...fitted, ...(await extras(current.layoutId)) };
         if (current.archived) await assets.setArchived(scope, id, false);
         if (JSON.stringify(merged) !== JSON.stringify(current.fields))
           await assets.update(scope, id, { fields: merged, version: current.version }, 'Synced from ConnectWise RMM');
@@ -873,7 +995,7 @@ export async function runCwRmmSync(
             await assets.create(scope, clientId, {
               layoutId: layout.id,
               name,
-              fields,
+              fields: { ...fields, ...(await extras(layout.id)) },
               notes: 'Synced from ConnectWise RMM.',
             })
           ).id;
@@ -892,7 +1014,11 @@ export async function runCwRmmSync(
             return;
           }
           // Fields Atlas users added stay; the RMM's own values are refreshed.
-          const merged = { ...current.fields, ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)) };
+          const merged = {
+            ...current.fields,
+            ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)),
+            ...(await extras(layout.id)),
+          };
           if (current.archived) await assets.setArchived(scope, existingId, false);
           if (current.name !== name || JSON.stringify(merged) !== JSON.stringify(current.fields))
             await assets.update(
