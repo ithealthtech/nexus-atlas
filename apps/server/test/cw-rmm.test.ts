@@ -166,14 +166,20 @@ describe('ConnectWise RMM sync', () => {
 
   it('is for administrators only', async () => {
     await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
-    await owner.call('POST', '/api/users', {
+    const user = await owner.call('POST', '/api/users', {
       email: 'tess@atlas.test',
       name: 'Tess Tech',
       password: 'temporary pass 1234',
       role: 'technician',
+      grants: [],
     });
+    expect(user.status, JSON.stringify(user.data)).toBe(201);
     const { b: tech } = await signIn(t.app, 'tess@atlas.test', 'temporary pass 1234');
-    await tech.call('POST', '/api/account/password', { current: 'temporary pass 1234', next: 'rmm reviewer pass 99' });
+    const changed = await tech.call('POST', '/api/account/password', {
+      current: 'temporary pass 1234',
+      next: 'rmm reviewer pass 99',
+    });
+    expect(changed.status, JSON.stringify(changed.data)).toBe(200);
     await enroll(tech);
     expect((await tech.call('GET', '/api/integrations/cw-rmm/companies')).status).toBe(403);
     expect((await tech.call('POST', '/api/integrations/cw-rmm/sync', {})).status).toBe(403);
