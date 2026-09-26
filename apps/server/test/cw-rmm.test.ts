@@ -278,3 +278,26 @@ describe('ConnectWise RMM response shapes', () => {
     expect(client.lastDeviceList).not.toContain('value-not-shown');
   });
 });
+
+describe('ConnectWise RMM category responses', () => {
+  it('reads devices from every category, including ones nested inside a record', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    let body: unknown = {
+      platform: [
+        { endpointID: 'p1', friendlyName: 'HDG-DC-01' },
+        { siteName: 'Main office', endpoints: [{ endpointId: 'p2', friendlyName: 'HDG-WS-02' }] },
+      ],
+      network: [{ resourceId: 'n1', friendlyName: 'HDG-FW-01' }],
+    };
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      return Response.json(body);
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    expect((await client.devices('c1')).map((d) => d.name).sort()).toEqual(['HDG-DC-01', 'HDG-FW-01', 'HDG-WS-02']);
+    body = { platform: [{ mystery: 'x', details: { a: 1 } }] };
+    expect(await client.devices('c1')).toEqual([]);
+    expect(client.lastDeviceList).toContain('a record without one has fields mystery, details{a}');
+  });
+});
