@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { cwRmmMappingSchema, type Actor, type CwRmmCompany, type CwRmmRegion } from '@atlas/shared';
@@ -100,6 +101,18 @@ export interface RmmDevice {
 
 /** Talks to the ConnectWise Asio platform API with an OAuth client-credentials token. */
 export class CwRmmClient {
+  // One client (and so one token) per set of credentials, shared by every request and sync: signing in for
+  // each page load gets the key locked.
+  private static shared = new WeakMap<typeof fetch, Map<string, CwRmmClient>>();
+  static for(region: CwRmmRegion, clientId: string, clientSecret: string, fetcher: typeof fetch = fetch) {
+    const key = [region, clientId, createHash('sha256').update(clientSecret).digest('hex')].join('|');
+    let clients = CwRmmClient.shared.get(fetcher);
+    if (!clients) CwRmmClient.shared.set(fetcher, (clients = new Map()));
+    let client = clients.get(key);
+    if (!client) clients.set(key, (client = new CwRmmClient(region, clientId, clientSecret, fetcher)));
+    return client;
+  }
+
   private token: { value: string; expires: number } | null = null;
   private readonly base: string;
 

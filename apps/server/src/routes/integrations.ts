@@ -21,7 +21,7 @@ async function startSync(
 ) {
   const saved = await settings.cwRmm(actor.orgId);
   if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
-  const client = new CwRmmClient(saved.region, saved.clientId, saved.clientSecret, fetcher);
+  const client = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher);
   const run = await ImportRun.start(db, actor, 'cw-rmm');
   const done = runCwRmmSync(db, actor, client, run, saved.map)
     .then(async () => {
@@ -64,7 +64,7 @@ export function registerIntegrationRoutes(
   const clientFor = async (orgId: string) => {
     const saved = await settings.cwRmm(orgId);
     if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
-    return { saved, client: new CwRmmClient(saved.region, saved.clientId, saved.clientSecret, deps.cwRmmFetch) };
+    return { saved, client: CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, deps.cwRmmFetch) };
   };
 
   app.get('/api/integrations/cw-rmm', authed, async (req) => settings.cwRmmView(admin(req).orgId));
@@ -76,7 +76,7 @@ export function registerIntegrationRoutes(
     const secret = body.clientSecret ?? (await settings.cwRmm(actor.orgId))?.clientSecret;
     if (!secret)
       throw new HttpError(400, 'Enter the client secret.', undefined, { clientSecret: 'Enter the client secret.' });
-    const companies = await new CwRmmClient(body.region, body.clientId, secret, deps.cwRmmFetch).companies();
+    const companies = await CwRmmClient.for(body.region, body.clientId, secret, deps.cwRmmFetch).companies();
     await settings.saveCwRmm(actor.orgId, actor.id, req.body);
     await event(req, 'ConnectWise RMM connection saved', `${companies.length} companies visible`);
     return { ...(await settings.cwRmmView(actor.orgId)), companies: companies.length };
