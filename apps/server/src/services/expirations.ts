@@ -95,6 +95,19 @@ export class ExpirationService {
           daysLeft: daysUntil(p.rotationDue!),
         });
 
+    if (clientIds.length)
+      for (const p of await this.vault.expiring(scope, withinDays))
+        items.push({
+          kind: 'password',
+          id: p.id,
+          title: p.name,
+          label: 'Password expires',
+          clientId: p.clientId,
+          clientName: p.clientName,
+          date: p.expiresOn!,
+          daysLeft: daysUntil(p.expiresOn!),
+        });
+
     const docScope = [
       ...(clientIds.length ? [inArray(schema.documents.clientId, clientIds)] : []),
       ...(scope.canReadGlobal ? [isNull(schema.documents.clientId)] : []),

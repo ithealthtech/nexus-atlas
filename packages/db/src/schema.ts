@@ -551,6 +551,8 @@ export const passwords = pgTable(
     fingerprint: text('fingerprint').notNull(),
     strength: integer('strength').notNull().default(0),
     rotationDays: integer('rotation_days'),
+    // When the account itself stops working (a vendor login, a temporary account), not a rotation reminder.
+    expiresOn: date('expires_on', { mode: 'string' }),
     changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
     restricted: boolean('restricted').notNull().default(false),
     // Shown to client accounts (read-only) in the client portal.
