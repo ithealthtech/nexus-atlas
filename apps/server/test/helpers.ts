@@ -56,6 +56,7 @@ export async function startApp(
   env: Record<string, string> = {},
   extra: {
     huduFetch?: typeof fetch;
+    cwRmmFetch?: typeof fetch;
     domainLookup?: DomainLookup;
     updateFetch?: typeof fetch;
     keys?: KeyProvider;

@@ -1107,6 +1107,52 @@ on('POST', '/import/hudu/preview', () => ({
   passwords: 903,
 }));
 on('POST', '/import/hudu/run', () => notInDemo('Importing from a real Hudu site'));
+// ConnectWise RMM: connecting and mapping work; syncing needs a real RMM.
+let cwRmm: { region: string; clientId: string; hasSecret: true; autoSync: boolean; lastSyncAt: string | null } | null =
+  null;
+const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
+const cwCompanies = () => [
+  ...db.clients.map((c, i) => ({ id: `cw${i + 1}`, name: c.name })),
+  { id: 'cw90', name: 'Riverside Veterinary' },
+];
+const cwView = () =>
+  cwCompanies().map((c) => {
+    const m = cwMap.get(c.id);
+    const linked = m?.action === 'link' ? db.clients.find((x) => x.id === m.clientId) : undefined;
+    return {
+      id: c.id,
+      name: c.name,
+      action: m?.action === 'skip' ? 'skip' : linked ? 'link' : null,
+      clientId: linked?.id ?? null,
+      clientName: linked?.name ?? null,
+      suggestedClientId: m ? null : (db.clients.find((x) => x.name === c.name)?.id ?? null),
+    };
+  });
+on('GET', '/integrations/cw-rmm', () => cwRmm);
+on('PUT', '/integrations/cw-rmm', (_m, b) => {
+  if (String(b.clientId ?? '').trim().length < 8) throw new MockError(400, 'Enter the client ID from API Access.');
+  if (!cwRmm && !b.clientSecret) throw new MockError(400, 'Enter the client secret.');
+  cwRmm = {
+    region: String(b.region ?? 'na'),
+    clientId: String(b.clientId),
+    hasSecret: true,
+    autoSync: b.autoSync !== false,
+    lastSyncAt: cwRmm?.lastSyncAt ?? null,
+  };
+  return { ...cwRmm, companies: cwCompanies().length };
+});
+on('DELETE', '/integrations/cw-rmm', () => ((cwRmm = null), { ok: true }));
+on('GET', '/integrations/cw-rmm/companies', () => cwView());
+on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
+  for (const m of b.mappings as { companyId: string; action: string; clientId?: string }[]) {
+    if (m.action === 'clear') cwMap.delete(m.companyId);
+    else if (m.action === 'skip') cwMap.set(m.companyId, { action: 'skip' });
+    else if (m.action === 'link' && m.clientId) cwMap.set(m.companyId, { action: 'link', clientId: m.clientId });
+    else if (m.action === 'create') notInDemo('Creating clients from ConnectWise RMM');
+  }
+  return cwView();
+});
+on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
 on('GET', '/import/jobs', () => importJobs);
 on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
 on('POST', '/import/csv', (_m, b) => {
