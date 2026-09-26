@@ -45,6 +45,9 @@ export const smtpTransport: MailTransport = async (smtp, message) => {
 
 const graph = new GraphMailer();
 
+/** The application permissions the Microsoft 365 app registration holds (see GraphMailer.permissions). */
+export const graphPermissions = (config: SmtpConfig) => graph.permissions(config);
+
 /** Sends with the configured method: Microsoft Graph (app registration) or SMTP. */
 export const defaultTransport: MailTransport = (config, message) =>
   config.method === 'graph' ? graph.send(config, message) : smtpTransport(config, message);

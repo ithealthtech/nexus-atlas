@@ -80,6 +80,16 @@ export class GraphMailer {
     return body.access_token;
   }
 
+  /**
+   * Signs in afresh and reports the application permissions Microsoft granted the app, without sending anything,
+   * so a change in Entra can be checked straight away.
+   */
+  async permissions(config: SmtpConfig): Promise<{ roles: string[]; canSend: boolean }> {
+    this.tokens.delete(this.cacheKey(config));
+    const roles = rolesOf(await this.token(config));
+    return { roles, canSend: roles.includes('Mail.Send') };
+  }
+
   async send(config: SmtpConfig, message: SendArgs) {
     const token = await this.token(config);
     const res = await this.fetcher(

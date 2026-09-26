@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { Info, Mail, Send } from 'lucide-react';
+import { Info, Mail, Send, ShieldCheck } from 'lucide-react';
+import { cn } from '@/lib/cn';
 import {
   SMTP_PRESETS,
   type NotificationSettings,
@@ -39,6 +40,20 @@ function EmailSettings({ current }: { current: SmtpSettingsView }) {
   const [testTo, setTestTo] = useState(actor.email);
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [permissions, setPermissions] = useState<{ roles: string[]; canSend: boolean } | null>(null);
+  const checkPermissions = async () => {
+    setChecking(true);
+    setTestError(null);
+    setPermissions(null);
+    try {
+      setPermissions(await api('/settings/email/permissions', { method: 'POST', body: {} }));
+    } catch (err) {
+      setTestError((err as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
   const save = useSave(
     (body: object) => api<SmtpSettingsView>('/settings/email', { method: 'PUT', body }),
     [['settings', 'email'], ['setup']],
@@ -333,10 +348,37 @@ function EmailSettings({ current }: { current: SmtpSettingsView }) {
           <Button variant="secondary" onClick={sendTest} loading={testing} disabled={!current.enabled}>
             <Send /> Send test
           </Button>
+          {current.method === 'graph' && (
+            <Button variant="ghost" onClick={checkPermissions} loading={checking} disabled={!current.enabled}>
+              <ShieldCheck /> Check permissions
+            </Button>
+          )}
         </div>
         <p className="mt-2 text-xs text-muted">
           {current.enabled ? 'Uses the saved settings.' : 'Save settings with email turned on first.'}
         </p>
+        {permissions && (
+          <div
+            role="status"
+            className={cn(
+              'mt-3 rounded-lg border px-3 py-2.5 text-sm',
+              permissions.canSend
+                ? 'border-success/40 bg-success-soft text-success'
+                : 'border-warning/40 bg-warning-soft text-warning',
+            )}
+          >
+            {permissions.canSend ? (
+              <p>Signed in to Microsoft 365. The app has the Mail.Send application permission.</p>
+            ) : (
+              <p>
+                Signed in to Microsoft 365, but the app has no Mail.Send <strong>application</strong> permission
+                {permissions.roles.length ? ` (it has ${permissions.roles.join(', ')})` : ''}. In Entra → App
+                registrations → API permissions, add Microsoft Graph → Application permissions → Mail.Send (Delegated
+                doesn&rsquo;t work for Atlas), then grant admin consent and check again.
+              </p>
+            )}
+          </div>
+        )}
         <FormError message={testError} />
       </div>
     </Card>

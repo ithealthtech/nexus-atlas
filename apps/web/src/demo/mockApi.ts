@@ -1028,6 +1028,7 @@ on('PUT', '/settings/email', (_m, b) => {
   return smtp;
 });
 on('POST', '/settings/email/test', () => notInDemo('Sending email'));
+on('POST', '/settings/email/permissions', () => notInDemo('Checking Microsoft 365 permissions'));
 on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
