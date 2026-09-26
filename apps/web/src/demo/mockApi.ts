@@ -148,7 +148,20 @@ const shares: {
 const vaultAudit: Json[] = [];
 const rotationDue = (p: (typeof passwords)[0]) =>
   p.rotationDays ? new Date(Date.parse(p.changedAt) + p.rotationDays * 86_400_000).toISOString().slice(0, 10) : null;
+type MockField = { id: string; label: string; secret: boolean; value: string };
+const customFields = new Map<string, MockField[]>();
+const saveFields = (id: string, input: unknown) => {
+  const before = customFields.get(id) ?? [];
+  customFields.set(
+    id,
+    (input as { id?: string; label: string; secret?: boolean; value?: string }[]).map((f) => {
+      const old = before.find((o) => o.id === f.id);
+      return { id: old?.id ?? uuid(), label: f.label, secret: !!f.secret, value: f.value ?? old?.value ?? '' };
+    }),
+  );
+};
 const passwordView = (p: (typeof passwords)[0]) => ({
+  customFields: (customFields.get(p.id) ?? []).map((f) => ({ ...f, value: f.secret ? null : f.value })),
   id: p.id,
   clientId: p.clientId,
   clientName: clientName(p.clientId)!,
@@ -774,13 +787,15 @@ on('POST', '/clients/:id/passwords', (m, b) => {
   };
   if (!p.name || !p.secret) throw new MockError(400, 'Name and password are required.');
   passwords.push(p);
+  if (Array.isArray(b.customFields)) saveFields(p.id, b.customFields);
   record('Added a password', 'password', p.id, p.name, p.clientId);
   return passwordView(p);
 });
 on('GET', '/passwords/:id', (m) => passwordView(find(passwords, m[1]!, 'Password')));
 on('PATCH', '/passwords/:id', (m, b) => {
   const p = find(passwords, m[1]!, 'Password');
-  const { version: _v, secret, totp, ...changes } = b;
+  const { version: _v, secret, totp, customFields: fields, ...changes } = b;
+  if (Array.isArray(fields)) saveFields(p.id, fields);
   if (typeof secret === 'string' && secret !== p.secret) {
     history.set(p.id, [
       { id: uuid(), secret: p.secret, changedByName: db.owner.name, createdAt: now() },
@@ -812,6 +827,7 @@ on('POST', '/passwords/:id/reveal', (m, b) => {
       : `Revealed ${field === 'secret' ? 'password' : field}`,
     String(b.reason ?? ''),
   );
+  if (field === 'custom') return { value: customFields.get(p.id)?.find((f) => f.id === b.fieldId)?.value ?? '' };
   if (field === 'totp')
     return {
       value: String(Math.floor(Math.random() * 1e6)).padStart(6, '0'),

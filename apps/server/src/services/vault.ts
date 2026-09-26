@@ -28,13 +28,19 @@ import { allowedRestricted } from './items.js';
 
 type Row = typeof schema.passwords.$inferSelect;
 const editor = alias(schema.users, 'pw_editor');
-const aad = (id: string, field: 'secret' | 'notes' | 'totp') => `pw|${id}|${field}`;
+const aad = (id: string, field: 'secret' | 'notes' | 'totp' | `custom:${string}`) => `pw|${id}|${field}`;
+type StoredField = { id: string; label: string; secret: boolean; value: string };
 const historyAad = (id: string) => `pwh|${id}`;
 const notFound = () => new HttpError(404, 'Password not found.');
 const conflict = () =>
   new HttpError(409, 'Someone else changed this password entry. Reload before saving.', 'conflict');
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
-const REVEAL_ACTIONS = { secret: 'Revealed password', notes: 'Viewed notes', totp: 'Viewed one-time code' } as const;
+const REVEAL_ACTIONS = {
+  secret: 'Revealed password',
+  notes: 'Viewed notes',
+  totp: 'Viewed one-time code',
+  custom: 'Viewed custom field',
+} as const;
 
 export class VaultService {
   constructor(private readonly keys: VaultKeys) {}
@@ -182,6 +188,12 @@ export class VaultService {
       category: (r.p.category as PasswordCategory | null) ?? guessPasswordCategory(r.p.name, r.p.username, r.p.url),
       categoryGuessed: !r.p.category,
       linkedAssets: links.get(r.p.id) ?? [],
+      customFields: r.p.customFields.map((f) => ({
+        id: f.id,
+        label: f.label,
+        secret: f.secret,
+        value: f.secret ? null : f.value,
+      })),
     };
   }
 
@@ -306,6 +318,7 @@ export class VaultService {
       rotationDays: body.rotationDays,
       restricted: body.restricted,
       clientVisible: body.clientVisible,
+      customFields: await this.customFields(org, id, body.customFields, []),
       createdBy: scope.actor.id,
       updatedBy: scope.actor.id,
     };
@@ -357,6 +370,8 @@ export class VaultService {
     };
     if (body.notes !== undefined)
       set.notes = body.notes ? await this.keys.seal(org, body.notes, aad(id, 'notes')) : null;
+    if (body.customFields !== undefined)
+      set.customFields = await this.customFields(org, id, body.customFields, p.customFields);
     if (body.totp !== undefined) set.totp = body.totp ? await this.keys.seal(org, body.totp, aad(id, 'totp')) : null;
     if (changedSecret) {
       set.secret = await this.keys.seal(org, secret!, aad(id, 'secret'));
@@ -423,21 +438,63 @@ export class VaultService {
   }
 
   // ---------- reveal ----------
+  /** Builds the stored list: secret values are sealed to the password and field; a secret sent
+   *  without a value keeps the one already stored under that id. */
+  private async customFields(
+    org: string,
+    passwordId: string,
+    input: { id?: string; label: string; secret: boolean; value?: string }[],
+    existing: StoredField[],
+  ): Promise<StoredField[]> {
+    const out: StoredField[] = [];
+    for (const f of input) {
+      const before = f.id ? existing.find((e) => e.id === f.id) : undefined;
+      const id = before?.id ?? randomUUID();
+      if (f.value === undefined) {
+        if (!before || before.secret !== f.secret)
+          throw new HttpError(400, `Enter a value for “${f.label}”.`, undefined, { customFields: 'Enter a value.' });
+        out.push({ ...before, label: f.label });
+      } else if (f.secret) {
+        out.push({
+          id,
+          label: f.label,
+          secret: true,
+          value: await this.keys.seal(org, f.value, aad(passwordId, `custom:${id}`)),
+        });
+      } else out.push({ id, label: f.label, secret: false, value: f.value });
+    }
+    return out;
+  }
+
   async reveal(scope: Scope, id: string, input: unknown, ip: string): Promise<RevealResult> {
     const { p, requireReason } = await this.load(scope, id, true);
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
-    const stored = body.field === 'secret' ? p.secret : body.field === 'notes' ? p.notes : p.totp;
+    const custom = body.field === 'custom' ? p.customFields.find((f) => f.id === body.fieldId) : undefined;
+    if (body.field === 'custom' && !custom) throw new HttpError(404, 'That field was not found.');
+    const stored = custom
+      ? custom.value
+      : body.field === 'secret'
+        ? p.secret
+        : body.field === 'notes'
+          ? p.notes
+          : p.totp;
     if (!stored) throw new HttpError(404, 'Nothing is stored in that field.');
-    const value = await this.keys.open(scope.actor.orgId, stored, aad(id, body.field));
-    await this.audit(
-      scope,
-      p,
-      body.copy && body.field === 'secret' ? 'Copied password' : REVEAL_ACTIONS[body.field],
-      body.reason,
-      ip,
-    );
+    const value =
+      custom && !custom.secret
+        ? custom.value
+        : await this.keys.open(
+            scope.actor.orgId,
+            stored,
+            aad(id, custom ? `custom:${custom.id}` : (body.field as 'secret' | 'notes' | 'totp')),
+          );
+    const action = custom
+      ? `${body.copy ? 'Copied' : 'Viewed'} custom field “${custom.label}”`
+      : body.copy && body.field === 'secret'
+        ? 'Copied password'
+        : REVEAL_ACTIONS[body.field];
+    await this.audit(scope, p, action, body.reason, ip);
     if (body.field === 'totp') return { value: totp(value), expiresIn: 30 - (Math.floor(Date.now() / 1000) % 30) };
     return { value };
   }
@@ -530,13 +587,26 @@ export class VaultService {
       .select()
       .from(schema.passwords)
       .where(and(eq(schema.passwords.orgId, org), eq(schema.passwords.clientId, clientId)));
-    const out: { id: string; secret: string; notes: string; totp: string }[] = [];
+    const out: {
+      id: string;
+      secret: string;
+      notes: string;
+      totp: string;
+      customFields: { label: string; secret: boolean; value: string }[];
+    }[] = [];
     for (const p of rows) {
       out.push({
         id: p.id,
         secret: await this.keys.open(org, p.secret, aad(p.id, 'secret')),
         notes: p.notes ? await this.keys.open(org, p.notes, aad(p.id, 'notes')) : '',
         totp: p.totp ? await this.keys.open(org, p.totp, aad(p.id, 'totp')) : '',
+        customFields: await Promise.all(
+          p.customFields.map(async (f) => ({
+            label: f.label,
+            secret: f.secret,
+            value: f.secret ? await this.keys.open(org, f.value, aad(p.id, `custom:${f.id}`)) : f.value,
+          })),
+        ),
       });
       await this.audit(scope, p, 'Exported (decrypted)', '', ip);
     }
