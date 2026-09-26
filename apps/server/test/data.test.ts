@@ -363,7 +363,10 @@ describe('Hudu import', () => {
     const stopped = (await owner.call('GET', `/api/import/jobs/${cutOff}`)).data;
     expect(stopped.status).toBe('failed');
     expect(stopped.messages.join(' ')).toContain('Atlas stopped while this import was running');
-    expect((await owner.call('POST', '/api/import/hudu/run', {})).status).toBe(202);
+    const restarted = await owner.call('POST', '/api/import/hudu/run', {});
+    expect(restarted.status).toBe(202);
+    // Let it finish before the test app shuts down.
+    expect((await waitForJob(owner, restarted.data.id)).status).toBe('done');
   });
 
   it('reports a rejected API key', async () => {
