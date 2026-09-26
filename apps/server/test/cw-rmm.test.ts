@@ -173,7 +173,7 @@ describe('ConnectWise RMM sync', () => {
       role: 'technician',
     });
     const { b: tech } = await signIn(t.app, 'tess@atlas.test', 'temporary pass 1234');
-    await tech.call('POST', '/api/account/password', { current: 'temporary pass 1234', next: 'rmm tech pass 1234' });
+    await tech.call('POST', '/api/account/password', { current: 'temporary pass 1234', next: 'rmm reviewer pass 99' });
     await enroll(tech);
     expect((await tech.call('GET', '/api/integrations/cw-rmm/companies')).status).toBe(403);
     expect((await tech.call('POST', '/api/integrations/cw-rmm/sync', {})).status).toBe(403);
