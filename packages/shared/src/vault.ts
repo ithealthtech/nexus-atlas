@@ -127,6 +127,27 @@ export const updatePasswordSchema = z.object({
   folderId: z.string().uuid().nullable().optional(),
   version: z.number().int().positive(),
 });
+/** One change applied to many passwords at once; each password is still checked on its own. */
+export const bulkPasswordSchema = z.discriminatedUnion('action', [
+  z.object({ ids: z.array(z.string().uuid()).min(1).max(500), action: z.enum(['archive', 'restore']) }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('rotation'),
+    rotationDays: z.number().int().min(1).max(3650).nullable(),
+  }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('clientVisible'),
+    clientVisible: z.boolean(),
+  }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('category'),
+    category: z.enum(PASSWORD_CATEGORIES).nullable(),
+  }),
+]);
+export type BulkPasswordInput = z.infer<typeof bulkPasswordSchema>;
+export type BulkPasswordResult = { updated: number; failed: { id: string; name: string | null; error: string }[] };
 export const revealSchema = z.object({
   field: z.enum(['secret', 'notes', 'totp']).default('secret'),
   reason: z.string().trim().max(300).default(''),

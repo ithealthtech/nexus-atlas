@@ -835,6 +835,19 @@ on('PATCH', '/passwords/:id', (m, b) => {
   record('Updated', 'password', p.id, p.name, p.clientId);
   return passwordView(p);
 });
+on('POST', '/passwords/bulk', (_m, b) => {
+  let updated = 0;
+  for (const id of b.ids as string[]) {
+    const p = find(passwords, id, 'Password') as (typeof passwords)[0] & { category?: PasswordCategory | null };
+    if (b.action === 'archive' || b.action === 'restore') p.archived = b.action === 'archive';
+    else if (b.action === 'rotation') p.rotationDays = b.rotationDays as number | null;
+    else if (b.action === 'clientVisible') p.clientVisible = !!b.clientVisible;
+    else if (b.action === 'category') p.category = b.category as PasswordCategory | null;
+    audit(p, b.action === 'archive' ? 'Archived' : b.action === 'restore' ? 'Restored' : 'Edited details', '');
+    updated++;
+  }
+  return { updated, failed: [] };
+});
 on('POST', '/passwords/:id/archive', (m, b) => {
   const p = find(passwords, m[1]!, 'Password');
   p.archived = !!b.archived;
