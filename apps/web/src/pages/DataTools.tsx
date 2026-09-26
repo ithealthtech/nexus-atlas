@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CloudDownload, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
-import type { CsvImportResult, CsvTarget, HuduPreview, ImportJobView } from '@atlas/shared';
+import type { CsvImportResult, CsvTarget, HuduImportOptions, HuduPreview, ImportJobView } from '@atlas/shared';
 import {
   Badge,
   Button,
@@ -20,6 +20,7 @@ import { parseCsv } from '@/lib/csv';
 import { useLayouts } from '@/lib/queries';
 import { formatDateTime } from '@/lib/format';
 import { CwRmmSync } from './CwRmm';
+import { HuduImportChoices } from './ImportChoices';
 
 const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
   hudu: 'Hudu',
@@ -103,9 +104,11 @@ function HuduImport() {
   const client = useQueryClient();
   const connection = useQuery({
     queryKey: ['hudu'],
-    queryFn: () => api<{ url: string; hasKey: boolean }>('/import/hudu'),
+    queryFn: () => api<{ url: string; hasKey: boolean; options: HuduImportOptions }>('/import/hudu'),
   });
   const [preview, setPreview] = useState<HuduPreview | null>(null);
+  // Starts from the choices saved with the last run; sent with the next one, which saves them again.
+  const [choices, setChoices] = useState<HuduImportOptions | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -190,9 +193,10 @@ function HuduImport() {
               variant="secondary"
               loading={busy === 'preview'}
               onClick={() =>
-                act('preview', async () =>
-                  setPreview(await api<HuduPreview>('/import/hudu/preview', { method: 'POST', body: {} })),
-                )
+                act('preview', async () => {
+                  setPreview(await api<HuduPreview>('/import/hudu/preview', { method: 'POST', body: {} }));
+                  setChoices(connection.data?.options ?? null);
+                })
               }
             >
               <CloudDownload /> Check what will be imported
@@ -231,17 +235,31 @@ function HuduImport() {
                 </div>
               ))}
             </dl>
+            {choices && (
+              <div className="mt-4 border-t border-border pt-4">
+                <HuduImportChoices preview={preview} value={choices} onChange={setChoices} />
+              </div>
+            )}
             <p className="mt-3 text-xs text-muted">
-              Companies become clients. Passwords go into each client&rsquo;s password list (folders are flattened).
-              Password-type asset fields are not copied into assets.
+              Password-type asset fields are never copied into assets. Your choices are saved for the next import.
             </p>
             <Button
               className="mt-4"
               loading={busy === 'run'}
-              disabled={job.data?.status === 'running'}
+              disabled={
+                job.data?.status === 'running' ||
+                !!(
+                  choices &&
+                  !choices.clients &&
+                  !choices.locations &&
+                  !choices.assets &&
+                  !choices.documents &&
+                  !choices.passwords
+                )
+              }
               onClick={() =>
                 act('run', async () => {
-                  const { id } = await api<{ id: string }>('/import/hudu/run', { method: 'POST', body: {} });
+                  const { id } = await api<{ id: string }>('/import/hudu/run', { method: 'POST', body: choices ?? {} });
                   setJobId(id);
                 })
               }

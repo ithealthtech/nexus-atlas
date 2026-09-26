@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { cwRmmMappingSchema, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField, MAX_LAYOUT_FIELDS } from '@atlas/shared';
+import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField, MAX_LAYOUT_FIELDS } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
@@ -744,7 +744,14 @@ export async function saveMapping(
  * Syncs linked companies: sites become locations, devices become Configurations assets. A device the RMM no
  * longer reports is archived, but only when its company's device list was fetched in full.
  */
-export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClient, run: ImportRun, map: StoredCwRmm['map']) {
+export async function runCwRmmSync(
+  db: Database,
+  actor: Actor,
+  client: CwRmmClient,
+  run: ImportRun,
+  map: StoredCwRmm['map'],
+  options: CwRmmSyncOptions = cwRmmSyncOptionsSchema.parse({}),
+) {
   const scope = new Scope(db, actor);
   const layoutService = new LayoutService(db);
   const assets = new AssetService(layoutService);
@@ -759,6 +766,10 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
 
   const linked = Object.entries(map).flatMap(([companyId, m]) => (m.action === 'link' ? [[companyId, m.clientId] as const] : []));
   if (!linked.length) run.note('No ConnectWise RMM companies are linked to Atlas clients yet.');
+  if (!options.locations || !options.devices)
+    run.note(
+      `Not synced this time, as chosen: ${[!options.locations && 'sites (locations)', !options.devices && 'devices'].filter(Boolean).join(' and ')}.`,
+    );
   const seen = new Set<string>();
   const complete: string[] = [];
   // Assets already linked to an RMM device, so two devices never land on one asset.
@@ -771,20 +782,23 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
     try {
       // One request at a time: ConnectWise rate-limits bursts.
       sites = await client.sites(companyId);
-      devices = await client.devices(
-        companyId,
-        sites.map((s) => s.id),
-      );
+      devices = options.devices
+        ? await client.devices(
+            companyId,
+            sites.map((s) => s.id),
+          )
+        : [];
     } catch (error) {
       run.count('assets', 'failed');
       run.note(`Company ${companyId}: ${error instanceof HttpError ? error.message : 'could not be read.'}`);
       continue;
     }
     // Field names only (never values), so an unexpected response can be diagnosed from the job log.
-    if (!devices.length) run.note(`Company ${companyId}: no devices listed (${client.lastDeviceList}).`);
+    if (options.devices && !devices.length) run.note(`Company ${companyId}: no devices listed (${client.lastDeviceList}).`);
     const siteNames = new Map<string, string>();
     for (const s of sites) {
       siteNames.set(s.id, s.name);
+      if (!options.locations) continue;
       const body = {
         name: s.name.slice(0, 120),
         address: s.address.slice(0, 300),
@@ -890,7 +904,8 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
         },
       );
     }
-    complete.push(clientId);
+    // Only a company whose devices were read counts toward archiving devices the RMM dropped.
+    if (options.devices) complete.push(clientId);
   }
 
   if (matched)

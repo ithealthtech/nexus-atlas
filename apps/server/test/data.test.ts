@@ -369,6 +369,48 @@ describe('Hudu import', () => {
     expect((await waitForJob(owner, restarted.data.id)).status).toBe('done');
   });
 
+  it('imports only what the administrator chose, and remembers the choice', async () => {
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const preview = (await owner.call('POST', '/api/import/hudu/preview', {})).data;
+    expect(preview.companyList.map((c: { name: string }) => c.name)).toContain('Harbor Dental Group');
+    expect(preview.layoutList).toContainEqual(expect.objectContaining({ id: 7, name: 'Firewalls' }));
+
+    // Only Harbor Dental Group, and neither its passwords nor documents.
+    const choice = { companyIds: [1], passwords: false, documents: false };
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', choice)).data.id);
+    expect(job.status).toBe('done');
+    expect(job.counts.clients.created).toBe(1);
+    expect(job.counts.passwords).toBeUndefined();
+    expect(job.counts.documents).toBeUndefined();
+    expect(job.messages.join(' ')).toContain('Not imported this time, as chosen: documents, passwords.');
+    expect((await owner.call('GET', '/api/clients')).data.map((c: { name: string }) => c.name)).toEqual([
+      'Harbor Dental Group',
+    ]);
+
+    // Saved for next time; a run without choices uses them.
+    expect((await owner.call('GET', '/api/import/hudu')).data.options).toMatchObject(choice);
+    const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(again.counts.passwords).toBeUndefined();
+
+    // With clients off, passwords still go to the client imported before, and no new clients appear.
+    const passwordsOnly = await waitForJob(
+      owner,
+      (
+        await owner.call('POST', '/api/import/hudu/run', {
+          clients: false,
+          locations: false,
+          assets: false,
+          documents: false,
+          passwords: true,
+          companyIds: null,
+        })
+      ).data.id,
+    );
+    expect(passwordsOnly.counts.clients).toBeUndefined();
+    expect(passwordsOnly.counts.passwords.created).toBeGreaterThan(0);
+    expect((await owner.call('GET', '/api/clients')).data).toHaveLength(1);
+  });
+
   it('reports a rejected API key', async () => {
     await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'wrong-key-000000000' });
     const preview = await owner.call('POST', '/api/import/hudu/preview', {});
