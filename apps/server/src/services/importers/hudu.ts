@@ -533,7 +533,17 @@ export async function runHuduImport(
       l.id,
       l.name,
       async () => (await layouts.create(actor, body)).id,
-      async (existing) => void (await layouts.update(actor, existing, body)),
+      async (existing) => {
+        // Fields added since (by an earlier import for data Hudu's layout lacked, or by hand) are kept.
+        const current = (await layouts.get(actor, existing)).fields as LayoutField[];
+        const keys = new Set(mapped.fields.map((f) => f.key));
+        for (const f of current)
+          if (!keys.has(f.key) && mapped.fields.length < 60) {
+            mapped.fields.push(f);
+            if (!mapped.byLabel.has(norm(f.label))) mapped.byLabel.set(norm(f.label), f);
+          }
+        await layouts.update(actor, existing, { ...body, fields: mapped.fields });
+      },
     );
     if (id) layoutMap.set(l.id, { ...mapped, id, name: l.name });
   }
