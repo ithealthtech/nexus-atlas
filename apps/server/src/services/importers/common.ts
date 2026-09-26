@@ -77,7 +77,7 @@ export class ImportRun {
   }
 
   note(message: string) {
-    if (this.messages.length < 500) this.messages.push(message.slice(0, 300));
+    if (this.messages.length < 500) this.messages.push(message.slice(0, 800));
   }
 
   async ref(kind: Kind, externalId: string | number): Promise<string | null> {

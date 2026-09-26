@@ -240,7 +240,7 @@ export class CwRmmClient {
   /** Every device for the company, page by page, using the first request shape the tenant accepts. */
   async devices(companyId: string, siteIds: string[] = []): Promise<RmmDevice[]> {
     const shapes = this.deviceQuery ? [this.deviceQuery] : DEVICE_QUERIES;
-    let lastError: unknown;
+    const tried: string[] = [];
     for (const shape of shapes) {
       if (shape.kind === 'v2' && shape.resourceType === 'sites' && !siteIds.length) continue;
       try {
@@ -250,10 +250,18 @@ export class CwRmmClient {
       } catch (error) {
         // Only a rejected request is worth trying another shape for.
         if (!(error instanceof HttpError && error.status === 400)) throw error;
-        lastError = error;
+        const said = /ConnectWise said: (.*)$/.exec(error.message)?.[1] ?? error.message;
+        tried.push(`${shape.kind === 'v2' ? `v2 by ${shape.resourceType}` : 'v1 list'}: ${said}`);
       }
     }
-    throw lastError;
+    // Every shape's answer, so one message shows whether it's the request or the key's permissions.
+    throw new HttpError(
+      400,
+      `ConnectWise RMM wouldn't list devices. Check the API key has the Devices read permission. Tried ${tried.join('; ')}`.slice(
+        0,
+        600,
+      ),
+    );
   }
 
   private async devicePages(companyId: string, siteIds: string[], shape: DeviceQuery): Promise<RmmDevice[]> {
