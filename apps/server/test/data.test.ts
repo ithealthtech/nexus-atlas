@@ -247,7 +247,9 @@ describe('Hudu import', () => {
       url: 'https://itdr.huducloud.test/',
       apiKey: 'hudu-key-1234567890',
     });
-    expect(saved.data).toEqual({ url: 'https://itdr.huducloud.test', hasKey: true });
+    expect(saved.data).toMatchObject({ url: 'https://itdr.huducloud.test', hasKey: true });
+    // Everything is imported until an administrator narrows it.
+    expect(saved.data.options).toMatchObject({ clients: true, assets: true, passwords: true, companyIds: null });
     const raw = await t.handle.db.execute(sql`select settings::text as s from orgs`);
     expect((raw.rows[0] as { s: string }).s).not.toContain('hudu-key-1234567890');
 
