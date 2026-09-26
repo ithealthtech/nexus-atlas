@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.11] - 2026-09-26
+
+### Fixed
+
+- **Imports after a restart:** an import or ConnectWise RMM sync cut off by a restart (for example installing an update) is marked stopped when Atlas starts again, so a new one can start straight away instead of being refused for five minutes. (#70)
+
 ## [1.1.10] - 2026-09-26
 
 ### Fixed
