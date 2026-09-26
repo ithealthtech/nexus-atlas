@@ -213,7 +213,7 @@ export class CwRmmClient {
       );
     if (!res.ok)
       throw new HttpError(
-        res.status === 400 ? 400 : 502,
+        res.status === 400 || res.status === 404 ? res.status : 502,
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
     return res.json();
@@ -272,14 +272,25 @@ export class CwRmmClient {
     const out: RmmDevice[] = [];
     for (let cursor = 0, pages = 0; pages < 500; pages++) {
       const query = `limit=${shape.limit}&cursor=${cursor}`;
-      const body =
-        shape.kind === 'v2'
-          ? await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
-              resourceType: shape.resourceType,
-              resources:
-                shape.resourceType === 'site' ? siteIds : shape.resourceType === 'partner' ? [] : [companyId],
-            })
-          : await this.call('GET', `/api/platform/v1/device/endpoints?${query}&clientId=${encodeURIComponent(companyId)}`);
+      let body: unknown;
+      try {
+        body =
+          shape.kind === 'v2'
+            ? await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
+                resourceType: shape.resourceType,
+                resources:
+                  shape.resourceType === 'site' ? siteIds : shape.resourceType === 'partner' ? [] : [companyId],
+              })
+            : await this.call(
+                'GET',
+                `/api/platform/v1/device/endpoints?${query}&clientId=${encodeURIComponent(companyId)}`,
+              );
+      } catch (error) {
+        // ConnectWise answers "resource not found" (404) for a company with no devices, or past the last page. A
+        // request it can't read gets 400, so a 404 still means the request itself was accepted.
+        if (error instanceof HttpError && error.status === 404) break;
+        throw error;
+      }
       const page = listOf(body);
       for (const d of page) {
         const id = text(d, 'endpointId', 'id', 'deviceId');
