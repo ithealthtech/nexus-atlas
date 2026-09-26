@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.7] - 2026-09-26
+
+### Fixed
+
+- **ConnectWise RMM sync:** devices now get their hostname, IP address, and MAC address from ConnectWise's device details, including at companies with more than one site. (#61)
+
 ## [1.1.6] - 2026-09-26
 
 ### Fixed
