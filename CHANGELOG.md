@@ -2,6 +2,27 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-09-26
+
+### Added
+
+- **ConnectWise RMM (Asio) sync:** Import & export connects ConnectWise RMM with an API client ID and secret, links RMM companies to Atlas clients (same-name clients suggested), and syncs hourly or on demand: sites become locations, devices become Configurations assets, and devices the RMM stops reporting are archived. Still to be confirmed against a live ConnectWise tenant. (#44)
+- **Sidebar client picker:** jump to any client from the sidebar. (#24)
+- **Quick share:** create a one-time share link for a password straight from the list, for clients without a portal login. (#25)
+- **Password list sort and grouping:** sort by name, client, type, recently changed, or needs attention; group by client or type. Remembered per browser. (#36)
+- **Password folders:** per-client folders, a folder filter in the list, and a Folder field in the form. Hudu imports keep their password folders. (#37)
+- **Favorites and recently used:** star passwords (personal to you) and show only favorites or the ones you last used. (#38)
+- **Bulk actions:** select passwords to archive or restore them, or change rotation, client-portal sharing, or type in one go. Each is checked and audited individually. (#39)
+- **Link assets from the password form.** (#40)
+- **Custom fields on passwords:** up to 30 labelled values each, optionally hidden (encrypted, revealed and audited per field). Included in decrypted exports. (#41)
+- **Generator presets:** Strong, Admin / service account, Easy to type, Wi-Fi / spoken, and a new PIN mode; the last settings are remembered per browser. (#42)
+- **Password expiry dates:** an optional date the account stops working, shown on the password and on the Expirations page and in expiry emails. (#43)
+
+### Fixed
+
+- **Microsoft 365 email:** a failed test email is now logged with Microsoft's reason, and common Entra sign-in errors (secret ID instead of value, expired secret, wrong IDs, missing consent) say what to change. (#45)
+- **API keys:** password folder routes now need the passwords scope. (#37)
+
 ## [1.0.3] - 2026-09-25
 
 ### Added
