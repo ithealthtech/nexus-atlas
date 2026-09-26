@@ -570,6 +570,61 @@ export function fitFields(layoutFields: LayoutField[], values: Record<string, st
   return out;
 }
 
+const DEVICE_FIELD_LABELS: Record<string, string> = {
+  type: 'Type',
+  hostname: 'Hostname',
+  ip_address: 'IP address',
+  mac_address: 'MAC address',
+  manufacturer: 'Manufacturer',
+  model: 'Model',
+  serial_number: 'Serial number',
+  operating_system: 'Operating system',
+  location: 'Location',
+};
+
+/**
+ * Adds text fields to a layout for device values it has no field for (within the 60-field limit), and returns
+ * the layout's fields. `cache` is updated so each layout is changed once per sync.
+ */
+async function ensureDeviceFields(
+  layouts: LayoutService,
+  actor: Actor,
+  layoutId: string,
+  cache: Map<string, LayoutField[]>,
+  values: Record<string, string>,
+): Promise<LayoutField[]> {
+  const current = cache.get(layoutId) ?? [];
+  const labelled = new Set(current.map((f) => f.label.trim().toLowerCase()));
+  const used = new Set(current.map((f) => f.key));
+  const added: LayoutField[] = [];
+  for (const [key, value] of Object.entries(values)) {
+    // Type only goes into a matching choice list; it isn't added as free text.
+    if (!value || key === 'type') continue;
+    const label = DEVICE_FIELD_LABELS[key]!;
+    const fits = fitFields(current, { [key]: key === 'ip_address' ? '10.0.0.1' : 'x' });
+    if (Object.keys(fits).length || labelled.has(label.toLowerCase())) continue;
+    if (current.length + added.length >= 60) break;
+    let fieldKey = key;
+    for (let n = 2; used.has(fieldKey); n++) fieldKey = `${key}_${n}`;
+    used.add(fieldKey);
+    added.push({
+      key: fieldKey,
+      label,
+      type: 'text',
+      required: false,
+      options: [],
+      help: 'Added by the ConnectWise RMM sync.',
+      showInList: false,
+      expires: false,
+    });
+  }
+  if (!added.length) return current;
+  const next = [...current, ...added];
+  await layouts.update(actor, layoutId, { fields: next });
+  cache.set(layoutId, next);
+  return next;
+}
+
 /** Non-archived assets in a client by lower-cased name, with how many device fields each one's layout can take. */
 async function sameNameCandidates(db: Database, orgId: string, clientId: string) {
   const layouts = await db
@@ -691,7 +746,8 @@ export async function saveMapping(
  */
 export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClient, run: ImportRun, map: StoredCwRmm['map']) {
   const scope = new Scope(db, actor);
-  const assets = new AssetService(new LayoutService(db));
+  const layoutService = new LayoutService(db);
+  const assets = new AssetService(layoutService);
   // The client is shared between syncs; each sync notes the field names it saw.
   client.lastDeviceFields = '';
   const [layout] = await db
@@ -773,7 +829,15 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
       /** Writes the device's values into an asset of another layout, where that layout's fields can take them. */
       const updateOther = async (id: string) => {
         const current = await assets.get(scope, id);
-        const fitted = fitFields(existing.layoutFields.get(current.layoutId) ?? [], fields);
+        // A value the layout has no field for gets one, so nothing the RMM knows is dropped.
+        const layoutFields = await ensureDeviceFields(
+          layoutService,
+          actor,
+          current.layoutId,
+          existing.layoutFields,
+          fields,
+        );
+        const fitted = fitFields(layoutFields, fields);
         const merged = { ...current.fields, ...fitted };
         if (current.archived) await assets.setArchived(scope, id, false);
         if (JSON.stringify(merged) !== JSON.stringify(current.fields))
