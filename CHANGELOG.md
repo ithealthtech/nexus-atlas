@@ -6,6 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Fixed
 
+- **Microsoft 365 email:** when Microsoft refuses to send, Atlas now checks its own token and says whether the app is missing the Mail.Send *Application* permission (Delegated permissions don't work for Atlas) or is being kept from the mailbox by an Exchange access policy. A permission fixed in Entra applies on the next try instead of up to an hour later. (#56)
 - **ConnectWise RMM sync:** a company with no devices (ConnectWise's "resource not found") no longer fails the sync; device lists nested deeper in ConnectWise's response are found; devices are no longer dropped when their own client ID uses a different numbering; and a company that still comes back empty gets a job note with the response's field names (never values). (#54)
 
 ## [1.1.3] - 2026-09-26
