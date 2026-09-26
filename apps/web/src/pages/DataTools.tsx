@@ -19,7 +19,14 @@ import { ApiError, api } from '@/lib/api';
 import { parseCsv } from '@/lib/csv';
 import { useLayouts } from '@/lib/queries';
 import { formatDateTime } from '@/lib/format';
+import { CwRmmSync } from './CwRmm';
 
+const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
+  hudu: 'Hudu',
+  legacy: 'Atlas 0.2',
+  csv: 'CSV',
+  'cw-rmm': 'ConnectWise RMM',
+};
 const KIND_LABELS: Record<string, string> = {
   clients: 'Clients',
   locations: 'Locations',
@@ -32,16 +39,21 @@ const KIND_LABELS: Record<string, string> = {
   links: 'Links',
 };
 
-function JobSummary({ job }: { job: ImportJobView }) {
+export function JobSummary({ job }: { job: ImportJobView }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge tone={job.status === 'done' ? 'success' : job.status === 'failed' ? 'danger' : 'info'}>
-          {job.status === 'running' ? 'Importing…' : job.status === 'done' ? 'Finished' : 'Stopped'}
+          {job.status === 'running'
+            ? job.source === 'cw-rmm'
+              ? 'Syncing…'
+              : 'Importing…'
+            : job.status === 'done'
+              ? 'Finished'
+              : 'Stopped'}
         </Badge>
         <span className="text-muted">
-          {job.source === 'hudu' ? 'Hudu' : job.source === 'legacy' ? 'Atlas 0.2' : 'CSV'} · started by{' '}
-          {job.startedByName} {formatDateTime(job.createdAt)}
+          {SOURCE_LABELS[job.source]} · started by {job.startedByName} {formatDateTime(job.createdAt)}
         </span>
       </div>
       {Object.keys(job.counts).length > 0 && (
@@ -531,9 +543,10 @@ export function DataTools() {
       <PageHeader
         eyebrow="Administration"
         title="Import & export"
-        description="Bring in documentation from Hudu or spreadsheets. Export a single client from its page."
+        description="Sync devices from ConnectWise RMM, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
       />
       <div className="grid max-w-4xl gap-6">
+        <CwRmmSync />
         <HuduImport />
         <CsvImport />
         <ImportHistory />
