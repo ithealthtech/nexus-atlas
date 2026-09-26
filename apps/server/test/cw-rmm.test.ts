@@ -218,6 +218,8 @@ describe('ConnectWise RMM client', () => {
     await Promise.all([client.sites('a'), client.sites('b'), client.sites('c')]);
     // One lock, one retry: two token requests in total, however many callers.
     expect(tokens).toBe(2);
-    await expect(client.devices('a')).rejects.toThrow(/ConnectWise said: resources must not be empty/);
+    await expect(client.devices('a')).rejects.toThrow(
+      /Tried v2 by clients: resources must not be empty; v2 by companies: resources must not be empty; v1 list: resources must not be empty/,
+    );
   });
 });
