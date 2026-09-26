@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, types, tests, e2e (Linux)
+    name: Lint, types, unit tests (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -30,7 +30,6 @@ jobs:
           --health-retries 20
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
-      E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/atlas_e2e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,7 +43,45 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
-      - run: npx playwright install --with-deps chromium
+      - name: Legacy 0.2 suite (kept until the M3 data migration)
+        run: npm run legacy:test
+
+  # Runs beside the checks above instead of after them: the browser tests are the slow part.
+  e2e:
+    name: End-to-end (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/atlas_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -54,8 +91,6 @@ jobs:
             playwright-report
             test-results
           retention-days: 7
-      - name: Legacy 0.2 suite (kept until the M3 data migration)
-        run: npm run legacy:test
 
   windows:
     name: Build and unit tests (Windows)

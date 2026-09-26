@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { totp, totpStep } from '../apps/server/src/identity/totp';
 import { E2E } from '../playwright.config';
@@ -781,7 +781,33 @@ async function freshCode(secret: string) {
   return totp(secret, step);
 }
 
+// A full sign-in waits for an unused authenticator code (up to 30 seconds), so a session is reused across tests.
+// Only while it's under 8 minutes old: password-confirmed actions need a sign-in from the last 10.
+const REUSE_MS = 8 * 60_000;
+const sessions = new Map<string, { cookies: Awaited<ReturnType<BrowserContext['cookies']>>; at: number }>();
+
 async function signIn(page: Page, email: string, password: string, given: string) {
+  const saved = sessions.get(email);
+  if (saved && Date.now() - saved.at < REUSE_MS) {
+    await page.context().addCookies(saved.cookies);
+    await page.goto('/');
+    const dashboard = page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ });
+    // Signed out or expired since: fall back to a full sign-in.
+    if (
+      await dashboard
+        .waitFor({ timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false)
+    )
+      return;
+    await page.context().clearCookies();
+    sessions.delete(email);
+  }
+  await signInFully(page, email, password, given);
+  sessions.set(email, { cookies: await page.context().cookies(), at: Date.now() });
+}
+
+async function signInFully(page: Page, email: string, password: string, given: string) {
   const secret = given || (email === OWNER.email && existsSync(SECRET_FILE) ? readFileSync(SECRET_FILE, 'utf8') : '');
   await page.goto('/');
   await page.getByLabel('Email').fill(email);
