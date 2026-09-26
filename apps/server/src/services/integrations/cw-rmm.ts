@@ -18,8 +18,8 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
 };
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
 const RETRY_MS = 2000;
-// Four attempts at this length, plus the lead-in, stay within an import job message (800 characters).
-const ATTEMPT_CHARS = 140;
+// Four attempts at this length, plus the lead-in and the company prefix, fit an import job message (800 characters).
+const ATTEMPT_CHARS = 130;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Json = Record<string, unknown>;

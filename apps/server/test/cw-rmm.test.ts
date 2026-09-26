@@ -237,6 +237,7 @@ describe('ConnectWise RMM device-list errors', () => {
     const error = await new CwRmmClient('na', 'id', 'secret', fetcher).devices('a', ['s1']).catch((e: Error) => e);
     expect(error.message).toContain('v1 list: access denied');
     expect(error.message).toContain('v2 by sites: invalid request');
-    expect(error.message.length).toBeLessThanOrEqual(800);
+    // The sync adds "Company <id>: " before it; the whole line must fit the 800-character job message.
+    expect(`Company ${'0'.repeat(36)}: ${error.message}`.length).toBeLessThanOrEqual(800);
   });
 });
