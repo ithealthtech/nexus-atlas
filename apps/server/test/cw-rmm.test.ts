@@ -335,3 +335,60 @@ describe('ConnectWise RMM device details', () => {
     expect(client.lastDeviceFields).not.toContain('ahmdhackdt010');
   });
 });
+
+describe('ConnectWise RMM real response shapes', () => {
+  it('maps the fields a real tenant returns, finding each device in the right site', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const calls: string[] = [];
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      calls.push(url.pathname);
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      // Shapes as reported by a real tenant (field names only; values made up).
+      if (url.pathname === '/api/platform/v2/device/companies/c1/sites/s2/endpoints/e1')
+        return Response.json({
+          companyID: 'c1',
+          siteID: 's2',
+          endpointID: 'e1',
+          platform: {
+            deviceName: 'AHMDHACKDT010',
+            friendlyName: 'Front desk PC',
+            resourceType: 'desktop',
+            endpointType: 'Desktop',
+            ipAddress: '10.1.2.3',
+            macAddress: 'AA:BB:CC:DD:EE:FF',
+            type: 'Windows',
+            subResourceType: 'workstation',
+          },
+        });
+      if (url.pathname.includes('/endpoints/'))
+        return Response.json({ message: 'resource not found' }, { status: 404 });
+      return Response.json({
+        platform: [
+          {
+            endpointID: 'e1',
+            deviceName: 'AHMDHACKDT010',
+            friendlyName: 'Front desk PC',
+            resourceType: 'desktop',
+            endpointType: 'Desktop',
+          },
+        ],
+      });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const [device] = await client.devices('c1', ['s1', 's2']);
+    expect(device).toMatchObject({
+      siteId: 's2',
+      name: 'Front desk PC',
+      hostname: 'AHMDHACKDT010',
+      ip: '10.1.2.3',
+      mac: 'AA:BB:CC:DD:EE:FF',
+      type: 'Desktop',
+    });
+    // Tried s1 (not there), then s2.
+    expect(calls.filter((c) => c.includes('/endpoints/e1'))).toEqual([
+      '/api/platform/v2/device/companies/c1/sites/s1/endpoints/e1',
+      '/api/platform/v2/device/companies/c1/sites/s2/endpoints/e1',
+    ]);
+  });
+});

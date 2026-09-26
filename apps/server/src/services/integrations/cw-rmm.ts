@@ -100,7 +100,11 @@ const SITE_ID_KEYS =['siteId', 'siteID', 'site_id', 'site.id', 'site.siteId'];
 const DETAIL_CONCURRENCY = 4;
 
 /** Maps a device record (summary merged with details) onto Atlas's fields, reading whichever names are present. */
-function mapDevice(id: string, companyId: string, siteId: string, d: Json): RmmDevice {
+function mapDevice(id: string, companyId: string, siteId: string, record: Json): RmmDevice {
+  // ConnectWise's details put a device's own fields under its category, e.g. platform{deviceName, ipAddress,
+  // macAddress, type}; those are read as if they were top-level.
+  const inner = ['platform', 'network', 'cloud'].map((k) => record[k]).find((v) => v && typeof v === 'object' && !Array.isArray(v));
+  const d: Json = { ...record, ...(inner as Json | undefined) };
   const hostname = text(
     d,
     'hostName',
@@ -118,7 +122,7 @@ function mapDevice(id: string, companyId: string, siteId: string, d: Json): RmmD
     siteId,
     name: text(d, 'friendlyName', 'name', 'displayName', 'endpointName') || hostname || `Device ${id}`,
     hostname,
-    type: text(d, 'endpointType', 'deviceType', 'type', 'classification', 'category', 'deviceClass', 'os.type'),
+    type: text(d, 'endpointType', 'subResourceType', 'deviceType', 'type', 'classification', 'category', 'deviceClass', 'os.type'),
     os: text(
       d,
       'os.name',
@@ -429,24 +433,38 @@ export class CwRmmClient {
    */
   private async withDetails(companyId: string, siteIds: string[], listed: { id: string; raw: Json }[]) {
     const out: RmmDevice[] = [];
+    // The list doesn't say which site a device is in. The details endpoint needs one, so the company's sites
+    // are tried in turn, busiest first (by devices found so far), stopping at the one that knows the device.
+    const hits = new Map<string, number>();
     let next = 0;
     const worker = async () => {
       while (next < listed.length) {
         const { id, raw } = listed[next++]!;
-        const siteId = text(raw, ...SITE_ID_KEYS) || (siteIds.length === 1 ? siteIds[0]! : '');
+        const listedSite = text(raw, ...SITE_ID_KEYS);
+        const candidates = listedSite
+          ? [listedSite]
+          : [...siteIds].sort((a, b) => (hits.get(b) ?? 0) - (hits.get(a) ?? 0));
+        let siteId = listedSite; // Kept even when the details can't be read.
         let detail: Json = {};
-        let detailNote = siteId ? '' : 'no site ID to look it up';
-        if (siteId)
+        let detailNote = candidates.length ? '' : 'no site to look it up in';
+        for (const site of candidates) {
           try {
             const body = await this.call(
               'GET',
-              `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(siteId)}/endpoints/${encodeURIComponent(id)}`,
+              `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(site)}/endpoints/${encodeURIComponent(id)}`,
             );
             detail = deviceObject(body, id);
+            siteId = text(detail, ...SITE_ID_KEYS) || site;
+            hits.set(site, (hits.get(site) ?? 0) + 1);
+            detailNote = '';
+            break;
           } catch (error) {
             if (!(error instanceof HttpError)) throw error;
             detailNote = error.message.replace(/^ConnectWise RMM /, '').slice(0, 120);
+            // Not in this site: try the next. Anything else won't change from site to site.
+            if (error.status !== 404) break;
           }
+        }
         // Field names only (never values), once per client, so the mapping can be checked against a real device.
         this.lastDeviceFields ||= `summary fields ${shapeOf(raw)}; details ${detailNote || `fields ${shapeOf(detail)}`}`;
         out.push(mapDevice(id, companyId, siteId, { ...raw, ...detail }));
