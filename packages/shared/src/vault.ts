@@ -182,6 +182,10 @@ export interface PasswordView {
   linkedAssets: { id: string; name: string }[];
   folderId: string | null;
   folderName: string | null;
+  /** Pinned by the person viewing (not shared with others). */
+  favorite: boolean;
+  /** When the person viewing last revealed, copied, or shared it. */
+  lastUsedAt: string | null;
 }
 export interface PasswordHistoryView {
   id: string;

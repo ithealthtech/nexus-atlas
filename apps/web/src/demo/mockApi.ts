@@ -149,7 +149,12 @@ const shares: {
 const vaultAudit: Json[] = [];
 const rotationDue = (p: (typeof passwords)[0]) =>
   p.rotationDays ? new Date(Date.parse(p.changedAt) + p.rotationDays * 86_400_000).toISOString().slice(0, 10) : null;
+// Personal to the demo user: their stars and when they last used each password.
+const favorites = new Set<string>();
+const lastUsed = new Map<string, string>();
 const passwordView = (p: (typeof passwords)[0]) => ({
+  favorite: favorites.has(p.id),
+  lastUsedAt: lastUsed.get(p.id) ?? null,
   id: p.id,
   clientId: p.clientId,
   clientName: clientName(p.clientId)!,
@@ -835,6 +840,16 @@ on('POST', '/passwords/:id/archive', (m, b) => {
   p.archived = !!b.archived;
   return passwordView(p);
 });
+on('PUT', '/passwords/:id/favorite', (m) => {
+  const p = find(passwords, m[1]!, 'Password');
+  favorites.add(p.id);
+  return passwordView(p);
+});
+on('DELETE', '/passwords/:id/favorite', (m) => {
+  const p = find(passwords, m[1]!, 'Password');
+  favorites.delete(p.id);
+  return passwordView(p);
+});
 on('POST', '/passwords/:id/reveal', (m, b) => {
   const p = find(passwords, m[1]!, 'Password');
   const field = String(b.field ?? 'secret');
@@ -847,6 +862,7 @@ on('POST', '/passwords/:id/reveal', (m, b) => {
       : `Revealed ${field === 'secret' ? 'password' : field}`,
     String(b.reason ?? ''),
   );
+  lastUsed.set(p.id, new Date().toISOString());
   if (field === 'totp')
     return {
       value: String(Math.floor(Math.random() * 1e6)).padStart(6, '0'),
