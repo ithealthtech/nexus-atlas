@@ -58,7 +58,7 @@ function fakeAsio() {
     if (url.pathname === '/api/platform/v2/device/categories/all/endpoints') {
       const request = JSON.parse(String(init?.body));
       // Like a real tenant, only one resource type is accepted.
-      if (request.resourceType !== 'companies') return json({ message: 'Invalid resourceType.' }, 400);
+      if (request.resourceType !== 'company') return json({ message: 'invalid resource type' }, 400);
       const company = request.resources[0] as string;
       const limit = Number(url.searchParams.get('limit'));
       const cursor = Number(url.searchParams.get('cursor'));
@@ -140,7 +140,7 @@ describe('ConnectWise RMM sync', () => {
     expect(job.counts.assets.created).toBe(206);
     expect(job.counts.locations.created).toBe(1);
     // Paged past the first 200 devices, and never asked about the skipped company.
-    // One rejected shape, then three pages of 100 for Harbor and one for Northline, with a single sign-in.
+    // One rejected shape (client), then three pages of 100 for Harbor and one for Northline, with a single sign-in.
     expect(asio.state.calls.filter((c) => c.includes('/endpoints')).length).toBe(5);
     expect(asio.state.tokens).toBe(1);
 
@@ -219,7 +219,7 @@ describe('ConnectWise RMM client', () => {
     // One lock, one retry: two token requests in total, however many callers.
     expect(tokens).toBe(2);
     await expect(client.devices('a')).rejects.toThrow(
-      /Tried v2 by clients: resources must not be empty; v2 by companies: resources must not be empty; v1 list: resources must not be empty/,
+      /Tried v2 by client: resources must not be empty; v2 by company: resources must not be empty; v2 by partner: resources must not be empty; v1 list: resources must not be empty/,
     );
   });
 });
@@ -236,7 +236,7 @@ describe('ConnectWise RMM device-list errors', () => {
     }) as typeof fetch;
     const error = await new CwRmmClient('na', 'id', 'secret', fetcher).devices('a', ['s1']).catch((e: Error) => e);
     expect(error.message).toContain('v1 list: access denied');
-    expect(error.message).toContain('v2 by sites: invalid request');
+    expect(error.message).toContain('v2 by site: invalid request');
     // The sync adds "Company <id>: " before it; the whole line must fit the 800-character job message.
     expect(`Company ${'0'.repeat(36)}: ${error.message}`.length).toBeLessThanOrEqual(800);
   });
