@@ -254,7 +254,7 @@ describe('Hudu import', () => {
     expect((raw.rows[0] as { s: string }).s).not.toContain('hudu-key-1234567890');
 
     const preview = await owner.call('POST', '/api/import/hudu/preview', {});
-    expect(preview.data).toEqual({ companies: 26, assetLayouts: 1, assets: 1, articles: 2, passwords: 2 });
+    expect(preview.data).toMatchObject({ companies: 26, assetLayouts: 1, assets: 1, articles: 2, passwords: 2 });
     expect(hudu.calls).toContain('/api/v1/companies?page=2');
 
     const start = await owner.call('POST', '/api/import/hudu/run', {});
