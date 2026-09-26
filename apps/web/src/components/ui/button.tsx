@@ -8,7 +8,7 @@ const variants: Record<Variant, string> = {
   primary: 'bg-primary text-primary-fg hover:bg-primary-hover shadow-sm',
   secondary: 'bg-surface text-text border border-border hover:bg-surface-3',
   ghost: 'text-text-2 hover:bg-surface-3 hover:text-text',
-  danger: 'bg-danger text-white hover:opacity-90',
+  danger: 'bg-danger text-danger-fg hover:opacity-90',
   link: 'text-primary underline-offset-4 hover:underline px-0 h-auto',
 };
 const sizes: Record<Size, string> = {

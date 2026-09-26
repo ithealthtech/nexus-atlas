@@ -30,6 +30,7 @@
   --sidebar-accent: var(--accent);
   --sidebar-width: 16rem;
   --danger: #a3301f;
+  --danger-fg: #ffffff;
   --danger-soft: #fdeeeb;
   --warning: #7f5b0e;
   --warning-soft: #fcf3de;
@@ -59,6 +60,7 @@
   --sidebar: #0b1411;
   --sidebar-2: #15241f;
   --danger: #ef8a7c;
+  --danger-fg: #1f0906;
   --danger-soft: #3a1d19;
   --warning: #e3b95a;
   --warning-soft: #33290f;
@@ -95,6 +97,7 @@
   --color-sidebar-active: var(--sidebar-active);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
   --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
