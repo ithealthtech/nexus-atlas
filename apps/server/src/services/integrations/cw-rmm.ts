@@ -18,6 +18,8 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
 };
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
 const RETRY_MS = 2000;
+// Five attempts at this length, plus the lead-in and the company prefix, fit an import job message (800 characters).
+const ATTEMPT_CHARS = 100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Json = Record<string, unknown>;
@@ -25,9 +27,12 @@ type Json = Record<string, unknown>;
 type DeviceQuery = { kind: 'v2'; resourceType: string; limit: number } | { kind: 'v1'; limit: number };
 // ConnectWise doesn't publish which of these a tenant accepts; the first that works is kept for the run.
 const DEVICE_QUERIES: DeviceQuery[] = [
-  { kind: 'v2', resourceType: 'clients', limit: 100 },
-  { kind: 'v2', resourceType: 'companies', limit: 100 },
-  { kind: 'v2', resourceType: 'sites', limit: 100 },
+  // A real tenant rejected the plural forms (clients, companies, sites) by name.
+  { kind: 'v2', resourceType: 'client', limit: 100 },
+  { kind: 'v2', resourceType: 'company', limit: 100 },
+  { kind: 'v2', resourceType: 'site', limit: 100 },
+  // Every device the key can see, kept to this company by each device's own company ID.
+  { kind: 'v2', resourceType: 'partner', limit: 100 },
   { kind: 'v1', limit: 100 },
 ];
 
@@ -242,7 +247,7 @@ export class CwRmmClient {
     const shapes = this.deviceQuery ? [this.deviceQuery] : DEVICE_QUERIES;
     const tried: string[] = [];
     for (const shape of shapes) {
-      if (shape.kind === 'v2' && shape.resourceType === 'sites' && !siteIds.length) continue;
+      if (shape.kind === 'v2' && shape.resourceType === 'site' && !siteIds.length) continue;
       try {
         const devices = await this.devicePages(companyId, siteIds, shape);
         this.deviceQuery = shape;
@@ -251,16 +256,15 @@ export class CwRmmClient {
         // Only a rejected request is worth trying another shape for.
         if (!(error instanceof HttpError && error.status === 400)) throw error;
         const said = /ConnectWise said: (.*)$/.exec(error.message)?.[1] ?? error.message;
-        tried.push(`${shape.kind === 'v2' ? `v2 by ${shape.resourceType}` : 'v1 list'}: ${said}`);
+        // Each attempt gets its own share of the job message, so a long answer can't hide a later one.
+        const short = said.length > ATTEMPT_CHARS ? `${said.slice(0, ATTEMPT_CHARS - 1)}…` : said;
+        tried.push(`${shape.kind === 'v2' ? `v2 by ${shape.resourceType}` : 'v1 list'}: ${short}`);
       }
     }
     // Every shape's answer, so one message shows whether it's the request or the key's permissions.
     throw new HttpError(
       400,
-      `ConnectWise RMM wouldn't list devices. Check the API key has the Devices read permission. Tried ${tried.join('; ')}`.slice(
-        0,
-        600,
-      ),
+      `ConnectWise RMM wouldn't list devices. Check the API key has the Devices read permission. Tried ${tried.join('; ')}`,
     );
   }
 
@@ -272,7 +276,8 @@ export class CwRmmClient {
         shape.kind === 'v2'
           ? await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
               resourceType: shape.resourceType,
-              resources: shape.resourceType === 'sites' ? siteIds : [companyId],
+              resources:
+                shape.resourceType === 'site' ? siteIds : shape.resourceType === 'partner' ? [] : [companyId],
             })
           : await this.call('GET', `/api/platform/v1/device/endpoints?${query}&clientId=${encodeURIComponent(companyId)}`);
       const page = listOf(body);
