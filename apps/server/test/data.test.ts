@@ -247,12 +247,14 @@ describe('Hudu import', () => {
       url: 'https://itdr.huducloud.test/',
       apiKey: 'hudu-key-1234567890',
     });
-    expect(saved.data).toEqual({ url: 'https://itdr.huducloud.test', hasKey: true });
+    expect(saved.data).toMatchObject({ url: 'https://itdr.huducloud.test', hasKey: true });
+    // Everything is imported until an administrator narrows it.
+    expect(saved.data.options).toMatchObject({ clients: true, assets: true, passwords: true, companyIds: null });
     const raw = await t.handle.db.execute(sql`select settings::text as s from orgs`);
     expect((raw.rows[0] as { s: string }).s).not.toContain('hudu-key-1234567890');
 
     const preview = await owner.call('POST', '/api/import/hudu/preview', {});
-    expect(preview.data).toEqual({ companies: 26, assetLayouts: 1, assets: 1, articles: 2, passwords: 2 });
+    expect(preview.data).toMatchObject({ companies: 26, assetLayouts: 1, assets: 1, articles: 2, passwords: 2 });
     expect(hudu.calls).toContain('/api/v1/companies?page=2');
 
     const start = await owner.call('POST', '/api/import/hudu/run', {});
@@ -367,6 +369,48 @@ describe('Hudu import', () => {
     expect(restarted.status).toBe(202);
     // Let it finish before the test app shuts down.
     expect((await waitForJob(owner, restarted.data.id)).status).toBe('done');
+  });
+
+  it('imports only what the administrator chose, and remembers the choice', async () => {
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const preview = (await owner.call('POST', '/api/import/hudu/preview', {})).data;
+    expect(preview.companyList.map((c: { name: string }) => c.name)).toContain('Harbor Dental Group');
+    expect(preview.layoutList).toContainEqual(expect.objectContaining({ id: 7, name: 'Firewalls' }));
+
+    // Only Harbor Dental Group, and neither its passwords nor documents.
+    const choice = { companyIds: [1], passwords: false, documents: false };
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', choice)).data.id);
+    expect(job.status).toBe('done');
+    expect(job.counts.clients.created).toBe(1);
+    expect(job.counts.passwords).toBeUndefined();
+    expect(job.counts.documents).toBeUndefined();
+    expect(job.messages.join(' ')).toContain('Not imported this time, as chosen: documents, passwords.');
+    expect((await owner.call('GET', '/api/clients')).data.map((c: { name: string }) => c.name)).toEqual([
+      'Harbor Dental Group',
+    ]);
+
+    // Saved for next time; a run without choices uses them.
+    expect((await owner.call('GET', '/api/import/hudu')).data.options).toMatchObject(choice);
+    const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(again.counts.passwords).toBeUndefined();
+
+    // With clients off, passwords still go to the client imported before, and no new clients appear.
+    const passwordsOnly = await waitForJob(
+      owner,
+      (
+        await owner.call('POST', '/api/import/hudu/run', {
+          clients: false,
+          locations: false,
+          assets: false,
+          documents: false,
+          passwords: true,
+          companyIds: null,
+        })
+      ).data.id,
+    );
+    expect(passwordsOnly.counts.clients).toBeUndefined();
+    expect(passwordsOnly.counts.passwords.created).toBeGreaterThan(0);
+    expect((await owner.call('GET', '/api/clients')).data).toHaveLength(1);
   });
 
   it('reports a rejected API key', async () => {

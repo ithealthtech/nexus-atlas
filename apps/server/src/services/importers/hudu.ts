@@ -1,6 +1,8 @@
 import type { Database } from '@atlas/db';
 import {
   guessPasswordCategory,
+  huduImportOptionsSchema,
+  type HuduImportOptions,
   type Actor,
   type FieldType,
   type HuduPreview,
@@ -455,12 +457,20 @@ export async function previewHudu(client: HuduClient): Promise<HuduPreview> {
     client.articles(),
     client.passwords(),
   ]);
+  const live = assets.filter((a) => !a.archived);
+  const perLayout = new Map<number, number>();
+  for (const a of live) perLayout.set(a.asset_layout_id, (perLayout.get(a.asset_layout_id) ?? 0) + 1);
+  const active = companies.filter((c) => !c.archived);
   return {
-    companies: companies.filter((c) => !c.archived).length,
+    companies: active.length,
     assetLayouts: layouts.length,
-    assets: assets.filter((a) => !a.archived).length,
+    assets: live.length,
     articles: articles.filter((a) => !a.archived).length,
     passwords: passwords.filter((p) => !p.archived).length,
+    companyList: active.map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)),
+    layoutList: layouts
+      .map((l) => ({ id: l.id, name: l.name, assets: perLayout.get(l.id) ?? 0 }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
@@ -475,6 +485,7 @@ export async function runHuduImport(
   client: HuduClient,
   run: ImportRun,
   vault: VaultService,
+  options: HuduImportOptions = huduImportOptionsSchema.parse({}),
 ) {
   const scope = new Scope(db, actor);
   const clients = new ClientService(db);
@@ -482,10 +493,27 @@ export async function runHuduImport(
   const assets = new AssetService(layouts);
   const documents = new DocumentService();
   const relations = new RelationService();
+  const companyChosen = (id: number) => !options.companyIds || options.companyIds.includes(id);
+  const layoutChosen = (id: number) => !options.layoutIds || options.layoutIds.includes(id);
+  const skipped = [
+    !options.clients && 'clients',
+    !options.locations && 'locations',
+    !options.assets && 'assets',
+    !options.documents && 'documents',
+    !options.passwords && 'passwords',
+  ].filter(Boolean);
+  if (skipped.length) run.note(`Not imported this time, as chosen: ${skipped.join(', ')}.`);
+  if (options.companyIds)
+    run.note(`Only ${options.companyIds.length} chosen compan${options.companyIds.length === 1 ? 'y' : 'ies'}.`);
 
-  // Companies
+  // Companies. With clients switched off, the rest still goes to clients an earlier import made.
   const companyToClient = new Map<number, string>();
-  for (const c of (await client.companies()).filter((x) => !x.archived)) {
+  for (const c of (await client.companies()).filter((x) => !x.archived && companyChosen(x.id))) {
+    if (!options.clients) {
+      const earlier = await run.ref('clients', c.id);
+      if (earlier) companyToClient.set(c.id, earlier);
+      continue;
+    }
     const notes = [
       htmlToText(c.notes ?? ''),
       c.website ? `Website: ${c.website}` : '',
@@ -504,7 +532,7 @@ export async function runHuduImport(
     );
     if (!id) continue;
     companyToClient.set(c.id, id);
-    if (c.address_line_1) {
+    if (options.locations && c.address_line_1) {
       const location = {
         name: 'Main office',
         address: [c.address_line_1, c.address_line_2].filter(Boolean).join(', ').slice(0, 300),
@@ -525,9 +553,9 @@ export async function runHuduImport(
     }
   }
 
-  // Asset layouts
+  // Asset layouts: only for the assets being imported.
   const layoutMap = new Map<number, MappedLayout & { id: string; name: string }>();
-  for (const l of await client.layouts()) {
+  for (const l of options.assets ? (await client.layouts()).filter((x) => layoutChosen(x.id)) : []) {
     const mapped = mapLayout(l);
     const body = {
       name: `${l.name}`.slice(0, 80),
@@ -557,7 +585,12 @@ export async function runHuduImport(
   // Every value an asset carries gets a field: first a pass over all assets collects what no field of their
   // layout takes (integration data such as RAM or department, extra Hudu fields), and those fields are added
   // to the layout, so the import below puts each value in its own field instead of the notes.
-  const huduAssets = (await client.assets()).filter((x) => !x.archived);
+  // Assets of other companies or layouts than the ones chosen are left alone, not counted as skipped.
+  const huduAssets = options.assets
+    ? (await client.assets()).filter(
+        (x) => !x.archived && companyChosen(x.company_id) && layoutChosen(x.asset_layout_id),
+      )
+    : [];
   const missingByLayout = new Map<number, Map<string, string>>();
   for (const a of huduAssets) {
     const layout = layoutMap.get(a.asset_layout_id);
@@ -615,8 +648,9 @@ export async function runHuduImport(
     if (assetId) assetToAtlas.set(a.id, assetId);
   }
 
-  // Articles
-  for (const a of (await client.articles()).filter((x) => !x.archived)) {
+  // Articles (company ones only for the chosen companies; knowledge-base ones whenever documents are chosen)
+  const articles = options.documents ? await client.articles() : [];
+  for (const a of articles.filter((x) => !x.archived && (!x.company_id || companyChosen(x.company_id)))) {
     const clientId = a.company_id ? companyToClient.get(a.company_id) : null;
     if (a.company_id && !clientId) {
       run.count('documents', 'skipped');
@@ -648,7 +682,8 @@ export async function runHuduImport(
     }
     return folderCache.get(key)!;
   };
-  for (const p of (await client.passwords()).filter((x) => !x.archived)) {
+  const huduPasswords = options.passwords ? await client.passwords() : [];
+  for (const p of huduPasswords.filter((x) => !x.archived && (!x.company_id || companyChosen(x.company_id)))) {
     const clientId = p.company_id ? companyToClient.get(p.company_id) : undefined;
     const name = p.name.slice(0, 200) || `Password ${p.id}`;
     if (!clientId || !p.password) {

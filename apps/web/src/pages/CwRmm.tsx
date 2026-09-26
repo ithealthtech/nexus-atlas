@@ -296,6 +296,34 @@ export function CwRmmSync() {
               </Button>
             </div>
             {job.data && <JobSummary job={job.data} />}
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">What to sync</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    ['locations', 'Sites', 'Each linked company’s sites, as locations.'],
+                    ['devices', 'Devices', 'As assets: updating same-named ones, or in Configurations.'],
+                  ] as const
+                ).map(([key, label, help]) => (
+                  <Checkbox
+                    key={key}
+                    label={label}
+                    description={help}
+                    checked={data.options[key]}
+                    disabled={busy === 'options'}
+                    onChange={(e) =>
+                      act('options', async () => {
+                        await api('/integrations/cw-rmm/options', {
+                          method: 'PUT',
+                          body: { ...data.options, [key]: e.target.checked },
+                        });
+                        await connection.refetch();
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </fieldset>
             <CompanyMapping />
           </>
         )}

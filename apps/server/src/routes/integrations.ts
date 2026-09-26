@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { eq, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { cwRmmConnectionSchema, type Actor } from '@atlas/shared';
+import { cwRmmConnectionSchema, cwRmmSyncOptionsSchema, type Actor } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { actorFor } from '../identity/service.js';
@@ -23,7 +23,7 @@ async function startSync(
   if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
   const client = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher);
   const run = await ImportRun.start(db, actor, 'cw-rmm');
-  const done = runCwRmmSync(db, actor, client, run, saved.map)
+  const done = runCwRmmSync(db, actor, client, run, saved.map, cwRmmSyncOptionsSchema.parse(saved.options ?? {}))
     .then(async () => {
       await run.flush('done');
       await settings.patchCwRmm(actor.orgId, { lastSyncAt: new Date().toISOString() });
@@ -98,6 +98,11 @@ export function registerIntegrationRoutes(
     const { saved, client } = await clientFor(actor.orgId);
     await saveMapping(db, actor, settings, client, req.body);
     return companiesWithMapping(db, actor, client, { ...saved, ...(await settings.cwRmm(actor.orgId))! });
+  });
+  app.put('/api/integrations/cw-rmm/options', authed, async (req) => {
+    const actor = admin(req);
+    await settings.patchCwRmm(actor.orgId, { options: cwRmmSyncOptionsSchema.parse(req.body) });
+    return settings.cwRmmView(actor.orgId);
   });
   app.post('/api/integrations/cw-rmm/sync', authed, async (req, reply) => {
     const actor = admin(req);

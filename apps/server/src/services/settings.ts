@@ -3,6 +3,10 @@ import { schema, type Database } from '@atlas/db';
 import {
   brandingSchema,
   cwRmmConnectionSchema,
+  cwRmmSyncOptionsSchema,
+  huduImportOptionsSchema,
+  type CwRmmSyncOptions,
+  type HuduImportOptions,
   type CwRmmRegion,
   type CwRmmView,
   huduConnectionSchema,
@@ -42,7 +46,7 @@ export interface AuditCheckpoint {
 }
 interface StoredSettings {
   branding?: Branding;
-  hudu?: { url: string; keySealed: string };
+  hudu?: { url: string; keySealed: string; options?: HuduImportOptions };
   smtp?: StoredSmtp;
   notifications?: NotificationSettings;
   auditCheckpoint?: AuditCheckpoint;
@@ -67,6 +71,7 @@ export interface StoredCwRmm {
   /** The administrator who connected it; scheduled syncs run as them. */
   connectedBy: string;
   lastSyncAt: string | null;
+  options?: CwRmmSyncOptions;
   /** ConnectWise company id → what to do with it. */
   map: Record<string, { action: 'link'; clientId: string } | { action: 'skip' }>;
 }
@@ -210,9 +215,22 @@ export class SettingsService {
     return saved ? { url: saved.url, apiKey: open(this.keys, saved.keySealed, `org|${orgId}|hudu`) } : null;
   }
 
-  async huduView(orgId: string): Promise<{ url: string; hasKey: boolean } | null> {
+  async huduView(orgId: string): Promise<{ url: string; hasKey: boolean; options: HuduImportOptions } | null> {
     const saved = (await this.load(orgId)).hudu;
-    return saved ? { url: saved.url, hasKey: true } : null;
+    return saved ? { url: saved.url, hasKey: true, options: huduImportOptionsSchema.parse(saved.options ?? {}) } : null;
+  }
+
+  /** What the Hudu import brings in; everything until an administrator narrows it. */
+  async huduOptions(orgId: string): Promise<HuduImportOptions> {
+    return huduImportOptionsSchema.parse((await this.load(orgId)).hudu?.options ?? {});
+  }
+
+  async saveHuduOptions(orgId: string, input: unknown): Promise<HuduImportOptions> {
+    const saved = (await this.load(orgId)).hudu;
+    if (!saved) throw new HttpError(400, 'Connect Hudu first: enter its address and an API key.');
+    const options = huduImportOptionsSchema.parse(input);
+    await this.put(orgId, 'hudu', { ...saved, options });
+    return options;
   }
 
   async saveHudu(orgId: string, input: unknown) {
@@ -223,6 +241,8 @@ export class SettingsService {
     await this.put(orgId, 'hudu', {
       url: body.url.replace(/\/+$/, ''),
       keySealed: seal(this.keys, apiKey, `org|${orgId}|hudu`),
+      // Changing the address or key keeps what the import is set to bring in.
+      options: (await this.load(orgId)).hudu?.options,
     });
   }
 
@@ -250,6 +270,7 @@ export class SettingsService {
           hasSecret: true,
           autoSync: saved.autoSync,
           lastSyncAt: saved.lastSyncAt,
+          options: cwRmmSyncOptionsSchema.parse(saved.options ?? {}),
         }
       : null;
   }
@@ -267,12 +288,13 @@ export class SettingsService {
       autoSync: body.autoSync,
       connectedBy: userId,
       lastSyncAt: current?.lastSyncAt ?? null,
+      options: current?.options,
       map: current?.map ?? {},
     } satisfies StoredCwRmm);
   }
 
   /** Updates the mapping or last-sync time without touching the secret. */
-  async patchCwRmm(orgId: string, patch: Partial<Pick<StoredCwRmm, 'map' | 'lastSyncAt'>>) {
+  async patchCwRmm(orgId: string, patch: Partial<Pick<StoredCwRmm, 'map' | 'lastSyncAt' | 'options'>>) {
     const saved = (await this.load(orgId)).cwRmm;
     if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
     await this.put(orgId, 'cwRmm', { ...saved, ...patch });
