@@ -142,7 +142,7 @@ describe('ConnectWise RMM sync', () => {
     expect(job.counts.locations.created).toBe(1);
     // Paged past the first 200 devices, and never asked about the skipped company.
     // One rejected shape (client), then three pages of 100 for Harbor and one for Northline, with a single sign-in.
-    expect(asio.state.calls.filter((c) => c.includes('/endpoints')).length).toBe(5);
+    expect(asio.state.calls.filter((c) => c.includes('/categories/all/endpoints')).length).toBe(5);
     expect(asio.state.tokens).toBe(1);
 
     const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
@@ -299,5 +299,39 @@ describe('ConnectWise RMM category responses', () => {
     body = { platform: [{ mystery: 'x', details: { a: 1 } }] };
     expect(await client.devices('c1')).toEqual([]);
     expect(client.lastDeviceList).toContain('a record without one has fields mystery, details{a}');
+  });
+});
+
+describe('ConnectWise RMM device details', () => {
+  it("fills a device's fields from its own endpoint, and notes field names only", async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      if (url.pathname === '/api/platform/v2/device/companies/c1/sites/s1/endpoints/e1')
+        return Response.json({
+          endpointId: 'e1',
+          system: { hostname: 'ahmdhackdt010', manufacturer: 'Dell Inc.', model: 'OptiPlex 7090' },
+          os: { name: 'Windows 11 Pro' },
+          networkInterfaces: [{ ipAddress: '10.1.2.3', macAddress: 'AA:BB:CC:DD:EE:FF' }],
+          bios: { serialNumber: 'ABC1234' },
+        });
+      return Response.json({ platform: [{ endpointId: 'e1', siteId: 's1', friendlyName: 'AHMDHACKDT010' }] });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const [device] = await client.devices('c1', ['s1']);
+    expect(device).toMatchObject({
+      name: 'AHMDHACKDT010',
+      hostname: 'ahmdhackdt010',
+      os: 'Windows 11 Pro',
+      ip: '10.1.2.3',
+      mac: 'AA:BB:CC:DD:EE:FF',
+      manufacturer: 'Dell Inc.',
+      model: 'OptiPlex 7090',
+      serial: 'ABC1234',
+    });
+    expect(client.lastDeviceFields).toContain('summary fields endpointId, siteId, friendlyName');
+    expect(client.lastDeviceFields).toContain('system{hostname,manufacturer,model}');
+    expect(client.lastDeviceFields).not.toContain('ahmdhackdt010');
   });
 });

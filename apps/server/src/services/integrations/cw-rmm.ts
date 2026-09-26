@@ -79,6 +79,105 @@ const DEVICE_ID_KEYS = [
   'id',
 ];
 /**
+ * The device inside a details response: the body itself when it is the device, else the record carrying this
+ * device's ID (for example under data, or in a one-item list). Its own lists, like network interfaces, are
+ * fields of the device, not the device.
+ */
+function deviceObject(body: unknown, id: string): Json {
+  const isObject = (v: unknown): v is Json => !!v && typeof v === 'object' && !Array.isArray(v);
+  if (isObject(body) && text(body, ...DEVICE_ID_KEYS)) return body;
+  const match = recordsOf(body).find((r) => text(r, ...DEVICE_ID_KEYS) === id);
+  if (match) return match;
+  if (isObject(body)) {
+    const inner = Object.values(body).filter(isObject);
+    if (inner.length === 1) return inner[0]!;
+    return body;
+  }
+  return {};
+}
+
+const SITE_ID_KEYS =['siteId', 'siteID', 'site_id', 'site.id', 'site.siteId'];
+const DETAIL_CONCURRENCY = 4;
+
+/** Maps a device record (summary merged with details) onto Atlas's fields, reading whichever names are present. */
+function mapDevice(id: string, companyId: string, siteId: string, d: Json): RmmDevice {
+  const hostname = text(
+    d,
+    'hostName',
+    'hostname',
+    'system.hostName',
+    'system.hostname',
+    'computerName',
+    'machineName',
+    'deviceName',
+    'systemName',
+  );
+  return {
+    id,
+    companyId,
+    siteId,
+    name: text(d, 'friendlyName', 'name', 'displayName', 'endpointName') || hostname || `Device ${id}`,
+    hostname,
+    type: text(d, 'endpointType', 'deviceType', 'type', 'classification', 'category', 'deviceClass', 'os.type'),
+    os: text(
+      d,
+      'os.name',
+      'os.product',
+      'os.caption',
+      'os.productName',
+      'operatingSystem.name',
+      'operatingSystem.caption',
+      'operatingSystem',
+      'osName',
+      'osType',
+      'os',
+    ),
+    ip: text(
+      d,
+      'ipAddress',
+      'localIpAddress',
+      'privateIpAddress',
+      'internalIpAddress',
+      'network.ipAddress',
+      'networkInterfaces.0.ipAddress',
+      'networkInterfaces.0.ipv4',
+      'networkAdapters.0.ipAddress',
+      'networks.0.ipv4',
+      'ipAddresses',
+      'ipv4',
+    ),
+    mac: text(
+      d,
+      'macAddress',
+      'network.macAddress',
+      'networkInterfaces.0.macAddress',
+      'networkAdapters.0.macAddress',
+      'networks.0.macAddress',
+      'macAddresses',
+    ),
+    manufacturer: text(
+      d,
+      'manufacturer',
+      'system.manufacturer',
+      'hardware.manufacturer',
+      'bios.manufacturer',
+      'baseBoard.manufacturer',
+      'vendor',
+    ),
+    model: text(d, 'model', 'system.model', 'hardware.model', 'systemModel', 'productName'),
+    serial: text(
+      d,
+      'serialNumber',
+      'system.serialNumber',
+      'hardware.serialNumber',
+      'bios.serialNumber',
+      'baseBoard.serialNumber',
+      'serial',
+    ),
+  };
+}
+
+/**
  * Every device record in a device-list response. ConnectWise groups them by category ({ platform: [...],
  * network: [...] }), and a record can itself hold the devices (for example a site with an endpoints list), so
  * all categories are gathered and records without a device ID of their own are opened up.
@@ -160,6 +259,8 @@ export interface RmmDevice {
 export class CwRmmClient {
   /** What the last device list looked like, for a job note when a company comes back empty. */
   lastDeviceList = '';
+  /** Field names of one real device (summary and details), for a single job note per sync. */
+  lastDeviceFields = '';
   // One client (and so one token) per set of credentials, shared by every request and sync: signing in for
   // each page load gets the key locked.
   private static shared = new WeakMap<typeof fetch, Map<string, CwRmmClient>>();
@@ -303,9 +404,9 @@ export class CwRmmClient {
     for (const shape of shapes) {
       if (shape.kind === 'v2' && shape.resourceType === 'site' && !siteIds.length) continue;
       try {
-        const devices = await this.devicePages(companyId, siteIds, shape);
+        const listed = await this.devicePages(companyId, siteIds, shape);
         this.deviceQuery = shape;
-        return devices;
+        return this.withDetails(companyId, siteIds, listed);
       } catch (error) {
         // Only a rejected request is worth trying another shape for.
         if (!(error instanceof HttpError && error.status === 400)) throw error;
@@ -322,8 +423,41 @@ export class CwRmmClient {
     );
   }
 
-  private async devicePages(companyId: string, siteIds: string[], shape: DeviceQuery): Promise<RmmDevice[]> {
+  /**
+   * The list gives a short summary per device; the details (hostname, OS, network, hardware) come from each
+   * device's own endpoint, fetched a few at a time. A device whose details can't be read keeps its summary.
+   */
+  private async withDetails(companyId: string, siteIds: string[], listed: { id: string; raw: Json }[]) {
     const out: RmmDevice[] = [];
+    let next = 0;
+    const worker = async () => {
+      while (next < listed.length) {
+        const { id, raw } = listed[next++]!;
+        const siteId = text(raw, ...SITE_ID_KEYS) || (siteIds.length === 1 ? siteIds[0]! : '');
+        let detail: Json = {};
+        let detailNote = siteId ? '' : 'no site ID to look it up';
+        if (siteId)
+          try {
+            const body = await this.call(
+              'GET',
+              `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(siteId)}/endpoints/${encodeURIComponent(id)}`,
+            );
+            detail = deviceObject(body, id);
+          } catch (error) {
+            if (!(error instanceof HttpError)) throw error;
+            detailNote = error.message.replace(/^ConnectWise RMM /, '').slice(0, 120);
+          }
+        // Field names only (never values), once per client, so the mapping can be checked against a real device.
+        this.lastDeviceFields ||= `summary fields ${shapeOf(raw)}; details ${detailNote || `fields ${shapeOf(detail)}`}`;
+        out.push(mapDevice(id, companyId, siteId, { ...raw, ...detail }));
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(DETAIL_CONCURRENCY, listed.length) }, worker));
+    return out;
+  }
+
+  private async devicePages(companyId: string, siteIds: string[], shape: DeviceQuery) {
+    const out: { id: string; raw: Json }[] = [];
     // Only lists that aren't already limited to the company need filtering; a device's own company ID may use
     // a different numbering than the company list, so trusting it elsewhere could drop every device.
     const filter = shape.kind === 'v1' || shape.resourceType === 'partner';
@@ -369,21 +503,7 @@ export class CwRmmClient {
           otherCompany++;
           continue;
         }
-        const hostname = text(d, 'hostName', 'hostname', 'system.hostName', 'computerName');
-        out.push({
-          id,
-          companyId,
-          siteId: text(d, 'siteId', 'site.id'),
-          name: text(d, 'friendlyName', 'name', 'displayName') || hostname || `Device ${id}`,
-          hostname,
-          type: text(d, 'endpointType', 'deviceType', 'type', 'classification', 'category'),
-          os: text(d, 'os.name', 'os.product', 'operatingSystem.name', 'operatingSystem', 'osName', 'os'),
-          ip: text(d, 'ipAddress', 'localIpAddress', 'network.ipAddress', 'ipAddresses'),
-          mac: text(d, 'macAddress', 'network.macAddress', 'macAddresses'),
-          manufacturer: text(d, 'manufacturer', 'system.manufacturer', 'hardware.manufacturer'),
-          model: text(d, 'model', 'system.model', 'hardware.model'),
-          serial: text(d, 'serialNumber', 'system.serialNumber', 'hardware.serialNumber', 'bios.serialNumber'),
-        });
+        out.push({ id, raw: d });
       }
       if (!pages)
         this.lastDeviceList = `${via}: response fields ${shapeOf(body)}; ${page.length} records on the first page`;
@@ -478,6 +598,8 @@ export async function saveMapping(
 export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClient, run: ImportRun, map: StoredCwRmm['map']) {
   const scope = new Scope(db, actor);
   const assets = new AssetService(new LayoutService(db));
+  // The client is shared between syncs; each sync notes the field names it saw.
+  client.lastDeviceFields = '';
   const [layout] = await db
     .select({ id: schema.assetLayouts.id, archived: schema.assetLayouts.archived })
     .from(schema.assetLayouts)
@@ -559,6 +681,8 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
     }
     complete.push(clientId);
   }
+
+  if (client.lastDeviceFields) run.note(`ConnectWise device ${client.lastDeviceFields}.`);
 
   // Archive devices removed from the RMM, within the companies read in full.
   if (complete.length) {
