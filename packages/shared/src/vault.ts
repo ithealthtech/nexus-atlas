@@ -86,6 +86,11 @@ const totpSecret = z
     'Enter the authenticator setup key (letters A–Z and digits 2–7), or leave it empty.',
   );
 
+const expiryDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a valid date.')
+  .refine((d) => !Number.isNaN(Date.parse(d)) && new Date(d).toISOString().startsWith(d), 'Choose a valid date.');
+
 /** A labelled extra value. On edit, a secret field may omit `value` to keep what's stored. */
 export const customFieldSchema = z.object({
   id: z.string().uuid().optional(),
@@ -110,6 +115,7 @@ const base = {
   notes: z.string().max(20000).default(''),
   totp: totpSecret.default(''),
   rotationDays: z.number().int().min(1).max(3650).nullable().default(null),
+  expiresOn: expiryDate.nullable().default(null),
   restricted: z.boolean().default(false),
   clientVisible: z.boolean().default(false),
   // null: let Atlas guess from the name, username, and address.
@@ -133,6 +139,7 @@ export const updatePasswordSchema = z.object({
   notes: z.string().max(20000).optional(),
   totp: totpSecret.optional(),
   rotationDays: z.number().int().min(1).max(3650).nullable().optional(),
+  expiresOn: expiryDate.nullable().optional(),
   restricted: z.boolean().optional(),
   clientVisible: z.boolean().optional(),
   category: z.enum(PASSWORD_CATEGORIES).nullable().optional(),
@@ -202,6 +209,8 @@ export interface PasswordView {
   strength: number;
   reused: number;
   rotationDays: number | null;
+  /** YYYY-MM-DD the account stops working, if it does. */
+  expiresOn: string | null;
   changedAt: string;
   rotationDue: string | null;
   restricted: boolean;

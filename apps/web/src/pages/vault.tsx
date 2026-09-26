@@ -94,6 +94,7 @@ import {
 const strengthTone: Tone[] = ['danger', 'danger', 'warning', 'success', 'success'];
 const today = () => new Date().toISOString().slice(0, 10);
 export const rotationOverdue = (p: PasswordView) => !!p.rotationDue && p.rotationDue <= today();
+export const expired = (p: PasswordView) => !!p.expiresOn && p.expiresOn <= today();
 
 function StrengthMeter({ value }: { value: string }) {
   const score = passwordStrength(value);
@@ -447,6 +448,7 @@ export function PasswordDialog({
       username: text('username'),
       url: kind === 'login' ? text('url') : '',
       rotationDays: rotation ? Number(rotation) : null,
+      expiresOn: text('expiresOn') || null,
       ...(actor.isAdmin ? { restricted: form.get('restricted') === 'on' } : {}),
       clientVisible: form.get('clientVisible') === 'on',
       ...(kind === 'login' ? { category: text('category') || null } : {}),
@@ -716,7 +718,12 @@ export function PasswordDialog({
         <CustomFieldsEditor fields={fields} onChange={setFields} error={error?.fields?.customFields} />
         <AssetLinksField clientId={item?.clientId ?? clientId} value={assetIds} onChange={setAssetIds} />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Rotate every" help="Flags it for change when due.">
+          <Field
+            label="Rotate every"
+            help={
+              item ? `Counted from the last change, ${formatDate(item.changedAt)}.` : 'Flags it for change when due.'
+            }
+          >
             {(p) => (
               <Select {...p} name="rotationDays" defaultValue={item?.rotationDays ? String(item.rotationDays) : ''}>
                 <option value="">Don&rsquo;t remind me</option>
@@ -727,6 +734,13 @@ export function PasswordDialog({
                 ))}
               </Select>
             )}
+          </Field>
+          <Field
+            label="Account expires"
+            help="Optional. For logins that stop working on a date, like a trial or a temporary account."
+            error={error?.fields?.expiresOn}
+          >
+            {(p) => <Input {...p} name="expiresOn" type="date" defaultValue={item?.expiresOn ?? ''} />}
           </Field>
           {actor.isAdmin && (
             <div className="pt-6">
@@ -2167,20 +2181,22 @@ export function PasswordDetail() {
           </div>
         )}
       </div>
-      {actor.isStaff && (item.reused > 0 || rotationOverdue(item) || (item.kind === 'login' && item.strength < 2)) && (
-        <div className="mb-6 flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <div>
-            {item.kind === 'login' && item.strength < 2 && <p>This password is weak. Generate a longer one.</p>}
-            {item.reused > 0 && (
-              <p>
-                The same password is used in {item.reused} other place{item.reused === 1 ? '' : 's'}.
-              </p>
-            )}
-            {rotationOverdue(item) && <p>Due for rotation since {formatDate(`${item.rotationDue}T12:00:00`)}.</p>}
+      {actor.isStaff &&
+        (item.reused > 0 || rotationOverdue(item) || expired(item) || (item.kind === 'login' && item.strength < 2)) && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <div>
+              {item.kind === 'login' && item.strength < 2 && <p>This password is weak. Generate a longer one.</p>}
+              {item.reused > 0 && (
+                <p>
+                  The same password is used in {item.reused} other place{item.reused === 1 ? '' : 's'}.
+                </p>
+              )}
+              {rotationOverdue(item) && <p>Due for rotation since {formatDate(`${item.rotationDue}T12:00:00`)}.</p>}
+              {expired(item) && <p>This account expired on {formatDate(`${item.expiresOn}T12:00:00`)}.</p>}
+            </div>
           </div>
-        </div>
-      )}
+        )}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
           <Card>
@@ -2288,6 +2304,18 @@ export function PasswordDetail() {
                       </span>
                     ) : (
                       <span className="text-muted">No reminder</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted">Account expires</dt>
+                  <dd className="mt-1">
+                    {item.expiresOn ? (
+                      <span className={cn(expired(item) && 'font-semibold text-danger')}>
+                        {formatDate(`${item.expiresOn}T12:00:00`)}
+                      </span>
+                    ) : (
+                      <span className="text-muted">Never</span>
                     )}
                   </dd>
                 </div>

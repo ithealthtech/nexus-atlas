@@ -185,6 +185,7 @@ export class VaultService {
       strength: r.p.strength,
       reused: Math.max(0, (reuse.get(r.p.fingerprint) ?? 1) - 1),
       rotationDays: r.p.rotationDays,
+      expiresOn: r.p.expiresOn,
       changedAt: r.p.changedAt.toISOString(),
       rotationDue: due,
       restricted: r.p.restricted,
@@ -503,6 +504,7 @@ export class VaultService {
       fingerprint: await this.keys.fingerprint(org, secret),
       strength: body.kind === 'bitlocker' ? 4 : passwordStrength(secret),
       rotationDays: body.rotationDays,
+      expiresOn: body.expiresOn,
       restricted: body.restricted,
       clientVisible: body.clientVisible,
       customFields: await this.customFields(org, id, body.customFields, []),
@@ -549,6 +551,7 @@ export class VaultService {
       username: body.username,
       url: body.url,
       rotationDays: body.rotationDays,
+      expiresOn: body.expiresOn,
       restricted: body.restricted,
       clientVisible: body.clientVisible,
       category: p.kind === 'login' ? body.category : undefined,
@@ -873,6 +876,14 @@ export class VaultService {
     return (await this.list(scope, {}))
       .filter((p) => p.rotationDue && p.rotationDue <= cutoff)
       .sort((a, b) => a.rotationDue!.localeCompare(b.rotationDue!));
+  }
+
+  /** Passwords whose account expires within `withinDays` (or already has). */
+  async expiring(scope: Scope, withinDays = 14): Promise<PasswordView[]> {
+    const cutoff = new Date(Date.now() + withinDays * 86_400_000).toISOString().slice(0, 10);
+    return (await this.list(scope, {}))
+      .filter((p) => p.expiresOn && p.expiresOn <= cutoff)
+      .sort((a, b) => a.expiresOn!.localeCompare(b.expiresOn!));
   }
 
   // ---------- share links ----------

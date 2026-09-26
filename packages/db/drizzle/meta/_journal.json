@@ -92,6 +92,13 @@
       "when": 1790396144341,
       "tag": "0012_password_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790396328192,
+      "tag": "0013_password_expiry",
+      "breakpoints": true
     }
   ]
 }
