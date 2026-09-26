@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-09-26
+
+### Fixed
+
+- **ConnectWise RMM sync:** when devices can't be listed, the sync message shows ConnectWise's answer to every request Atlas tried and points at the API key's Devices read permission. Import messages are no longer cut off at 300 characters. (#49)
+
 ## [1.1.1] - 2026-09-26
 
 ### Fixed
