@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-09-26
+
+### Added
+
+- **Choose what gets imported:** the Hudu import lets an administrator tick which kinds of data to bring in (clients, locations, assets, documents, passwords), which companies, and which asset layouts. The choices are saved for the next run. ConnectWise RMM sync can be limited to sites or devices, and scheduled syncs follow the choice; with devices off, no device is ever archived. (#72)
+- **Erase all data (owner only):** Settings → Danger zone. Requesting it needs the owner's password, a fresh authenticator code, and the organization's name typed exactly. A 10-minute wait follows, during which every administrator is emailed and any of them can cancel. The owner then confirms again, and a full backup is taken before anything is erased (nothing is erased if the backup fails). People, settings, integrations, backups, and the security log are kept. (#73)
+
+### Fixed
+
+- Red (danger) buttons have readable text in dark mode. (#73)
+
 ## [1.1.11] - 2026-09-26
 
 ### Fixed
