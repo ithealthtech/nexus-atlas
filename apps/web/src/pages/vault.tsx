@@ -21,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  X,
   Share2,
   ShieldCheck,
   Star,
@@ -40,6 +41,7 @@ import {
   type PasswordFolderView,
   type PasswordKind,
   type PasswordView,
+  type RelationView,
   type UserView,
 } from '@atlas/shared';
 import { PasswordIcon, hostOf } from '@/lib/password-categories';
@@ -67,7 +69,7 @@ import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
-import { useClient, useClients, useUsers, useGroups } from '@/lib/queries';
+import { useAssets, useClient, useClients, useUsers, useGroups } from '@/lib/queries';
 import {
   DEFAULT_GENERATOR,
   copySecret,
@@ -192,6 +194,106 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
 }
 
 // ---------------------------------------------------------------- form
+/** Adds and removes asset links so they match `next`; returns a message if any link couldn't be changed. */
+async function syncAssetLinks(passwordId: string, before: string[], next: string[]): Promise<string | null> {
+  const add = next.filter((id) => !before.includes(id));
+  const remove = before.filter((id) => !next.includes(id));
+  if (!add.length && !remove.length) return null;
+  const base = `/items/password/${passwordId}/relations`;
+  const failed: string[] = [];
+  for (const id of add)
+    await api(base, { method: 'POST', body: { type: 'asset', id } }).catch((e: Error) => failed.push(e.message));
+  if (remove.length) {
+    const links = await api<RelationView[]>(base);
+    for (const link of links.filter((l) => l.type === 'asset' && remove.includes(l.id)))
+      await api(`${base}/${link.relationId}`, { method: 'DELETE' }).catch((e: Error) => failed.push(e.message));
+  }
+  return failed.length ? `Saved, but some asset links didn't change: ${[...new Set(failed)].join(' ')}` : null;
+}
+
+/** Pick the client's assets this password belongs to (a firewall, a server, a tenant…). */
+function AssetLinksField({
+  clientId,
+  value,
+  onChange,
+}: {
+  clientId: string;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const assets = useAssets({ client: clientId });
+  const [query, setQuery] = useState('');
+  const all = assets.data ?? [];
+  const chosen = value.map((id) => all.find((a) => a.id === id) ?? { id, name: 'Asset', layoutName: '' });
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? all.filter((a) => !value.includes(a.id) && `${a.name} ${a.layoutName}`.toLowerCase().includes(q)).slice(0, 8)
+    : [];
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Linked assets</legend>
+      {chosen.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5" aria-label="Linked assets">
+          {chosen.map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center gap-1 rounded-full bg-surface-3 py-0.5 pr-1 pl-2.5 text-xs font-medium"
+            >
+              {a.name}
+              <button
+                type="button"
+                className="grid size-5 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-text"
+                aria-label={`Unlink ${a.name}`}
+                onClick={() => onChange(value.filter((id) => id !== a.id))}
+              >
+                <X className="size-3" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className="relative block">
+        <span className="sr-only">Find an asset to link</span>
+        <Search
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+          aria-hidden
+        />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={all.length ? 'Find an asset to link…' : 'This client has no assets yet'}
+          disabled={!all.length}
+          className="pl-9"
+          autoComplete="off"
+        />
+      </label>
+      {q && (
+        <ul className="max-h-48 overflow-y-auto rounded-lg border border-border" aria-label="Matching assets">
+          {matches.length ? (
+            matches.map((a) => (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-surface-2"
+                  onClick={() => {
+                    onChange([...value, a.id]);
+                    setQuery('');
+                  }}
+                >
+                  <span className="truncate font-medium">{a.name}</span>
+                  <span className="shrink-0 text-xs text-muted">{a.layoutName}</span>
+                </button>
+              </li>
+            ))
+          ) : (
+            <li className="px-3 py-2 text-sm text-muted">No matching assets.</li>
+          )}
+        </ul>
+      )}
+    </fieldset>
+  );
+}
+
 export function PasswordDialog({
   clientId,
   item,
@@ -214,6 +316,7 @@ export function PasswordDialog({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [assetIds, setAssetIds] = useState<string[]>(item?.linkedAssets.map((a) => a.id) ?? []);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -242,11 +345,19 @@ export function PasswordDialog({
             body: { ...body, version: item.version },
           })
         : await api<PasswordView>(`/clients/${clientId}/passwords`, { method: 'POST', body: { ...body, kind } });
+      const linkFailed = await syncAssetLinks(saved.id, item?.linkedAssets.map((a) => a.id) ?? [], assetIds);
+      if (linkFailed) toast(linkFailed, 'error');
       queryClient.setQueryData(['password', saved.id], saved);
       await Promise.all(
-        ['passwords', 'password-history', 'password-audit', 'password-folders', 'activity'].map((k) =>
-          queryClient.invalidateQueries({ queryKey: [k] }),
-        ),
+        [
+          'passwords',
+          'password',
+          'password-history',
+          'password-audit',
+          'password-folders',
+          'activity',
+          'relations',
+        ].map((k) => queryClient.invalidateQueries({ queryKey: [k] })),
       );
       toast(item ? 'Saved.' : `${saved.name} saved to the vault.`);
       onClose();
@@ -475,6 +586,7 @@ export function PasswordDialog({
             )}
           </Field>
         )}
+        <AssetLinksField clientId={item?.clientId ?? clientId} value={assetIds} onChange={setAssetIds} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Rotate every" help="Flags it for change when due.">
             {(p) => (
