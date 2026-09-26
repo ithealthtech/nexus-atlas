@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.9] - 2026-09-26
+
+### Changed
+
+- **Imports put every value in a field:** the Hudu import matches integration data (Atera, ConnectWise Manage, NinjaOne, and others) and extra Hudu fields to the fields they mean, and adds a field to the layout for anything it has no field for, instead of writing device details into the notes. Re-running the import moves details out of existing assets' notes and keeps fields added since. The ConnectWise RMM sync likewise adds fields to a matched asset's layout when needed. Asset layouts can now have up to 200 fields. (#66)
+
 ## [1.1.8] - 2026-09-26
 
 ### Added
