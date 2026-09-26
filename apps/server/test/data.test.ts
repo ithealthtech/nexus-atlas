@@ -412,6 +412,10 @@ describe('Hudu import', () => {
               cpu: { model: 'Intel i7-1365U', cores: 10 },
               bitlocker_recovery_key: 'never-import-this-either',
               disks: ['C: 512 GB'],
+              // Like Atera's card: IDs, GUIDs, and nested details all become fields too.
+              AgentID: 628,
+              DeviceGuid: 'a977a312-8cf7-46d0',
+              BatteryInfo: { Name: 'DELL 1WJT00C', BatteryHealth: 74 },
             },
           },
         ],
@@ -449,6 +453,10 @@ describe('Hudu import', () => {
       cpu_model: 'Intel i7-1365U',
       cpu_cores: '10',
       disks: 'C: 512 GB',
+      agent_id: '628',
+      device_guid: 'a977a312-8cf7-46d0',
+      battery_info_name: 'DELL 1WJT00C',
+      battery_info_battery_health: '74',
     });
     expect(pc.notes).toBe('');
     expect(JSON.stringify(pc)).not.toContain('never-import-this');

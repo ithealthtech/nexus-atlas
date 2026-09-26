@@ -30,6 +30,9 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   ip: 'IP address or subnet',
 };
 
+/** How many fields one asset layout can have. Imports add a field for every value they bring in. */
+export const MAX_LAYOUT_FIELDS = 200;
+
 export const layoutFieldSchema = z
   .object({
     key: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, 'Field keys use lowercase letters, numbers, and underscores.'),
@@ -56,7 +59,7 @@ export const layoutSchema = z
       .regex(/^[a-z0-9-]{1,40}$/)
       .default('box'),
     description: z.string().max(300).default(''),
-    fields: z.array(layoutFieldSchema).max(60),
+    fields: z.array(layoutFieldSchema).max(MAX_LAYOUT_FIELDS),
   })
   .refine((l) => new Set(l.fields.map((f) => f.key)).size === l.fields.length, {
     message: 'Each field needs a unique key.',
@@ -69,7 +72,7 @@ export const updateLayoutSchema = z.object({
     .regex(/^[a-z0-9-]{1,40}$/)
     .optional(),
   description: z.string().max(300).optional(),
-  fields: z.array(layoutFieldSchema).max(60).optional(),
+  fields: z.array(layoutFieldSchema).max(MAX_LAYOUT_FIELDS).optional(),
   archived: z.boolean().optional(),
 });
 

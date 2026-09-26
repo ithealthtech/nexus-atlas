@@ -1,5 +1,12 @@
 import type { Database } from '@atlas/db';
-import { guessPasswordCategory, type Actor, type FieldType, type HuduPreview, type LayoutField } from '@atlas/shared';
+import {
+  guessPasswordCategory,
+  type Actor,
+  type FieldType,
+  type HuduPreview,
+  type LayoutField,
+  MAX_LAYOUT_FIELDS,
+} from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
@@ -188,7 +195,7 @@ function mapLayout(layout: HuduLayout): MappedLayout {
       if (f.id !== undefined) excluded.add(f.id);
       continue;
     }
-    if (fields.length >= 60) continue;
+    if (fields.length >= MAX_LAYOUT_FIELDS) continue;
     let key = slug(f.label);
     for (let n = 2; used.has(key); n++) key = `${slug(f.label).slice(0, 36)}_${n}`;
     used.add(key);
@@ -223,7 +230,7 @@ function cardEntries(data: unknown, prefix = ''): [string, string][] {
       if (!prefix) out.push(...cardEntries(value, name));
     } else out.push([name, String(value)]);
   }
-  return out.slice(0, 80);
+  return out.slice(0, 300);
 }
 
 /**
@@ -247,9 +254,8 @@ function assetDetails(a: HuduAsset, layout: MappedLayout) {
   };
   const present = (raw: unknown) => raw !== null && raw !== undefined && raw !== '';
   /** Puts a value in its field; one with no field is reported as missing and kept for the notes meanwhile. */
-  const place = (name: string, raw: unknown, overwrite: boolean, lines: string[], integration = true) => {
-    // Another system's record numbers are skipped; a layout's own fields (even "Asset ID") never are.
-    if (!present(raw) || layout.excluded.has(norm(name)) || (integration && INTERNAL.test(name.trim()))) return;
+  const place = (name: string, raw: unknown, overwrite: boolean, lines: string[]) => {
+    if (!present(raw) || layout.excluded.has(norm(name))) return;
     const target = fieldFor(layout, name);
     if (target && put(target, raw, overwrite)) return;
     if (!target) missing.set(norm(name), readableLabel(name));
@@ -262,7 +268,7 @@ function assetDetails(a: HuduAsset, layout: MappedLayout) {
       continue;
     const byId = f.asset_layout_field_id !== undefined && layout.byId.get(f.asset_layout_field_id);
     if (byId) put(byId, f.value, true);
-    else if (label) place(label, f.value, true, extra, false);
+    else if (label) place(label, f.value, true, extra);
   }
   for (const entry of a.custom_fields ?? [])
     for (const [key, value] of Object.entries(entry ?? {})) place(key, value, false, extra);
@@ -282,13 +288,13 @@ function assetDetails(a: HuduAsset, layout: MappedLayout) {
     if (lines.length) cards.push([`From ${card.integrator_name || 'an integration'}:`, ...lines].join('\n'));
   }
 
-  // Only what still has no field (a layout at its 60-field limit) stays in the notes.
+  // Only what still has no field (a layout at its field limit) stays in the notes.
   const notes = [...extra, ...cards].filter(Boolean).join('\n').slice(0, 19000);
   return { fields, labels, notes, missing };
 }
 
 /**
- * Adds text fields for values a layout had no field for (up to the 60-field limit), and makes the mapped layout
+ * Adds text fields for values a layout had no field for (up to the field limit), and makes the mapped layout
  * aware of them so the values land there. Returns the labels added.
  */
 async function addLayoutFields(
@@ -302,7 +308,7 @@ async function addLayoutFields(
   const used = new Set(existing.map((f) => f.key));
   const added: LayoutField[] = [];
   for (const [key, label] of missing) {
-    if (existing.length + added.length >= 60) break;
+    if (existing.length + added.length >= MAX_LAYOUT_FIELDS) break;
     if (layout.byLabel.has(norm(label))) continue;
     let fieldKey = slug(label);
     for (let n = 2; used.has(fieldKey); n++) fieldKey = `${slug(label).slice(0, 36)}_${n}`;
@@ -327,9 +333,6 @@ async function addLayoutFields(
   }
   return added.map((f) => f.label);
 }
-
-// Integration keys that are another system's internal record numbers, not information about the asset.
-const INTERNAL = /(^|[\s_])(id|guid|identifier)$|^(id|name)$|Guid$|[a-z]Id$/;
 
 // The same information under the names integrations use for it (compared normalized).
 const SYNONYMS: Record<string, string[]> = {
@@ -369,7 +372,11 @@ function readableLabel(name: string): string {
     .trim()
     .toLowerCase()
     .split(' ')
-    .map((w) => (['ip', 'mac', 'os', 'cpu', 'ram', 'url', 'dns', 'ssid', 'vlan'].includes(w) ? w.toUpperCase() : w))
+    .map((w) =>
+      ['ip', 'mac', 'os', 'cpu', 'ram', 'url', 'dns', 'ssid', 'vlan', 'id', 'guid', 'bios', 'oem'].includes(w)
+        ? w.toUpperCase()
+        : w,
+    )
     .join(' ');
   return (label.charAt(0).toUpperCase() + label.slice(1)).slice(0, 80);
 }
@@ -538,7 +545,7 @@ export async function runHuduImport(
         const current = (await layouts.get(actor, existing)).fields as LayoutField[];
         const keys = new Set(mapped.fields.map((f) => f.key));
         for (const f of current)
-          if (!keys.has(f.key) && mapped.fields.length < 60) {
+          if (!keys.has(f.key) && mapped.fields.length < MAX_LAYOUT_FIELDS) {
             mapped.fields.push(f);
             if (!mapped.byLabel.has(norm(f.label))) mapped.byLabel.set(norm(f.label), f);
           }
@@ -572,7 +579,7 @@ export async function runHuduImport(
     const left = missing.size - added.length;
     if (left > 0)
       run.note(
-        `${layout.name}: ${left} more value${left === 1 ? '' : 's'} didn't fit, because a layout holds at most 60 fields; they were kept in each asset's notes.`,
+        `${layout.name}: ${left} more value${left === 1 ? '' : 's'} didn't fit, because a layout holds at most ${MAX_LAYOUT_FIELDS} fields; they were kept in each asset's notes.`,
       );
   }
 

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { cwRmmMappingSchema, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField } from '@atlas/shared';
+import { cwRmmMappingSchema, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField, MAX_LAYOUT_FIELDS } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
@@ -583,7 +583,7 @@ const DEVICE_FIELD_LABELS: Record<string, string> = {
 };
 
 /**
- * Adds text fields to a layout for device values it has no field for (within the 60-field limit), and returns
+ * Adds text fields to a layout for device values it has no field for (within the field limit), and returns
  * the layout's fields. `cache` is updated so each layout is changed once per sync.
  */
 async function ensureDeviceFields(
@@ -603,7 +603,7 @@ async function ensureDeviceFields(
     const label = DEVICE_FIELD_LABELS[key]!;
     const fits = fitFields(current, { [key]: key === 'ip_address' ? '10.0.0.1' : 'x' });
     if (Object.keys(fits).length || labelled.has(label.toLowerCase())) continue;
-    if (current.length + added.length >= 60) break;
+    if (current.length + added.length >= MAX_LAYOUT_FIELDS) break;
     let fieldKey = key;
     for (let n = 2; used.has(fieldKey); n++) fieldKey = `${key}_${n}`;
     used.add(fieldKey);
