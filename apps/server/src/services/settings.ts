@@ -2,6 +2,9 @@ import { eq, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
   brandingSchema,
+  cwRmmConnectionSchema,
+  type CwRmmRegion,
+  type CwRmmView,
   huduConnectionSchema,
   type Branding,
   notificationSettingsSchema,
@@ -43,6 +46,18 @@ interface StoredSettings {
   smtp?: StoredSmtp;
   notifications?: NotificationSettings;
   auditCheckpoint?: AuditCheckpoint;
+  cwRmm?: StoredCwRmm;
+}
+export interface StoredCwRmm {
+  region: CwRmmRegion;
+  clientId: string;
+  secretSealed: string;
+  autoSync: boolean;
+  /** The administrator who connected it; scheduled syncs run as them. */
+  connectedBy: string;
+  lastSyncAt: string | null;
+  /** ConnectWise company id → what to do with it. */
+  map: Record<string, { action: 'link'; clientId: string } | { action: 'skip' }>;
 }
 /** Email settings ready to send with (secrets decrypted). */
 export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientSecretSealed'> {
@@ -50,6 +65,7 @@ export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientS
   clientSecret: string;
 }
 
+const cwAad = (orgId: string) => `org|${orgId}|cw-rmm`;
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
 const graphAad = (orgId: string) => `org|${orgId}|graph`;
 const DEFAULT_SMTP: StoredSmtp = {
@@ -114,6 +130,8 @@ export class SettingsService {
         });
       if (stored.hudu)
         await this.put(id, 'hudu', { ...stored.hudu, keySealed: reseal(stored.hudu.keySealed, `org|${id}|hudu`)! });
+      if (stored.cwRmm)
+        await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
     }
     return count;
   }
@@ -201,6 +219,58 @@ export class SettingsService {
     await this.db
       .update(schema.orgs)
       .set({ settings: sql`${schema.orgs.settings} - 'hudu'` })
+      .where(eq(schema.orgs.id, orgId));
+  }
+
+  /** ConnectWise RMM connection with the client secret decrypted, or null when not connected. */
+  async cwRmm(orgId: string): Promise<(StoredCwRmm & { clientSecret: string }) | null> {
+    const saved = (await this.load(orgId)).cwRmm;
+    return saved
+      ? { ...saved, map: saved.map ?? {}, clientSecret: open(this.keys, saved.secretSealed, cwAad(orgId)) }
+      : null;
+  }
+
+  async cwRmmView(orgId: string): Promise<CwRmmView | null> {
+    const saved = (await this.load(orgId)).cwRmm;
+    return saved
+      ? {
+          region: saved.region,
+          clientId: saved.clientId,
+          hasSecret: true,
+          autoSync: saved.autoSync,
+          lastSyncAt: saved.lastSyncAt,
+        }
+      : null;
+  }
+
+  async saveCwRmm(orgId: string, userId: string, input: unknown) {
+    const body = cwRmmConnectionSchema.parse(input);
+    const current = await this.cwRmm(orgId);
+    const secret = body.clientSecret ?? current?.clientSecret;
+    if (!secret)
+      throw new HttpError(400, 'Enter the client secret.', undefined, { clientSecret: 'Enter the client secret.' });
+    await this.put(orgId, 'cwRmm', {
+      region: body.region,
+      clientId: body.clientId,
+      secretSealed: seal(this.keys, secret, cwAad(orgId)),
+      autoSync: body.autoSync,
+      connectedBy: userId,
+      lastSyncAt: current?.lastSyncAt ?? null,
+      map: current?.map ?? {},
+    } satisfies StoredCwRmm);
+  }
+
+  /** Updates the mapping or last-sync time without touching the secret. */
+  async patchCwRmm(orgId: string, patch: Partial<Pick<StoredCwRmm, 'map' | 'lastSyncAt'>>) {
+    const saved = (await this.load(orgId)).cwRmm;
+    if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
+    await this.put(orgId, 'cwRmm', { ...saved, ...patch });
+  }
+
+  async forgetCwRmm(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${schema.orgs.settings} - 'cwRmm'` })
       .where(eq(schema.orgs.id, orgId));
   }
 

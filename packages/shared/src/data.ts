@@ -27,7 +27,7 @@ export interface ApiKeyView {
 }
 
 // ---------- imports ----------
-export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy'] as const;
+export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy', 'cw-rmm'] as const;
 export type ImportSource = (typeof IMPORT_SOURCES)[number];
 export interface ImportCounts {
   created: number;
@@ -54,6 +54,52 @@ export const huduConnectionSchema = z.object({
   // Omitted keeps the saved key.
   apiKey: z.string().trim().min(10).max(200).optional(),
 });
+// ---------- ConnectWise RMM (Asio) ----------
+export const CW_RMM_REGIONS = ['na', 'eu', 'au'] as const;
+export type CwRmmRegion = (typeof CW_RMM_REGIONS)[number];
+export const CW_RMM_REGION_LABELS: Record<CwRmmRegion, string> = {
+  na: 'North America',
+  eu: 'Europe',
+  au: 'Australia',
+};
+export const cwRmmConnectionSchema = z.object({
+  region: z.enum(CW_RMM_REGIONS).default('na'),
+  clientId: z.string().trim().min(8, 'Enter the client ID from API Access.').max(200),
+  // Omitted keeps the saved secret.
+  clientSecret: z.string().trim().min(8).max(500).optional(),
+  autoSync: z.boolean().default(true),
+});
+export interface CwRmmView {
+  region: CwRmmRegion;
+  clientId: string;
+  hasSecret: boolean;
+  autoSync: boolean;
+  lastSyncAt: string | null;
+}
+/** A ConnectWise RMM company and what Atlas does with it. */
+export interface CwRmmCompany {
+  id: string;
+  name: string;
+  /** 'link' syncs into clientId; 'skip' ignores it; null means not decided yet. */
+  action: 'link' | 'skip' | null;
+  clientId: string | null;
+  clientName: string | null;
+  /** An Atlas client with the same name, offered when nothing is decided yet. */
+  suggestedClientId: string | null;
+}
+export const cwRmmMappingSchema = z.object({
+  mappings: z
+    .array(
+      z.object({
+        companyId: z.string().trim().min(1).max(100),
+        // 'create' makes a new Atlas client named after the company, then links it.
+        action: z.enum(['link', 'create', 'skip', 'clear']),
+        clientId: z.string().uuid().optional(),
+      }),
+    )
+    .max(2000),
+});
+
 export interface HuduPreview {
   companies: number;
   assetLayouts: number;
