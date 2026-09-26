@@ -1,4 +1,6 @@
-// Operations: backups and the system status page.
+import { z } from 'zod';
+
+// Operations: backups and the system status page, and erasing all data.
 
 export interface BackupRunView {
   id: string;
@@ -93,3 +95,25 @@ export interface UpdateInfo {
   canApply: boolean;
   run: UpdateRun;
 }
+
+// ---------- erase all data (owner only) ----------
+export interface EraseStatus {
+  pending: {
+    requestedAt: string;
+    requestedByName: string;
+    /** When the owner can confirm; before then it can only be cancelled. */
+    confirmableAt: string;
+    expiresAt: string;
+    confirmable: boolean;
+  } | null;
+}
+export const eraseRequestSchema = z.object({
+  password: z.string().min(1, 'Enter your password.').max(1024),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app.'),
+  /** The organization's name, typed exactly. */
+  confirmName: z.string().max(200),
+});
+export const eraseConfirmSchema = z.object({ confirmName: z.string().max(200) });

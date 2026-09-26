@@ -1012,6 +1012,34 @@ on('DELETE', '/groups/:id', (m) => {
   );
   return { ok: true };
 });
+// Erase all data: requesting and cancelling work; erasing never happens in the demo.
+let erase: {
+  requestedAt: string;
+  requestedByName: string;
+  confirmableAt: string;
+  expiresAt: string;
+  confirmable: boolean;
+} | null = null;
+const eraseView = () =>
+  erase ? { pending: { ...erase, confirmable: Date.parse(erase.confirmableAt) <= Date.now() } } : { pending: null };
+on('GET', '/org/erase', () => eraseView());
+on('POST', '/org/erase/request', (_m, b) => {
+  if (String(b.confirmName ?? '').trim() !== 'IT Done Right')
+    throw new MockError(400, 'Type the organization’s name exactly as shown.');
+  if (!/^\d{6}$/.test(String(b.code ?? '')))
+    throw new MockError(400, 'Enter the 6-digit code from your authenticator app.');
+  const now = Date.now();
+  erase = {
+    requestedAt: new Date(now).toISOString(),
+    requestedByName: db.owner.name,
+    confirmableAt: new Date(now + 10 * 60_000).toISOString(),
+    expiresAt: new Date(now + 70 * 60_000).toISOString(),
+    confirmable: false,
+  };
+  return eraseView();
+});
+on('DELETE', '/org/erase', () => ((erase = null), { pending: null }));
+on('POST', '/org/erase/confirm', () => notInDemo('Erasing all data'));
 on('GET', '/settings/email', () => smtp);
 on('PUT', '/settings/email', (_m, b) => {
   const { password, clientSecret, ...rest } = b;

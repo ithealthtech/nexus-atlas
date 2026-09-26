@@ -34,6 +34,7 @@ import { SettingsService } from './services/settings.js';
 import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
+import { registerEraseRoutes } from './routes/erase.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
 import { failInterruptedJobs } from './services/importers/common.js';
 import { ApiKeyService } from './services/api-keys.js';
@@ -539,6 +540,7 @@ export async function buildApp({
     backups,
     status: new StatusService(database, { config, keys, backups, settings, notifier, version: APP_VERSION }),
   });
+  registerEraseRoutes(app, { db, authed, recent, identity, settings, mail, backups, storage: files });
   registerUpdateRoutes(app, {
     db,
     authed,

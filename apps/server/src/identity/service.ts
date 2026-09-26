@@ -314,6 +314,27 @@ export class IdentityService {
     });
   }
 
+  /**
+   * Checks an authenticator code for a sensitive action (not a sign-in): the code must be current and unused, and
+   * using it means it can't be used again. Failures count toward the lockout like any wrong code.
+   */
+  async confirmCode(user: UserRow, code: string, ip: string) {
+    if (!user.mfaSecret) fail(400, 'This needs a code from an authenticator app. Add one on your Account page.');
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now())
+      fail(429, 'Too many attempts. Try again in 15 minutes.');
+    const step = matchTotp(open(this.keys, user.mfaSecret!, mfaAad(user.id)), code, user.mfaLastStep);
+    if (!step) {
+      await this.recordFailure(user, 'Wrong MFA code', ip);
+      fail(400, 'That code did not match. Check your authenticator app and try again.', 'mfa_invalid');
+    }
+    const updated = await this.db
+      .update(schema.users)
+      .set({ mfaLastStep: step, failedAttempts: 0 })
+      .where(and(eq(schema.users.id, user.id), lt(schema.users.mfaLastStep, step)))
+      .returning({ id: schema.users.id });
+    if (!updated.length) fail(400, 'That code was already used. Wait for the next one.', 'mfa_invalid');
+  }
+
   async verifyMfa(context: SessionContext, code: string, ip: string) {
     const { user } = context;
     if (!user.mfaSecret) fail(400, 'MFA is not enabled for this account.');

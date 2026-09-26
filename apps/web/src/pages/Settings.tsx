@@ -25,6 +25,7 @@ import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useEmailSettings, useNotificationSettings, useSave } from '@/lib/queries';
 import { ApiKeysCard } from './SettingsExtra';
+import { DangerZone } from './DangerZone';
 
 const SECURITY_LABEL: Record<SmtpSecurity, string> = {
   starttls: 'STARTTLS (usually port 587)',
@@ -483,6 +484,7 @@ function NotificationSettingsCard({ current }: { current: NotificationSettings }
 }
 
 export function Settings() {
+  const actor = useActor();
   const email = useEmailSettings();
   const notifications = useNotificationSettings();
   return (
@@ -508,6 +510,7 @@ export function Settings() {
         )}
 
         <ApiKeysCard />
+        {actor.isAdmin && <DangerZone />}
       </div>
     </>
   );
