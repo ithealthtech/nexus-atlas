@@ -9,6 +9,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Folder,
   Eye,
   EyeOff,
   HardDrive,
@@ -24,6 +25,7 @@ import {
   ShieldCheck,
   Star,
   Timer,
+  Trash2,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -33,6 +35,7 @@ import {
   STRENGTH_LABELS,
   passwordStrength,
   type PasswordCategory,
+  type PasswordFolderView,
   type PasswordKind,
   type PasswordView,
   type UserView,
@@ -66,11 +69,12 @@ import { useClient, useClients, useUsers, useGroups } from '@/lib/queries';
 import {
   DEFAULT_GENERATOR,
   copySecret,
-  encryptShare,
+  createShareLink,
   generatePassword,
   useAskReason,
   usePassword,
   usePasswordAudit,
+  usePasswordFolders,
   usePasswordHistory,
   usePasswords,
   useReveal,
@@ -201,6 +205,8 @@ export function PasswordDialog({
   const queryClient = useQueryClient();
   const reveal = useReveal();
   const [kind, setKind] = useState<PasswordKind>(item?.kind ?? 'login');
+  const folders = usePasswordFolders(clientId).data ?? [];
+  const [folderId, setFolderId] = useState(item?.folderId ?? '');
   const [secret, setSecret] = useState('');
   const [showSecret, setShowSecret] = useState(!item);
   const [generating, setGenerating] = useState(false);
@@ -219,6 +225,7 @@ export function PasswordDialog({
       ...(actor.isAdmin ? { restricted: form.get('restricted') === 'on' } : {}),
       clientVisible: form.get('clientVisible') === 'on',
       ...(kind === 'login' ? { category: text('category') || null } : {}),
+      folderId: text('folderId') || null,
     };
     // On edit, secrets are sent only when changed, so unrevealed values are never round-tripped.
     if (!item || secret) body.secret = secret;
@@ -235,7 +242,7 @@ export function PasswordDialog({
         : await api<PasswordView>(`/clients/${clientId}/passwords`, { method: 'POST', body: { ...body, kind } });
       queryClient.setQueryData(['password', saved.id], saved);
       await Promise.all(
-        ['passwords', 'password-history', 'password-audit', 'activity'].map((k) =>
+        ['passwords', 'password-history', 'password-audit', 'password-folders', 'activity'].map((k) =>
           queryClient.invalidateQueries({ queryKey: [k] }),
         ),
       );
@@ -340,6 +347,28 @@ export function PasswordDialog({
             )}
           </Field>
         )}
+        <Field
+          label="Folder"
+          help={
+            folders.length ? undefined : 'This client has no folders yet. Add them with Folders in the password list.'
+          }
+          error={error?.fields?.folderId}
+        >
+          {(p) => (
+            // Controlled, and the current folder is always an option, so a slow folder list can't unfile it.
+            <Select {...p} name="folderId" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+              <option value="">No folder</option>
+              {item?.folderId && !folders.some((f) => f.id === item.folderId) && (
+                <option value={item.folderId}>{item.folderName}</option>
+              )}
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
         <Field
           label={kind === 'bitlocker' ? 'Recovery key' : item ? 'New password' : 'Password'}
           error={error?.fields?.secret}
@@ -561,12 +590,60 @@ function QuickAction({
 const Slot = () => <span className="inline-block size-9" aria-hidden />;
 
 /** Copy username / password / one-time code, and open the sign-in address, without opening the entry. */
+/**
+ * Quick share: one click makes a one-time link (one view, 24 hours) and copies it, for sending to someone who
+ * doesn't sign in to Atlas. The full Share dialog on the password page offers other limits.
+ */
+function useQuickShare() {
+  const ask = useAskReason();
+  const queryClient = useQueryClient();
+  // Shown when the browser won't let us copy: the link's key exists nowhere else, so it must not be lost.
+  const [manual, setManual] = useState<string | null>(null);
+  const share = async (item: PasswordView): Promise<string | null> => {
+    let reason = '';
+    if (item.requireReason) {
+      const given = await ask('Why are you sharing this password?');
+      if (given === null) return null;
+      reason = given;
+    }
+    const link = await createShareLink(item, { maxViews: 1, hours: 24, reason });
+    await Promise.all(
+      ['password-shares', 'password-audit'].map((k) => queryClient.invalidateQueries({ queryKey: [k, item.id] })),
+    );
+    try {
+      // The link is the secret now; copy it as-is (not auto-cleared) so it can be pasted into an email or ticket.
+      await navigator.clipboard.writeText(link);
+    } catch {
+      setManual(link);
+      return null;
+    }
+    return 'One-time link copied. It opens once and expires in 24 hours.';
+  };
+  const dialog = manual && (
+    <Dialog
+      open
+      onClose={() => setManual(null)}
+      title="Copy the one-time link"
+      description="Your browser didn't allow copying automatically. Copy this link now: it can't be shown again. It opens once and expires in 24 hours."
+      footer={<Button onClick={() => setManual(null)}>Done</Button>}
+    >
+      <Field label="Share link">
+        {(p) => <Input {...p} readOnly value={manual} onFocus={(e) => e.currentTarget.select()} autoFocus />}
+      </Field>
+    </Dialog>
+  );
+  return { share, dialog };
+}
+
 function QuickActions({ item }: { item: PasswordView }) {
   const reveal = useReveal();
+  const actor = useActor();
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
   const bitlocker = item.kind === 'bitlocker';
   const openable = !bitlocker && /^https?:\/\//i.test(item.url);
   return (
     <div className="flex items-center justify-end">
+      {quickShareDialog}
       {item.username ? (
         <QuickAction
           label={`Copy ${bitlocker ? 'recovery key ID' : 'username'} for ${item.name}`}
@@ -604,6 +681,15 @@ function QuickActions({ item }: { item: PasswordView }) {
       ) : (
         <Slot />
       )}
+      {actor.isStaff ? (
+        <QuickAction
+          label={`Quick share ${item.name}: copy a one-time link`}
+          icon={Share2}
+          action={() => quickShare(item)}
+        />
+      ) : (
+        <Slot />
+      )}
       {openable ? (
         <a
           href={item.url}
@@ -622,6 +708,66 @@ function QuickActions({ item }: { item: PasswordView }) {
   );
 }
 
+// ---------- list sorting and grouping (remembered per browser) ----------
+type ListSort = 'name' | 'client' | 'type' | 'recent' | 'attention';
+type ListGroup = 'none' | 'client' | 'type';
+type ListView = { sort: ListSort; group: ListGroup };
+const SORT_LABELS: Record<ListSort, string> = {
+  name: 'Name',
+  client: 'Client',
+  type: 'Type',
+  recent: 'Recently changed',
+  attention: 'Needs attention first',
+};
+const LIST_VIEW_KEY = 'atlas-password-list';
+function loadListView(): ListView {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LIST_VIEW_KEY) ?? '{}') as Partial<ListView>;
+    return {
+      sort: saved.sort && saved.sort in SORT_LABELS ? saved.sort : 'name',
+      group: saved.group === 'client' || saved.group === 'type' ? saved.group : 'none',
+    };
+  } catch {
+    return { sort: 'name', group: 'none' };
+  }
+}
+function saveListView(view: ListView) {
+  try {
+    localStorage.setItem(LIST_VIEW_KEY, JSON.stringify(view));
+  } catch {
+    /* Storage can be blocked; the choice still applies until the page reloads. */
+  }
+}
+const typeLabel = (p: PasswordView) =>
+  p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category];
+/** Higher is worse: rotation overdue, then reused, then weak. */
+const attention = (p: PasswordView) =>
+  (rotationOverdue(p) ? 4 : 0) + (p.reused > 0 ? 2 : 0) + (p.kind === 'login' && p.strength < 2 ? 1 : 0);
+const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+function sortPasswords(items: PasswordView[], sort: ListSort) {
+  const name = (a: PasswordView, b: PasswordView) => byText(a.name, b.name);
+  const compare: Record<ListSort, (a: PasswordView, b: PasswordView) => number> = {
+    name,
+    client: (a, b) => byText(a.clientName, b.clientName) || name(a, b),
+    type: (a, b) => byText(typeLabel(a), typeLabel(b)) || name(a, b),
+    recent: (a, b) => b.updatedAt.localeCompare(a.updatedAt) || name(a, b),
+    attention: (a, b) => attention(b) - attention(a) || name(a, b),
+  };
+  return [...items].sort(compare[sort]);
+}
+/** Keeps the sort order inside each group; groups themselves are alphabetical. */
+function groupPasswords(items: PasswordView[], group: ListGroup) {
+  if (group === 'none') return [{ key: 'all', label: null as string | null, items }];
+  const map = new Map<string, PasswordView[]>();
+  for (const p of items) {
+    const label = group === 'client' ? p.clientName : typeLabel(p);
+    map.set(label, [...(map.get(label) ?? []), p]);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => byText(a, b))
+    .map(([label, groupItems]) => ({ key: label, label: label as string | null, items: groupItems }));
+}
+
 export function PasswordsView({ clientId }: { clientId?: string }) {
   const search = useSearch({ strict: false }) as { archived?: boolean };
   const go = useGo();
@@ -634,6 +780,24 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
   const [adding, setAdding] = useState(false);
   const [show, setShow] = useState<'all' | 'favorites' | 'recent'>('all');
+  // Folders belong to one client, so they're offered inside a client (to staff with password access).
+  const folderQuery = usePasswordFolders(clientId && actor.isStaff ? clientId : undefined);
+  const folders = folderQuery.data ?? [];
+  const [chosenFolder, setFolder] = useState(''); // '' all, 'none' unfiled, or a folder id
+  // A folder deleted while it's the filter drops back to all, so the list never looks empty for no reason.
+  const folder =
+    chosenFolder && chosenFolder !== 'none' && folderQuery.isSuccess && !folders.some((f) => f.id === chosenFolder)
+      ? ''
+      : chosenFolder;
+  const [managingFolders, setManagingFolders] = useState(false);
+  const [view, setView] = useState<ListView>(loadListView);
+  const changeView = (next: Partial<ListView>) => {
+    const merged = { ...view, ...next };
+    setView(merged);
+    saveListView(merged);
+  };
+  // Grouping by client makes no sense inside one client.
+  const groupBy = clientId && view.group === 'client' ? 'none' : view.group;
   const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
   const types = useMemo(() => {
@@ -641,29 +805,39 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
     for (const p of list.data ?? []) counts.set(typeOf(p), (counts.get(typeOf(p)) ?? 0) + 1);
     return counts;
   }, [list.data]);
-  const rows = useMemo(() => {
-    const matching = (list.data ?? []).filter(
-      (p) =>
-        (show !== 'favorites' || p.favorite) &&
-        (show !== 'recent' || p.lastUsedAt) &&
-        (!type || typeOf(p) === type) &&
-        [
-          p.name,
-          p.username,
-          p.url,
-          p.clientName,
-          PASSWORD_CATEGORY_LABELS[p.category],
-          ...p.linkedAssets.map((a) => a.name),
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(query.trim().toLowerCase()),
-    );
-    // Recently used: most recent first, up to 25.
-    return show === 'recent'
-      ? matching.sort((a, b) => b.lastUsedAt!.localeCompare(a.lastUsedAt!)).slice(0, 25)
-      : matching;
-  }, [list.data, query, type, show]);
+  const rows = useMemo(
+    () =>
+      (list.data ?? []).filter(
+        (p) =>
+          (show !== 'favorites' || p.favorite) &&
+          (show !== 'recent' || p.lastUsedAt) &&
+          (!type || typeOf(p) === type) &&
+          (!folder || (folder === 'none' ? !p.folderId : p.folderId === folder)) &&
+          [
+            p.name,
+            p.username,
+            p.url,
+            p.clientName,
+            PASSWORD_CATEGORY_LABELS[p.category],
+            ...p.linkedAssets.map((a) => a.name),
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+      ),
+    [list.data, query, type, folder, show],
+  );
+  // Recently used: most recent first, up to 25, whatever the chosen sort.
+  const groups = useMemo(
+    () =>
+      groupPasswords(
+        show === 'recent'
+          ? [...rows].sort((a, b) => b.lastUsedAt!.localeCompare(a.lastUsedAt!)).slice(0, 25)
+          : sortPasswords(rows, view.sort),
+        groupBy,
+      ),
+    [rows, view.sort, groupBy, show],
+  );
   if (clientId && client.data && !canUse)
     return (
       <Card>
@@ -724,6 +898,45 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               </Select>
             </label>
           )}
+          {folders.length > 0 && (
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Folder</span>
+              <Select value={folder} onChange={(e) => setFolder(e.target.value)}>
+                <option value="">All folders</option>
+                <option value="none">No folder</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} ({f.count})
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
+          {clientId && canUse && actor.isStaff && (
+            <Button variant="ghost" size="sm" onClick={() => setManagingFolders(true)}>
+              <Folder /> Folders
+            </Button>
+          )}
+          <label className="w-full sm:w-auto">
+            <span className="sr-only">Sort</span>
+            <Select value={view.sort} onChange={(e) => changeView({ sort: e.target.value as ListSort })}>
+              {Object.entries(SORT_LABELS)
+                .filter(([k]) => !(clientId && k === 'client'))
+                .map(([k, label]) => (
+                  <option key={k} value={k}>
+                    Sort: {label}
+                  </option>
+                ))}
+            </Select>
+          </label>
+          <label className="w-full sm:w-auto">
+            <span className="sr-only">Group by</span>
+            <Select value={groupBy} onChange={(e) => changeView({ group: e.target.value as ListGroup })}>
+              <option value="none">No grouping</option>
+              {!clientId && <option value="client">Group by client</option>}
+              <option value="type">Group by type</option>
+            </Select>
+          </label>
           {actor.isStaff && (
             <Button
               variant="ghost"
@@ -758,65 +971,77 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                   <th className="px-3 py-3 text-right font-medium">Quick actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((p) => (
-                  <tr key={p.id} className="hover:bg-surface-2">
-                    {/* On phones the name takes whatever width the actions leave, and truncates. */}
-                    <td className="w-full max-w-0 py-3 pr-2 pl-2 sm:w-auto sm:max-w-none sm:pr-5 sm:pl-3">
-                      <div className="flex items-center gap-1">
-                        {actor.isStaff && <FavoriteButton item={p} />}
-                        <AppLink to={`/passwords/${p.id}`} className="flex min-w-0 items-center gap-3">
-                          <span
-                            className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
-                            title={
-                              p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
-                            }
-                          >
-                            <PasswordIcon item={p} className="size-4" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="flex items-center gap-1.5 font-semibold hover:underline">
-                              <span className="truncate">{p.name}</span>
-                              {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
+              {groups.map((g) => (
+                <tbody key={g.key} className="divide-y divide-border border-b border-border last:border-b-0">
+                  {g.label !== null && (
+                    <tr className="bg-surface-2/60">
+                      <th colSpan={6} scope="rowgroup" className="px-5 py-2 text-xs font-semibold text-text-2">
+                        {g.label} <span className="font-normal text-muted">({g.items.length})</span>
+                      </th>
+                    </tr>
+                  )}
+                  {g.items.map((p) => (
+                    <tr key={p.id} className="hover:bg-surface-2">
+                      {/* On phones the name takes whatever width the actions leave, and truncates. */}
+                      <td className="w-full max-w-0 py-3 pr-2 pl-2 sm:w-auto sm:max-w-none sm:pr-5 sm:pl-3">
+                        <div className="flex items-center gap-1">
+                          {actor.isStaff && <FavoriteButton item={p} />}
+                          <AppLink to={`/passwords/${p.id}`} className="flex min-w-0 items-center gap-3">
+                            <span
+                              className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
+                              title={
+                                p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
+                              }
+                            >
+                              <PasswordIcon item={p} className="size-4" />
                             </span>
-                            {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
-                            <span className="block truncate text-xs text-muted">
-                              {[
-                                p.kind === 'bitlocker'
-                                  ? 'BitLocker recovery key'
-                                  : PASSWORD_CATEGORY_LABELS[p.category],
-                                p.kind === 'login' && p.url ? hostOf(p.url) : '',
-                                p.linkedAssets.length
-                                  ? `on ${p.linkedAssets
-                                      .slice(0, 2)
-                                      .map((a) => a.name)
-                                      .join(', ')}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
-                                  : '',
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
+                            <span className="min-w-0">
+                              <span className="flex items-center gap-1.5 font-semibold hover:underline">
+                                <span className="truncate">{p.name}</span>
+                                {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
+                              </span>
+                              {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
+                              <span className="block truncate text-xs text-muted">
+                                {[
+                                  p.folderName ? `${p.folderName} folder` : '',
+                                  p.kind === 'bitlocker'
+                                    ? 'BitLocker recovery key'
+                                    : PASSWORD_CATEGORY_LABELS[p.category],
+                                  p.kind === 'login' && p.url ? hostOf(p.url) : '',
+                                  p.linkedAssets.length
+                                    ? `on ${p.linkedAssets
+                                        .slice(0, 2)
+                                        .map((a) => a.name)
+                                        .join(
+                                          ', ',
+                                        )}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
+                                    : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </span>
                             </span>
-                          </span>
-                        </AppLink>
-                      </div>
-                    </td>
-                    {!clientId && <td className="hidden px-5 py-3 text-text-2 md:table-cell">{p.clientName}</td>}
-                    <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
-                      {p.username || <span className="font-sans text-muted">—</span>}
-                    </td>
-                    <td className="hidden px-5 py-3 sm:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {p.kind === 'login' && (
-                          <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
-                        )}
-                        {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
-                        {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5">{!p.archived && <QuickActions item={p} />}</td>
-                  </tr>
-                ))}
-              </tbody>
+                          </AppLink>
+                        </div>
+                      </td>
+                      {!clientId && <td className="hidden px-5 py-3 text-text-2 md:table-cell">{p.clientName}</td>}
+                      <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
+                        {p.username || <span className="font-sans text-muted">—</span>}
+                      </td>
+                      <td className="hidden px-5 py-3 sm:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {p.kind === 'login' && (
+                            <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
+                          )}
+                          {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
+                          {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">{!p.archived && <QuickActions item={p} />}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         ) : (
@@ -849,9 +1074,146 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
         )}
       </Card>
       {adding && clientId && <PasswordDialog clientId={clientId} onClose={() => setAdding(false)} />}
+      {managingFolders && clientId && (
+        <FoldersDialog clientId={clientId} folders={folders} onClose={() => setManagingFolders(false)} />
+      )}
     </>
   );
 }
+/** Create, rename, and delete one client's password folders. Deleting a folder unfiles its passwords. */
+function FoldersDialog({
+  clientId,
+  folders,
+  onClose,
+}: {
+  clientId: string;
+  folders: PasswordFolderView[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async (action: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await Promise.all(['password-folders', 'passwords'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
+      toast(done);
+      return true;
+    } catch (e) {
+      setError((e as ApiError).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = async (e: FormEvent) => {
+    e.preventDefault();
+    const value = name.trim();
+    if (!value) return;
+    if (
+      await run(
+        () => api(`/clients/${clientId}/password-folders`, { method: 'POST', body: { name: value } }),
+        `${value} added.`,
+      )
+    )
+      setName('');
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Folders"
+      description="Folders organize this client's passwords. Deleting one keeps its passwords; they just have no folder."
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      <form onSubmit={add} className="mb-4 flex gap-2">
+        <label className="flex-1">
+          <span className="sr-only">New folder name</span>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="New folder name" />
+        </label>
+        <Button type="submit" loading={busy && !editing} disabled={!name.trim()}>
+          <Plus /> Add
+        </Button>
+      </form>
+      {folders.length ? (
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {folders.map((f) => (
+            <li key={f.id} className="flex items-center gap-2 px-3 py-2">
+              <Folder className="size-4 shrink-0 text-muted" aria-hidden />
+              {editing?.id === f.id ? (
+                <form
+                  className="flex flex-1 gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (
+                      await run(
+                        () => api(`/password-folders/${f.id}`, { method: 'PATCH', body: { name: editing.name } }),
+                        'Folder renamed.',
+                      )
+                    )
+                      setEditing(null);
+                  }}
+                >
+                  <label className="flex-1">
+                    <span className="sr-only">Folder name</span>
+                    <Input
+                      autoFocus
+                      value={editing.name}
+                      maxLength={80}
+                      onChange={(e) => setEditing({ id: f.id, name: e.target.value })}
+                    />
+                  </label>
+                  <Button type="submit" size="sm" loading={busy}>
+                    Save
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>
+                    Cancel
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {f.name} <span className="text-muted">({f.count})</span>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Rename ${f.name}`}
+                    title="Rename"
+                    onClick={() => setEditing({ id: f.id, name: f.name })}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Delete ${f.name}`}
+                    title="Delete"
+                    onClick={() =>
+                      confirm(`Delete the folder ${f.name}? Its ${f.count} password(s) stay, without a folder.`) &&
+                      void run(() => api(`/password-folders/${f.id}`, { method: 'DELETE' }), `${f.name} deleted.`)
+                    }
+                  >
+                    <Trash2 />
+                  </Button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">No folders yet.</p>
+      )}
+      <FormError message={error} />
+    </Dialog>
+  );
+}
+
 export function ClientPasswords() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
   return <PasswordsView clientId={clientId} />;
@@ -1049,6 +1411,8 @@ function AuditCard({ item }: { item: PasswordView }) {
 function SharesCard({ item }: { item: PasswordView }) {
   const { data } = useShares(item.id);
   const [sharing, setSharing] = useState(false);
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
+  const [quickBusy, setQuickBusy] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
   const active = (data ?? []).filter(
@@ -1059,9 +1423,28 @@ function SharesCard({ item }: { item: PasswordView }) {
       <CardHeader
         title="Share links"
         actions={
-          <Button variant="ghost" size="sm" onClick={() => setSharing(true)}>
-            <Share2 /> Share
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              loading={quickBusy}
+              onClick={async () => {
+                setQuickBusy(true);
+                try {
+                  const done = await quickShare(item);
+                  if (done) toast(done);
+                } catch (e) {
+                  toast((e as Error).message, 'error');
+                } finally {
+                  setQuickBusy(false);
+                }
+              }}
+            >
+              <Share2 /> Quick share
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSharing(true)}>
+              More options
+            </Button>
+          </div>
         }
       />
       {!active.length ? (
@@ -1100,6 +1483,7 @@ function SharesCard({ item }: { item: PasswordView }) {
         </ul>
       )}
       {sharing && <ShareDialog item={item} onClose={() => setSharing(false)} />}
+      {quickShareDialog}
     </Card>
   );
 }
@@ -1123,23 +1507,7 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
         if (given === null) return;
         reason = given;
       }
-      const { value } = await api<{ value: string }>(`/passwords/${item.id}/reveal`, {
-        method: 'POST',
-        body: { reason: reason || 'Creating a share link' },
-      });
-      // Encrypted here; the server only ever sees ciphertext. The key goes after # and never reaches the server.
-      const { ciphertext, key } = await encryptShare({
-        name: item.name,
-        username: item.username,
-        url: item.url,
-        secret: value,
-        kind: item.kind,
-      });
-      const share = await api<{ token: string }>(`/passwords/${item.id}/shares`, {
-        method: 'POST',
-        body: { ciphertext, maxViews, expiresHours: hours, reason },
-      });
-      setLink(`${location.origin}/share/${share.token}#${key}`);
+      setLink(await createShareLink(item, { maxViews, hours, reason }));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['password-shares', item.id] }),
         queryClient.invalidateQueries({ queryKey: ['password-audit', item.id] }),

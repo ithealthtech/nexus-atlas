@@ -526,7 +526,18 @@ export async function runHuduImport(
     );
   }
 
-  // Passwords: flattened into each client's vault.
+  // Passwords: into each client's vault, in folders matching Hudu's (one level).
+  const folderCache = new Map<string, string>();
+  const folderFor = async (clientId: string, rawName: string) => {
+    const name = rawName.trim().slice(0, 80);
+    if (!name) return null;
+    const key = `${clientId}|${name.toLowerCase()}`;
+    if (!folderCache.has(key)) {
+      const existing = (await vault.folders(scope, clientId)).find((f) => f.name.toLowerCase() === name.toLowerCase());
+      folderCache.set(key, existing?.id ?? (await vault.createFolder(scope, clientId, { name })).id);
+    }
+    return folderCache.get(key)!;
+  };
   for (const p of (await client.passwords()).filter((x) => !x.archived)) {
     const clientId = p.company_id ? companyToClient.get(p.company_id) : undefined;
     const name = p.name.slice(0, 200) || `Password ${p.id}`;
@@ -551,16 +562,21 @@ export async function runHuduImport(
     // Hudu's folder often says what a login is for ("Network", "M365"); fall back to Atlas's own guess.
     const fromFolder = p.password_folder_name ? guessPasswordCategory(p.password_folder_name) : 'other';
     const category = fromFolder !== 'other' ? fromFolder : null;
+    // The same folder in Atlas, created the first time it's seen for this client.
+    const folderId = p.password_folder_name ? await folderFor(clientId, p.password_folder_name) : null;
     if (totp && !body.totp) run.note(`password "${name}": the one-time code key wasn't valid and was left out.`);
     const passwordId = await run.upsert(
       'passwords',
       p.id,
       name,
-      async () => (await vault.create(scope, clientId, { ...body, category }, 'import')).id,
+      async () => (await vault.create(scope, clientId, { ...body, category, folderId }, 'import')).id,
       async (existing) => {
         const current = await vault.get(scope, existing);
-        // Keep a type someone chose in Atlas; only fill it when it's still a guess.
-        const keep = current.categoryGuessed ? { category } : {};
+        // Keep a type someone chose in Atlas; only fill it when it's still a guess. Likewise the folder.
+        const keep = {
+          ...(current.categoryGuessed ? { category } : {}),
+          ...(current.folderId ? {} : { folderId }),
+        };
         await vault.update(scope, existing, { ...body, ...keep, version: current.version }, 'import');
       },
     );

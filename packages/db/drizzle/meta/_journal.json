@@ -75,8 +75,15 @@
     {
       "idx": 10,
       "version": "7",
-      "when": 1790350416045,
-      "tag": "0010_password_favorites",
+      "when": 1790349557148,
+      "tag": "0010_password_folders",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790395633612,
+      "tag": "0011_password_favorites",
       "breakpoints": true
     }
   ]

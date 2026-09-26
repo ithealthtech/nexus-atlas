@@ -131,6 +131,7 @@ const docSummary = (d: (typeof documents)[0]) => {
 
 // ---------- vault ----------
 const passwords = db.passwords.map((p) => ({ ...p, ...meta(), updatedAt: p.changedAt }));
+const passwordFolders: { id: string; clientId: string; name: string }[] = [];
 const history = new Map<string, { id: string; secret: string; changedByName: string; createdAt: string }[]>();
 const access = new Map<string, { userIds: string[]; groupIds: string[] }>();
 const shares: {
@@ -188,6 +189,8 @@ const passwordView = (p: (typeof passwords)[0]) => ({
     .map((id) => assets.find((a) => a.id === id && !a.archived))
     .filter((a) => !!a)
     .map((a) => ({ id: a.id, name: a.name })),
+  folderId: (p as { folderId?: string | null }).folderId ?? null,
+  folderName: passwordFolders.find((f) => f.id === (p as { folderId?: string | null }).folderId)?.name ?? null,
 });
 const audit = (p: (typeof passwords)[0], action: string, reason = '') =>
   vaultAudit.unshift({
@@ -763,6 +766,7 @@ on('POST', '/clients/:id/passwords', (m, b) => {
     clientId: m[1]!,
     kind: (b.kind as 'login') ?? 'login',
     category: (b.category as PasswordCategory | null) ?? null,
+    folderId: (b.folderId as string | null) ?? null,
     name: String(b.name ?? '').trim(),
     username: String(b.username ?? ''),
     url: String(b.url ?? ''),
@@ -783,6 +787,37 @@ on('POST', '/clients/:id/passwords', (m, b) => {
   return passwordView(p);
 });
 on('GET', '/passwords/:id', (m) => passwordView(find(passwords, m[1]!, 'Password')));
+const folderView = (f: (typeof passwordFolders)[0]) => ({
+  ...f,
+  count: passwords.filter((p) => (p as { folderId?: string | null }).folderId === f.id && !p.archived).length,
+});
+on('GET', '/clients/:id/password-folders', (m) =>
+  passwordFolders
+    .filter((f) => f.clientId === m[1])
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(folderView),
+);
+on('POST', '/clients/:id/password-folders', (m, b) => {
+  const name = String(b.name ?? '').trim();
+  if (!name) throw new MockError(400, 'Name the folder.');
+  if (passwordFolders.some((f) => f.clientId === m[1] && f.name.toLowerCase() === name.toLowerCase()))
+    throw new MockError(409, 'This client already has a folder with that name.');
+  const f = { id: uuid(), clientId: m[1]!, name };
+  passwordFolders.push(f);
+  return folderView(f);
+});
+on('PATCH', '/password-folders/:id', (m, b) => {
+  const f = find(passwordFolders, m[1]!, 'Folder');
+  f.name = String(b.name ?? f.name).trim() || f.name;
+  return folderView(f);
+});
+on('DELETE', '/password-folders/:id', (m) => {
+  const i = passwordFolders.findIndex((f) => f.id === m[1]);
+  if (i >= 0) passwordFolders.splice(i, 1);
+  for (const p of passwords)
+    if ((p as { folderId?: string | null }).folderId === m[1]) Object.assign(p, { folderId: null });
+  return { ok: true };
+});
 on('PATCH', '/passwords/:id', (m, b) => {
   const p = find(passwords, m[1]!, 'Password');
   const { version: _v, secret, totp, ...changes } = b;

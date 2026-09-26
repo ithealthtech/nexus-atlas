@@ -26,6 +26,19 @@ export function registerVaultRoutes(
     vault.list(scopeOf(req), { clientId: req.query.client || undefined, archived: req.query.archived === 'true' }),
   );
   app.get('/api/passwords/rotation-due', authed, async (req) => vault.rotationDue(scopeOf(req)));
+  // Folders: one client's, open to anyone with password access to it.
+  app.get<{ Params: Params }>('/api/clients/:id/password-folders', authed, async (req) =>
+    vault.folders(scopeOf(req), req.params.id),
+  );
+  app.post<{ Params: Params }>('/api/clients/:id/password-folders', authed, async (req, reply) =>
+    reply.status(201).send(await vault.createFolder(scopeOf(req), req.params.id, req.body)),
+  );
+  app.patch<{ Params: Params }>('/api/password-folders/:id', authed, async (req) =>
+    vault.renameFolder(scopeOf(req), req.params.id, req.body),
+  );
+  app.delete<{ Params: Params }>('/api/password-folders/:id', authed, async (req) =>
+    vault.deleteFolder(scopeOf(req), req.params.id),
+  );
   app.post<{ Params: Params }>('/api/clients/:id/passwords', authed, async (req, reply) =>
     reply.status(201).send(await vault.create(scopeOf(req), req.params.id, req.body, req.ip)),
   );
