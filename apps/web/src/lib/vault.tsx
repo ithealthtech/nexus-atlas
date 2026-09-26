@@ -177,7 +177,7 @@ const WORDS =
   );
 
 export interface GeneratorOptions {
-  mode: 'characters' | 'passphrase';
+  mode: 'characters' | 'passphrase' | 'pin';
   length: number;
   symbols: boolean;
   digits: boolean;
@@ -191,6 +191,57 @@ export const DEFAULT_GENERATOR: GeneratorOptions = {
   words: 5,
 };
 
+/** Common starting points. Each can still be adjusted before use. */
+export const GENERATOR_PRESETS: { id: string; label: string; hint: string; options: GeneratorOptions }[] = [
+  { id: 'strong', label: 'Strong', hint: '24 characters, all types', options: DEFAULT_GENERATOR },
+  {
+    id: 'admin',
+    label: 'Admin / service account',
+    hint: '32 characters, all types',
+    options: { ...DEFAULT_GENERATOR, length: 32 },
+  },
+  {
+    id: 'typeable',
+    label: 'Easy to type',
+    hint: '16 letters and numbers, no symbols',
+    options: { ...DEFAULT_GENERATOR, length: 16, symbols: false },
+  },
+  {
+    id: 'wifi',
+    label: 'Wi-Fi / spoken',
+    hint: '4-word passphrase',
+    options: { ...DEFAULT_GENERATOR, mode: 'passphrase', words: 4 },
+  },
+  {
+    id: 'pin',
+    label: 'PIN',
+    hint: '6 digits',
+    options: { ...DEFAULT_GENERATOR, mode: 'pin', length: 6 },
+  },
+];
+export const presetFor = (o: GeneratorOptions) =>
+  GENERATOR_PRESETS.find((p) => JSON.stringify(p.options) === JSON.stringify(o))?.id ?? null;
+
+const GENERATOR_KEY = 'atlas-generator';
+/** The last settings used in this browser, if any; falls back to the default. */
+export function loadGeneratorOptions(): GeneratorOptions {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GENERATOR_KEY) ?? 'null') as Partial<GeneratorOptions> | null;
+    if (saved && ['characters', 'passphrase', 'pin'].includes(saved.mode ?? ''))
+      return { ...DEFAULT_GENERATOR, ...saved };
+  } catch {
+    /* storage unavailable */
+  }
+  return DEFAULT_GENERATOR;
+}
+export function saveGeneratorOptions(o: GeneratorOptions) {
+  try {
+    localStorage.setItem(GENERATOR_KEY, JSON.stringify(o));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 /** Unbiased random index using rejection sampling over crypto.getRandomValues. */
 function randomIndex(max: number) {
   const limit = Math.floor(0x100000000 / max) * max;
@@ -200,6 +251,7 @@ function randomIndex(max: number) {
   return buffer[0]! % max;
 }
 export function generatePassword(o: GeneratorOptions): string {
+  if (o.mode === 'pin') return Array.from({ length: o.length }, () => String(randomIndex(10))).join('');
   if (o.mode === 'passphrase') {
     const words = Array.from({ length: o.words }, () => WORDS[randomIndex(WORDS.length)]!);
     words[randomIndex(words.length)] = words[randomIndex(words.length)]!.replace(/^./, (c) => c.toUpperCase());
