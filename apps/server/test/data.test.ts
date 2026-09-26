@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { unzipSync, strFromU8 } from 'fflate';
+import { failInterruptedJobs } from '../src/services/importers/common.js';
 import { loginAddress } from '../src/services/importers/hudu.js';
 import { OWNER, enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -355,6 +356,14 @@ describe('Hudu import', () => {
     expect(old.status).toBe('failed');
     expect(old.messages.join(' ')).toContain('Atlas stopped while this import was running');
     expect((await waitForJob(owner, next.data.id)).status).toBe('done');
+
+    // At startup, an import cut off by the restart is marked stopped at once, however fresh its heartbeat.
+    const cutOff = await insert(1);
+    expect(await failInterruptedJobs(t.handle.db)).toBe(1);
+    const stopped = (await owner.call('GET', `/api/import/jobs/${cutOff}`)).data;
+    expect(stopped.status).toBe('failed');
+    expect(stopped.messages.join(' ')).toContain('Atlas stopped while this import was running');
+    expect((await owner.call('POST', '/api/import/hudu/run', {})).status).toBe(202);
   });
 
   it('reports a rejected API key', async () => {

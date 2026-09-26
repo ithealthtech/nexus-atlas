@@ -35,6 +35,7 @@ import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
+import { failInterruptedJobs } from './services/importers/common.js';
 import { ApiKeyService } from './services/api-keys.js';
 import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
@@ -550,6 +551,9 @@ export async function buildApp({
     }),
   });
   if (config.NODE_ENV !== 'test') {
+    // Nothing is running yet, so an import still marked running was cut off by the restart (an update, say).
+    const interrupted = await failInterruptedJobs(db);
+    if (interrupted) app.log.warn({ interrupted }, 'Imports stopped by the restart were marked as stopped');
     notifier.start();
     backups.start();
     const cwRmm = new CwRmmScheduler(db, settings, (err) => app.log.error({ err }, 'ConnectWise RMM sync'), cwRmmFetch);
