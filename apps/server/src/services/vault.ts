@@ -7,11 +7,13 @@ import {
   createPasswordSchema,
   guessPasswordCategory,
   passwordAccessSchema,
+  passwordFolderSchema,
   passwordStrength,
   revealSchema,
   shareSchema,
   updatePasswordSchema,
   type PasswordCategory,
+  type PasswordFolderView,
   type PasswordHistoryView,
   type PasswordKind,
   type PasswordView,
@@ -153,6 +155,7 @@ export class VaultService {
     r: { p: Row; clientName: string; requireReason: boolean; editor: string | null },
     reuse: Map<string, number>,
     links: Map<string, { id: string; name: string }[]> = new Map(),
+    folders: Map<string, string> = new Map(),
   ): PasswordView {
     const due = r.p.rotationDays
       ? new Date(r.p.changedAt.getTime() + r.p.rotationDays * 86_400_000).toISOString().slice(0, 10)
@@ -182,7 +185,120 @@ export class VaultService {
       category: (r.p.category as PasswordCategory | null) ?? guessPasswordCategory(r.p.name, r.p.username, r.p.url),
       categoryGuessed: !r.p.category,
       linkedAssets: links.get(r.p.id) ?? [],
+      folderId: r.p.folderId,
+      folderName: r.p.folderId ? (folders.get(r.p.folderId) ?? null) : null,
     };
+  }
+
+  /** Folder names for the folders these passwords are in. */
+  private async folderNames(scope: Scope, rows: Row[]) {
+    const ids = [...new Set(rows.map((r) => r.folderId).filter((f): f is string => !!f))];
+    if (!ids.length) return new Map<string, string>();
+    const found = await scope.db
+      .select({ id: schema.passwordFolders.id, name: schema.passwordFolders.name })
+      .from(schema.passwordFolders)
+      .where(and(eq(schema.passwordFolders.orgId, scope.actor.orgId), inArray(schema.passwordFolders.id, ids)));
+    return new Map(found.map((f) => [f.id, f.name]));
+  }
+
+  /** A password's folder must belong to the same client. */
+  private async checkFolder(scope: Scope, clientId: string, folderId: string | null | undefined) {
+    if (!folderId) return;
+    const [folder] = await scope.db
+      .select({ id: schema.passwordFolders.id })
+      .from(schema.passwordFolders)
+      .where(
+        and(
+          eq(schema.passwordFolders.id, folderId),
+          eq(schema.passwordFolders.clientId, clientId),
+          eq(schema.passwordFolders.orgId, scope.actor.orgId),
+        ),
+      );
+    if (!folder)
+      throw new HttpError(400, 'Choose a folder from this client.', undefined, {
+        folderId: 'Choose a folder from this client.',
+      });
+  }
+
+  // ---------- folders ----------
+  private async requireVaultClient(scope: Scope, clientId: string) {
+    const level = await scope.require(clientId, 'read', 'Client');
+    if (level !== 'edit_passwords') throw new HttpError(403, 'You don’t have password access for this client.');
+  }
+
+  async folders(scope: Scope, clientId: string): Promise<PasswordFolderView[]> {
+    await this.requireVaultClient(scope, clientId);
+    const f = schema.passwordFolders;
+    const rows = await scope.db
+      .select({ id: f.id, clientId: f.clientId, name: f.name })
+      .from(f)
+      .where(and(eq(f.orgId, scope.actor.orgId), eq(f.clientId, clientId)))
+      .orderBy(asc(sql`lower(${f.name})`));
+    // Active passwords in each folder.
+    const counts = await scope.db
+      .select({ folderId: schema.passwords.folderId, n: count() })
+      .from(schema.passwords)
+      .where(
+        and(
+          eq(schema.passwords.orgId, scope.actor.orgId),
+          eq(schema.passwords.clientId, clientId),
+          eq(schema.passwords.archived, false),
+        ),
+      )
+      .groupBy(schema.passwords.folderId);
+    const byFolder = new Map(counts.map((c) => [c.folderId, Number(c.n)]));
+    return rows.map((r) => ({ ...r, count: byFolder.get(r.id) ?? 0 }));
+  }
+
+  private async folderRow(scope: Scope, folderId: string) {
+    const [row] = isUuid(folderId)
+      ? await scope.db
+          .select()
+          .from(schema.passwordFolders)
+          .where(and(eq(schema.passwordFolders.id, folderId), eq(schema.passwordFolders.orgId, scope.actor.orgId)))
+      : [];
+    if (!row) throw new HttpError(404, 'Folder not found.');
+    await this.requireVaultClient(scope, row.clientId);
+    return row;
+  }
+
+  private duplicate(error: unknown): never {
+    // Unique violation; the pg error may be wrapped by drizzle.
+    const e = error as { code?: string; cause?: { code?: string } };
+    if (e.code === '23505' || e.cause?.code === '23505')
+      throw new HttpError(409, 'This client already has a folder with that name.', undefined, {
+        name: 'This client already has a folder with that name.',
+      });
+    throw error;
+  }
+
+  async createFolder(scope: Scope, clientId: string, input: unknown): Promise<PasswordFolderView> {
+    await this.requireVaultClient(scope, clientId);
+    const { name } = passwordFolderSchema.parse(input);
+    const [row] = await scope.db
+      .insert(schema.passwordFolders)
+      .values({ orgId: scope.actor.orgId, clientId, name })
+      .returning()
+      .catch((e) => this.duplicate(e));
+    return { id: row!.id, clientId, name, count: 0 };
+  }
+
+  async renameFolder(scope: Scope, folderId: string, input: unknown): Promise<PasswordFolderView> {
+    const row = await this.folderRow(scope, folderId);
+    const { name } = passwordFolderSchema.parse(input);
+    await scope.db
+      .update(schema.passwordFolders)
+      .set({ name })
+      .where(eq(schema.passwordFolders.id, row.id))
+      .catch((e) => this.duplicate(e));
+    return (await this.folders(scope, row.clientId)).find((f) => f.id === row.id)!;
+  }
+
+  /** Deleting a folder unfiles its passwords; nothing else is removed. */
+  async deleteFolder(scope: Scope, folderId: string) {
+    const row = await this.folderRow(scope, folderId);
+    await scope.db.delete(schema.passwordFolders).where(eq(schema.passwordFolders.id, row.id));
+    return { ok: true };
   }
 
   private async audit(scope: Scope, row: Pick<Row, 'id' | 'clientId' | 'name'>, action: string, reason = '', ip = '') {
@@ -242,7 +358,11 @@ export class VaultService {
       scope,
       visible.map((r) => r.p.id),
     );
-    return visible.map((r) => this.view(r, reuse, links));
+    const folders = await this.folderNames(
+      scope,
+      visible.map((r) => r.p),
+    );
+    return visible.map((r) => this.view(r, reuse, links, folders));
   }
 
   /** Portal: passwords shared with the client accounts of clients the actor can read. */
@@ -270,13 +390,18 @@ export class VaultService {
         ),
       )
       .orderBy(asc(sql`lower(${schema.passwords.name})`));
-    return rows.map((r) => this.view(r, new Map()));
+    const folders = await this.folderNames(
+      scope,
+      rows.map((r) => r.p),
+    );
+    return rows.map((r) => this.view(r, new Map(), new Map(), folders));
   }
 
   async get(scope: Scope, id: string): Promise<PasswordView> {
     const row = await this.load(scope, id, true);
-    if (this.isPortal(scope)) return this.view(row, new Map());
-    return this.view(row, await this.reuseCounts(scope, [row.p]), await this.linkedAssets(scope, [row.p.id]));
+    const folders = await this.folderNames(scope, [row.p]);
+    if (this.isPortal(scope)) return this.view(row, new Map(), new Map(), folders);
+    return this.view(row, await this.reuseCounts(scope, [row.p]), await this.linkedAssets(scope, [row.p.id]), folders);
   }
 
   // ---------- write ----------
@@ -286,6 +411,7 @@ export class VaultService {
     const body = createPasswordSchema.parse(input);
     if (body.restricted && !this.isAdmin(scope))
       throw new HttpError(403, 'Only administrators can restrict a password to specific people.');
+    await this.checkFolder(scope, clientId, body.folderId);
     const id = randomUUID();
     const org = scope.actor.orgId;
     const secret = body.kind === 'bitlocker' ? body.secret.trim() : body.secret;
@@ -295,6 +421,7 @@ export class VaultService {
       clientId,
       kind: body.kind,
       category: body.kind === 'login' ? body.category : null,
+      folderId: body.folderId,
       name: body.name,
       username: body.username,
       url: body.url,
@@ -338,6 +465,7 @@ export class VaultService {
     if (body.version !== p.version) throw conflict();
     if (body.restricted !== undefined && body.restricted !== p.restricted && !this.isAdmin(scope))
       throw new HttpError(403, 'Only administrators can change who may use a password.');
+    await this.checkFolder(scope, p.clientId, body.folderId);
     const org = scope.actor.orgId;
     const secret = body.secret !== undefined ? (p.kind === 'bitlocker' ? body.secret.trim() : body.secret) : undefined;
     if (secret !== undefined && p.kind === 'bitlocker' && !/^\d{6}(-\d{6}){7}$/.test(secret))
@@ -351,6 +479,7 @@ export class VaultService {
       restricted: body.restricted,
       clientVisible: body.clientVisible,
       category: p.kind === 'login' ? body.category : undefined,
+      folderId: body.folderId,
       version: p.version + 1,
       updatedBy: scope.actor.id,
       updatedAt: new Date(),
