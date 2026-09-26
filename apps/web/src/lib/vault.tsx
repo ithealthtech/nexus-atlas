@@ -1,6 +1,13 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PasswordHistoryView, PasswordView, RevealResult, ShareView, VaultAuditView } from '@atlas/shared';
+import type {
+  PasswordFolderView,
+  PasswordHistoryView,
+  PasswordView,
+  RevealResult,
+  ShareView,
+  VaultAuditView,
+} from '@atlas/shared';
 import { Button, Dialog, Field, Input } from '@/components/ui';
 import { ApiError, api } from './api';
 
@@ -11,6 +18,12 @@ export const usePasswords = (filter: { client?: string; archived?: boolean }) =>
       api<PasswordView[]>(
         `/passwords?${new URLSearchParams(Object.entries({ client: filter.client ?? '', archived: filter.archived ? 'true' : '' }).filter(([, v]) => v))}`,
       ),
+  });
+export const usePasswordFolders = (clientId: string | undefined) =>
+  useQuery({
+    queryKey: ['password-folders', clientId],
+    queryFn: () => api<PasswordFolderView[]>(`/clients/${clientId}/password-folders`),
+    enabled: !!clientId,
   });
 export const usePassword = (id: string) =>
   useQuery({ queryKey: ['password', id], queryFn: () => api<PasswordView>(`/passwords/${id}`) });
@@ -96,7 +109,7 @@ export function useReveal() {
   const reveal = useCallback(
     async (
       item: Pick<PasswordView, 'id' | 'requireReason'>,
-      body: { field?: 'secret' | 'notes' | 'totp'; copy?: boolean; historyId?: string },
+      body: { field?: 'secret' | 'notes' | 'totp' | 'custom'; fieldId?: string; copy?: boolean; historyId?: string },
       label = 'Why do you need this password?',
     ) => {
       let reason = '';
@@ -111,7 +124,7 @@ export function useReveal() {
       try {
         return await api<RevealResult>(path, {
           method: 'POST',
-          body: { field: body.field ?? 'secret', copy: body.copy ?? false, reason },
+          body: { field: body.field ?? 'secret', fieldId: body.fieldId, copy: body.copy ?? false, reason },
         });
       } catch (e) {
         if (e instanceof ApiError && e.code === 'reason_required') {
@@ -119,7 +132,7 @@ export function useReveal() {
           if (given === null) return null;
           return api<RevealResult>(path, {
             method: 'POST',
-            body: { field: body.field ?? 'secret', copy: body.copy ?? false, reason: given },
+            body: { field: body.field ?? 'secret', fieldId: body.fieldId, copy: body.copy ?? false, reason: given },
           });
         }
         throw e;
@@ -164,7 +177,7 @@ const WORDS =
   );
 
 export interface GeneratorOptions {
-  mode: 'characters' | 'passphrase';
+  mode: 'characters' | 'passphrase' | 'pin';
   length: number;
   symbols: boolean;
   digits: boolean;
@@ -178,6 +191,57 @@ export const DEFAULT_GENERATOR: GeneratorOptions = {
   words: 5,
 };
 
+/** Common starting points. Each can still be adjusted before use. */
+export const GENERATOR_PRESETS: { id: string; label: string; hint: string; options: GeneratorOptions }[] = [
+  { id: 'strong', label: 'Strong', hint: '24 characters, all types', options: DEFAULT_GENERATOR },
+  {
+    id: 'admin',
+    label: 'Admin / service account',
+    hint: '32 characters, all types',
+    options: { ...DEFAULT_GENERATOR, length: 32 },
+  },
+  {
+    id: 'typeable',
+    label: 'Easy to type',
+    hint: '16 letters and numbers, no symbols',
+    options: { ...DEFAULT_GENERATOR, length: 16, symbols: false },
+  },
+  {
+    id: 'wifi',
+    label: 'Wi-Fi / spoken',
+    hint: '4-word passphrase',
+    options: { ...DEFAULT_GENERATOR, mode: 'passphrase', words: 4 },
+  },
+  {
+    id: 'pin',
+    label: 'PIN',
+    hint: '6 digits',
+    options: { ...DEFAULT_GENERATOR, mode: 'pin', length: 6 },
+  },
+];
+export const presetFor = (o: GeneratorOptions) =>
+  GENERATOR_PRESETS.find((p) => JSON.stringify(p.options) === JSON.stringify(o))?.id ?? null;
+
+const GENERATOR_KEY = 'atlas-generator';
+/** The last settings used in this browser, if any; falls back to the default. */
+export function loadGeneratorOptions(): GeneratorOptions {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GENERATOR_KEY) ?? 'null') as Partial<GeneratorOptions> | null;
+    if (saved && ['characters', 'passphrase', 'pin'].includes(saved.mode ?? ''))
+      return { ...DEFAULT_GENERATOR, ...saved };
+  } catch {
+    /* storage unavailable */
+  }
+  return DEFAULT_GENERATOR;
+}
+export function saveGeneratorOptions(o: GeneratorOptions) {
+  try {
+    localStorage.setItem(GENERATOR_KEY, JSON.stringify(o));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 /** Unbiased random index using rejection sampling over crypto.getRandomValues. */
 function randomIndex(max: number) {
   const limit = Math.floor(0x100000000 / max) * max;
@@ -187,6 +251,7 @@ function randomIndex(max: number) {
   return buffer[0]! % max;
 }
 export function generatePassword(o: GeneratorOptions): string {
+  if (o.mode === 'pin') return Array.from({ length: o.length }, () => String(randomIndex(10))).join('');
   if (o.mode === 'passphrase') {
     const words = Array.from({ length: o.words }, () => WORDS[randomIndex(WORDS.length)]!);
     words[randomIndex(words.length)] = words[randomIndex(words.length)]!.replace(/^./, (c) => c.toUpperCase());
@@ -239,6 +304,33 @@ export async function encryptShare(payload: SharedPayload): Promise<{ ciphertext
   combined.set(data, iv.length);
   return { ciphertext: b64url(combined), key: b64url(rawKey) };
 }
+
+/**
+ * Creates a one-time share link for a password: reveals it (audited), encrypts it in the browser, and stores only
+ * the ciphertext. The decryption key is after the # in the link, so it never reaches the server.
+ */
+export async function createShareLink(
+  item: Pick<PasswordView, 'id' | 'name' | 'username' | 'url' | 'kind'>,
+  options: { maxViews: number; hours: number; reason: string },
+): Promise<string> {
+  const { value } = await api<{ value: string }>(`/passwords/${item.id}/reveal`, {
+    method: 'POST',
+    body: { reason: options.reason || 'Creating a share link' },
+  });
+  const { ciphertext, key } = await encryptShare({
+    name: item.name,
+    username: item.username,
+    url: item.url,
+    secret: value,
+    kind: item.kind,
+  });
+  const share = await api<{ token: string }>(`/passwords/${item.id}/shares`, {
+    method: 'POST',
+    body: { ciphertext, maxViews: options.maxViews, expiresHours: options.hours, reason: options.reason },
+  });
+  return `${location.origin}/share/${share.token}#${key}`;
+}
+
 export async function decryptShare(ciphertext: string, key: string): Promise<SharedPayload> {
   const bytes = fromB64url(ciphertext);
   const cryptoKey = await crypto.subtle.importKey('raw', fromB64url(key), 'AES-GCM', false, ['decrypt']);

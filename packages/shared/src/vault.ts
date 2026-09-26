@@ -86,6 +86,22 @@ const totpSecret = z
     'Enter the authenticator setup key (letters A–Z and digits 2–7), or leave it empty.',
   );
 
+const expiryDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a valid date.')
+  .refine((d) => !Number.isNaN(Date.parse(d)) && new Date(d).toISOString().startsWith(d), 'Choose a valid date.');
+
+/** A labelled extra value. On edit, a secret field may omit `value` to keep what's stored. */
+export const customFieldSchema = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().min(1, 'Give the field a label.').max(100),
+  secret: z.boolean().default(false),
+  value: z.string().max(5000).optional(),
+});
+export type CustomFieldInput = z.input<typeof customFieldSchema>;
+export const MAX_CUSTOM_FIELDS = 30;
+const customFields = z.array(customFieldSchema).max(MAX_CUSTOM_FIELDS);
+
 const base = {
   name: z.string().trim().min(1, 'Name is required.').max(200),
   username: z.string().trim().max(254).default(''),
@@ -99,10 +115,14 @@ const base = {
   notes: z.string().max(20000).default(''),
   totp: totpSecret.default(''),
   rotationDays: z.number().int().min(1).max(3650).nullable().default(null),
+  expiresOn: expiryDate.nullable().default(null),
   restricted: z.boolean().default(false),
   clientVisible: z.boolean().default(false),
   // null: let Atlas guess from the name, username, and address.
   category: z.enum(PASSWORD_CATEGORIES).nullable().default(null),
+  customFields: customFields.default([]),
+  // A folder of the same client, or null for none.
+  folderId: z.string().uuid().nullable().default(null),
 };
 
 export const createPasswordSchema = z
@@ -119,13 +139,39 @@ export const updatePasswordSchema = z.object({
   notes: z.string().max(20000).optional(),
   totp: totpSecret.optional(),
   rotationDays: z.number().int().min(1).max(3650).nullable().optional(),
+  expiresOn: expiryDate.nullable().optional(),
   restricted: z.boolean().optional(),
   clientVisible: z.boolean().optional(),
   category: z.enum(PASSWORD_CATEGORIES).nullable().optional(),
+  customFields: customFields.optional(),
+  folderId: z.string().uuid().nullable().optional(),
   version: z.number().int().positive(),
 });
+/** One change applied to many passwords at once; each password is still checked on its own. */
+export const bulkPasswordSchema = z.discriminatedUnion('action', [
+  z.object({ ids: z.array(z.string().uuid()).min(1).max(500), action: z.enum(['archive', 'restore']) }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('rotation'),
+    rotationDays: z.number().int().min(1).max(3650).nullable(),
+  }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('clientVisible'),
+    clientVisible: z.boolean(),
+  }),
+  z.object({
+    ids: z.array(z.string().uuid()).min(1).max(500),
+    action: z.literal('category'),
+    category: z.enum(PASSWORD_CATEGORIES).nullable(),
+  }),
+]);
+export type BulkPasswordInput = z.infer<typeof bulkPasswordSchema>;
+export type BulkPasswordResult = { updated: number; failed: { id: string; name: string | null; error: string }[] };
 export const revealSchema = z.object({
-  field: z.enum(['secret', 'notes', 'totp']).default('secret'),
+  field: z.enum(['secret', 'notes', 'totp', 'custom']).default('secret'),
+  // Which custom field, when `field` is 'custom'.
+  fieldId: z.string().uuid().optional(),
   reason: z.string().trim().max(300).default(''),
   copy: z.boolean().default(false),
 });
@@ -163,6 +209,8 @@ export interface PasswordView {
   strength: number;
   reused: number;
   rotationDays: number | null;
+  /** YYYY-MM-DD the account stops working, if it does. */
+  expiresOn: string | null;
   changedAt: string;
   rotationDue: string | null;
   restricted: boolean;
@@ -177,6 +225,14 @@ export interface PasswordView {
   categoryGuessed: boolean;
   /** Assets this password is linked to, so similar logins can be told apart. */
   linkedAssets: { id: string; name: string }[];
+  /** A secret field's value is null here; reveal it with field 'custom' and its id. */
+  customFields: { id: string; label: string; secret: boolean; value: string | null }[];
+  folderId: string | null;
+  folderName: string | null;
+  /** Pinned by the person viewing (not shared with others). */
+  favorite: boolean;
+  /** When the person viewing last revealed, copied, or shared it. */
+  lastUsedAt: string | null;
 }
 export interface PasswordHistoryView {
   id: string;
@@ -223,3 +279,12 @@ export function passwordStrength(value: string): number {
   return bits < 28 ? 0 : bits < 40 ? 1 : bits < 60 ? 2 : bits < 80 ? 3 : 4;
 }
 export const STRENGTH_LABELS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'] as const;
+
+// ---------- folders ----------
+export const passwordFolderSchema = z.object({ name: z.string().trim().min(1, 'Name the folder.').max(80) });
+export interface PasswordFolderView {
+  id: string;
+  clientId: string;
+  name: string;
+  count: number;
+}

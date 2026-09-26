@@ -145,6 +145,10 @@ describe('REST API keys', () => {
     expect(clients.json().map((c: { name: string }) => c.name)).toEqual(['Harbor Dental Group']);
     expect((await v1('POST', '/clients', read.data.token, { name: 'Nope' })).statusCode).toBe(403);
     expect((await v1('GET', '/passwords', read.data.token)).statusCode).toBe(403);
+    // Password folders are part of the vault, so they need the passwords scope too.
+    expect((await v1('GET', `/clients/${clients.json()[0].id}/password-folders`, read.data.token)).statusCode).toBe(
+      403,
+    );
     expect((await v1('GET', '/users', read.data.token)).statusCode).toBe(403);
     expect((await v1('GET', '/settings/email', read.data.token)).statusCode).toBe(403);
     // A browser session can't be used on /api/v1, and a key can't be used on /api.
@@ -300,6 +304,11 @@ describe('Hudu import', () => {
     // Hudu's folder sets the type, and the password stays linked to the asset it was attached to.
     expect(password).toMatchObject({ category: 'network', categoryGuessed: false });
     expect(password.linkedAssets.map((a: { name: string }) => a.name)).toEqual(['HDG-FW-01']);
+    // ...and it's filed in a folder of the same name.
+    expect(password.folderName).toBe('Network');
+    expect((await owner.call('GET', `/api/clients/${harbor.id}/password-folders`)).data).toEqual([
+      expect.objectContaining({ name: 'Network', count: 1 }),
+    ]);
     expect((await owner.call('POST', `/api/passwords/${password.id}/reveal`, {})).data.value).toBe('Hudu-Secret-9981!');
 
     // Second run: updates, no duplicates.
