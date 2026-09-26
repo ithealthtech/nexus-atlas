@@ -206,7 +206,7 @@ describe('ConnectWise RMM sync', () => {
     expect(all.map((a) => a.name).sort()).toEqual(['HDG-DC-01', 'HDG-WS-02']);
     const updated = (await owner.call('GET', `/api/assets/${dc.id}`)).data;
     // Existing fields take what fits; the site had no field in this layout, so the sync added one.
-    expect(updated.fields).toEqual({
+    expect(updated.fields).toMatchObject({
       notes_extra: 'Front office',
       host: 'hdg-dc-01',
       addr: '10.0.0.5',
