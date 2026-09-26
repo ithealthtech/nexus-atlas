@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.10] - 2026-09-26
+
+### Fixed
+
+- **ConnectWise RMM sync:** the note about archived duplicate copies says "copies" instead of "copyies". (#68)
+
 ## [1.1.9] - 2026-09-26
 
 ### Changed
