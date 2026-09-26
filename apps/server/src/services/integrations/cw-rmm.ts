@@ -444,7 +444,7 @@ export class CwRmmClient {
         const candidates = listedSite
           ? [listedSite]
           : [...siteIds].sort((a, b) => (hits.get(b) ?? 0) - (hits.get(a) ?? 0));
-        let siteId = '';
+        let siteId = listedSite; // Kept even when the details can't be read.
         let detail: Json = {};
         let detailNote = candidates.length ? '' : 'no site to look it up in';
         for (const site of candidates) {
