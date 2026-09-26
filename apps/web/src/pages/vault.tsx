@@ -68,7 +68,7 @@ import { useClient, useClients, useUsers, useGroups } from '@/lib/queries';
 import {
   DEFAULT_GENERATOR,
   copySecret,
-  encryptShare,
+  createShareLink,
   generatePassword,
   useAskReason,
   usePassword,
@@ -553,12 +553,60 @@ function QuickAction({
 const Slot = () => <span className="inline-block size-9" aria-hidden />;
 
 /** Copy username / password / one-time code, and open the sign-in address, without opening the entry. */
+/**
+ * Quick share: one click makes a one-time link (one view, 24 hours) and copies it, for sending to someone who
+ * doesn't sign in to Atlas. The full Share dialog on the password page offers other limits.
+ */
+function useQuickShare() {
+  const ask = useAskReason();
+  const queryClient = useQueryClient();
+  // Shown when the browser won't let us copy: the link's key exists nowhere else, so it must not be lost.
+  const [manual, setManual] = useState<string | null>(null);
+  const share = async (item: PasswordView): Promise<string | null> => {
+    let reason = '';
+    if (item.requireReason) {
+      const given = await ask('Why are you sharing this password?');
+      if (given === null) return null;
+      reason = given;
+    }
+    const link = await createShareLink(item, { maxViews: 1, hours: 24, reason });
+    await Promise.all(
+      ['password-shares', 'password-audit'].map((k) => queryClient.invalidateQueries({ queryKey: [k, item.id] })),
+    );
+    try {
+      // The link is the secret now; copy it as-is (not auto-cleared) so it can be pasted into an email or ticket.
+      await navigator.clipboard.writeText(link);
+    } catch {
+      setManual(link);
+      return null;
+    }
+    return 'One-time link copied. It opens once and expires in 24 hours.';
+  };
+  const dialog = manual && (
+    <Dialog
+      open
+      onClose={() => setManual(null)}
+      title="Copy the one-time link"
+      description="Your browser didn't allow copying automatically. Copy this link now: it can't be shown again. It opens once and expires in 24 hours."
+      footer={<Button onClick={() => setManual(null)}>Done</Button>}
+    >
+      <Field label="Share link">
+        {(p) => <Input {...p} readOnly value={manual} onFocus={(e) => e.currentTarget.select()} autoFocus />}
+      </Field>
+    </Dialog>
+  );
+  return { share, dialog };
+}
+
 function QuickActions({ item }: { item: PasswordView }) {
   const reveal = useReveal();
+  const actor = useActor();
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
   const bitlocker = item.kind === 'bitlocker';
   const openable = !bitlocker && /^https?:\/\//i.test(item.url);
   return (
     <div className="flex items-center justify-end">
+      {quickShareDialog}
       {item.username ? (
         <QuickAction
           label={`Copy ${bitlocker ? 'recovery key ID' : 'username'} for ${item.name}`}
@@ -596,6 +644,15 @@ function QuickActions({ item }: { item: PasswordView }) {
       ) : (
         <Slot />
       )}
+      {actor.isStaff ? (
+        <QuickAction
+          label={`Quick share ${item.name}: copy a one-time link`}
+          icon={Share2}
+          action={() => quickShare(item)}
+        />
+      ) : (
+        <Slot />
+      )}
       {openable ? (
         <a
           href={item.url}
@@ -612,6 +669,66 @@ function QuickActions({ item }: { item: PasswordView }) {
       )}
     </div>
   );
+}
+
+// ---------- list sorting and grouping (remembered per browser) ----------
+type ListSort = 'name' | 'client' | 'type' | 'recent' | 'attention';
+type ListGroup = 'none' | 'client' | 'type';
+type ListView = { sort: ListSort; group: ListGroup };
+const SORT_LABELS: Record<ListSort, string> = {
+  name: 'Name',
+  client: 'Client',
+  type: 'Type',
+  recent: 'Recently changed',
+  attention: 'Needs attention first',
+};
+const LIST_VIEW_KEY = 'atlas-password-list';
+function loadListView(): ListView {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LIST_VIEW_KEY) ?? '{}') as Partial<ListView>;
+    return {
+      sort: saved.sort && saved.sort in SORT_LABELS ? saved.sort : 'name',
+      group: saved.group === 'client' || saved.group === 'type' ? saved.group : 'none',
+    };
+  } catch {
+    return { sort: 'name', group: 'none' };
+  }
+}
+function saveListView(view: ListView) {
+  try {
+    localStorage.setItem(LIST_VIEW_KEY, JSON.stringify(view));
+  } catch {
+    /* Storage can be blocked; the choice still applies until the page reloads. */
+  }
+}
+const typeLabel = (p: PasswordView) =>
+  p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category];
+/** Higher is worse: rotation overdue, then reused, then weak. */
+const attention = (p: PasswordView) =>
+  (rotationOverdue(p) ? 4 : 0) + (p.reused > 0 ? 2 : 0) + (p.kind === 'login' && p.strength < 2 ? 1 : 0);
+const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+function sortPasswords(items: PasswordView[], sort: ListSort) {
+  const name = (a: PasswordView, b: PasswordView) => byText(a.name, b.name);
+  const compare: Record<ListSort, (a: PasswordView, b: PasswordView) => number> = {
+    name,
+    client: (a, b) => byText(a.clientName, b.clientName) || name(a, b),
+    type: (a, b) => byText(typeLabel(a), typeLabel(b)) || name(a, b),
+    recent: (a, b) => b.updatedAt.localeCompare(a.updatedAt) || name(a, b),
+    attention: (a, b) => attention(b) - attention(a) || name(a, b),
+  };
+  return [...items].sort(compare[sort]);
+}
+/** Keeps the sort order inside each group; groups themselves are alphabetical. */
+function groupPasswords(items: PasswordView[], group: ListGroup) {
+  if (group === 'none') return [{ key: 'all', label: null as string | null, items }];
+  const map = new Map<string, PasswordView[]>();
+  for (const p of items) {
+    const label = group === 'client' ? p.clientName : typeLabel(p);
+    map.set(label, [...(map.get(label) ?? []), p]);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => byText(a, b))
+    .map(([label, groupItems]) => ({ key: label, label: label as string | null, items: groupItems }));
 }
 
 export function PasswordsView({ clientId }: { clientId?: string }) {
@@ -635,6 +752,14 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
       ? ''
       : chosenFolder;
   const [managingFolders, setManagingFolders] = useState(false);
+  const [view, setView] = useState<ListView>(loadListView);
+  const changeView = (next: Partial<ListView>) => {
+    const merged = { ...view, ...next };
+    setView(merged);
+    saveListView(merged);
+  };
+  // Grouping by client makes no sense inside one client.
+  const groupBy = clientId && view.group === 'client' ? 'none' : view.group;
   const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
   const types = useMemo(() => {
@@ -662,6 +787,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
       ),
     [list.data, query, type, folder],
   );
+  const groups = useMemo(() => groupPasswords(sortPasswords(rows, view.sort), groupBy), [rows, view.sort, groupBy]);
   if (clientId && client.data && !canUse)
     return (
       <Card>
@@ -731,6 +857,26 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               <Folder /> Folders
             </Button>
           )}
+          <label className="w-full sm:w-auto">
+            <span className="sr-only">Sort</span>
+            <Select value={view.sort} onChange={(e) => changeView({ sort: e.target.value as ListSort })}>
+              {Object.entries(SORT_LABELS)
+                .filter(([k]) => !(clientId && k === 'client'))
+                .map(([k, label]) => (
+                  <option key={k} value={k}>
+                    Sort: {label}
+                  </option>
+                ))}
+            </Select>
+          </label>
+          <label className="w-full sm:w-auto">
+            <span className="sr-only">Group by</span>
+            <Select value={groupBy} onChange={(e) => changeView({ group: e.target.value as ListGroup })}>
+              <option value="none">No grouping</option>
+              {!clientId && <option value="client">Group by client</option>}
+              <option value="type">Group by type</option>
+            </Select>
+          </label>
           {actor.isStaff && (
             <Button
               variant="ghost"
@@ -765,61 +911,72 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                   <th className="px-3 py-3 text-right font-medium">Quick actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((p) => (
-                  <tr key={p.id} className="hover:bg-surface-2">
-                    {/* On phones the name takes whatever width the actions leave, and truncates. */}
-                    <td className="w-full max-w-0 py-3 pr-2 pl-4 sm:w-auto sm:max-w-none sm:px-5">
-                      <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">
-                        <span
-                          className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
-                          title={
-                            p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
-                          }
-                        >
-                          <PasswordIcon item={p} className="size-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5 font-semibold hover:underline">
-                            <span className="truncate">{p.name}</span>
-                            {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
+              {groups.map((g) => (
+                <tbody key={g.key} className="divide-y divide-border border-b border-border last:border-b-0">
+                  {g.label !== null && (
+                    <tr className="bg-surface-2/60">
+                      <th colSpan={6} scope="rowgroup" className="px-5 py-2 text-xs font-semibold text-text-2">
+                        {g.label} <span className="font-normal text-muted">({g.items.length})</span>
+                      </th>
+                    </tr>
+                  )}
+                  {g.items.map((p) => (
+                    <tr key={p.id} className="hover:bg-surface-2">
+                      {/* On phones the name takes whatever width the actions leave, and truncates. */}
+                      <td className="w-full max-w-0 py-3 pr-2 pl-4 sm:w-auto sm:max-w-none sm:px-5">
+                        <AppLink to={`/passwords/${p.id}`} className="flex items-center gap-3">
+                          <span
+                            className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
+                            title={
+                              p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
+                            }
+                          >
+                            <PasswordIcon item={p} className="size-4" />
                           </span>
-                          {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
-                          <span className="block truncate text-xs text-muted">
-                            {[
-                              p.folderName ? `${p.folderName} folder` : '',
-                              p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category],
-                              p.kind === 'login' && p.url ? hostOf(p.url) : '',
-                              p.linkedAssets.length
-                                ? `on ${p.linkedAssets
-                                    .slice(0, 2)
-                                    .map((a) => a.name)
-                                    .join(', ')}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
-                                : '',
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5 font-semibold hover:underline">
+                              <span className="truncate">{p.name}</span>
+                              {p.restricted && <Lock className="size-3.5 text-muted" aria-label="Restricted" />}
+                            </span>
+                            {/* What tells similar logins apart: its type, where it signs in, and what it's for. */}
+                            <span className="block truncate text-xs text-muted">
+                              {[
+                                p.folderName ? `${p.folderName} folder` : '',
+                                p.kind === 'bitlocker'
+                                  ? 'BitLocker recovery key'
+                                  : PASSWORD_CATEGORY_LABELS[p.category],
+                                p.kind === 'login' && p.url ? hostOf(p.url) : '',
+                                p.linkedAssets.length
+                                  ? `on ${p.linkedAssets
+                                      .slice(0, 2)
+                                      .map((a) => a.name)
+                                      .join(', ')}${p.linkedAssets.length > 2 ? ` +${p.linkedAssets.length - 2}` : ''}`
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </span>
                           </span>
-                        </span>
-                      </AppLink>
-                    </td>
-                    {!clientId && <td className="hidden px-5 py-3 text-text-2 md:table-cell">{p.clientName}</td>}
-                    <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
-                      {p.username || <span className="font-sans text-muted">—</span>}
-                    </td>
-                    <td className="hidden px-5 py-3 sm:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {p.kind === 'login' && (
-                          <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
-                        )}
-                        {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
-                        {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5">{!p.archived && <QuickActions item={p} />}</td>
-                  </tr>
-                ))}
-              </tbody>
+                        </AppLink>
+                      </td>
+                      {!clientId && <td className="hidden px-5 py-3 text-text-2 md:table-cell">{p.clientName}</td>}
+                      <td className="hidden max-w-48 truncate px-5 py-3 font-mono text-[13px] text-text-2 sm:table-cell">
+                        {p.username || <span className="font-sans text-muted">—</span>}
+                      </td>
+                      <td className="hidden px-5 py-3 sm:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {p.kind === 'login' && (
+                            <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
+                          )}
+                          {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
+                          {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">{!p.archived && <QuickActions item={p} />}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         ) : (
@@ -1189,6 +1346,8 @@ function AuditCard({ item }: { item: PasswordView }) {
 function SharesCard({ item }: { item: PasswordView }) {
   const { data } = useShares(item.id);
   const [sharing, setSharing] = useState(false);
+  const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
+  const [quickBusy, setQuickBusy] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
   const active = (data ?? []).filter(
@@ -1199,9 +1358,28 @@ function SharesCard({ item }: { item: PasswordView }) {
       <CardHeader
         title="Share links"
         actions={
-          <Button variant="ghost" size="sm" onClick={() => setSharing(true)}>
-            <Share2 /> Share
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              loading={quickBusy}
+              onClick={async () => {
+                setQuickBusy(true);
+                try {
+                  const done = await quickShare(item);
+                  if (done) toast(done);
+                } catch (e) {
+                  toast((e as Error).message, 'error');
+                } finally {
+                  setQuickBusy(false);
+                }
+              }}
+            >
+              <Share2 /> Quick share
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSharing(true)}>
+              More options
+            </Button>
+          </div>
         }
       />
       {!active.length ? (
@@ -1240,6 +1418,7 @@ function SharesCard({ item }: { item: PasswordView }) {
         </ul>
       )}
       {sharing && <ShareDialog item={item} onClose={() => setSharing(false)} />}
+      {quickShareDialog}
     </Card>
   );
 }
@@ -1263,23 +1442,7 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
         if (given === null) return;
         reason = given;
       }
-      const { value } = await api<{ value: string }>(`/passwords/${item.id}/reveal`, {
-        method: 'POST',
-        body: { reason: reason || 'Creating a share link' },
-      });
-      // Encrypted here; the server only ever sees ciphertext. The key goes after # and never reaches the server.
-      const { ciphertext, key } = await encryptShare({
-        name: item.name,
-        username: item.username,
-        url: item.url,
-        secret: value,
-        kind: item.kind,
-      });
-      const share = await api<{ token: string }>(`/passwords/${item.id}/shares`, {
-        method: 'POST',
-        body: { ciphertext, maxViews, expiresHours: hours, reason },
-      });
-      setLink(`${location.origin}/share/${share.token}#${key}`);
+      setLink(await createShareLink(item, { maxViews, hours, reason }));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['password-shares', item.id] }),
         queryClient.invalidateQueries({ queryKey: ['password-audit', item.id] }),
