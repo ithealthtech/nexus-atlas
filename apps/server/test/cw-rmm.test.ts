@@ -233,6 +233,38 @@ describe('ConnectWise RMM sync', () => {
     expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
   });
 
+  it('syncs only what was chosen, and never archives devices while devices are switched off', async () => {
+    asio.state.devices.set('c1', [
+      { endpointId: 'e1', siteId: 's1', friendlyName: 'HDG-DC-01' },
+      { endpointId: 'e2', siteId: 's1', friendlyName: 'HDG-WS-02' },
+    ]);
+    await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [{ companyId: 'c1', action: 'link', clientId: harbor }],
+    });
+    await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
+
+    const saved = await owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: true, devices: false });
+    expect(saved.data.options).toEqual({ locations: true, devices: false });
+    const sitesOnly = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(sitesOnly.counts.assets).toBeUndefined();
+    expect(sitesOnly.counts.locations.updated).toBe(1);
+    expect(sitesOnly.messages.join(' ')).toContain('Not synced this time, as chosen: devices.');
+    // Not reading devices must not look like every device was removed.
+    const kept = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as { archived: boolean }[];
+    expect(kept).toHaveLength(2);
+
+    await owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: false, devices: true });
+    const devicesOnly = await waitForJob(
+      owner,
+      (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id,
+    );
+    expect(devicesOnly.counts.locations).toBeUndefined();
+    expect(devicesOnly.counts.assets.updated).toBe(2);
+  });
+
   it('is for administrators only', async () => {
     await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
     const user = await owner.call('POST', '/api/users', {

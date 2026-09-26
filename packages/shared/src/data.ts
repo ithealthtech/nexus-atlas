@@ -75,7 +75,16 @@ export interface CwRmmView {
   hasSecret: boolean;
   autoSync: boolean;
   lastSyncAt: string | null;
+  options: CwRmmSyncOptions;
 }
+/** What a ConnectWise RMM sync brings in. */
+export const cwRmmSyncOptionsSchema = z.object({
+  /** Sites, as locations. */
+  locations: z.boolean().default(true),
+  /** Devices, as assets. */
+  devices: z.boolean().default(true),
+});
+export type CwRmmSyncOptions = z.infer<typeof cwRmmSyncOptionsSchema>;
 /** A ConnectWise RMM company and what Atlas does with it. */
 export interface CwRmmCompany {
   id: string;
@@ -106,7 +115,23 @@ export interface HuduPreview {
   assets: number;
   articles: number;
   passwords: number;
+  /** For choosing what to import: each company, and each asset layout with how many assets use it. */
+  companyList: { id: number; name: string }[];
+  layoutList: { id: number; name: string; assets: number }[];
 }
+
+/** What a Hudu import brings in. null lists mean "all", including ones added in Hudu later. */
+export const huduImportOptionsSchema = z.object({
+  clients: z.boolean().default(true),
+  /** Each company's address, as its main location. */
+  locations: z.boolean().default(true),
+  assets: z.boolean().default(true),
+  documents: z.boolean().default(true),
+  passwords: z.boolean().default(true),
+  companyIds: z.array(z.number().int()).max(5000).nullable().default(null),
+  layoutIds: z.array(z.number().int()).max(1000).nullable().default(null),
+});
+export type HuduImportOptions = z.infer<typeof huduImportOptionsSchema>;
 
 export const CSV_TARGETS = ['clients', 'contacts', 'locations', 'assets', 'passwords'] as const;
 export type CsvTarget = (typeof CSV_TARGETS)[number];

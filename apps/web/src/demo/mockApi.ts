@@ -1056,7 +1056,16 @@ on('GET', '/audit/export/:kind', (m) =>
 
 // data in and out
 let branding: Branding = { ...DEFAULT_BRANDING };
-let hudu: { url: string; hasKey: boolean } | null = null;
+const ALL_HUDU = {
+  clients: true,
+  locations: true,
+  assets: true,
+  documents: true,
+  passwords: true,
+  companyIds: null as number[] | null,
+  layoutIds: null as number[] | null,
+};
+let hudu: { url: string; hasKey: boolean; options: typeof ALL_HUDU } | null = null;
 const importJobs: ImportJobView[] = [];
 const apiKeys: ApiKeyView[] = [];
 on('GET', '/branding', () => ({ name: 'IT Done Right', ...branding }));
@@ -1097,7 +1106,7 @@ on('GET', '/import/hudu', () => hudu);
 on('PUT', '/import/hudu', (_m, b) => {
   const url = String(b.url ?? '').trim();
   if (!/^https:\/\//.test(url)) throw new MockError(400, 'Use the https:// address of your Hudu site.');
-  return (hudu = { url, hasKey: true });
+  return (hudu = { url, hasKey: true, options: hudu?.options ?? { ...ALL_HUDU } });
 });
 on('DELETE', '/import/hudu', () => ((hudu = null), { ok: true }));
 on('POST', '/import/hudu/preview', () => ({
@@ -1106,11 +1115,31 @@ on('POST', '/import/hudu/preview', () => ({
   assets: 612,
   articles: 147,
   passwords: 903,
+  companyList: [...db.clients.map((c, i) => ({ id: i + 1, name: c.name })), { id: 90, name: 'Riverside Veterinary' }],
+  layoutList: [
+    { id: 1, name: 'Computer Assets', assets: 402 },
+    { id: 2, name: 'Applications', assets: 96 },
+    { id: 3, name: 'Network Devices', assets: 71 },
+    { id: 4, name: 'People', assets: 43 },
+  ],
 }));
-on('POST', '/import/hudu/run', () => notInDemo('Importing from a real Hudu site'));
+on('PUT', '/import/hudu/options', (_m, b) => {
+  if (!hudu) throw new MockError(400, 'Connect Hudu first.');
+  return (hudu.options = { ...ALL_HUDU, ...(b as object) });
+});
+on('POST', '/import/hudu/run', (_m, b) => {
+  if (hudu && Object.keys(b).length) hudu.options = { ...ALL_HUDU, ...(b as object) };
+  return notInDemo('Importing from a real Hudu site');
+});
 // ConnectWise RMM: connecting and mapping work; syncing needs a real RMM.
-let cwRmm: { region: string; clientId: string; hasSecret: true; autoSync: boolean; lastSyncAt: string | null } | null =
-  null;
+let cwRmm: {
+  region: string;
+  clientId: string;
+  hasSecret: true;
+  autoSync: boolean;
+  lastSyncAt: string | null;
+  options: { locations: boolean; devices: boolean };
+} | null = null;
 const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
 const cwCompanies = () => [
   ...db.clients.map((c, i) => ({ id: `cw${i + 1}`, name: c.name })),
@@ -1139,10 +1168,16 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     hasSecret: true,
     autoSync: b.autoSync !== false,
     lastSyncAt: cwRmm?.lastSyncAt ?? null,
+    options: cwRmm?.options ?? { locations: true, devices: true },
   };
   return { ...cwRmm, companies: cwCompanies().length };
 });
 on('DELETE', '/integrations/cw-rmm', () => ((cwRmm = null), { ok: true }));
+on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
+  if (!cwRmm) throw new MockError(400, 'Connect ConnectWise RMM first.');
+  cwRmm.options = { locations: b.locations !== false, devices: b.devices !== false };
+  return cwRmm;
+});
 on('GET', '/integrations/cw-rmm/companies', () => cwView());
 on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
   for (const m of b.mappings as { companyId: string; action: string; clientId?: string }[]) {

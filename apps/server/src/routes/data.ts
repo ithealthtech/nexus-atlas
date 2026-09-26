@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { schema, type Database } from '@atlas/db';
+import { huduImportOptionsSchema } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import type { KeyProvider } from '../crypto/keys.js';
 import { HttpError } from '../errors.js';
@@ -50,7 +51,12 @@ export function registerDataRoutes(
   app.get(
     '/api/import/hudu',
     authed,
-    async (req) => (await settings.huduView(admin(req).orgId)) ?? { url: '', hasKey: false },
+    async (req) =>
+      (await settings.huduView(admin(req).orgId)) ?? {
+        url: '',
+        hasKey: false,
+        options: huduImportOptionsSchema.parse({}),
+      },
   );
   app.put('/api/import/hudu', authed, async (req) => {
     const actor = admin(req);
@@ -66,15 +72,21 @@ export function registerDataRoutes(
     await event(req, 'Hudu connection removed', '');
     return { ok: true };
   });
+  app.put('/api/import/hudu/options', authed, async (req) => settings.saveHuduOptions(admin(req).orgId, req.body));
   app.post('/api/import/hudu/preview', authed, async (req) => previewHudu(await huduClient(admin(req).orgId)));
   app.post('/api/import/hudu/run', authed, async (req, reply) => {
     const actor = admin(req);
     recent(req);
     const client = await huduClient(actor.orgId);
+    // Choices sent with the run are saved, so the next run brings in the same things.
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const options = Object.keys(body).length
+      ? await settings.saveHuduOptions(actor.orgId, body)
+      : await settings.huduOptions(actor.orgId);
     const run = await ImportRun.start(db, actor, 'hudu');
     await event(req, 'Hudu import started', '');
     // Runs in the background; the page polls the job for progress.
-    void runHuduImport(db, actor, client, run, vault)
+    void runHuduImport(db, actor, client, run, vault, options)
       .then(() => run.flush('done'))
       .catch(async (error) => {
         run.note(error instanceof HttpError ? error.message : 'The import stopped unexpectedly.');
