@@ -207,3 +207,35 @@ export const brandingSchema = z.object({
 });
 export type Branding = z.infer<typeof brandingSchema>;
 export const DEFAULT_BRANDING: Branding = brandingSchema.parse({});
+
+// ---------- duplicates ----------
+export const DUPLICATE_TYPES = ['assets', 'clients', 'contacts', 'locations'] as const;
+export type DuplicateType = (typeof DUPLICATE_TYPES)[number];
+/** Records that look like the same thing: same name (ignoring case and spacing) in the same client. */
+export interface DuplicateGroup {
+  type: DuplicateType;
+  name: string;
+  clientId: string | null;
+  clientName: string | null;
+  items: {
+    id: string;
+    name: string;
+    /** What tells them apart: the asset layout, a contact's email, a location's address, a client's item count. */
+    detail: string;
+    /** How many fields hold a value (assets) or how much the record holds, to suggest which one to keep. */
+    filled: number;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+}
+export const mergeDuplicatesSchema = z.object({
+  type: z.enum(DUPLICATE_TYPES),
+  keepId: z.string().uuid(),
+  mergeIds: z.array(z.string().uuid()).min(1).max(50),
+});
+export interface MergeResult {
+  keptId: string;
+  merged: number;
+  /** Fields added to the kept asset's layout for values it had no field for. */
+  fieldsAdded: string[];
+}

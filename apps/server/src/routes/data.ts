@@ -4,6 +4,7 @@ import { huduImportOptionsSchema } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import type { KeyProvider } from '../crypto/keys.js';
 import { HttpError } from '../errors.js';
+import { findDuplicates, mergeDuplicates } from '../services/duplicates.js';
 import { exportClient } from '../services/export.js';
 import { getJob, ImportRun, listJobs } from '../services/importers/common.js';
 import { importCsv } from '../services/importers/csv.js';
@@ -94,6 +95,20 @@ export function registerDataRoutes(
         await run.flush('failed');
       });
     return reply.status(202).send({ id: run.jobId });
+  });
+
+  // ---- duplicates ----
+  app.get('/api/duplicates', authed, async (req) => findDuplicates(db, admin(req).orgId));
+  app.post('/api/duplicates/merge', authed, async (req) => {
+    const actor = admin(req);
+    recent(req);
+    const result = await mergeDuplicates(db, actor, req.body);
+    await event(
+      req,
+      'Duplicates merged',
+      `${(req.body as { type?: string }).type}: ${result.merged} into ${result.keptId}`,
+    );
+    return result;
   });
 
   // ---- jobs ----
