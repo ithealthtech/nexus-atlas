@@ -897,7 +897,7 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
     run.note(`${matched} device${matched === 1 ? '' : 's'} matched an asset already in Atlas by name, and updated it.`);
   if (folded)
     run.note(
-      `${folded} copy${folded === 1 ? '' : 'ies'} from earlier syncs archived; their devices now update the same-named asset that was already there.`,
+      `${folded} cop${folded === 1 ? 'y' : 'ies'} from earlier syncs archived; their devices now update the same-named asset that was already there.`,
     );
   if (client.lastDeviceFields) run.note(`ConnectWise device ${client.lastDeviceFields}.`);
 

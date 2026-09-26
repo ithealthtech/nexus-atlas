@@ -224,6 +224,7 @@ describe('ConnectWise RMM sync', () => {
     ).data;
     const second = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
     expect(second.messages.join(' ')).toContain('1 copy from earlier syncs archived');
+    expect(second.messages.join(' ')).not.toContain('copyies');
     expect((await owner.call('GET', `/api/assets/${ws.id}`)).data.archived).toBe(true);
     expect((await owner.call('GET', `/api/assets/${old.id}`)).data.fields).toMatchObject({ host: 'hdg-ws-02' });
     // Stays settled on the next run: nothing new is archived or copied.
