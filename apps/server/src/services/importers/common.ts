@@ -12,6 +12,23 @@ const HEARTBEAT_MS = 30_000;
 const ABANDONED =
   'Atlas stopped while this import was running. Start it again; items already imported are updated, not duplicated.';
 
+/**
+ * Marks imports left "running" by a previous process as stopped. Called at startup, when nothing can be running
+ * yet: an update or restart mid-import would otherwise block new imports until the heartbeat goes stale.
+ */
+export async function failInterruptedJobs(db: Database): Promise<number> {
+  const rows = await db
+    .update(schema.importJobs)
+    .set({
+      status: 'failed',
+      finishedAt: new Date(),
+      messages: sql`${schema.importJobs.messages} || ${JSON.stringify([ABANDONED])}::jsonb`,
+    })
+    .where(eq(schema.importJobs.status, 'running'))
+    .returning({ id: schema.importJobs.id });
+  return rows.length;
+}
+
 const isUniqueViolation = (error: unknown) =>
   !!error &&
   typeof error === 'object' &&
