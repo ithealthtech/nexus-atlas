@@ -64,9 +64,13 @@ import { useActor } from '@/lib/session';
 import { useClient, useClients, useUsers, useGroups } from '@/lib/queries';
 import {
   DEFAULT_GENERATOR,
+  GENERATOR_PRESETS,
   copySecret,
   encryptShare,
   generatePassword,
+  loadGeneratorOptions,
+  presetFor,
+  saveGeneratorOptions,
   useAskReason,
   usePassword,
   usePasswordAudit,
@@ -102,13 +106,17 @@ function StrengthMeter({ value }: { value: string }) {
 }
 
 function Generator({ onUse }: { onUse: (value: string) => void }) {
-  const [options, setOptions] = useState<GeneratorOptions>(DEFAULT_GENERATOR);
-  const [value, setValue] = useState(() => generatePassword(DEFAULT_GENERATOR));
+  const [options, setOptions] = useState<GeneratorOptions>(loadGeneratorOptions);
+  const [value, setValue] = useState(() => generatePassword(options));
   const update = (patch: Partial<GeneratorOptions>) => {
     const next = { ...options, ...patch };
+    // Switching into PIN mode starts from a PIN-sized length; leaving it restores a sensible one.
+    if (patch.mode === 'pin' && options.mode !== 'pin') next.length = 6;
+    if (patch.mode && patch.mode !== 'pin' && options.mode === 'pin') next.length = DEFAULT_GENERATOR.length;
     setOptions(next);
     setValue(generatePassword(next));
   };
+  const preset = presetFor(options);
   return (
     <div className="space-y-3 rounded-xl border border-border bg-surface-2 p-4">
       <div className="flex items-center gap-2">
@@ -126,13 +134,36 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
         >
           <RefreshCw />
         </Button>
-        <Button size="sm" onClick={() => onUse(value)}>
+        <Button
+          size="sm"
+          onClick={() => {
+            saveGeneratorOptions(options);
+            onUse(value);
+          }}
+        >
           Use
         </Button>
       </div>
+      <div role="group" aria-label="Presets" className="flex flex-wrap gap-1.5">
+        {GENERATOR_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            aria-pressed={preset === p.id}
+            title={p.hint}
+            onClick={() => {
+              setOptions(p.options);
+              setValue(generatePassword(p.options));
+            }}
+            className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-2 hover:bg-surface-3 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:text-text"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
         <div role="group" aria-label="Generator type" className="flex gap-1 rounded-lg bg-surface-3 p-1">
-          {(['characters', 'passphrase'] as const).map((mode) => (
+          {(['characters', 'passphrase', 'pin'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -140,11 +171,24 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
               onClick={() => update({ mode })}
               className="rounded-md px-2.5 py-1 text-xs font-medium capitalize aria-pressed:bg-surface aria-pressed:shadow-sm"
             >
-              {mode}
+              {mode === 'pin' ? 'PIN' : mode}
             </button>
           ))}
         </div>
-        {options.mode === 'characters' ? (
+        {options.mode === 'pin' ? (
+          <label className="flex items-center gap-2">
+            Digits
+            <input
+              type="range"
+              min={4}
+              max={12}
+              value={options.length}
+              onChange={(e) => update({ length: Number(e.target.value) })}
+              className="accent-(--primary)"
+            />
+            <span className="w-6 tabular-nums">{options.length}</span>
+          </label>
+        ) : options.mode === 'characters' ? (
           <>
             <label className="flex items-center gap-2">
               Length
