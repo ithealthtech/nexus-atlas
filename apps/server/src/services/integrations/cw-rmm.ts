@@ -65,6 +65,36 @@ const listOf = (body: unknown, depth = 0): Json[] => {
   }
   return [];
 };
+const DEVICE_ID_KEYS = [
+  'endpointId',
+  'endpointID',
+  'endpoint_id',
+  'endpoint.id',
+  'endpoint.endpointId',
+  'deviceId',
+  'deviceID',
+  'device.id',
+  'resourceId',
+  'agentId',
+  'id',
+];
+/**
+ * Every device record in a device-list response. ConnectWise groups them by category ({ platform: [...],
+ * network: [...] }), and a record can itself hold the devices (for example a site with an endpoints list), so
+ * all categories are gathered and records without a device ID of their own are opened up.
+ */
+function recordsOf(body: unknown, depth = 0): Json[] {
+  if (depth > 4 || !body || typeof body !== 'object') return [];
+  const items = Array.isArray(body)
+    ? (body.filter((v) => v && typeof v === 'object') as Json[])
+    : Object.values(body as Json).flatMap((v) => recordsOf(v, depth + 1));
+  if (!Array.isArray(body)) return items;
+  return items.flatMap((item) => {
+    if (text(item, ...DEVICE_ID_KEYS)) return [item];
+    const inner = Object.values(item).flatMap((v) => (Array.isArray(v) ? recordsOf(v, depth + 1) : []));
+    return inner.length ? inner : [item];
+  });
+}
 /** A response's field names (never values), two levels deep, for diagnosing an unexpected shape. */
 const shapeOf = (body: unknown): string => {
   if (Array.isArray(body)) return `a list of ${body.length}`;
@@ -300,6 +330,7 @@ export class CwRmmClient {
     const via = shape.kind === 'v2' ? `v2 by ${shape.resourceType}` : 'v1 list';
     let seen = 0;
     let otherCompany = 0;
+    let noId: Json | undefined;
     this.lastDeviceList = `${via}: no response`;
     for (let cursor = 0, pages = 0; pages < 500; pages++) {
       const query = `limit=${shape.limit}&cursor=${cursor}`;
@@ -325,11 +356,14 @@ export class CwRmmClient {
         }
         throw error;
       }
-      const page = listOf(body);
+      const page = recordsOf(body);
       seen += page.length;
       for (const d of page) {
-        const id = text(d, 'endpointId', 'id', 'deviceId');
-        if (!id) continue;
+        const id = text(d, ...DEVICE_ID_KEYS);
+        if (!id) {
+          noId ??= d;
+          continue;
+        }
         const owner = text(d, 'companyId', 'clientId', 'company.id', 'client.id');
         if (filter && owner && owner !== companyId) {
           otherCompany++;
@@ -358,7 +392,9 @@ export class CwRmmClient {
       cursor = Number.isFinite(next) && next > cursor ? next : cursor + page.length;
     }
     if (seen && !out.length)
-      this.lastDeviceList += `; ${otherCompany} belonged to another company, ${seen - otherCompany} had no device ID`;
+      this.lastDeviceList +=
+        `; ${otherCompany} belonged to another company, ${seen - otherCompany} had no device ID` +
+        (noId ? `; a record without one has fields ${shapeOf(noId)}` : '');
     return out;
   }
 }
