@@ -2,6 +2,16 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.8] - 2026-09-26
+
+### Added
+
+- **Check Microsoft 365 permissions:** Settings → Email has a Check permissions button that signs in to Microsoft and shows whether the app registration has the Mail.Send application permission, without sending an email. (#64)
+
+### Changed
+
+- **ConnectWise RMM sync updates what is already there:** a device that matches an existing asset by name or hostname (for example one imported from Hudu) updates that asset, in whichever of its fields fit, instead of creating a Configurations copy. Copies made by earlier syncs are archived and their devices moved to the existing asset. (#63)
+
 ## [1.1.7] - 2026-09-26
 
 ### Fixed
