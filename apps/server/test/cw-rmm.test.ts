@@ -56,7 +56,10 @@ function fakeAsio() {
           : [],
       );
     if (url.pathname === '/api/platform/v2/device/categories/all/endpoints') {
-      const company = JSON.parse(String(init?.body)).resources[0] as string;
+      const request = JSON.parse(String(init?.body));
+      // Like a real tenant, only one resource type is accepted.
+      if (request.resourceType !== 'companies') return json({ message: 'Invalid resourceType.' }, 400);
+      const company = request.resources[0] as string;
       const limit = Number(url.searchParams.get('limit'));
       const cursor = Number(url.searchParams.get('cursor'));
       const all = state.devices.get(company) ?? [];
@@ -137,7 +140,9 @@ describe('ConnectWise RMM sync', () => {
     expect(job.counts.assets.created).toBe(206);
     expect(job.counts.locations.created).toBe(1);
     // Paged past the first 200 devices, and never asked about the skipped company.
-    expect(asio.state.calls.filter((c) => c.includes('/endpoints')).length).toBe(3);
+    // One rejected shape, then three pages of 100 for Harbor and one for Northline, with a single sign-in.
+    expect(asio.state.calls.filter((c) => c.includes('/endpoints')).length).toBe(5);
+    expect(asio.state.tokens).toBe(1);
 
     const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
       id: string;
@@ -191,5 +196,28 @@ describe('ConnectWise RMM sync', () => {
     expect(deviceType({ type: 'Laptop', os: 'Windows 11' })).toBe('Laptop');
     expect(deviceType({ type: 'Desktop', os: 'Windows 11' })).toBe('Workstation');
     expect(deviceType({ type: '', os: '' })).toBe('Other');
+  });
+});
+
+describe('ConnectWise RMM client', () => {
+  it('shares one sign-in, waits out a lock, and reports what ConnectWise said', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    let tokens = 0;
+    let locked = 1;
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') {
+        tokens++;
+        if (locked-- > 0) return new Response('{}', { status: 423, headers: { 'retry-after': '0.01' } });
+        return Response.json({ access_token: 'tok', expires_in: 3600 });
+      }
+      if (url.pathname.endsWith('/sites')) return Response.json([]);
+      return Response.json({ message: 'resources must not be empty' }, { status: 400 });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    await Promise.all([client.sites('a'), client.sites('b'), client.sites('c')]);
+    // One lock, one retry: two token requests in total, however many callers.
+    expect(tokens).toBe(2);
+    await expect(client.devices('a')).rejects.toThrow(/ConnectWise said: resources must not be empty/);
   });
 });

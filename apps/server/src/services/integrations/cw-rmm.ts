@@ -16,9 +16,19 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
   au: 'https://openapi.service.auplatform.connectwise.com',
 };
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
-const PAGE = 200;
+const RETRY_MS = 2000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Json = Record<string, unknown>;
+
+type DeviceQuery = { kind: 'v2'; resourceType: string; limit: number } | { kind: 'v1'; limit: number };
+// ConnectWise doesn't publish which of these a tenant accepts; the first that works is kept for the run.
+const DEVICE_QUERIES: DeviceQuery[] = [
+  { kind: 'v2', resourceType: 'clients', limit: 100 },
+  { kind: 'v2', resourceType: 'companies', limit: 100 },
+  { kind: 'v2', resourceType: 'sites', limit: 100 },
+  { kind: 'v1', limit: 100 },
+];
 
 // The Asio API's field names vary between endpoints and versions, so each value is read from the first
 // name that's present.
@@ -42,6 +52,22 @@ const listOf = (body: unknown): Json[] => {
       if (Array.isArray((body as Json)[key])) return (body as Json)[key] as Json[];
   return [];
 };
+
+/** ConnectWise's own explanation of an error, trimmed for a job message. */
+async function detail(res: Response): Promise<string> {
+  const raw = await res.text().catch(() => '');
+  let message = raw;
+  try {
+    const body = JSON.parse(raw) as Json;
+    message =
+      text(body, 'message', 'error_description', 'error.message', 'detail', 'title', 'errors.0.message', 'error') ||
+      raw;
+  } catch {
+    /* not JSON */
+  }
+  message = message.replace(/\s+/g, ' ').trim().slice(0, 200);
+  return message ? ` ConnectWise said: ${message}` : '';
+}
 
 export interface RmmCompany {
   id: string;
@@ -86,11 +112,37 @@ export class CwRmmClient {
     this.base = CW_RMM_BASE[region];
   }
 
-  private async bearer() {
-    if (this.token && this.token.expires > Date.now() + 60_000) return this.token.value;
-    let res: Response;
-    try {
-      res = await this.fetcher(`${this.base}/v1/token`, {
+  /** Concurrent callers share one sign-in: ConnectWise locks a key (423) that asks for many tokens at once. */
+  private pending: Promise<string> | null = null;
+  /** The device-list request this tenant accepted, once one has worked. */
+  private deviceQuery: DeviceQuery | null = null;
+
+  private bearer(): Promise<string> {
+    if (this.token && this.token.expires > Date.now() + 60_000) return Promise.resolve(this.token.value);
+    this.pending ??= this.signIn().finally(() => {
+      this.pending = null;
+    });
+    return this.pending;
+  }
+
+  /** Sends a request, waiting and retrying (up to 3 times) when ConnectWise says to slow down. */
+  private async send(request: () => Promise<Response>): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      let res: Response;
+      try {
+        res = await request();
+      } catch {
+        throw new HttpError(502, 'ConnectWise RMM could not be reached. Check the region and this server’s internet access.');
+      }
+      if (![423, 429, 503].includes(res.status) || attempt >= 3) return res;
+      const after = Number(res.headers.get('retry-after'));
+      await sleep(Number.isFinite(after) && after > 0 ? Math.min(after, 60) * 1000 : RETRY_MS * 2 ** attempt);
+    }
+  }
+
+  private async signIn(): Promise<string> {
+    const res = await this.send(() =>
+      this.fetcher(`${this.base}/v1/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
@@ -100,13 +152,19 @@ export class CwRmmClient {
           scope: SCOPES,
         }),
         signal: AbortSignal.timeout(20_000),
-      });
-    } catch {
-      throw new HttpError(502, 'ConnectWise RMM could not be reached. Check the region and this server’s internet access.');
-    }
+      }),
+    );
     if (res.status === 400 || res.status === 401 || res.status === 403)
-      throw new HttpError(400, 'ConnectWise RMM rejected the client ID or secret, or the key is missing a scope.');
-    if (!res.ok) throw new HttpError(502, `ConnectWise RMM returned ${res.status} when signing in.`);
+      throw new HttpError(
+        400,
+        `ConnectWise RMM rejected the client ID or secret, or the key is missing a scope.${await detail(res)}`,
+      );
+    if (res.status === 423)
+      throw new HttpError(
+        502,
+        'ConnectWise RMM has temporarily locked this API key after too many sign-ins. Wait a few minutes, then sync again.',
+      );
+    if (!res.ok) throw new HttpError(502, `ConnectWise RMM returned ${res.status} when signing in.${await detail(res)}`);
     const body = (await res.json()) as Json;
     const value = text(body, 'access_token', 'accessToken');
     if (!value) throw new HttpError(502, 'ConnectWise RMM did not return an access token.');
@@ -116,19 +174,30 @@ export class CwRmmClient {
   }
 
   private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
-    const res = await this.fetcher(`${this.base}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${await this.bearer()}`,
-        Accept: 'application/json',
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(60_000),
-    });
+    const token = await this.bearer();
+    const res = await this.send(() =>
+      this.fetcher(`${this.base}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(60_000),
+      }),
+    );
+    const where = path.split('?')[0];
     if (res.status === 401 || res.status === 403)
-      throw new HttpError(400, `ConnectWise RMM refused ${path}. Check the key's scopes in API Access.`);
-    if (!res.ok) throw new HttpError(502, `ConnectWise RMM returned ${res.status} for ${path}.`);
+      throw new HttpError(
+        400,
+        `ConnectWise RMM refused ${where}. Check the key's scopes in API Access.${await detail(res)}`,
+      );
+    if (!res.ok)
+      throw new HttpError(
+        res.status === 400 ? 400 : 502,
+        `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
+      );
     return res.json();
   }
 
@@ -155,22 +224,47 @@ export class CwRmmClient {
       .filter((s) => s.id);
   }
 
-  /** Every device for the company, page by page. */
-  async devices(companyId: string): Promise<RmmDevice[]> {
+  /** Every device for the company, page by page, using the first request shape the tenant accepts. */
+  async devices(companyId: string, siteIds: string[] = []): Promise<RmmDevice[]> {
+    const shapes = this.deviceQuery ? [this.deviceQuery] : DEVICE_QUERIES;
+    let lastError: unknown;
+    for (const shape of shapes) {
+      if (shape.kind === 'v2' && shape.resourceType === 'sites' && !siteIds.length) continue;
+      try {
+        const devices = await this.devicePages(companyId, siteIds, shape);
+        this.deviceQuery = shape;
+        return devices;
+      } catch (error) {
+        // Only a rejected request is worth trying another shape for.
+        if (!(error instanceof HttpError && error.status === 400)) throw error;
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
+  private async devicePages(companyId: string, siteIds: string[], shape: DeviceQuery): Promise<RmmDevice[]> {
     const out: RmmDevice[] = [];
     for (let cursor = 0, pages = 0; pages < 500; pages++) {
-      const body = await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?limit=${PAGE}&cursor=${cursor}`, {
-        resourceType: 'companies',
-        resources: [companyId],
-      });
+      const query = `limit=${shape.limit}&cursor=${cursor}`;
+      const body =
+        shape.kind === 'v2'
+          ? await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
+              resourceType: shape.resourceType,
+              resources: shape.resourceType === 'sites' ? siteIds : [companyId],
+            })
+          : await this.call('GET', `/api/platform/v1/device/endpoints?${query}&clientId=${encodeURIComponent(companyId)}`);
       const page = listOf(body);
       for (const d of page) {
         const id = text(d, 'endpointId', 'id', 'deviceId');
         if (!id) continue;
+        // The v1 list may ignore the filter; keep only this company's devices.
+        const owner = text(d, 'companyId', 'clientId', 'company.id', 'client.id');
+        if (owner && owner !== companyId) continue;
         const hostname = text(d, 'hostName', 'hostname', 'system.hostName', 'computerName');
         out.push({
           id,
-          companyId: text(d, 'companyId', 'clientId', 'company.id') || companyId,
+          companyId,
           siteId: text(d, 'siteId', 'site.id'),
           name: text(d, 'friendlyName', 'name', 'displayName') || hostname || `Device ${id}`,
           hostname,
@@ -184,7 +278,7 @@ export class CwRmmClient {
         });
       }
       const next = Number(pick((body ?? {}) as Json, 'nextCursor', 'pageInfo.nextCursor', 'next'));
-      if (page.length < PAGE) break;
+      if (page.length < shape.limit) break;
       cursor = Number.isFinite(next) && next > cursor ? next : cursor + page.length;
     }
     return out;
@@ -285,7 +379,12 @@ export async function runCwRmmSync(db: Database, actor: Actor, client: CwRmmClie
     let sites: RmmSite[];
     let devices: RmmDevice[];
     try {
-      [sites, devices] = await Promise.all([client.sites(companyId), client.devices(companyId)]);
+      // One request at a time: ConnectWise rate-limits bursts.
+      sites = await client.sites(companyId);
+      devices = await client.devices(
+        companyId,
+        sites.map((s) => s.id),
+      );
     } catch (error) {
       run.count('assets', 'failed');
       run.note(`Company ${companyId}: ${error instanceof HttpError ? error.message : 'could not be read.'}`);
