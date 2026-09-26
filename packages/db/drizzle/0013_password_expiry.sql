@@ -1,0 +1,1 @@
+ALTER TABLE "passwords" ADD COLUMN "expires_on" date;

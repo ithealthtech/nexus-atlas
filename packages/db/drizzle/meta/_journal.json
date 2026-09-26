@@ -71,6 +71,34 @@
       "when": 1790301950266,
       "tag": "0009_password_category",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790349557148,
+      "tag": "0010_password_folders",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790395633612,
+      "tag": "0011_password_favorites",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790396144341,
+      "tag": "0012_password_custom_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790396328192,
+      "tag": "0013_password_expiry",
+      "breakpoints": true
     }
   ]
 }

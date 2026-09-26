@@ -279,7 +279,7 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText(/Replaced by Avery Owner/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Share' }).click();
+    await page.getByRole('button', { name: 'More options' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Create link' }).click();
     const link = await page.getByRole('dialog').getByLabel('Share link').inputValue();
     expect(link).toMatch(/\/share\/[\w-]{32}#[\w-]{43}$/);
