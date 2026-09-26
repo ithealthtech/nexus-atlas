@@ -1,5 +1,12 @@
 import type { Database } from '@atlas/db';
-import { guessPasswordCategory, type Actor, type FieldType, type HuduPreview, type LayoutField } from '@atlas/shared';
+import {
+  guessPasswordCategory,
+  type Actor,
+  type FieldType,
+  type HuduPreview,
+  type LayoutField,
+  MAX_LAYOUT_FIELDS,
+} from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
@@ -188,7 +195,7 @@ function mapLayout(layout: HuduLayout): MappedLayout {
       if (f.id !== undefined) excluded.add(f.id);
       continue;
     }
-    if (fields.length >= 60) continue;
+    if (fields.length >= MAX_LAYOUT_FIELDS) continue;
     let key = slug(f.label);
     for (let n = 2; used.has(key); n++) key = `${slug(f.label).slice(0, 36)}_${n}`;
     used.add(key);
@@ -223,7 +230,7 @@ function cardEntries(data: unknown, prefix = ''): [string, string][] {
       if (!prefix) out.push(...cardEntries(value, name));
     } else out.push([name, String(value)]);
   }
-  return out.slice(0, 80);
+  return out.slice(0, 300);
 }
 
 /**
@@ -235,7 +242,8 @@ function assetDetails(a: HuduAsset, layout: MappedLayout) {
   const fields: Record<string, unknown> = {};
   const labels = new Map<string, string>();
   const extra: string[] = [];
-  const unmatched = new Set<string>();
+  /** Values no field of the layout takes: normalized name → a label for a new field. */
+  const missing = new Map<string, string>();
   const put = (target: LayoutField, raw: unknown, overwrite: boolean) => {
     labels.set(target.key, target.label);
     if (!overwrite && fields[target.key] !== undefined) return true;
@@ -245,56 +253,132 @@ function assetDetails(a: HuduAsset, layout: MappedLayout) {
     return true;
   };
   const present = (raw: unknown) => raw !== null && raw !== undefined && raw !== '';
+  /** Puts a value in its field; one with no field is reported as missing and kept for the notes meanwhile. */
+  const place = (name: string, raw: unknown, overwrite: boolean, lines: string[]) => {
+    if (!present(raw) || layout.excluded.has(norm(name))) return;
+    const target = fieldFor(layout, name);
+    if (target && put(target, raw, overwrite)) return;
+    if (!target) missing.set(norm(name), readableLabel(name));
+    lines.push(`${readableLabel(name)}: ${htmlToText(String(raw)).slice(0, 500)}`);
+  };
 
   for (const f of a.fields ?? []) {
     const label = (f.label ?? f.caption ?? '').trim();
     if (layout.excluded.has(norm(label)) || (f.asset_layout_field_id && layout.excluded.has(f.asset_layout_field_id)))
       continue;
-    const target =
-      (f.asset_layout_field_id !== undefined && layout.byId.get(f.asset_layout_field_id)) ||
-      layout.byLabel.get(norm(label));
-    if (target) put(target, f.value, true);
-    else if (present(f.value) && label) {
-      unmatched.add(label);
-      extra.push(`${label}: ${htmlToText(String(f.value)).slice(0, 500)}`);
-    }
+    const byId = f.asset_layout_field_id !== undefined && layout.byId.get(f.asset_layout_field_id);
+    if (byId) put(byId, f.value, true);
+    else if (label) place(label, f.value, true, extra);
   }
   for (const entry of a.custom_fields ?? [])
-    for (const [key, value] of Object.entries(entry ?? {})) {
-      if (layout.excluded.has(norm(key)) || !present(value)) continue;
-      const target = layout.byLabel.get(norm(key));
-      if (!target || !put(target, value, false))
-        extra.push(`${key.replace(/_/g, ' ')}: ${String(value).slice(0, 500)}`);
-    }
+    for (const [key, value] of Object.entries(entry ?? {})) place(key, value, false, extra);
 
   if (a.primary_mail) {
     const email = [...layout.byLabel.values()].find((f) => f.type === 'email' || /e-?mail/i.test(f.label));
     if (!email || !put(email, a.primary_mail, false)) extra.push(`Email: ${a.primary_mail}`);
   }
+  place('Manufacturer', a.primary_manufacturer, false, extra);
+  place('Model', a.primary_model, false, extra);
+  place('Serial number', a.primary_serial, false, extra);
 
   const cards: string[] = [];
   for (const card of a.cards ?? []) {
-    const entries = cardEntries(card.data);
-    if (!entries.length) continue;
     const lines: string[] = [];
-    for (const [key, value] of entries) {
-      const target = layout.byLabel.get(norm(key));
-      if (!target || !put(target, value, false)) lines.push(`${key.replace(/_/g, ' ')}: ${value.slice(0, 500)}`);
-    }
+    for (const [key, value] of cardEntries(card.data)) place(key, value, false, lines);
     if (lines.length) cards.push([`From ${card.integrator_name || 'an integration'}:`, ...lines].join('\n'));
   }
 
-  const notes = [
-    a.primary_manufacturer && `Manufacturer: ${a.primary_manufacturer}`,
-    a.primary_model && `Model: ${a.primary_model}`,
-    a.primary_serial && `Serial: ${a.primary_serial}`,
-    ...extra,
-    ...cards,
-  ]
-    .filter(Boolean)
-    .join('\n')
-    .slice(0, 19000);
-  return { fields, labels, notes, unmatched };
+  // Only what still has no field (a layout at its field limit) stays in the notes.
+  const notes = [...extra, ...cards].filter(Boolean).join('\n').slice(0, 19000);
+  return { fields, labels, notes, missing };
+}
+
+/**
+ * Adds text fields for values a layout had no field for (up to the field limit), and makes the mapped layout
+ * aware of them so the values land there. Returns the labels added.
+ */
+async function addLayoutFields(
+  layouts: LayoutService,
+  actor: Actor,
+  layout: MappedLayout & { id: string },
+  missing: Map<string, string>,
+): Promise<string[]> {
+  const current = await layouts.get(actor, layout.id);
+  const existing = current.fields as LayoutField[];
+  const used = new Set(existing.map((f) => f.key));
+  const added: LayoutField[] = [];
+  for (const [key, label] of missing) {
+    if (existing.length + added.length >= MAX_LAYOUT_FIELDS) break;
+    if (layout.byLabel.has(norm(label))) continue;
+    let fieldKey = slug(label);
+    for (let n = 2; used.has(fieldKey); n++) fieldKey = `${slug(label).slice(0, 36)}_${n}`;
+    used.add(fieldKey);
+    const field: LayoutField = {
+      key: fieldKey,
+      label,
+      type: 'text',
+      required: false,
+      options: [],
+      help: 'Added by the Hudu import.',
+      showInList: false,
+      expires: false,
+    };
+    added.push(field);
+    layout.byLabel.set(key, field);
+    layout.byLabel.set(norm(label), field);
+  }
+  if (added.length) {
+    await layouts.update(actor, layout.id, { fields: [...existing, ...added] });
+    layout.fields.push(...added);
+  }
+  return added.map((f) => f.label);
+}
+
+// The same information under the names integrations use for it (compared normalized).
+const SYNONYMS: Record<string, string[]> = {
+  'manufacturer name': ['manufacturer'],
+  manufacturer: ['manufacturer name', 'make', 'vendor'],
+  modelnumber: ['model'],
+  'model number': ['model'],
+  model: ['model number'],
+  osinfo: ['operating system', 'os'],
+  'os info': ['operating system', 'os'],
+  ipaddress: ['ip address', 'ip'],
+  macaddress: ['mac address', 'mac'],
+  serial: ['serial number', 'serial no', 'service tag'],
+  serialnumber: ['serial number', 'serial', 'service tag'],
+  'serial number': ['serial', 'serial no', 'service tag'],
+  'site name': ['location', 'site'],
+  'location name': ['location'],
+  'type name': ['type'],
+  'status name': ['status'],
+  ram: ['memory', 'ram'],
+};
+
+function fieldFor(layout: MappedLayout, name: string): LayoutField | undefined {
+  const key = norm(name);
+  return (
+    layout.byLabel.get(key) ??
+    (SYNONYMS[key] ?? []).map((s) => layout.byLabel.get(s)).find(Boolean) ??
+    layout.byLabel.get(norm(readableLabel(name)))
+  );
+}
+
+/** "cpuSpeed" → "CPU speed", "manufacturer name" → "Manufacturer name", "os_type" → "OS type". */
+function readableLabel(name: string): string {
+  const label = name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\s]+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .map((w) =>
+      ['ip', 'mac', 'os', 'cpu', 'ram', 'url', 'dns', 'ssid', 'vlan', 'id', 'guid', 'bios', 'oem'].includes(w)
+        ? w.toUpperCase()
+        : w,
+    )
+    .join(' ');
+  return (label.charAt(0).toUpperCase() + label.slice(1)).slice(0, 80);
 }
 
 function fieldValue(field: LayoutField, raw: unknown): unknown {
@@ -456,16 +540,52 @@ export async function runHuduImport(
       l.id,
       l.name,
       async () => (await layouts.create(actor, body)).id,
-      async (existing) => void (await layouts.update(actor, existing, body)),
+      async (existing) => {
+        // Fields added since (by an earlier import for data Hudu's layout lacked, or by hand) are kept.
+        const current = (await layouts.get(actor, existing)).fields as LayoutField[];
+        const keys = new Set(mapped.fields.map((f) => f.key));
+        for (const f of current)
+          if (!keys.has(f.key) && mapped.fields.length < MAX_LAYOUT_FIELDS) {
+            mapped.fields.push(f);
+            if (!mapped.byLabel.has(norm(f.label))) mapped.byLabel.set(norm(f.label), f);
+          }
+        await layouts.update(actor, existing, { ...body, fields: mapped.fields });
+      },
     );
     if (id) layoutMap.set(l.id, { ...mapped, id, name: l.name });
   }
-  // Field names on assets that no layout field matched, per layout, reported once at the end.
-  const unmatchedByLayout = new Map<string, Set<string>>();
+  // Every value an asset carries gets a field: first a pass over all assets collects what no field of their
+  // layout takes (integration data such as RAM or department, extra Hudu fields), and those fields are added
+  // to the layout, so the import below puts each value in its own field instead of the notes.
+  const huduAssets = (await client.assets()).filter((x) => !x.archived);
+  const missingByLayout = new Map<number, Map<string, string>>();
+  for (const a of huduAssets) {
+    const layout = layoutMap.get(a.asset_layout_id);
+    if (!layout || !companyToClient.has(a.company_id)) continue;
+    const seen = missingByLayout.get(a.asset_layout_id) ?? new Map<string, string>();
+    for (const [key, label] of assetDetails(a, layout).missing) if (!seen.has(key)) seen.set(key, label);
+    missingByLayout.set(a.asset_layout_id, seen);
+  }
+  for (const [huduLayoutId, missing] of missingByLayout) {
+    if (!missing.size) continue;
+    const layout = layoutMap.get(huduLayoutId)!;
+    const added = await addLayoutFields(layouts, actor, layout, missing);
+    if (added.length)
+      run.note(
+        `${layout.name}: added ${added.length} field${added.length === 1 ? '' : 's'} for data the layout had no place for (${added
+          .slice(0, 12)
+          .join(', ')}${added.length > 12 ? ` and ${added.length - 12} more` : ''}).`,
+      );
+    const left = missing.size - added.length;
+    if (left > 0)
+      run.note(
+        `${layout.name}: ${left} more value${left === 1 ? '' : 's'} didn't fit, because a layout holds at most ${MAX_LAYOUT_FIELDS} fields; they were kept in each asset's notes.`,
+      );
+  }
 
   // Assets
   const assetToAtlas = new Map<number, string>();
-  for (const a of (await client.assets()).filter((x) => !x.archived)) {
+  for (const a of huduAssets) {
     const clientId = companyToClient.get(a.company_id);
     const layout = layoutMap.get(a.asset_layout_id);
     if (!clientId || !layout) {
@@ -473,12 +593,7 @@ export async function runHuduImport(
       run.note(`asset "${a.name}": its company or layout wasn't imported.`);
       continue;
     }
-    const { fields, labels, notes, unmatched } = assetDetails(a, layout);
-    if (unmatched.size) {
-      const seen = unmatchedByLayout.get(layout.name) ?? new Set<string>();
-      for (const label of unmatched) seen.add(label);
-      unmatchedByLayout.set(layout.name, seen);
-    }
+    const { fields, labels, notes } = assetDetails(a, layout);
     const name = a.name.slice(0, 200) || `Asset ${a.id}`;
     const assetId = await run.upsert(
       'assets',
@@ -499,11 +614,6 @@ export async function runHuduImport(
     );
     if (assetId) assetToAtlas.set(a.id, assetId);
   }
-  for (const [layoutName, labels] of unmatchedByLayout)
-    run.note(
-      `${layoutName}: ${[...labels].slice(0, 10).join(', ')}${labels.size > 10 ? ` and ${labels.size - 10} more` : ''} ` +
-        `didn't match a field in the layout, so their values were kept in each asset's notes.`,
-    );
 
   // Articles
   for (const a of (await client.articles()).filter((x) => !x.archived)) {

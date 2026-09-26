@@ -280,8 +280,10 @@ describe('Hudu import', () => {
       warranty_expiration: '2027-03-01',
       managed: true,
       admin_url: 'https://10.20.0.1:8443',
+      // The layout had no serial field, so the import added one.
+      serial_number: 'FGT60F-123',
     });
-    expect(asset.notes).toContain('Serial: FGT60F-123');
+    // A value its field can't hold (not an email) is kept in the notes rather than lost.
     expect(asset.notes).toContain('Contact email: not an email');
     expect(JSON.stringify(asset)).not.toContain('should-not-be-imported');
 
@@ -410,6 +412,10 @@ describe('Hudu import', () => {
               cpu: { model: 'Intel i7-1365U', cores: 10 },
               bitlocker_recovery_key: 'never-import-this-either',
               disks: ['C: 512 GB'],
+              // Like Atera's card: IDs, GUIDs, and nested details all become fields too.
+              AgentID: 628,
+              DeviceGuid: 'a977a312-8cf7-46d0',
+              BatteryInfo: { Name: 'DELL 1WJT00C', BatteryHealth: 74 },
             },
           },
         ],
@@ -427,7 +433,8 @@ describe('Hudu import', () => {
     const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
     expect(job.status, JSON.stringify(job)).toBe('done');
     expect(job.counts.assets).toMatchObject({ created: 3, failed: 0 });
-    expect(job.messages.join('\n')).toContain('Computer Assets: Rack Unit didn');
+    // Values the layout had no field for get one, instead of going into the notes.
+    expect(job.messages.join('\n')).toMatch(/Computer Assets: added \d+ fields for data the layout had no place for/);
 
     const all = (await owner.call('GET', '/api/assets')).data as { id: string; name: string }[];
     const get = async (name: string) =>
@@ -439,13 +446,31 @@ describe('Hudu import', () => {
       assigned_user: 'Dana Reyes',
       warranty_expiration: '2027-06-30',
       ip_address: '10.20.4.14',
+      manufacturer: 'Dell',
+      serial_number: 'ABC1234',
+      rack_unit: 'U12',
+      last_seen: '2026-09-24T10:00:00Z',
+      cpu_model: 'Intel i7-1365U',
+      cpu_cores: '10',
+      disks: 'C: 512 GB',
+      agent_id: '628',
+      device_guid: 'a977a312-8cf7-46d0',
+      battery_info_name: 'DELL 1WJT00C',
+      battery_info_battery_health: '74',
     });
-    expect(pc.notes).toContain('Manufacturer: Dell');
-    expect(pc.notes).toContain('Rack Unit: U12');
-    expect(pc.notes).toContain('From NinjaOne:');
-    expect(pc.notes).toContain('cpu model: Intel i7-1365U');
-    expect(pc.notes).toContain('disks: C: 512 GB');
+    expect(pc.notes).toBe('');
     expect(JSON.stringify(pc)).not.toContain('never-import-this');
+    const computers = (await owner.call('GET', '/api/layouts')).data.find(
+      (l: { name: string }) => l.name === 'Computer Assets',
+    );
+    expect(computers.fields.map((f: { label: string }) => f.label)).toEqual(
+      expect.arrayContaining(['Manufacturer', 'Serial number', 'Rack unit', 'CPU model', 'Disks']),
+    );
+
+    // A second run finds the fields already there: nothing more is added and nothing moves.
+    const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(again.messages.join('\n')).not.toContain('Computer Assets: added');
+    expect((await get('HDG-WS-014')).fields).toMatchObject({ rack_unit: 'U12', manufacturer: 'Dell' });
 
     const person = await get('Dana Reyes');
     expect(person.fields).toEqual({ title: 'Office Manager', email: 'dana@harbordental.test', phone: '919-555-0142' });

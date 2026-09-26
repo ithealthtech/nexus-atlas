@@ -205,7 +205,17 @@ describe('ConnectWise RMM sync', () => {
     const all = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as { id: string; name: string }[];
     expect(all.map((a) => a.name).sort()).toEqual(['HDG-DC-01', 'HDG-WS-02']);
     const updated = (await owner.call('GET', `/api/assets/${dc.id}`)).data;
-    expect(updated.fields).toEqual({ notes_extra: 'Front office', host: 'hdg-dc-01', addr: '10.0.0.5' });
+    // Existing fields take what fits; the site had no field in this layout, so the sync added one.
+    expect(updated.fields).toEqual({
+      notes_extra: 'Front office',
+      host: 'hdg-dc-01',
+      addr: '10.0.0.5',
+      location: 'Main office',
+    });
+    const computers = (await owner.call('GET', '/api/layouts')).data.find(
+      (l: { name: string }) => l.name === 'Computer Assets',
+    );
+    expect(computers.fields.map((f: { label: string }) => f.label)).toContain('Location');
 
     // A copy an earlier sync made is folded into the asset that was already there.
     const ws = all.find((a) => a.name === 'HDG-WS-02')!;
