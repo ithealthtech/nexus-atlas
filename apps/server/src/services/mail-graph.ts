@@ -2,11 +2,6 @@ import { createHash } from 'node:crypto';
 import type { SmtpConfig } from './settings.js';
 import type { SendArgs } from './mail.js';
 
-/**
- * Microsoft 365 delivery through Microsoft Graph, authenticated as an Entra app registration with the OAuth2
- * client-credentials flow. The app needs the application permission Mail.Send (admin consent); scope it to
- * the sending mailbox with an Exchange application access policy or RBAC for Applications.
- */
 /** What to change for the Entra sign-in errors people hit most when setting this up. */
 const SIGN_IN_HINTS: [RegExp, string][] = [
   [/AADSTS7000215/, 'Paste the secret’s Value from Certificates & secrets, not its Secret ID.'],
@@ -19,6 +14,23 @@ const SIGN_IN_HINTS: [RegExp, string][] = [
   [/AADSTS500011|AADSTS65001/, 'Grant admin consent for the app’s API permissions.'],
 ];
 
+/** The application permissions ("roles") in an access token. Only the payload is read; it isn't verified. */
+function rolesOf(token: string): string[] {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
+      roles?: unknown;
+    };
+    return Array.isArray(payload.roles) ? payload.roles.filter((r): r is string => typeof r === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Microsoft 365 delivery through Microsoft Graph, authenticated as an Entra app registration with the OAuth2
+ * client-credentials flow. The app needs the application permission Mail.Send (admin consent); scope it to
+ * the sending mailbox with an Exchange application access policy or RBAC for Applications.
+ */
 export class GraphMailer {
   // Tokens last about an hour; reuse one per app registration *and secret* until shortly before it expires,
   // so saving a new secret (or a mistyped one) is tried at once rather than an hour later.
@@ -89,10 +101,13 @@ export class GraphMailer {
     );
     if (res.status === 202) return;
     const body = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
-    if (res.status === 401) this.tokens.delete(this.cacheKey(config));
+    // A refused token is dropped, so a permission fixed in Entra is picked up by the next try, not an hour later.
+    if (res.status === 401 || res.status === 403) this.tokens.delete(this.cacheKey(config));
     const hint =
       res.status === 403
-        ? ' Check the app has the Mail.Send application permission with admin consent, and may send as this mailbox.'
+        ? rolesOf(token).includes('Mail.Send')
+          ? ' The app has Mail.Send, so an Exchange application access policy or RBAC for Applications is likely keeping it from sending as this mailbox.'
+          : ' The app’s token has no Mail.Send application permission. In Entra → App registrations → API permissions, add Microsoft Graph → Application permissions → Mail.Send (Delegated doesn’t work for Atlas), then grant admin consent.'
         : res.status === 404
           ? ' Check the From address is a licensed or shared mailbox in this tenant, not a group or an alias.'
           : '';
