@@ -34,6 +34,7 @@ import { SettingsService } from './services/settings.js';
 import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
+import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
 import { ApiKeyService } from './services/api-keys.js';
 import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
@@ -59,6 +60,8 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Replaces fetch for Hudu imports (tests use a fake Hudu). */
   huduFetch?: typeof fetch;
+  /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
+  cwRmmFetch?: typeof fetch;
   /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
   domainLookup?: DomainLookup;
   /** Replaces fetch for the GitHub release check (tests use fake releases). */
@@ -109,6 +112,7 @@ export async function buildApp({
   storage,
   mailTransport = defaultTransport,
   huduFetch,
+  cwRmmFetch,
   domainLookup,
   updateFetch,
 }: AppOptions): Promise<FastifyInstance> {
@@ -548,9 +552,12 @@ export async function buildApp({
   if (config.NODE_ENV !== 'test') {
     notifier.start();
     backups.start();
+    const cwRmm = new CwRmmScheduler(db, settings, (err) => app.log.error({ err }, 'ConnectWise RMM sync'), cwRmmFetch);
+    cwRmm.start();
     app.addHook('onClose', async () => {
       notifier.stop();
       backups.stop();
+      cwRmm.stop();
     });
   }
 
@@ -587,6 +594,7 @@ export async function buildApp({
     return saved;
   });
   registerDataRoutes(app, { db, authed, recent, settings, keys, vault, storage: files, huduFetch });
+  registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch });
 
   app.all('/api/*', async () => {
     throw new HttpError(404, 'Not found.');
