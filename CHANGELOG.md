@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.3] - 2026-09-26
+
+### Fixed
+
+- **ConnectWise RMM sync:** devices are requested with the resource types ConnectWise accepts (client, company, site, then every device the key can see, filtered to the company), after a real tenant rejected the plural forms. If no request works, the sync message still shows every attempt's answer without cutting any off. (#52)
+
 ## [1.1.2] - 2026-09-26
 
 ### Fixed
