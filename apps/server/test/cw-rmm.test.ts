@@ -259,3 +259,22 @@ describe('ConnectWise RMM companies without devices', () => {
     expect((await client.devices('full')).map((d) => d.name)).toEqual(['PC-1']);
   });
 });
+
+describe('ConnectWise RMM response shapes', () => {
+  it('finds devices nested deeper in the response, and describes an empty one by field names only', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    let body: unknown = { data: { endpoints: [{ endpointId: 'e1', friendlyName: 'PC-1', clientId: 12345 }] } };
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      return Response.json(body);
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    // A device's own client ID in another numbering doesn't drop it when the list is already per company.
+    expect((await client.devices('company-uuid')).map((d) => d.name)).toEqual(['PC-1']);
+    body = { total: 0, secretish: 'value-not-shown', paging: { cursor: 0 } };
+    expect(await client.devices('company-uuid')).toEqual([]);
+    expect(client.lastDeviceList).toContain('response fields total, secretish, paging{cursor}');
+    expect(client.lastDeviceList).not.toContain('value-not-shown');
+  });
+});
