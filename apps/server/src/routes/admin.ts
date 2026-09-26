@@ -3,13 +3,14 @@ import { eq } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { testEmailSchema } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
+import { HttpError } from '../errors.js';
 import type { AuditService } from '../services/audit.js';
 import { ExpirationService } from '../services/expirations.js';
 import { GroupService } from '../services/groups.js';
-import type { MailService } from '../services/mail.js';
+import { graphPermissions, type MailService } from '../services/mail.js';
 import { Notifier } from '../services/notifier.js';
 import { Scope } from '../services/scope.js';
-import type { SettingsService } from '../services/settings.js';
+import type { SettingsService, SmtpConfig } from '../services/settings.js';
 import type { VaultService } from '../services/vault.js';
 
 type Params = { id: string };
@@ -27,6 +28,8 @@ export function registerAdminRoutes(
     vault: VaultService;
     publicOrigin: string;
     sendHour: number;
+    /** Replaces the Microsoft 365 permission check (tests use a fake Microsoft). */
+    graphPermissions?: (config: SmtpConfig) => Promise<{ roles: string[]; canSend: boolean }>;
   },
 ): Notifier {
   const { db, authed, recent, settings, mail, audit } = deps;
@@ -79,6 +82,18 @@ export function registerAdminRoutes(
           : `${saved.host}:${saved.port}`,
     );
     return saved;
+  });
+  // Signs in to Microsoft 365 and lists the app's application permissions, without sending anything.
+  app.post('/api/settings/email/permissions', authed, async (req) => {
+    const orgId = admin(req);
+    const config = await settings.smtpConfig(orgId);
+    if (!config || config.method !== 'graph')
+      throw new HttpError(409, 'Save Microsoft 365 (app registration) email settings with email turned on first.');
+    try {
+      return await (deps.graphPermissions ?? graphPermissions)(config);
+    } catch (error) {
+      throw new HttpError(502, (error as Error).message.slice(0, 400));
+    }
   });
   app.post('/api/settings/email/test', authed, async (req) => {
     const orgId = admin(req);

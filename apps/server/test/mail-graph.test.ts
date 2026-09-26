@@ -210,3 +210,22 @@ describe('Microsoft 365 email settings', () => {
     await expect(new SettingsService(t.handle.db, staticKeyProvider([oldKey])).smtpConfig(orgId)).rejects.toThrow();
   });
 });
+
+describe('Microsoft 365 permission check', () => {
+  it("reports the app's application permissions from a fresh token, without sending", async () => {
+    const jwt = (roles: string[]) => `x.${Buffer.from(JSON.stringify({ roles })).toString('base64url')}.y`;
+    let roles: string[] = [];
+    const ms = fakeMicrosoft({ send: () => new Response('{}', { status: 500 }) });
+    const fetcher = (async (input: string | URL, init?: RequestInit) =>
+      String(input).includes('login.microsoftonline.com')
+        ? Response.json({ access_token: jwt(roles), expires_in: 3599 })
+        : ms.fetcher(input, init)) as typeof fetch;
+    const mailer = new GraphMailer(fetcher);
+    // Only Delegated permissions granted: the app-only token has no roles.
+    expect(await mailer.permissions(CONFIG)).toEqual({ roles: [], canSend: false });
+    // After adding the Application permission and consenting, the next check sees it at once.
+    roles = ['Mail.Send'];
+    expect(await mailer.permissions(CONFIG)).toEqual({ roles: ['Mail.Send'], canSend: true });
+    expect(ms.calls.some((c) => c.url.includes('sendMail'))).toBe(false);
+  });
+});
