@@ -107,7 +107,7 @@ export class MailService {
         html,
       });
     } catch (error) {
-      const detail = error instanceof Error ? error.message.slice(0, 200) : 'unknown error';
+      const detail = error instanceof Error ? error.message.slice(0, 400) : 'unknown error';
       throw new HttpError(
         502,
         smtp.method === 'graph'
