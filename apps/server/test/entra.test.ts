@@ -177,7 +177,9 @@ describe('Microsoft Entra ID sign-in', () => {
     // Not confirmed, so a second try still doesn't get in.
     expect((await signInWithMicrosoft(tess())).session).toBeUndefined();
     // Confirming has to name the account the administrator looked at.
-    expect((await owner.call('POST', `/api/users/${person.id}/entra/confirm`, { oid: 'someone-else' })).status).toBe(409);
+    expect((await owner.call('POST', `/api/users/${person.id}/entra/confirm`, { oid: 'someone-else' })).status).toBe(
+      409,
+    );
     expect((await owner.call('POST', `/api/users/${person.id}/entra/confirm`, { oid: tessOid })).status).toBe(200);
 
     // Now the account ID is what counts: a different email claim for the same account still signs in.
