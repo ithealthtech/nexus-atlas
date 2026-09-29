@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { kindOf, layoutRules, osFamily, typeField } from '../src/services/asset-stats.js';
+import { kindOf, layoutRules, osField, osFamily, typeField } from '../src/services/asset-stats.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TEMP = 'temporary pass 1234';
@@ -40,6 +40,8 @@ describe('asset statistics values', () => {
     const f = (key: string, label: string, type = 'text') =>
       ({ key, label, type, required: false, options: [], help: '', showInList: false, expires: false }) as never;
     expect(typeField([f('kind', 'Device Type', 'select')])).toBe('kind');
+    expect(osField([f('bios', 'BIOS Version'), f('osv', 'OS version')])).toBe('osv');
+    expect(osField([f('bios', 'BIOS Version')])).toBeNull();
     const layouts = [
       { id: 'a', key: 'configuration', name: 'Configurations', fields: [f('type', 'Type', 'select')] },
       { id: 'b', key: 'printer', name: 'Printers', fields: [f('model', 'Model')] },

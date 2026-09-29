@@ -277,7 +277,15 @@ const STATS_SAMPLE: AssetStatsAsset[] = RMM_SAMPLE.map((d, i) => {
     osName,
   };
 });
-const statsAssets = (client: string | null) => STATS_SAMPLE.filter((a) => !client || a.clientId === client);
+// The sample devices all sit in Configurations, so the administrator's choice for that layout applies to all of them.
+const statsAssets = (client: string | null): AssetStatsAsset[] => {
+  const layout = db.layouts.find((l) => l.key === 'configuration');
+  const chosen = (layout && assetStatsSettings.layouts[layout.id]) ?? 'auto';
+  if (chosen === 'none') return [];
+  return STATS_SAMPLE.filter((a) => !client || a.clientId === client).map((a) =>
+    chosen === 'auto' ? a : { ...a, kind: chosen },
+  );
+};
 function kindCounts(list: AssetStatsAsset[]): AssetKindCounts {
   const c = { total: list.length, ...Object.fromEntries(ASSET_KINDS.map((k) => [k, 0])) } as AssetKindCounts;
   for (const a of list) c[a.kind]++;
@@ -1436,7 +1444,10 @@ on('GET', '/asset-stats/assets', (_m, _b, q) => {
     .sort((a, b) => a.clientName.localeCompare(b.clientName) || a.name.localeCompare(b.name));
 });
 on('GET', '/settings/asset-stats', () => assetStatsSettings);
-on('PUT', '/settings/asset-stats', (_m, b) => (assetStatsSettings = b as AssetStatsSettings));
+on('PUT', '/settings/asset-stats', (_m, b) => {
+  const layouts = Object.entries((b as AssetStatsSettings).layouts).filter(([, v]) => v !== 'auto');
+  return (assetStatsSettings = { layouts: Object.fromEntries(layouts) });
+});
 on('GET', '/settings/warranty', () => warrantySettings);
 on('PUT', '/settings/warranty', (_m, b) => (warrantySettings = b as WarrantySettings));
 on('GET', '/rmm-health/trend', (_m, _b, q) => rmmTrend(q.get('client')));

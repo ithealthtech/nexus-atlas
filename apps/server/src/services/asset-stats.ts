@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import {
   ASSET_KINDS,
@@ -19,7 +19,8 @@ import type { SettingsService } from './settings.js';
 const MAX_ASSETS = 500;
 
 const TYPE_LABEL = /^(device |asset |equipment )?type$|^kind$|^category$/;
-const OS_LABEL = /operating system|^os$|os version/;
+// Word boundaries keep "BIOS version" out.
+const OS_LABEL = /operating system|^os$|\bos version\b/;
 
 /** A layout's Type field (the built-in Configurations "Type", or one named like it), if any. */
 export function typeField(fields: LayoutField[]): string | null {
@@ -143,12 +144,20 @@ export class AssetStatsService {
       ).map((r) => [r.id, r]),
     );
     if (!rules.size) return [];
+    // Only each layout's Type and operating system values are read, in the database, so asset fields aren't loaded.
+    const pick = (key: 'typeKey' | 'osKey'): SQL<string | null> => {
+      const whens = [...rules.values()].flatMap((r) =>
+        r[key] ? [sql`when ${schema.assets.layoutId} = ${r.id} then ${schema.assets.fields} ->> ${r[key]}`] : [],
+      );
+      return whens.length ? sql<string | null>`case ${sql.join(whens, sql` `)} end` : sql<null>`null`;
+    };
     const rows = await scope.db
       .select({
         id: schema.assets.id,
         name: schema.assets.name,
         layoutId: schema.assets.layoutId,
-        fields: schema.assets.fields,
+        type: pick('typeKey'),
+        os: pick('osKey'),
         clientId: schema.assets.clientId,
         clientName: schema.clients.name,
         layoutName: schema.assetLayouts.name,
@@ -164,12 +173,10 @@ export class AssetStatsService {
           inArray(schema.assets.layoutId, [...rules.keys()]),
         ),
       );
-    const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
-    return rows.map(({ fields, layoutId, ...r }) => {
+    return rows.map(({ type, os, layoutId, ...r }) => {
       const rule = rules.get(layoutId)!;
-      const values = (fields ?? {}) as Record<string, unknown>;
-      const osName = rule.osKey ? text(values[rule.osKey]) : '';
-      const kind = rule.kind ?? kindOf(rule.typeKey ? text(values[rule.typeKey]) : '', osName);
+      const osName = (os ?? '').trim();
+      const kind = rule.kind ?? kindOf((type ?? '').trim(), osName);
       return { ...r, kind, os: osFamily(osName), osName };
     });
   }
