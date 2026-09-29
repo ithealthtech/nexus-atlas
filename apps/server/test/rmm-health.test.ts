@@ -13,7 +13,8 @@ const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 type Device = Record<string, unknown>;
 
 /** A fake Asio API with two companies whose devices report agent and protection status. */
-function fakeAsio(devices: Map<string, Device[]>) {
+/** `failing` companies answer every request with a server error. */
+function fakeAsio(devices: Map<string, Device[]>, failing = new Set<string>()) {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   return (async (input: string | URL, init?: RequestInit) => {
@@ -24,7 +25,8 @@ function fakeAsio(devices: Map<string, Device[]>) {
         { id: 'c1', name: 'Harbor Dental Group' },
         { id: 'c2', name: 'Northline Architecture' },
       ]);
-    if (/\/sites$/.test(url.pathname)) return json([]);
+    const sites = url.pathname.match(/companies\/(\w+)\/sites$/);
+    if (sites) return failing.has(sites[1]!) ? json({ message: 'unavailable' }, 500) : json([]);
     if (url.pathname === '/api/platform/v2/device/categories/all/endpoints') {
       const request = JSON.parse(String(init?.body));
       if (request.resourceType !== 'company') return json({ message: 'invalid resource type' }, 400);
@@ -105,6 +107,7 @@ describe('RMM health report', () => {
   let t: TestApp;
   let owner: Browser;
   let devices: Map<string, Device[]>;
+  let failing: Set<string>;
   let harbor: string;
   let northline: string;
 
@@ -155,7 +158,8 @@ describe('RMM health report', () => {
         ],
       ],
     ]);
-    t = await startApp({}, { cwRmmFetch: fakeAsio(devices) });
+    failing = new Set();
+    t = await startApp({}, { cwRmmFetch: fakeAsio(devices, failing) });
     owner = (await setupOwner(t.app)).b;
     harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
     northline = (await owner.call('POST', '/api/clients', { name: 'Northline Architecture' })).data.id;
@@ -225,6 +229,30 @@ describe('RMM health report', () => {
       total: 4,
       unknown: 3,
     });
+  });
+
+  it("keeps a client's health when one of its companies could not be read", async () => {
+    // Both companies feed Harbor.
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [{ companyId: 'c2', action: 'link', clientId: harbor }],
+    });
+    await sync();
+    expect((await owner.call('GET', `/api/rmm-health?client=${harbor}`)).data.totals.total).toBe(5);
+    const snapshots = async () =>
+      (await t.handle.db.execute(sql`select counts from rmm_health_snapshots`)).rows.map(
+        (r) => (r.counts as { total: number }).total,
+      );
+    expect(await snapshots()).toEqual([5]);
+    // Next time c2 fails and c1 drops a device: nothing of Harbor's is removed, and today's point stays.
+    failing.add('c2');
+    devices.set('c1', devices.get('c1')!.slice(0, 3));
+    expect((await sync()).status).toBe('done');
+    expect((await owner.call('GET', `/api/rmm-health?client=${harbor}`)).data.totals.total).toBe(5);
+    expect(await snapshots()).toEqual([5]);
+    // Once both are read again, the dropped device goes.
+    failing.clear();
+    await sync();
+    expect((await owner.call('GET', `/api/rmm-health?client=${harbor}`)).data.totals.total).toBe(4);
   });
 
   it('lists the devices behind a slice, most overdue first', async () => {

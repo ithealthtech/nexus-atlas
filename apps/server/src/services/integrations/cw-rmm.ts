@@ -1067,7 +1067,9 @@ export async function runCwRmmSync(
       `Not synced this time, as chosen: ${[!options.locations && 'sites (locations)', !options.devices && 'devices'].filter(Boolean).join(' and ')}.`,
     );
   const seen = new Set<string>();
-  const complete: string[] = [];
+  const readInFull = new Set<string>();
+  // A client linked to several companies is read in full only if every one of them was.
+  const unread = new Set<string>();
   // Assets already linked to an RMM device, so two devices never land on one asset.
   const claimed = await claimedByRmm(db, actor.orgId);
   let matched = 0;
@@ -1085,6 +1087,7 @@ export async function runCwRmmSync(
           )
         : [];
     } catch (error) {
+      unread.add(clientId);
       run.count('assets', 'failed');
       run.note(`Company ${companyId}: ${error instanceof HttpError ? error.message : 'could not be read.'}`);
       continue;
@@ -1230,7 +1233,7 @@ export async function runCwRmmSync(
       if (assetId) await saveStatus(db, actor.orgId, clientId, assetId, d);
     }
     // Only a company whose devices were read counts toward archiving devices the RMM dropped.
-    if (options.devices) complete.push(clientId);
+    if (options.devices) readInFull.add(clientId);
   }
 
   if (matched)
@@ -1241,7 +1244,8 @@ export async function runCwRmmSync(
     );
   if (client.lastDeviceFields) run.note(`ConnectWise device ${client.lastDeviceFields}.`);
 
-  // Archive devices removed from the RMM, within the companies read in full.
+  // Archive devices removed from the RMM, within the clients read in full.
+  const complete = [...readInFull].filter((id) => !unread.has(id));
   if (complete.length) {
     // Their health drops out of the charts with them.
     const statuses = await db
