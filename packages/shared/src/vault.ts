@@ -225,6 +225,8 @@ export interface PasswordView {
   categoryGuessed: boolean;
   /** Assets this password is linked to, so similar logins can be told apart. */
   linkedAssets: { id: string; name: string }[];
+  /** Times this password appears in known breaches; null when not checked (yet). */
+  breachCount: number | null;
   /** A secret field's value is null here; reveal it with field 'custom' and its id. */
   customFields: { id: string; label: string; secret: boolean; value: string | null }[];
   folderId: string | null;

@@ -117,3 +117,35 @@ export const eraseRequestSchema = z.object({
   confirmName: z.string().max(200),
 });
 export const eraseConfirmSchema = z.object({ confirmName: z.string().max(200) });
+
+// ---------- password health ----------
+export const PASSWORD_ISSUES = ['breached', 'weak', 'reused', 'overdue', 'expired', 'old'] as const;
+export type PasswordIssue = (typeof PASSWORD_ISSUES)[number];
+export const PASSWORD_ISSUE_LABELS: Record<PasswordIssue, string> = {
+  breached: 'Found in a data breach',
+  weak: 'Weak',
+  reused: 'Reused',
+  overdue: 'Rotation overdue',
+  expired: 'Account expired',
+  old: 'Not changed in over a year',
+};
+export interface PasswordHealthItem {
+  id: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  category: string;
+  issues: PasswordIssue[];
+}
+export interface PasswordHealthReport {
+  /** Percent of passwords with no issue, 0–100; null when there are none. */
+  score: number | null;
+  total: number;
+  counts: Record<PasswordIssue, number>;
+  clients: { id: string; name: string; total: number; withIssues: number; score: number | null }[];
+  /** Only passwords with at least one issue, worst first. */
+  items: PasswordHealthItem[];
+  breach: { enabled: boolean; checked: number; unchecked: number; lastRunAt: string | null };
+}
+export const passwordHealthSettingsSchema = z.object({ breachChecks: z.boolean().default(true) });
+export type PasswordHealthSettings = z.infer<typeof passwordHealthSettingsSchema>;

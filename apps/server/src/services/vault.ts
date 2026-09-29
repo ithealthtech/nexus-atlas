@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { schema } from '@atlas/db';
+import { schema, type Database } from '@atlas/db';
 import {
   ROLE_INFO,
   createPasswordSchema,
@@ -204,6 +204,7 @@ export class VaultService {
         secret: f.secret,
         value: f.secret ? null : f.value,
       })),
+      breachCount: r.p.breachCount,
       folderId: r.p.folderId,
       folderName: r.p.folderId ? (folders.get(r.p.folderId) ?? null) : null,
       favorite: mine.favorites.has(r.p.id),
@@ -569,6 +570,9 @@ export class VaultService {
       set.secret = await this.keys.seal(org, secret!, aad(id, 'secret'));
       set.fingerprint = await this.keys.fingerprint(org, secret!);
       set.strength = p.kind === 'bitlocker' ? 4 : passwordStrength(secret!);
+      // A new password hasn't been checked against known breaches yet.
+      set.breachCount = null;
+      set.breachCheckedAt = null;
       set.changedAt = new Date();
     }
     const historyId = randomUUID();
@@ -805,6 +809,42 @@ export class VaultService {
 
   // ---------- export ----------
   /** Decrypted secrets for a client's passwords, for an administrator's export. Each entry is audited. */
+  /**
+   * Logins whose breach check is missing or older than `staleDays`, with their password in the clear, for the
+   * breach checker only. The plaintext stays in memory and is never stored or logged.
+   */
+  async secretsToCheck(
+    db: Database,
+    orgId: string,
+    limit: number,
+    staleDays = 30,
+  ): Promise<{ id: string; secret: string }[]> {
+    const cutoff = new Date(Date.now() - staleDays * 86_400_000);
+    const rows = await db
+      .select({ id: schema.passwords.id, secret: schema.passwords.secret })
+      .from(schema.passwords)
+      .where(
+        and(
+          eq(schema.passwords.orgId, orgId),
+          eq(schema.passwords.kind, 'login'),
+          eq(schema.passwords.archived, false),
+          or(isNull(schema.passwords.breachCheckedAt), lt(schema.passwords.breachCheckedAt, cutoff)),
+        ),
+      )
+      .orderBy(sql`${schema.passwords.breachCheckedAt} asc nulls first`)
+      .limit(limit);
+    return Promise.all(
+      rows.map(async (r) => ({ id: r.id, secret: await this.keys.open(orgId, r.secret, aad(r.id, 'secret')) })),
+    );
+  }
+
+  async recordBreach(db: Database, orgId: string, id: string, count: number) {
+    await db
+      .update(schema.passwords)
+      .set({ breachCount: count, breachCheckedAt: new Date() })
+      .where(and(eq(schema.passwords.id, id), eq(schema.passwords.orgId, orgId)));
+  }
+
   async exportSecrets(scope: Scope, clientId: string, ip: string) {
     if (!this.isAdmin(scope)) throw new HttpError(403, 'Only administrators can export decrypted passwords.');
     const org = scope.actor.orgId;

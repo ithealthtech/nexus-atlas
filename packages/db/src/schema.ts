@@ -574,6 +574,10 @@ export const passwords = pgTable(
     // Keyed hash of the secret, used only to spot reuse within the organization.
     fingerprint: text('fingerprint').notNull(),
     strength: integer('strength').notNull().default(0),
+    // How many times the password appears in known breaches (Have I Been Pwned), and when that was last checked.
+    // Null until checked. Only the flag is stored, never the password or its hash.
+    breachCount: integer('breach_count'),
+    breachCheckedAt: timestamp('breach_checked_at', { withTimezone: true }),
     rotationDays: integer('rotation_days'),
     // When the account itself stops working (a vendor login, a temporary account), not a rotation reminder.
     expiresOn: date('expires_on', { mode: 'string' }),

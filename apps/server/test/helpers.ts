@@ -57,6 +57,7 @@ export async function startApp(
   extra: {
     huduFetch?: typeof fetch;
     cwRmmFetch?: typeof fetch;
+    breachFetch?: typeof fetch;
     domainLookup?: DomainLookup;
     updateFetch?: typeof fetch;
     keys?: KeyProvider;

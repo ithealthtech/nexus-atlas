@@ -3,6 +3,8 @@ import { schema, type Database } from '@atlas/db';
 import {
   brandingSchema,
   cwRmmConnectionSchema,
+  passwordHealthSettingsSchema,
+  type PasswordHealthSettings,
   cwRmmSyncOptionsSchema,
   huduImportOptionsSchema,
   type CwRmmSyncOptions,
@@ -53,6 +55,7 @@ interface StoredSettings {
   cwRmm?: StoredCwRmm;
   /** A pending "erase all data" request, during its waiting period. */
   erase?: EraseRequest;
+  health?: PasswordHealthSettings & { lastRunAt?: string };
 }
 export interface EraseRequest {
   requestedAt: string;
@@ -305,6 +308,22 @@ export class SettingsService {
       .update(schema.orgs)
       .set({ settings: sql`${schema.orgs.settings} - 'cwRmm'` })
       .where(eq(schema.orgs.id, orgId));
+  }
+
+  async passwordHealth(orgId: string): Promise<PasswordHealthSettings & { lastRunAt?: string }> {
+    const saved = (await this.load(orgId)).health;
+    return { ...passwordHealthSettingsSchema.parse(saved ?? {}), lastRunAt: saved?.lastRunAt };
+  }
+
+  async savePasswordHealth(orgId: string, input: unknown) {
+    const body = passwordHealthSettingsSchema.parse(input);
+    await this.put(orgId, 'health', { ...body, lastRunAt: (await this.load(orgId)).health?.lastRunAt });
+    return this.passwordHealth(orgId);
+  }
+
+  async saveHealthRun(orgId: string, at: string) {
+    const current = await this.passwordHealth(orgId);
+    await this.put(orgId, 'health', { breachChecks: current.breachChecks, lastRunAt: at });
   }
 
   async eraseRequest(orgId: string): Promise<EraseRequest | null> {
