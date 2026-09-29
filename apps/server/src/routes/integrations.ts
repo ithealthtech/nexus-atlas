@@ -7,6 +7,7 @@ import { HttpError } from '../errors.js';
 import { actorFor } from '../identity/service.js';
 import { ImportRun } from '../services/importers/common.js';
 import { companiesWithMapping, CwRmmClient, runCwRmmSync, saveMapping } from '../services/integrations/cw-rmm.js';
+import { RmmHealthService } from '../services/rmm-health.js';
 import type { SettingsService } from '../services/settings.js';
 
 const HOUR = 3_600_000;
@@ -24,7 +25,9 @@ async function startSync(
   const client = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher);
   const run = await ImportRun.start(db, actor, 'cw-rmm');
   const done = runCwRmmSync(db, actor, client, run, saved.map, cwRmmSyncOptionsSchema.parse(saved.options ?? {}))
-    .then(async () => {
+    .then(async (complete) => {
+      // Today's point on the RMM health trend lines, for the clients whose devices were read.
+      await new RmmHealthService(settings).snapshot(db, actor.orgId, complete).catch((error) => log(error));
       await run.flush('done');
       await settings.patchCwRmm(actor.orgId, { lastSyncAt: new Date().toISOString() });
     })

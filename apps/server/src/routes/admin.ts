@@ -1,7 +1,13 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { testEmailSchema } from '@atlas/shared';
+import {
+  RMM_HEALTH_FILTERS,
+  WARRANTY_FILTERS,
+  testEmailSchema,
+  type RmmHealthFilter,
+  type WarrantyFilter,
+} from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import type { AuditService } from '../services/audit.js';
@@ -9,13 +15,15 @@ import { ExpirationService } from '../services/expirations.js';
 import { GroupService } from '../services/groups.js';
 import { graphPermissions, type MailService } from '../services/mail.js';
 import { Notifier } from '../services/notifier.js';
-import { Scope } from '../services/scope.js';
+import { RmmHealthService } from '../services/rmm-health.js';
+import { WarrantyService } from '../services/warranty.js';
+import { Scope, isUuid } from '../services/scope.js';
 import type { SettingsService, SmtpConfig } from '../services/settings.js';
 import type { VaultService } from '../services/vault.js';
 
 type Params = { id: string };
 
-/** Groups, email and notification settings, expirations, and the audit log. Returns the background notifier. */
+/** Groups, email and notification settings, expirations, RMM health, asset warranty, and the audit log. Returns the background notifier. */
 export function registerAdminRoutes(
   app: FastifyInstance,
   deps: {
@@ -36,6 +44,8 @@ export function registerAdminRoutes(
   const { db, authed, recent, settings, mail, audit } = deps;
   const groups = new GroupService(db);
   const expirations = new ExpirationService(deps.vault);
+  const rmmHealth = new RmmHealthService(settings);
+  const warranty = new WarrantyService(settings);
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const admin = (req: FastifyRequest) => {
     requireAdmin(actorOf(req));
@@ -128,10 +138,80 @@ export function registerAdminRoutes(
     return saved;
   });
 
+  app.get('/api/settings/rmm-health', authed, async (req) => settings.rmmHealth(req.session!.actor.orgId));
+  app.put('/api/settings/rmm-health', authed, async (req) => {
+    const orgId = admin(req);
+    recent(req);
+    const saved = await settings.saveRmmHealth(orgId, req.body);
+    await event(
+      req,
+      'RMM health settings changed',
+      `Stale after ${saved.staleDays} days · very stale after ${saved.veryStaleDays}`,
+    );
+    return saved;
+  });
+
   // ---- expirations ----
   app.get<{ Querystring: { days?: string } }>('/api/expirations', authed, async (req) => {
     const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 730);
     return expirations.list(new Scope(db, actorOf(req)), days);
+  });
+
+  // ---- RMM health ----
+  type HealthQuery = { client?: string; staleDays?: string; veryStaleDays?: string; filter?: string };
+  /** The scope and options for an RMM health request; a client the actor can't read is not found. */
+  const healthScope = async (req: FastifyRequest<{ Querystring: HealthQuery }>) => {
+    const scope = new Scope(db, actorOf(req));
+    const { client, staleDays, veryStaleDays } = req.query;
+    if (client !== undefined) {
+      if (!isUuid(client)) throw new HttpError(404, 'Client not found.');
+      await scope.require(client, 'read', 'Client');
+    }
+    return { scope, opts: { clientId: client, stale: staleDays, veryStale: veryStaleDays } };
+  };
+  app.get<{ Querystring: HealthQuery }>('/api/rmm-health', authed, async (req) => {
+    const { scope, opts } = await healthScope(req);
+    return rmmHealth.report(scope, opts);
+  });
+  app.get<{ Querystring: HealthQuery & { days?: string } }>('/api/rmm-health/trend', authed, async (req) => {
+    const { scope, opts } = await healthScope(req);
+    return rmmHealth.trend(scope, { clientId: opts.clientId, days: req.query.days });
+  });
+  app.get<{ Querystring: HealthQuery }>('/api/rmm-health/devices', authed, async (req) => {
+    const filter = req.query.filter as RmmHealthFilter;
+    if (!RMM_HEALTH_FILTERS.includes(filter)) throw new HttpError(400, 'Choose which devices to list.');
+    const { scope, opts } = await healthScope(req);
+    return rmmHealth.devices(scope, filter, opts);
+  });
+
+  // ---- asset warranty ----
+  type WarrantyQuery = { client?: string; soonDays?: string; filter?: string };
+  const warrantyScope = async (req: FastifyRequest<{ Querystring: WarrantyQuery }>) => {
+    const scope = new Scope(db, actorOf(req));
+    const { client, soonDays } = req.query;
+    if (client !== undefined) {
+      if (!isUuid(client)) throw new HttpError(404, 'Client not found.');
+      await scope.require(client, 'read', 'Client');
+    }
+    return { scope, opts: { clientId: client, soonDays } };
+  };
+  app.get<{ Querystring: WarrantyQuery }>('/api/warranty', authed, async (req) => {
+    const { scope, opts } = await warrantyScope(req);
+    return warranty.report(scope, opts);
+  });
+  app.get<{ Querystring: WarrantyQuery }>('/api/warranty/assets', authed, async (req) => {
+    const filter = req.query.filter as WarrantyFilter;
+    if (!WARRANTY_FILTERS.includes(filter)) throw new HttpError(400, 'Choose which assets to list.');
+    const { scope, opts } = await warrantyScope(req);
+    return warranty.assets(scope, filter, opts);
+  });
+  app.get('/api/settings/warranty', authed, async (req) => settings.warranty(actorOf(req).orgId));
+  app.put('/api/settings/warranty', authed, async (req) => {
+    const orgId = admin(req);
+    recent(req);
+    const saved = await settings.saveWarranty(orgId, req.body);
+    await event(req, 'Warranty settings changed', `Expiring soon within ${saved.soonDays} days`);
+    return saved;
   });
 
   // ---- audit log ----

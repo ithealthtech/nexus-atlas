@@ -851,3 +851,55 @@ export const checklistRuns = pgTable(
   },
   (t) => [index('checklist_runs_client').on(t.orgId, t.clientId), index('checklist_runs_assignee').on(t.assigneeId)],
 );
+
+// Health of each device an RMM sync reports (agent online, last check-in, endpoint protection), for the RMM health
+// charts. Rewritten by every sync; a device whose asset is archived or deleted drops out of the charts.
+export const rmmDeviceStatus = pgTable(
+  'rmm_device_status',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    source: text('source').notNull(),
+    externalId: text('external_id').notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    online: boolean('online'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    protection: text('protection'),
+    protectionProduct: text('protection_product').notNull().default(''),
+    updatedAt: updated(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.source, t.externalId] }),
+    index('rmm_device_status_client').on(t.orgId, t.clientId),
+    check('rmm_device_status_kind_check', sql`${t.kind} in ('server','workstation','other')`),
+    check(
+      'rmm_device_status_protection_check',
+      sql`${t.protection} is null or ${t.protection} in ('running','not_running','missing')`,
+    ),
+  ],
+);
+
+// One row per client per day with that day's RMM health counts (RmmHealthCounts), written after each sync, for the
+// trend lines. The day's last sync wins.
+export const rmmHealthSnapshots = pgTable(
+  'rmm_health_snapshots',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    counts: jsonb('counts').notNull(),
+    updatedAt: updated(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('rmm_health_snapshots_day').on(t.orgId, t.day)],
+);

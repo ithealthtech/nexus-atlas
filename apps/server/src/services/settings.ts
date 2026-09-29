@@ -20,6 +20,10 @@ import {
   huduConnectionSchema,
   type Branding,
   notificationSettingsSchema,
+  rmmHealthSettingsSchema,
+  type RmmHealthSettings,
+  warrantySettingsSchema,
+  type WarrantySettings,
   smtpSettingsSchema,
   type MailMethod,
   type NotificationSettings,
@@ -63,6 +67,8 @@ interface StoredSettings {
   erase?: EraseRequest;
   health?: PasswordHealthSettings & { lastRunAt?: string };
   entra?: StoredEntra;
+  rmmHealth?: RmmHealthSettings;
+  warranty?: WarrantySettings;
   m365?: StoredM365;
 }
 export interface StoredEntra {
@@ -244,6 +250,26 @@ export class SettingsService {
     const body = notificationSettingsSchema.parse(input);
     body.alertDays = [...new Set(body.alertDays)].sort((a, b) => b - a);
     await this.put(orgId, 'notifications', body);
+    return body;
+  }
+
+  async rmmHealth(orgId: string): Promise<RmmHealthSettings> {
+    return rmmHealthSettingsSchema.parse((await this.load(orgId)).rmmHealth ?? {});
+  }
+
+  async saveRmmHealth(orgId: string, input: unknown): Promise<RmmHealthSettings> {
+    const body = rmmHealthSettingsSchema.parse(input);
+    await this.put(orgId, 'rmmHealth', body);
+    return body;
+  }
+
+  async warranty(orgId: string): Promise<WarrantySettings> {
+    return warrantySettingsSchema.parse((await this.load(orgId)).warranty ?? {});
+  }
+
+  async saveWarranty(orgId: string, input: unknown): Promise<WarrantySettings> {
+    const body = warrantySettingsSchema.parse(input);
+    await this.put(orgId, 'warranty', body);
     return body;
   }
 

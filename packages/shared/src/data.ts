@@ -109,6 +109,114 @@ export const cwRmmMappingSchema = z.object({
     .max(2000),
 });
 
+// ---------- RMM health ----------
+export type RmmDeviceKind = 'server' | 'workstation' | 'other';
+export type RmmProtection = 'running' | 'not_running' | 'missing';
+/** Days since last check-in after which an agent counts as stale, and as very stale. */
+export const RMM_STALE_DAYS = { stale: 7, veryStale: 30 } as const;
+/** How long since check-in before an agent counts as stale, and very stale. Set per organization. */
+export const rmmHealthSettingsSchema = z
+  .object({
+    staleDays: z.number().int().min(1).max(365).default(RMM_STALE_DAYS.stale),
+    veryStaleDays: z.number().int().min(2).max(730).default(RMM_STALE_DAYS.veryStale),
+  })
+  .refine((v) => v.veryStaleDays > v.staleDays, {
+    message: 'Very stale must be more days than stale.',
+    path: ['veryStaleDays'],
+  });
+export type RmmHealthSettings = z.infer<typeof rmmHealthSettingsSchema>;
+/** One day of the trend lines, summed over the clients in view. Days without a sync are left out. */
+export interface RmmHealthTrendPoint {
+  day: string;
+  total: number;
+  online: number;
+  current: number;
+  protectionRunning: number;
+}
+/** Device counts behind the RMM health charts. Unknown means the RMM didn't report it. */
+export interface RmmHealthCounts {
+  total: number;
+  servers: number;
+  workstations: number;
+  online: number;
+  offline: number;
+  onlineUnknown: number;
+  offlineServers: number;
+  current: number;
+  stale: number;
+  veryStale: number;
+  seenUnknown: number;
+  protectionRunning: number;
+  protectionNotRunning: number;
+  protectionMissing: number;
+  protectionUnknown: number;
+}
+export interface RmmHealthReport {
+  staleDays: number;
+  veryStaleDays: number;
+  /** When the newest device status was written, or null before any sync. */
+  updatedAt: string | null;
+  totals: RmmHealthCounts;
+  /** One row per client with synced devices, worst first. */
+  clients: { clientId: string; clientName: string; counts: RmmHealthCounts }[];
+}
+/** Which devices to list when a chart slice is chosen. */
+export const RMM_HEALTH_FILTERS = [
+  'offline',
+  'online_unknown',
+  'stale',
+  'very_stale',
+  'seen_unknown',
+  'protection_not_running',
+  'protection_missing',
+  'protection_unknown',
+] as const;
+export type RmmHealthFilter = (typeof RMM_HEALTH_FILTERS)[number];
+export interface RmmHealthDevice {
+  assetId: string;
+  clientId: string;
+  clientName: string;
+  name: string;
+  kind: RmmDeviceKind;
+  online: boolean | null;
+  lastSeenAt: string | null;
+  protection: RmmProtection | null;
+  protectionProduct: string;
+}
+
+// ---------- asset warranty ----------
+/** Days ahead within which a warranty counts as expiring soon. Set per organization. */
+export const warrantySettingsSchema = z.object({
+  soonDays: z.number().int().min(1).max(365).default(90),
+});
+export type WarrantySettings = z.infer<typeof warrantySettingsSchema>;
+/** Assets whose layout has a warranty date field, by where that date falls. Unknown means no date entered. */
+export interface WarrantyCounts {
+  total: number;
+  expired: number;
+  soon: number;
+  active: number;
+  unknown: number;
+}
+export interface WarrantyReport {
+  soonDays: number;
+  totals: WarrantyCounts;
+  /** One row per client with hardware assets, most expired and unknown first. */
+  clients: { clientId: string; clientName: string; counts: WarrantyCounts }[];
+}
+export const WARRANTY_FILTERS = ['expired', 'soon', 'active', 'unknown'] as const;
+export type WarrantyFilter = (typeof WARRANTY_FILTERS)[number];
+export interface WarrantyAsset {
+  assetId: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  layoutName: string;
+  /** YYYY-MM-DD, or null when no date is entered. */
+  warrantyExpires: string | null;
+  daysLeft: number | null;
+}
+
 // ---------- Microsoft 365 documentation sync ----------
 /** One multi-tenant app registration in the MSP's tenant; each client tenant grants it admin consent. */
 export const m365ConnectionSchema = z.object({

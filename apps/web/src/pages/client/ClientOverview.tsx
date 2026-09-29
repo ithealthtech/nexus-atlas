@@ -5,6 +5,8 @@ import { DOCUMENT_STATUS_LABELS } from '@atlas/shared';
 import { Card, CardHeader } from '@/components/ui';
 import { ActivityFeed } from '@/components/panels';
 import { ItemIcon } from '@/components/ItemIcon';
+import { RmmHealthCard } from '@/components/RmmHealth';
+import { WarrantyCard } from '@/components/Warranty';
 import { useActivity, useAssets, useClient, useContacts, useDocuments, useLayouts, useLocations } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
 
@@ -65,6 +67,7 @@ export function ClientOverview() {
             </p>
           )}
         </Card>
+        <RmmHealthCard clientId={clientId} />
         <Card>
           <CardHeader
             title="Recently updated documents"
@@ -100,6 +103,7 @@ export function ClientOverview() {
         </Card>
       </div>
       <div className="space-y-6">
+        <WarrantyCard clientId={clientId} />
         <Card>
           <CardHeader title="Primary contact" />
           {contact ? (
