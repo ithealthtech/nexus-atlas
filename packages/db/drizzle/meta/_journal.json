@@ -127,6 +127,13 @@
       "when": 1790707117620,
       "tag": "0017_rmm_device_status",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790713080686,
+      "tag": "0018_rmm_health_snapshots",
+      "breakpoints": true
     }
   ]
 }

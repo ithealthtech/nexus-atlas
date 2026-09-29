@@ -11,10 +11,16 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
-import type { RmmHealthCounts, RmmHealthDevice, RmmHealthFilter, RmmHealthReport } from '@atlas/shared';
+import type {
+  RmmHealthCounts,
+  RmmHealthDevice,
+  RmmHealthFilter,
+  RmmHealthReport,
+  RmmHealthTrendPoint,
+} from '@atlas/shared';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { relativeTime } from '@/lib/format';
+import { formatDate, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
 import { Card, CardHeader, Dialog, EmptyState, Skeleton } from './ui';
@@ -94,13 +100,88 @@ function Donut({ slices, total, active }: { slices: Slice[]; total: number; acti
   );
 }
 
+const TREND_DAYS = 30;
+type Metric = 'online' | 'current' | 'protectionRunning';
+
+export const useRmmHealthTrend = (clientId?: string) =>
+  useQuery({
+    queryKey: ['rmm-health', 'trend', clientId ?? 'all'],
+    queryFn: () =>
+      api<RmmHealthTrendPoint[]>(`/rmm-health/trend?days=${TREND_DAYS}${clientId ? `&client=${clientId}` : ''}`),
+  });
+
+/**
+ * One metric's share over the last 30 days, as a thin line. The caption beside it gives the first and latest values
+ * in words; each point has a tooltip.
+ */
+function Sparkline({ label, points }: { label: string; points: { day: string; value: number }[] }) {
+  if (points.length < 2) return null;
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  const low = Math.max(Math.min(...points.map((p) => p.value)) - 5, 0);
+  const span = Math.max(100 - low, 1);
+  const x = (i: number) => (i / (points.length - 1)) * 200;
+  const y = (v: number) => 4 + (1 - (v - low) / span) * 32;
+  const change = last.value - first.value;
+  return (
+    <div className="mt-auto border-t border-border pt-3">
+      <p className="flex items-baseline justify-between gap-2 text-xs text-muted">
+        <span>
+          Last {TREND_DAYS} days
+          <span className="sr-only">
+            , {label}: {first.value}% on {formatDate(`${first.day}T12:00:00`)}, {last.value}% on{' '}
+            {formatDate(`${last.day}T12:00:00`)}
+          </span>
+        </span>
+        <span className="font-medium text-text-2 tabular-nums" aria-hidden>
+          {change === 0 ? 'No change' : `${change > 0 ? '+' : '−'}${Math.abs(change)} pts`}
+        </span>
+      </p>
+      <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="mt-1 h-10 w-full overflow-visible" aria-hidden>
+        <line
+          x1="0"
+          x2="200"
+          y1={y(100)}
+          y2={y(100)}
+          className="stroke-border"
+          strokeWidth="1"
+          vectorEffect="non-scaling-stroke"
+        />
+        <polyline
+          points={points.map((p, i) => `${x(i)},${y(p.value)}`).join(' ')}
+          fill="none"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+          className="stroke-primary"
+        />
+        {points.map((p, i) => (
+          <rect
+            key={p.day}
+            x={x(i) - 100 / (points.length - 1)}
+            width={200 / (points.length - 1)}
+            y="0"
+            height="40"
+            fill="transparent"
+          >
+            <title>{`${formatDate(`${p.day}T12:00:00`)}: ${p.value}% ${label}`}</title>
+          </rect>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 function HealthChart({
   title,
   headline,
   slices,
   total,
   onPick,
+  trend,
 }: {
+  trend: { day: string; value: number }[];
   title: string;
   /** The share the chart is about, e.g. "online", shown large in the middle. */
   headline: { label: string; count: number };
@@ -110,7 +191,7 @@ function HealthChart({
 }) {
   const [active, setActive] = useState<string | null>(null);
   return (
-    <section aria-label={title} className="min-w-0 rounded-lg border border-border p-4">
+    <section aria-label={title} className="flex min-w-0 flex-col rounded-lg border border-border p-4">
       <h3 className="text-sm font-semibold text-text">{title}</h3>
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <div className="relative">
@@ -168,6 +249,8 @@ function HealthChart({
           </tbody>
         </table>
       </div>
+      <div className="min-h-3 flex-1" />
+      <Sparkline label={headline.label} points={trend} />
     </section>
   );
 }
@@ -293,6 +376,7 @@ function charts(c: RmmHealthCounts, staleDays: number, veryStaleDays: number) {
   return [
     {
       title: 'Agent online',
+      metric: 'online' as Metric,
       headline: { label: 'online', count: c.online },
       slices: [
         { label: 'Online', count: c.online, tone: 'good' },
@@ -302,6 +386,7 @@ function charts(c: RmmHealthCounts, staleDays: number, veryStaleDays: number) {
     },
     {
       title: 'Stale agents',
+      metric: 'current' as Metric,
       headline: { label: 'current', count: c.current },
       slices: [
         { label: `Current (under ${staleDays} days)`, count: c.current, tone: 'good' },
@@ -312,6 +397,7 @@ function charts(c: RmmHealthCounts, staleDays: number, veryStaleDays: number) {
     },
     {
       title: 'Endpoint protection',
+      metric: 'protectionRunning' as Metric,
       headline: { label: 'protected', count: c.protectionRunning },
       slices: [
         { label: 'Running', count: c.protectionRunning, tone: 'good' },
@@ -330,6 +416,7 @@ function charts(c: RmmHealthCounts, staleDays: number, veryStaleDays: number) {
 export function RmmHealthCard({ clientId }: { clientId?: string }) {
   const actor = useActor();
   const health = useRmmHealth(clientId);
+  const trend = useRmmHealthTrend(clientId).data ?? [];
   const [filter, setFilter] = useState<RmmHealthFilter | null>(null);
   const report = health.data;
   const c = report?.totals;
@@ -377,7 +464,15 @@ export function RmmHealthCard({ clientId }: { clientId?: string }) {
           </div>
           <div className="grid gap-4 xl:grid-cols-3">
             {charts(c, report.staleDays, report.veryStaleDays).map((chart) => (
-              <HealthChart key={chart.title} {...chart} total={c.total} onPick={(s) => setFilter(s.filter ?? null)} />
+              <HealthChart
+                key={chart.title}
+                {...chart}
+                total={c.total}
+                onPick={(s) => setFilter(s.filter ?? null)}
+                trend={trend
+                  .filter((p) => p.total > 0)
+                  .map((p) => ({ day: p.day, value: pct(p[chart.metric], p.total) }))}
+              />
             ))}
           </div>
           {!clientId && report.clients.length > 1 && <ClientTable report={report} />}

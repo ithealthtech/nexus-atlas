@@ -1,5 +1,5 @@
-import { and, eq, inArray } from 'drizzle-orm';
-import { schema } from '@atlas/db';
+import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { schema, type Database } from '@atlas/db';
 import {
   RMM_STALE_DAYS,
   type RmmDeviceKind,
@@ -7,12 +7,18 @@ import {
   type RmmHealthDevice,
   type RmmHealthFilter,
   type RmmHealthReport,
+  type RmmHealthSettings,
+  type RmmHealthTrendPoint,
   type RmmProtection,
 } from '@atlas/shared';
 import type { Scope } from './scope.js';
+import type { SettingsService } from './settings.js';
 
 const DAY = 86_400_000;
 const MAX_DEVICES = 500;
+/** How long daily snapshots are kept. */
+const KEEP_DAYS = 400;
+const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 type Row = RmmHealthDevice & { lastSeen: Date | null; updatedAt: Date };
 
@@ -63,14 +69,18 @@ function add(c: RmmHealthCounts, r: Row, fresh: Freshness) {
 const trouble = (c: RmmHealthCounts) =>
   c.total ? (c.offline + c.veryStale + c.protectionMissing + c.protectionNotRunning) / c.total : 0;
 
-/** Clamps stale thresholds: 1–365 days, very stale after stale. */
-export function thresholds(stale?: unknown, veryStale?: unknown) {
+/** Clamps stale thresholds (1–365 days, very stale after stale); a missing or invalid value takes the default. */
+export function thresholds(
+  stale?: unknown,
+  veryStale?: unknown,
+  defaults: RmmHealthSettings = { staleDays: RMM_STALE_DAYS.stale, veryStaleDays: RMM_STALE_DAYS.veryStale },
+) {
   const days = (v: unknown, fallback: number) => {
     const n = Math.round(Number(v));
     return n > 0 ? n : fallback;
   };
-  const s = Math.min(days(stale, RMM_STALE_DAYS.stale), 365);
-  const v = Math.min(Math.max(days(veryStale, RMM_STALE_DAYS.veryStale), s + 1), 730);
+  const s = Math.min(days(stale, defaults.staleDays), 365);
+  const v = Math.min(Math.max(days(veryStale, defaults.veryStaleDays), s + 1), 730);
   return { staleDays: s, veryStaleDays: v };
 }
 
@@ -79,12 +89,28 @@ export function thresholds(stale?: unknown, veryStale?: unknown) {
  * device the RMM stopped reporting (or one merged away) never counts.
  */
 export class RmmHealthService {
-  private async rows(scope: Scope, clientId?: string): Promise<Row[]> {
+  constructor(private readonly settings: SettingsService) {}
+
+  /** The clients in view: those the actor can read, narrowed to one when asked. */
+  private async ids(scope: Scope, clientId?: string) {
     const readable = await scope.readableClientIds();
-    const ids = clientId ? readable.filter((id) => id === clientId) : readable;
+    return clientId ? readable.filter((id) => id === clientId) : readable;
+  }
+
+  private async rows(scope: Scope, clientId?: string): Promise<Row[]> {
+    return this.statusRows(scope.db, scope.actor.orgId, await this.ids(scope, clientId));
+  }
+
+  /** The organization's thresholds, unless the request names its own. */
+  private async limits(orgId: string, opts: { stale?: unknown; veryStale?: unknown }) {
+    return thresholds(opts.stale, opts.veryStale, await this.settings.rmmHealth(orgId));
+  }
+
+  /** Device health rows for these clients. Access must already be checked. */
+  private async statusRows(db: Database, orgId: string, ids: string[]): Promise<Row[]> {
     if (!ids.length) return [];
     const s = schema.rmmDeviceStatus;
-    const rows = await scope.db
+    const rows = await db
       .select({
         assetId: s.assetId,
         clientId: s.clientId,
@@ -102,7 +128,7 @@ export class RmmHealthService {
       .innerJoin(schema.clients, eq(schema.clients.id, s.clientId))
       .where(
         and(
-          eq(s.orgId, scope.actor.orgId),
+          eq(s.orgId, orgId),
           inArray(s.clientId, ids),
           // The device's asset must still be in the client the status names.
           eq(schema.assets.clientId, s.clientId),
@@ -121,7 +147,7 @@ export class RmmHealthService {
     scope: Scope,
     opts: { clientId?: string; stale?: unknown; veryStale?: unknown } = {},
   ): Promise<RmmHealthReport> {
-    const { staleDays, veryStaleDays } = thresholds(opts.stale, opts.veryStale);
+    const { staleDays, veryStaleDays } = await this.limits(scope.actor.orgId, opts);
     const now = Date.now();
     const totals = emptyCounts();
     const byClient = new Map<string, { clientId: string; clientName: string; counts: RmmHealthCounts }>();
@@ -147,7 +173,7 @@ export class RmmHealthService {
     filter: RmmHealthFilter,
     opts: { clientId?: string; stale?: unknown; veryStale?: unknown } = {},
   ): Promise<RmmHealthDevice[]> {
-    const { staleDays, veryStaleDays } = thresholds(opts.stale, opts.veryStale);
+    const { staleDays, veryStaleDays } = await this.limits(scope.actor.orgId, opts);
     const now = Date.now();
     const match: Record<RmmHealthFilter, (r: Row) => boolean> = {
       offline: (r) => r.online === false,
@@ -179,5 +205,52 @@ export class RmmHealthService {
         protection,
         protectionProduct,
       }));
+  }
+
+  /**
+   * Records today's counts for these clients, for the trend lines; a client with no devices left records zeros.
+   * Called after a sync, with access already decided by the sync.
+   */
+  async snapshot(db: Database, orgId: string, clientIds: string[], now = Date.now()) {
+    if (!clientIds.length) return;
+    const { staleDays, veryStaleDays } = await this.limits(orgId, {});
+    const counts = new Map(clientIds.map((id) => [id, emptyCounts()]));
+    for (const r of await this.statusRows(db, orgId, clientIds))
+      add(counts.get(r.clientId)!, r, freshness(r.lastSeen, staleDays, veryStaleDays, now));
+    const day = dayOf(now);
+    const t = schema.rmmHealthSnapshots;
+    await db
+      .insert(t)
+      .values([...counts].map(([clientId, c]) => ({ orgId, clientId, day, counts: c })))
+      .onConflictDoUpdate({
+        target: [t.orgId, t.clientId, t.day],
+        set: { counts: sql`excluded.counts`, updatedAt: new Date(now) },
+      });
+    await db.delete(t).where(and(eq(t.orgId, orgId), lt(t.day, dayOf(now - KEEP_DAYS * DAY))));
+  }
+
+  /** Online, current, and protected counts per day over the last `days` days, for the clients in view. */
+  async trend(scope: Scope, opts: { clientId?: string; days?: unknown } = {}): Promise<RmmHealthTrendPoint[]> {
+    const ids = await this.ids(scope, opts.clientId);
+    if (!ids.length) return [];
+    const days = Math.min(Math.max(Math.round(Number(opts.days)) || 30, 2), 365);
+    const t = schema.rmmHealthSnapshots;
+    const rows = await scope.db
+      .select({ day: t.day, counts: t.counts })
+      .from(t)
+      .where(
+        and(eq(t.orgId, scope.actor.orgId), inArray(t.clientId, ids), gte(t.day, dayOf(Date.now() - (days - 1) * DAY))),
+      );
+    const byDay = new Map<string, RmmHealthTrendPoint>();
+    for (const r of rows) {
+      const c = { ...emptyCounts(), ...(r.counts as Partial<RmmHealthCounts>) };
+      let p = byDay.get(r.day);
+      if (!p) byDay.set(r.day, (p = { day: r.day, total: 0, online: 0, current: 0, protectionRunning: 0 }));
+      p.total += c.total;
+      p.online += c.online;
+      p.current += c.current;
+      p.protectionRunning += c.protectionRunning;
+    }
+    return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
   }
 }

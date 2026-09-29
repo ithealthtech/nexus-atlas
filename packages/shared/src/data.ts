@@ -114,6 +114,25 @@ export type RmmDeviceKind = 'server' | 'workstation' | 'other';
 export type RmmProtection = 'running' | 'not_running' | 'missing';
 /** Days since last check-in after which an agent counts as stale, and as very stale. */
 export const RMM_STALE_DAYS = { stale: 7, veryStale: 30 } as const;
+/** How long since check-in before an agent counts as stale, and very stale. Set per organization. */
+export const rmmHealthSettingsSchema = z
+  .object({
+    staleDays: z.number().int().min(1).max(365).default(RMM_STALE_DAYS.stale),
+    veryStaleDays: z.number().int().min(2).max(730).default(RMM_STALE_DAYS.veryStale),
+  })
+  .refine((v) => v.veryStaleDays > v.staleDays, {
+    message: 'Very stale must be more days than stale.',
+    path: ['veryStaleDays'],
+  });
+export type RmmHealthSettings = z.infer<typeof rmmHealthSettingsSchema>;
+/** One day of the trend lines, summed over the clients in view. Days without a sync are left out. */
+export interface RmmHealthTrendPoint {
+  day: string;
+  total: number;
+  online: number;
+  current: number;
+  protectionRunning: number;
+}
 /** Device counts behind the RMM health charts. Unknown means the RMM didn't report it. */
 export interface RmmHealthCounts {
   total: number;

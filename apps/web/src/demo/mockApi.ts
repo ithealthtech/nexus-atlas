@@ -20,6 +20,8 @@ import {
   type RmmHealthDevice,
   type RmmHealthFilter,
   type RmmHealthReport,
+  type RmmHealthSettings,
+  type RmmHealthTrendPoint,
   type ItemType,
   type LayoutField,
   type RichText,
@@ -172,6 +174,23 @@ function rmmHealth(client: string | null): RmmHealthReport {
     (k.offline + k.veryStale + k.protectionMissing + k.protectionNotRunning) / k.total;
   clients.sort((a, b) => trouble(b.counts) - trouble(a.counts));
   return { staleDays: 7, veryStaleDays: 30, updatedAt: ago(25), totals: rmmCounts(list), clients };
+}
+
+let rmmSettings: RmmHealthSettings = { staleDays: 7, veryStaleDays: 30 };
+/** A month of sample daily points that drift up to today's counts. */
+function rmmTrend(client: string | null): RmmHealthTrendPoint[] {
+  const today = rmmCounts(rmmDevices(client));
+  return Array.from({ length: 30 }, (_, i) => {
+    const back = 29 - i;
+    const dip = (n: number) => Math.max(Math.round(n - (back * today.total) / 400 - ((back * 7) % 3)), 0);
+    return {
+      day: new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10),
+      total: today.total,
+      online: back ? dip(today.online) : today.online,
+      current: back ? dip(today.current) : today.current,
+      protectionRunning: back ? dip(today.protectionRunning) : today.protectionRunning,
+    };
+  });
 }
 
 // ---------- documentation ----------
@@ -1262,6 +1281,9 @@ on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
 on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+on('GET', '/rmm-health/trend', (_m, _b, q) => rmmTrend(q.get('client')));
+on('GET', '/settings/rmm-health', () => rmmSettings);
+on('PUT', '/settings/rmm-health', (_m, b) => (rmmSettings = b as RmmHealthSettings));
 on('GET', '/rmm-health/devices', (_m, _b, q) =>
   rmmDevices(q.get('client'))
     .filter(RMM_MATCH[q.get('filter') as RmmHealthFilter] ?? (() => false))

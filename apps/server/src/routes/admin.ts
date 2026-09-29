@@ -37,7 +37,7 @@ export function registerAdminRoutes(
   const { db, authed, recent, settings, mail, audit } = deps;
   const groups = new GroupService(db);
   const expirations = new ExpirationService(deps.vault);
-  const rmmHealth = new RmmHealthService();
+  const rmmHealth = new RmmHealthService(settings);
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const admin = (req: FastifyRequest) => {
     requireAdmin(actorOf(req));
@@ -130,6 +130,19 @@ export function registerAdminRoutes(
     return saved;
   });
 
+  app.get('/api/settings/rmm-health', authed, async (req) => settings.rmmHealth(req.session!.actor.orgId));
+  app.put('/api/settings/rmm-health', authed, async (req) => {
+    const orgId = admin(req);
+    recent(req);
+    const saved = await settings.saveRmmHealth(orgId, req.body);
+    await event(
+      req,
+      'RMM health settings changed',
+      `Stale after ${saved.staleDays} days · very stale after ${saved.veryStaleDays}`,
+    );
+    return saved;
+  });
+
   // ---- expirations ----
   app.get<{ Querystring: { days?: string } }>('/api/expirations', authed, async (req) => {
     const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 730);
@@ -151,6 +164,10 @@ export function registerAdminRoutes(
   app.get<{ Querystring: HealthQuery }>('/api/rmm-health', authed, async (req) => {
     const { scope, opts } = await healthScope(req);
     return rmmHealth.report(scope, opts);
+  });
+  app.get<{ Querystring: HealthQuery & { days?: string } }>('/api/rmm-health/trend', authed, async (req) => {
+    const { scope, opts } = await healthScope(req);
+    return rmmHealth.trend(scope, { clientId: opts.clientId, days: req.query.days });
   });
   app.get<{ Querystring: HealthQuery }>('/api/rmm-health/devices', authed, async (req) => {
     const filter = req.query.filter as RmmHealthFilter;

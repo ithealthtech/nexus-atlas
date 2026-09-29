@@ -10,6 +10,7 @@ import type {
   LayoutView,
   LocationView,
   RelationView,
+  RmmHealthSettings,
   RevisionView,
   SearchResult,
 } from '@atlas/shared';
@@ -43,6 +44,8 @@ export const useExpirations = (days = 90) =>
   useQuery({ queryKey: ['expirations', days], queryFn: () => api<ExpirationItem[]>(`/expirations?days=${days}`) });
 export const useEmailSettings = () =>
   useQuery({ queryKey: ['settings', 'email'], queryFn: () => api<SmtpSettingsView>('/settings/email') });
+export const useRmmHealthSettings = () =>
+  useQuery({ queryKey: ['settings', 'rmm-health'], queryFn: () => api<RmmHealthSettings>('/settings/rmm-health') });
 export const useNotificationSettings = () =>
   useQuery({
     queryKey: ['settings', 'notifications'],

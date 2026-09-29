@@ -4,6 +4,7 @@ import { cn } from '@/lib/cn';
 import {
   SMTP_PRESETS,
   type NotificationSettings,
+  type RmmHealthSettings,
   type SmtpPreset,
   type SmtpSecurity,
   type SmtpSettingsView,
@@ -23,7 +24,7 @@ import {
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
-import { useEmailSettings, useNotificationSettings, useSave } from '@/lib/queries';
+import { useEmailSettings, useNotificationSettings, useRmmHealthSettings, useSave } from '@/lib/queries';
 import { ApiKeysCard } from './SettingsExtra';
 import { DangerZone } from './DangerZone';
 import { EntraSettings } from './EntraSettings';
@@ -484,16 +485,88 @@ function NotificationSettingsCard({ current }: { current: NotificationSettings }
   );
 }
 
+function RmmHealthSettingsCard({ current }: { current: RmmHealthSettings }) {
+  const toast = useToast();
+  const [form, setForm] = useState({
+    staleDays: String(current.staleDays),
+    veryStaleDays: String(current.veryStaleDays),
+  });
+  const [error, setError] = useState<string | null>(null);
+  const save = useSave(
+    (body: object) => api<RmmHealthSettings>('/settings/rmm-health', { method: 'PUT', body }),
+    [['settings', 'rmm-health'], ['rmm-health']],
+  );
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    const staleDays = Number(form.staleDays);
+    const veryStaleDays = Number(form.veryStaleDays);
+    if (!(veryStaleDays > staleDays)) return setError('Very stale must be more days than stale.');
+    try {
+      await save.mutateAsync({ staleDays, veryStaleDays });
+      toast('RMM health settings saved.');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader
+        title="RMM health"
+        description="When an agent that hasn't checked in counts as stale on the RMM health charts."
+      />
+      <form onSubmit={submit} className="space-y-5 p-5" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Stale after (days)" help="Between 1 and 365.">
+            {(p) => (
+              <Input
+                {...p}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={365}
+                value={form.staleDays}
+                onChange={(e) => setForm((f) => ({ ...f, staleDays: e.target.value }))}
+              />
+            )}
+          </Field>
+          <Field label="Very stale after (days)" help="More than stale, up to 730.">
+            {(p) => (
+              <Input
+                {...p}
+                type="number"
+                inputMode="numeric"
+                min={2}
+                max={730}
+                value={form.veryStaleDays}
+                onChange={(e) => setForm((f) => ({ ...f, veryStaleDays: e.target.value }))}
+              />
+            )}
+          </Field>
+        </div>
+        <p className="text-xs text-muted">Trend lines keep the counts as they were on each day.</p>
+        <FormError message={error} />
+        <div className="flex justify-end">
+          <Button type="submit" loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 export function Settings() {
   const actor = useActor();
   const email = useEmailSettings();
   const notifications = useNotificationSettings();
+  const rmmHealth = useRmmHealthSettings();
   return (
     <>
       <PageHeader
         eyebrow="Administration"
         title="Settings"
-        description="Email, alerts, log retention, branding, and API keys."
+        description="Email, alerts, log retention, RMM health, branding, and API keys."
       />
       <div className="grid max-w-3xl gap-6">
         {email.data ? (
@@ -508,6 +581,11 @@ export function Settings() {
           <NotificationSettingsCard key={JSON.stringify(notifications.data)} current={notifications.data} />
         ) : (
           <Skeleton className="h-48" />
+        )}
+        {rmmHealth.data ? (
+          <RmmHealthSettingsCard key={JSON.stringify(rmmHealth.data)} current={rmmHealth.data} />
+        ) : (
+          <Skeleton className="h-40" />
         )}
 
         <EntraSettings />

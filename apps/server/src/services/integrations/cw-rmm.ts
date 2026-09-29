@@ -1249,4 +1249,6 @@ export async function runCwRmmSync(
     if (archived)
       run.note(`Archived ${archived} device${archived === 1 ? '' : 's'} ConnectWise RMM no longer reports.`);
   }
+  /** The clients whose devices were read in full. */
+  return complete;
 }

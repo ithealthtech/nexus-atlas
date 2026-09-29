@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { deviceKind, onlineState, protectionOf, seenAt } from '../src/services/integrations/cw-rmm.js';
 import { thresholds } from '../src/services/rmm-health.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
@@ -92,6 +93,11 @@ describe('RMM health values', () => {
     expect(thresholds('3', '10')).toEqual({ staleDays: 3, veryStaleDays: 10 });
     expect(thresholds('0', '-5')).toEqual({ staleDays: 7, veryStaleDays: 30 });
     expect(thresholds('20', '5')).toEqual({ staleDays: 20, veryStaleDays: 21 });
+    // An organization's own thresholds fill in what the request leaves out.
+    expect(thresholds(undefined, undefined, { staleDays: 3, veryStaleDays: 14 })).toEqual({
+      staleDays: 3,
+      veryStaleDays: 14,
+    });
   });
 });
 
@@ -255,5 +261,54 @@ describe('RMM health report', () => {
     expect((await b.call('GET', '/api/rmm-health?client=not-a-uuid')).status).toBe(404);
     expect((await b.call('GET', `/api/rmm-health/devices?filter=offline&client=${harbor}`)).status).toBe(404);
     expect((await b.call('GET', '/api/rmm-health/devices?filter=offline')).data).toEqual([]);
+    const trend = (await b.call('GET', '/api/rmm-health/trend')).data;
+    expect(trend).toHaveLength(1);
+    expect(trend[0]).toMatchObject({ total: 1, online: 1 });
+    expect((await b.call('GET', `/api/rmm-health/trend?client=${harbor}`)).status).toBe(404);
+    expect((await b.call('PUT', '/api/settings/rmm-health', { staleDays: 2, veryStaleDays: 3 })).status).toBe(403);
+  });
+
+  it("uses the organization's stale thresholds, which only an administrator changes", async () => {
+    await sync();
+    expect((await owner.call('GET', '/api/settings/rmm-health')).data).toEqual({ staleDays: 7, veryStaleDays: 30 });
+    const bad = await owner.call('PUT', '/api/settings/rmm-health', { staleDays: 10, veryStaleDays: 10 });
+    expect(bad.status).toBe(400);
+    const saved = await owner.call('PUT', '/api/settings/rmm-health', { staleDays: 1, veryStaleDays: 5 });
+    expect(saved.data).toEqual({ staleDays: 1, veryStaleDays: 5 });
+    const report = (await owner.call('GET', '/api/rmm-health')).data;
+    expect(report).toMatchObject({ staleDays: 1, veryStaleDays: 5 });
+    expect(report.totals).toMatchObject({ current: 1, stale: 1, veryStale: 2 });
+    // A request can still ask for its own.
+    expect((await owner.call('GET', '/api/rmm-health?staleDays=7&veryStaleDays=30')).data.totals.current).toBe(2);
+    const events = await t.handle.db.execute(sql`select action from security_events`);
+    expect(events.rows.map((r) => r.action)).toContain('RMM health settings changed');
+  });
+
+  it('records a daily snapshot after each sync for the trend lines', async () => {
+    expect((await owner.call('GET', '/api/rmm-health/trend')).data).toEqual([]);
+    await sync();
+    const today = new Date().toISOString().slice(0, 10);
+    expect((await owner.call('GET', '/api/rmm-health/trend')).data).toEqual([
+      { day: today, total: 5, online: 2, current: 2, protectionRunning: 2 },
+    ]);
+    // The day's last sync wins: one row per client per day.
+    devices.set('c2', []);
+    await sync();
+    const rows = await t.handle.db.execute(sql`select count(*)::int as n from rmm_health_snapshots`);
+    expect(rows.rows[0]!.n).toBe(2);
+    expect((await owner.call('GET', `/api/rmm-health/trend?client=${northline}`)).data).toEqual([
+      { day: today, total: 0, online: 0, current: 0, protectionRunning: 0 },
+    ]);
+    // Older days show within the window, oldest first.
+    const past = new Date(Date.now() - 3 * DAY).toISOString().slice(0, 10);
+    await t.handle.db.execute(
+      sql`insert into rmm_health_snapshots (org_id, client_id, day, counts)
+          select org_id, id, ${past}, '{"total":4,"online":4,"current":4,"protectionRunning":3}'::jsonb
+          from clients where id = ${harbor}`,
+    );
+    const trend = (await owner.call('GET', `/api/rmm-health/trend?client=${harbor}`)).data;
+    expect(trend.map((p: { day: string }) => p.day)).toEqual([past, today]);
+    expect(trend[0]).toMatchObject({ total: 4, online: 4 });
+    expect((await owner.call('GET', `/api/rmm-health/trend?client=${harbor}&days=2`)).data).toHaveLength(1);
   });
 });

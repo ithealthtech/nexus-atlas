@@ -16,6 +16,8 @@ import {
   huduConnectionSchema,
   type Branding,
   notificationSettingsSchema,
+  rmmHealthSettingsSchema,
+  type RmmHealthSettings,
   smtpSettingsSchema,
   type MailMethod,
   type NotificationSettings,
@@ -59,6 +61,7 @@ interface StoredSettings {
   erase?: EraseRequest;
   health?: PasswordHealthSettings & { lastRunAt?: string };
   entra?: StoredEntra;
+  rmmHealth?: RmmHealthSettings;
 }
 export interface StoredEntra {
   tenantId: string;
@@ -216,6 +219,16 @@ export class SettingsService {
     const body = notificationSettingsSchema.parse(input);
     body.alertDays = [...new Set(body.alertDays)].sort((a, b) => b - a);
     await this.put(orgId, 'notifications', body);
+    return body;
+  }
+
+  async rmmHealth(orgId: string): Promise<RmmHealthSettings> {
+    return rmmHealthSettingsSchema.parse((await this.load(orgId)).rmmHealth ?? {});
+  }
+
+  async saveRmmHealth(orgId: string, input: unknown): Promise<RmmHealthSettings> {
+    const body = rmmHealthSettingsSchema.parse(input);
+    await this.put(orgId, 'rmmHealth', body);
     return body;
   }
 

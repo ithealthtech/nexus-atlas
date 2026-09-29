@@ -837,3 +837,21 @@ export const rmmDeviceStatus = pgTable(
     ),
   ],
 );
+
+// One row per client per day with that day's RMM health counts (RmmHealthCounts), written after each sync, for the
+// trend lines. The day's last sync wins.
+export const rmmHealthSnapshots = pgTable(
+  'rmm_health_snapshots',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    counts: jsonb('counts').notNull(),
+    updatedAt: updated(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('rmm_health_snapshots_day').on(t.orgId, t.day)],
+);
