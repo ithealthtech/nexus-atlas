@@ -191,6 +191,59 @@ export const trustedDevices = pgTable(
   (t) => [uniqueIndex('trusted_devices_token').on(t.tokenHash), index('trusted_devices_user').on(t.userId)],
 );
 
+// Apps signed in through Atlas on one device: the browser extension (and later the Windows app). Each holds a
+// P-256 key that never leaves the device; a request counts only when it is signed with that key, so the token alone
+// is useless if it is copied. Only a hash of the token is stored.
+export const deviceSessions = pgTable(
+  'device_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    // SubjectPublicKeyInfo (DER, base64url) of the device's signing key.
+    publicKey: text('public_key').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    ip: text('ip').notNull().default(''),
+    userAgent: text('user_agent').notNull().default(''),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenIp: text('last_seen_ip').notNull().default(''),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('device_sessions_token').on(t.tokenHash),
+    index('device_sessions_user').on(t.userId),
+    check('device_sessions_kind_check', sql`${t.kind} in ('browser_extension')`),
+  ],
+);
+
+// A device asking to sign in. The person approves it in Atlas after checking the code the device shows; the device
+// then collects its session once, proving it holds the key the request was made with.
+export const devicePairings = pgTable(
+  'device_pairings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: text('code').notNull(),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    publicKey: text('public_key').notNull(),
+    ip: text('ip').notNull().default(''),
+    userAgent: text('user_agent').notNull().default(''),
+    // Set when someone approves it; the session is created for them.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('device_pairings_code').on(t.code)],
+);
+
 export const passkeys = pgTable(
   'passkeys',
   {

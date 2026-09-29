@@ -13,7 +13,9 @@ import {
   shareSchema,
   updatePasswordSchema,
   bulkPasswordSchema,
+  deviceFillSchema,
   type BulkPasswordResult,
+  type DeviceLoginView,
   type PasswordCategory,
   type PasswordFolderView,
   type PasswordHistoryView,
@@ -29,6 +31,7 @@ import { totp } from '../identity/totp.js';
 import { recordActivity } from './activity.js';
 import { isUuid, type Scope } from './scope.js';
 import { allowedRestricted } from './items.js';
+import { matchLogin, siteOf } from './login-match.js';
 
 type Row = typeof schema.passwords.$inferSelect;
 const editor = alias(schema.users, 'pw_editor');
@@ -45,8 +48,16 @@ const REVEAL_ACTIONS = {
   totp: 'Viewed one-time code',
   custom: 'Viewed custom field',
 } as const;
-// Audit actions that count as "using" a password, for Recently used (plus creating a share link).
-const USED_ACTIONS = ['Revealed password', 'Copied password', 'Viewed one-time code', 'Viewed notes'] as const;
+// Audit actions that count as "using" a password, for Recently used (plus creating a share link and filling).
+const USED_ACTIONS = [
+  'Revealed password',
+  'Copied password',
+  'Viewed one-time code',
+  'Copied one-time code',
+  'Viewed notes',
+] as const;
+const FILLED = 'Filled password on';
+const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 type Personal = { favorites: Set<string>; lastUsed: Map<string, string> };
 
 export class VaultService {
@@ -230,7 +241,7 @@ export class VaultService {
           eq(a.orgId, scope.actor.orgId),
           eq(a.actorId, scope.actor.id),
           inArray(a.passwordId, ids),
-          sql`(${inArray(a.action, [...USED_ACTIONS])} or ${a.action} like 'Created a share link%')`,
+          sql`(${inArray(a.action, [...USED_ACTIONS])} or ${a.action} like 'Created a share link%' or ${a.action} like ${`${FILLED} %`})`,
         ),
       )
       .groupBy(a.passwordId);
@@ -722,10 +733,125 @@ export class VaultService {
       ? `${body.copy ? 'Copied' : 'Viewed'} custom field “${custom.label}”`
       : body.copy && body.field === 'secret'
         ? 'Copied password'
-        : REVEAL_ACTIONS[body.field];
+        : body.copy && body.field === 'totp'
+          ? 'Copied one-time code'
+          : REVEAL_ACTIONS[body.field];
     await this.audit(scope, p, action, body.reason, ip);
     if (body.field === 'totp') return { value: totp(value), expiresIn: 30 - (Math.floor(Date.now() / 1000) % 30) };
     return { value };
+  }
+
+  // ---------- browser extension ----------
+  /** Logins the actor may use, for the extension: staff only, not archived, in clients with password access. */
+  private async deviceRows(scope: Scope, where: SQL, limit: number) {
+    if (this.isPortal(scope)) return [];
+    const ids = await this.vaultClients(scope);
+    if (!ids.length) return [];
+    const rows = await scope.db
+      .select({
+        p: {
+          id: schema.passwords.id,
+          name: schema.passwords.name,
+          username: schema.passwords.username,
+          url: schema.passwords.url,
+          clientId: schema.passwords.clientId,
+          restricted: schema.passwords.restricted,
+          hasTotp: sql<boolean>`${schema.passwords.totp} is not null`,
+        },
+        clientName: schema.clients.name,
+        requireReason: schema.clients.requireRevealReason,
+      })
+      .from(schema.passwords)
+      .innerJoin(schema.clients, eq(schema.clients.id, schema.passwords.clientId))
+      .where(
+        and(
+          eq(schema.passwords.orgId, scope.actor.orgId),
+          inArray(schema.passwords.clientId, ids),
+          eq(schema.passwords.archived, false),
+          eq(schema.passwords.kind, 'login'),
+          where,
+        ),
+      )
+      .orderBy(asc(sql`lower(${schema.passwords.name})`))
+      .limit(limit);
+    const allowed = this.isAdmin(scope)
+      ? null
+      : await this.allowedRestricted(
+          scope,
+          rows.filter((r) => r.p.restricted).map((r) => r.p.id),
+        );
+    return rows.filter((r) => !r.p.restricted || !allowed || allowed.has(r.p.id));
+  }
+
+  private deviceView(
+    r: Awaited<ReturnType<VaultService['deviceRows']>>[number],
+    match: DeviceLoginView['match'],
+  ): DeviceLoginView {
+    return {
+      id: r.p.id,
+      name: r.p.name,
+      username: r.p.username,
+      url: r.p.url,
+      clientId: r.p.clientId,
+      clientName: r.clientName,
+      hasTotp: r.p.hasTotp,
+      requireReason: r.requireReason,
+      match,
+    };
+  }
+
+  /** Logins whose address matches the page: same host first, then the rest of its domain. */
+  async matchingLogins(scope: Scope, pageUrl: string): Promise<DeviceLoginView[]> {
+    const page = siteOf(pageUrl);
+    if (!page) return [];
+    // The address has to mention the domain (or the host, for addresses without one) to match at all.
+    const rows = await this.deviceRows(
+      scope,
+      sql`${schema.passwords.url} ilike ${likePattern(page.domain ?? page.host)}`,
+      500,
+    );
+    const rank = { exact: 0, domain: 1 } as const;
+    return rows
+      .map((r) => ({ r, match: matchLogin(r.p.url, page) }))
+      .filter((m) => m.match)
+      .sort((a, b) => rank[a.match!] - rank[b.match!])
+      .slice(0, 50)
+      .map((m) => this.deviceView(m.r, m.match));
+  }
+
+  /** Quick search by name, username, address, or client. */
+  async searchLogins(scope: Scope, query: string): Promise<DeviceLoginView[]> {
+    const q = query.trim().slice(0, 100);
+    if (q.length < 2) return [];
+    const pattern = likePattern(q);
+    const rows = await this.deviceRows(
+      scope,
+      or(
+        sql`${schema.passwords.name} ilike ${pattern}`,
+        sql`${schema.passwords.username} ilike ${pattern}`,
+        sql`${schema.passwords.url} ilike ${pattern}`,
+        sql`${schema.clients.name} ilike ${pattern}`,
+      )!,
+      25,
+    );
+    return rows.map((r) => this.deviceView(r, null));
+  }
+
+  /**
+   * The username and password to fill into a page, after the same checks as a reveal. The login's address must
+   * match the page, and the fill is audited with the page's host.
+   */
+  async fill(scope: Scope, id: string, input: unknown, ip: string): Promise<{ username: string; password: string }> {
+    const { p, requireReason } = await this.load(scope, id);
+    const body = deviceFillSchema.parse(input ?? {});
+    const page = siteOf(body.url);
+    if (p.kind !== 'login' || p.archived || !page || !matchLogin(p.url, page))
+      throw new HttpError(400, 'This login is not saved for this site.', 'site_mismatch');
+    if (requireReason && !body.reason)
+      throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
+    const password = await this.keys.open(scope.actor.orgId, p.secret, aad(id, 'secret'));
+    await this.audit(scope, p, `${FILLED} ${page.host}`.slice(0, 300), body.reason, ip);
+    return { username: p.username, password };
   }
 
   async history(scope: Scope, id: string): Promise<PasswordHistoryView[]> {

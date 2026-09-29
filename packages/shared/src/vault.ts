@@ -102,15 +102,15 @@ export type CustomFieldInput = z.input<typeof customFieldSchema>;
 export const MAX_CUSTOM_FIELDS = 30;
 const customFields = z.array(customFieldSchema).max(MAX_CUSTOM_FIELDS);
 
+const address = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((v) => v === '' || /^https?:\/\/\S+$/i.test(v), 'Enter an http:// or https:// address.');
 const base = {
   name: z.string().trim().min(1, 'Name is required.').max(200),
   username: z.string().trim().max(254).default(''),
-  url: z
-    .string()
-    .trim()
-    .max(2000)
-    .default('')
-    .refine((v) => v === '' || /^https?:\/\/\S+$/i.test(v), 'Enter an http:// or https:// address.'),
+  url: address.default(''),
   secret: z.string().min(1, 'The password is required.').max(4096),
   notes: z.string().max(20000).default(''),
   totp: totpSecret.default(''),
@@ -134,7 +134,8 @@ export const createPasswordSchema = z
 export const updatePasswordSchema = z.object({
   name: base.name.optional(),
   username: z.string().trim().max(254).optional(),
-  url: base.url.optional(),
+  // Without a default: a change that leaves the address out keeps it.
+  url: address.optional(),
   secret: base.secret.optional(),
   notes: z.string().max(20000).optional(),
   totp: totpSecret.optional(),

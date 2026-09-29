@@ -2,6 +2,16 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Browser extension for Edge and Chrome:** suggests the logins saved for the site you're on and fills them, with a quick search to copy a password, username, or one-time code for any login you can use. It signs in through Atlas: you approve the browser in Atlas after checking a code, and the extension gets a session tied to a key that never leaves the browser. It stores no passwords and asks Atlas each time. Fills and copies are recorded like reveals, and clients that require a reason ask for one. Signed-in browsers are listed on your account page, end after 7 days unused or 30 days in total, and are signed out with everything else when your password changes or an administrator signs you out. Build it with `npm run build:extension`. (#28)
+
+### Fixed
+
+- **Passwords:** changing only some details of a password (for example a bulk rotation change, or restricting it) no longer clears its website address. (#28)
+
 ## [1.6.0] - 2026-09-29
 
 ### Added
