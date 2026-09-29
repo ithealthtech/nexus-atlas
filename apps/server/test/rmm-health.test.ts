@@ -120,6 +120,7 @@ describe('RMM health report', () => {
             availabilityStatus: 'Online',
             lastSeen: ago(0),
             endpointProtection: { name: 'SentinelOne', status: 'Running' },
+            warrantyExpirationDate: '2027-03-31T00:00:00Z',
           },
           {
             endpointId: 'h2',
@@ -210,6 +211,20 @@ describe('RMM health report', () => {
 
     const one = (await owner.call('GET', `/api/rmm-health?client=${northline}`)).data;
     expect(one.totals).toMatchObject({ total: 1, online: 1, protectionRunning: 1 });
+  });
+
+  it('fills the warranty date the RMM reports, for the warranty chart', async () => {
+    await sync();
+    const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
+      name: string;
+      fields: Record<string, string>;
+    }[];
+    expect(assets.find((a) => a.name === 'HDG-DC-01')!.fields.warranty_expires).toBe('2027-03-31');
+    expect(assets.find((a) => a.name === 'HDG-FS-01')!.fields.warranty_expires).toBeUndefined();
+    expect((await owner.call('GET', `/api/warranty?client=${harbor}`)).data.totals).toMatchObject({
+      total: 4,
+      unknown: 3,
+    });
   });
 
   it('lists the devices behind a slice, most overdue first', async () => {

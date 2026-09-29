@@ -18,6 +18,8 @@ import {
   notificationSettingsSchema,
   rmmHealthSettingsSchema,
   type RmmHealthSettings,
+  warrantySettingsSchema,
+  type WarrantySettings,
   smtpSettingsSchema,
   type MailMethod,
   type NotificationSettings,
@@ -62,6 +64,7 @@ interface StoredSettings {
   health?: PasswordHealthSettings & { lastRunAt?: string };
   entra?: StoredEntra;
   rmmHealth?: RmmHealthSettings;
+  warranty?: WarrantySettings;
 }
 export interface StoredEntra {
   tenantId: string;
@@ -229,6 +232,16 @@ export class SettingsService {
   async saveRmmHealth(orgId: string, input: unknown): Promise<RmmHealthSettings> {
     const body = rmmHealthSettingsSchema.parse(input);
     await this.put(orgId, 'rmmHealth', body);
+    return body;
+  }
+
+  async warranty(orgId: string): Promise<WarrantySettings> {
+    return warrantySettingsSchema.parse((await this.load(orgId)).warranty ?? {});
+  }
+
+  async saveWarranty(orgId: string, input: unknown): Promise<WarrantySettings> {
+    const body = warrantySettingsSchema.parse(input);
+    await this.put(orgId, 'warranty', body);
     return body;
   }
 

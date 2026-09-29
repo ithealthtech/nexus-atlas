@@ -22,6 +22,11 @@ import {
   type RmmHealthReport,
   type RmmHealthSettings,
   type RmmHealthTrendPoint,
+  type WarrantyAsset,
+  type WarrantyCounts,
+  type WarrantyFilter,
+  type WarrantyReport,
+  type WarrantySettings,
   type ItemType,
   type LayoutField,
   type RichText,
@@ -191,6 +196,42 @@ function rmmTrend(client: string | null): RmmHealthTrendPoint[] {
       protectionRunning: back ? dip(today.protectionRunning) : today.protectionRunning,
     };
   });
+}
+
+// ---------- asset warranty (sample dates on the RMM sample's devices) ----------
+let warrantySettings: WarrantySettings = { soonDays: 90 };
+const WARRANTY_SAMPLE: WarrantyAsset[] = RMM_SAMPLE.map((d, i) => {
+  const n = (i * 11) % 23;
+  const daysLeft = n < 5 ? null : n < 8 ? -30 * n : n < 11 ? 12 * n - 60 : 60 * n;
+  return {
+    assetId: d.assetId,
+    name: d.name,
+    clientId: d.clientId,
+    clientName: d.clientName,
+    layoutName: 'Configurations',
+    warrantyExpires: daysLeft === null ? null : new Date(Date.now() + daysLeft * 86_400_000).toISOString().slice(0, 10),
+    daysLeft,
+  };
+});
+const warrantyAssets = (client: string | null) => WARRANTY_SAMPLE.filter((a) => !client || a.clientId === client);
+function warrantyStanding(a: WarrantyAsset): WarrantyFilter {
+  if (a.daysLeft === null) return 'unknown';
+  if (a.daysLeft < 0) return 'expired';
+  return a.daysLeft <= warrantySettings.soonDays ? 'soon' : 'active';
+}
+function warrantyCounts(list: WarrantyAsset[]): WarrantyCounts {
+  const c: WarrantyCounts = { total: list.length, expired: 0, soon: 0, active: 0, unknown: 0 };
+  for (const a of list) c[warrantyStanding(a)]++;
+  return c;
+}
+function warrantyReport(client: string | null): WarrantyReport {
+  const list = warrantyAssets(client);
+  const clients = [...new Set(list.map((a) => a.clientId))].map((id) => ({
+    clientId: id,
+    clientName: clientName(id) ?? '',
+    counts: warrantyCounts(list.filter((a) => a.clientId === id)),
+  }));
+  return { soonDays: warrantySettings.soonDays, totals: warrantyCounts(list), clients };
 }
 
 // ---------- documentation ----------
@@ -1281,6 +1322,14 @@ on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
 on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
+on('GET', '/warranty/assets', (_m, _b, q) =>
+  warrantyAssets(q.get('client'))
+    .filter((a) => warrantyStanding(a) === q.get('filter'))
+    .sort((a, b) => (a.warrantyExpires ?? '').localeCompare(b.warrantyExpires ?? '') || a.name.localeCompare(b.name)),
+);
+on('GET', '/settings/warranty', () => warrantySettings);
+on('PUT', '/settings/warranty', (_m, b) => (warrantySettings = b as WarrantySettings));
 on('GET', '/rmm-health/trend', (_m, _b, q) => rmmTrend(q.get('client')));
 on('GET', '/settings/rmm-health', () => rmmSettings);
 on('PUT', '/settings/rmm-health', (_m, b) => (rmmSettings = b as RmmHealthSettings));

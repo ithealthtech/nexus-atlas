@@ -5,6 +5,7 @@ import {
   SMTP_PRESETS,
   type NotificationSettings,
   type RmmHealthSettings,
+  type WarrantySettings,
   type SmtpPreset,
   type SmtpSecurity,
   type SmtpSettingsView,
@@ -24,7 +25,13 @@ import {
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
-import { useEmailSettings, useNotificationSettings, useRmmHealthSettings, useSave } from '@/lib/queries';
+import {
+  useEmailSettings,
+  useNotificationSettings,
+  useRmmHealthSettings,
+  useSave,
+  useWarrantySettings,
+} from '@/lib/queries';
 import { ApiKeysCard } from './SettingsExtra';
 import { DangerZone } from './DangerZone';
 import { EntraSettings } from './EntraSettings';
@@ -556,17 +563,65 @@ function RmmHealthSettingsCard({ current }: { current: RmmHealthSettings }) {
   );
 }
 
+function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
+  const toast = useToast();
+  const [soonDays, setSoonDays] = useState(String(current.soonDays));
+  const [error, setError] = useState<string | null>(null);
+  const save = useSave(
+    (body: object) => api<WarrantySettings>('/settings/warranty', { method: 'PUT', body }),
+    [['settings', 'warranty'], ['warranty']],
+  );
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await save.mutateAsync({ soonDays: Number(soonDays) });
+      toast('Warranty settings saved.');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader title="Asset warranty" description="When a warranty counts as expiring soon on the warranty chart." />
+      <form onSubmit={submit} className="space-y-5 p-5" noValidate>
+        <Field label="Expiring soon within (days)" help="Between 1 and 365.">
+          {(p) => (
+            <Input
+              {...p}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={365}
+              className="sm:max-w-40"
+              value={soonDays}
+              onChange={(e) => setSoonDays(e.target.value)}
+            />
+          )}
+        </Field>
+        <FormError message={error} />
+        <div className="flex justify-end">
+          <Button type="submit" loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 export function Settings() {
   const actor = useActor();
   const email = useEmailSettings();
   const notifications = useNotificationSettings();
   const rmmHealth = useRmmHealthSettings();
+  const warranty = useWarrantySettings();
   return (
     <>
       <PageHeader
         eyebrow="Administration"
         title="Settings"
-        description="Email, alerts, log retention, RMM health, branding, and API keys."
+        description="Email, alerts, log retention, RMM health, warranty, branding, and API keys."
       />
       <div className="grid max-w-3xl gap-6">
         {email.data ? (
@@ -586,6 +641,11 @@ export function Settings() {
           <RmmHealthSettingsCard key={JSON.stringify(rmmHealth.data)} current={rmmHealth.data} />
         ) : (
           <Skeleton className="h-40" />
+        )}
+        {warranty.data ? (
+          <WarrantySettingsCard key={JSON.stringify(warranty.data)} current={warranty.data} />
+        ) : (
+          <Skeleton className="h-32" />
         )}
 
         <EntraSettings />

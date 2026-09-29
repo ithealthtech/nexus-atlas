@@ -181,6 +181,7 @@ function mapDevice(id: string, companyId: string, siteId: string, record: Json):
     ),
     online: onlineState(pick(d, ...ONLINE_KEYS)),
     lastSeenAt: seenAt(pick(d, ...LAST_SEEN_KEYS)),
+    warrantyExpires: warrantyDate(pick(d, ...WARRANTY_KEYS)),
     ...protectionOf(d),
     extra: extraValues(d),
   };
@@ -212,6 +213,18 @@ const LAST_SEEN_KEYS = [
   'agent.lastContact',
   'agent.lastSeen',
 ];
+const WARRANTY_KEYS = [
+  'warrantyExpirationDate',
+  'warrantyExpiryDate',
+  'warrantyExpiration',
+  'warrantyEndDate',
+  'warrantyEnd',
+  'warranty.expirationDate',
+  'warranty.endDate',
+  'warranty.expires',
+  'hardware.warrantyExpirationDate',
+  'system.warrantyExpirationDate',
+];
 const PROTECTION_OBJECTS = ['endpointProtection', 'antivirus', 'antiVirus', 'av', 'securityProduct', 'security.antivirus'];
 
 /** true for online, false for offline, null when the value doesn't say. */
@@ -235,6 +248,17 @@ export function seenAt(value: unknown, now = Date.now()): string | null {
   // Before 2000 or more than a day ahead is a placeholder or a bad clock, not a check-in.
   if (!Number.isFinite(ms) || ms < Date.UTC(2000, 0, 1) || ms > now + 86_400_000) return null;
   return new Date(ms).toISOString();
+}
+
+/** A warranty end date as YYYY-MM-DD, from a date string or a Unix time; '' when missing or implausible. */
+export function warrantyDate(value: unknown): string {
+  let ms: number;
+  if (typeof value === 'number') ms = value < 1e11 ? value * 1000 : value;
+  else if (typeof value === 'string' && /^\d{9,13}$/.test(value.trim())) return warrantyDate(Number(value));
+  else if (typeof value === 'string') ms = Date.parse(value.trim());
+  else return '';
+  if (!Number.isFinite(ms) || ms < Date.UTC(1990, 0, 1) || ms > Date.UTC(2100, 0, 1)) return '';
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
 /** Endpoint protection: running, installed but not running, or missing, with the product name when given. */
@@ -292,6 +316,11 @@ const MAPPED = new Set(
     'model',
     'serialNumber',
     'serial',
+    'warrantyExpirationDate',
+    'warrantyExpiryDate',
+    'warrantyExpiration',
+    'warrantyEndDate',
+    'warrantyEnd',
   ].map((k) => k.toLowerCase()),
 );
 const CATEGORIES = new Set(['platform', 'network', 'cloud']);
@@ -401,6 +430,8 @@ export interface RmmDevice {
   lastSeenAt: string | null;
   protection: RmmProtection | null;
   protectionProduct: string;
+  /** Warranty end date (YYYY-MM-DD), or '' when not reported. */
+  warrantyExpires: string;
   /** Everything else ConnectWise sent about the device, as [label, value]. */
   extra: [string, string][];
 }
@@ -694,6 +725,7 @@ const FIELD_LABELS: Record<string, RegExp> = {
   serial_number: /serial|service tag/,
   operating_system: /operating system|^os$|os version/,
   location: /^location$|^site$/,
+  warranty_expires: /warrant/,
 };
 
 /** The device values another layout can hold, keyed by that layout's own fields; values that don't fit are left out. */
@@ -708,6 +740,8 @@ export function fitFields(layoutFields: LayoutField[], values: Record<string, st
     if (['text', 'textarea', 'ip', 'url'].includes(target.type)) {
       if (target.type === 'url' && !/^https?:\/\//i.test(value)) continue;
       out[target.key] = value;
+    } else if (target.type === 'date') {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) out[target.key] = value;
     } else if (target.type === 'select') {
       const option = target.options.find((o) => o.toLowerCase() === value.toLowerCase());
       if (option) out[target.key] = option;
@@ -726,7 +760,10 @@ const DEVICE_FIELD_LABELS: Record<string, string> = {
   serial_number: 'Serial number',
   operating_system: 'Operating system',
   location: 'Location',
+  warranty_expires: 'Warranty expires',
 };
+/** Sample values that fit a field of each device value's type, to test whether a layout can hold it. */
+const SAMPLE: Record<string, string> = { ip_address: '10.0.0.1', warranty_expires: '2030-01-01' };
 
 /**
  * Adds text fields to a layout for device values it has no field for (within the field limit), and returns
@@ -747,7 +784,7 @@ async function ensureDeviceFields(
     // Type only goes into a matching choice list; it isn't added as free text.
     if (!value || key === 'type') continue;
     const label = DEVICE_FIELD_LABELS[key]!;
-    const fits = fitFields(current, { [key]: key === 'ip_address' ? '10.0.0.1' : 'x' });
+    const fits = fitFields(current, { [key]: SAMPLE[key] ?? 'x' });
     if (Object.keys(fits).length || labelled.has(label.toLowerCase())) continue;
     if (current.length + added.length >= MAX_LAYOUT_FIELDS) break;
     let fieldKey = key;
@@ -756,12 +793,13 @@ async function ensureDeviceFields(
     added.push({
       key: fieldKey,
       label,
-      type: 'text',
+      // A warranty date is a date, so it shows on Expirations and the warranty chart.
+      type: key === 'warranty_expires' ? 'date' : 'text',
       required: false,
       options: [],
       help: 'Added by the ConnectWise RMM sync.',
       showInList: false,
-      expires: false,
+      expires: key === 'warranty_expires',
     });
   }
   if (!added.length) return current;
@@ -1096,6 +1134,7 @@ export async function runCwRmmSync(
         serial_number: d.serial.slice(0, 500),
         operating_system: d.os.slice(0, 500),
         location: (siteNames.get(d.siteId) ?? '').slice(0, 500),
+        warranty_expires: d.warrantyExpires,
       };
       const name = d.name.slice(0, 200);
       /** Everything else the RMM sent, keyed by the layout's own fields; fields it lacks are added to it. */

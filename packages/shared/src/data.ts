@@ -184,6 +184,39 @@ export interface RmmHealthDevice {
   protectionProduct: string;
 }
 
+// ---------- asset warranty ----------
+/** Days ahead within which a warranty counts as expiring soon. Set per organization. */
+export const warrantySettingsSchema = z.object({
+  soonDays: z.number().int().min(1).max(365).default(90),
+});
+export type WarrantySettings = z.infer<typeof warrantySettingsSchema>;
+/** Assets whose layout has a warranty date field, by where that date falls. Unknown means no date entered. */
+export interface WarrantyCounts {
+  total: number;
+  expired: number;
+  soon: number;
+  active: number;
+  unknown: number;
+}
+export interface WarrantyReport {
+  soonDays: number;
+  totals: WarrantyCounts;
+  /** One row per client with hardware assets, most expired and unknown first. */
+  clients: { clientId: string; clientName: string; counts: WarrantyCounts }[];
+}
+export const WARRANTY_FILTERS = ['expired', 'soon', 'active', 'unknown'] as const;
+export type WarrantyFilter = (typeof WARRANTY_FILTERS)[number];
+export interface WarrantyAsset {
+  assetId: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  layoutName: string;
+  /** YYYY-MM-DD, or null when no date is entered. */
+  warrantyExpires: string | null;
+  daysLeft: number | null;
+}
+
 export interface HuduPreview {
   companies: number;
   assetLayouts: number;

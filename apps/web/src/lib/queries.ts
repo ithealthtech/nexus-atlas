@@ -11,6 +11,7 @@ import type {
   LocationView,
   RelationView,
   RmmHealthSettings,
+  WarrantySettings,
   RevisionView,
   SearchResult,
 } from '@atlas/shared';
@@ -46,6 +47,8 @@ export const useEmailSettings = () =>
   useQuery({ queryKey: ['settings', 'email'], queryFn: () => api<SmtpSettingsView>('/settings/email') });
 export const useRmmHealthSettings = () =>
   useQuery({ queryKey: ['settings', 'rmm-health'], queryFn: () => api<RmmHealthSettings>('/settings/rmm-health') });
+export const useWarrantySettings = () =>
+  useQuery({ queryKey: ['settings', 'warranty'], queryFn: () => api<WarrantySettings>('/settings/warranty') });
 export const useNotificationSettings = () =>
   useQuery({
     queryKey: ['settings', 'notifications'],
