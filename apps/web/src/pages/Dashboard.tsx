@@ -10,6 +10,7 @@ import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard } from '@/components/RmmHealth';
 import { TicketsCard } from '@/components/Tickets';
 import { WarrantyCard } from '@/components/Warranty';
+import { AssetStatsCard } from '@/components/AssetStats';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
 import { useActivity, useAssets, useClients, useDocuments, useExpirations, useUsers } from '@/lib/queries';
@@ -116,6 +117,7 @@ export function Dashboard() {
       <div className="mb-7 space-y-6">
         <RmmHealthCard />
         <TicketsCard />
+        <AssetStatsCard />
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">

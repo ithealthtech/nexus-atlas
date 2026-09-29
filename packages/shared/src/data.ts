@@ -260,6 +260,90 @@ export interface WarrantyAsset {
   daysLeft: number | null;
 }
 
+// ---------- asset statistics ----------
+/** What kind of device an asset is, for the count tiles. */
+export const ASSET_KINDS = ['server', 'workstation', 'switch', 'network', 'printer', 'phone', 'other'] as const;
+export type AssetKind = (typeof ASSET_KINDS)[number];
+export const ASSET_KIND_LABELS: Record<AssetKind, string> = {
+  server: 'Servers',
+  workstation: 'Workstations',
+  switch: 'Switches',
+  network: 'Network devices',
+  printer: 'Printers',
+  phone: 'Phones',
+  other: 'Other devices',
+};
+/**
+ * Which layouts count as which kind of device. "auto" reads each asset's Type field (and its operating system);
+ * "none" leaves the layout out of the statistics. Layouts not listed are "auto".
+ */
+export const assetStatsSettingsSchema = z.object({
+  layouts: z
+    .record(z.string().uuid(), z.enum([...ASSET_KINDS, 'auto', 'none']))
+    .refine((r) => Object.keys(r).length <= 500, 'Too many layouts.')
+    .default({}),
+});
+export type AssetStatsSettings = z.infer<typeof assetStatsSettingsSchema>;
+/** Operating system families on the OS chart. */
+export const ASSET_OS = [
+  'windows-11',
+  'windows-10',
+  'windows-old',
+  'server-2025',
+  'server-2022',
+  'server-2019',
+  'server-2016',
+  'server-old',
+  'macos',
+  'linux',
+  'other',
+  'unknown',
+] as const;
+export type AssetOs = (typeof ASSET_OS)[number];
+export const ASSET_OS_INFO: Record<AssetOs, { label: string; endOfSupport: boolean }> = {
+  'windows-11': { label: 'Windows 11', endOfSupport: false },
+  'windows-10': { label: 'Windows 10', endOfSupport: true },
+  'windows-old': { label: 'Windows 8.1 or older', endOfSupport: true },
+  'server-2025': { label: 'Windows Server 2025', endOfSupport: false },
+  'server-2022': { label: 'Windows Server 2022', endOfSupport: false },
+  'server-2019': { label: 'Windows Server 2019', endOfSupport: false },
+  'server-2016': { label: 'Windows Server 2016', endOfSupport: false },
+  'server-old': { label: 'Windows Server 2012 R2 or older', endOfSupport: true },
+  macos: { label: 'macOS', endOfSupport: false },
+  linux: { label: 'Linux', endOfSupport: false },
+  other: { label: 'Other', endOfSupport: false },
+  unknown: { label: 'Not recorded', endOfSupport: false },
+};
+export type AssetKindCounts = Record<AssetKind, number> & { total: number };
+export interface AssetStatsReport {
+  totals: AssetKindCounts;
+  /** Devices per operating system family; every family is present. */
+  os: Record<AssetOs, number>;
+  /** One row per client with devices, most devices first. */
+  clients: { clientId: string; clientName: string; counts: AssetKindCounts; endOfSupport: number }[];
+}
+/** `kind:<AssetKind>`, `os:<AssetOs>`, or `eos` (every end-of-support device). */
+export type AssetStatsFilter = `kind:${AssetKind}` | `os:${AssetOs}` | 'eos';
+export function isAssetStatsFilter(v: unknown): v is AssetStatsFilter {
+  if (v === 'eos') return true;
+  if (typeof v !== 'string') return false;
+  const [what, value] = v.split(':');
+  return what === 'kind'
+    ? (ASSET_KINDS as readonly string[]).includes(value!)
+    : what === 'os' && (ASSET_OS as readonly string[]).includes(value!);
+}
+export interface AssetStatsAsset {
+  assetId: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  layoutName: string;
+  kind: AssetKind;
+  os: AssetOs;
+  /** The operating system as recorded on the asset. */
+  osName: string;
+}
+
 // ---------- Microsoft 365 documentation sync ----------
 /** One multi-tenant app registration in the MSP's tenant; each client tenant grants it admin consent. */
 export const m365ConnectionSchema = z.object({

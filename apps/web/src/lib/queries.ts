@@ -12,6 +12,7 @@ import type {
   RelationView,
   RmmHealthSettings,
   WarrantySettings,
+  AssetStatsSettings,
   RevisionView,
   SearchResult,
 } from '@atlas/shared';
@@ -49,6 +50,8 @@ export const useRmmHealthSettings = () =>
   useQuery({ queryKey: ['settings', 'rmm-health'], queryFn: () => api<RmmHealthSettings>('/settings/rmm-health') });
 export const useWarrantySettings = () =>
   useQuery({ queryKey: ['settings', 'warranty'], queryFn: () => api<WarrantySettings>('/settings/warranty') });
+export const useAssetStatsSettings = () =>
+  useQuery({ queryKey: ['settings', 'asset-stats'], queryFn: () => api<AssetStatsSettings>('/settings/asset-stats') });
 export const useNotificationSettings = () =>
   useQuery({
     queryKey: ['settings', 'notifications'],
