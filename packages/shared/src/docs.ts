@@ -233,6 +233,11 @@ export interface RelationView extends ItemRef {
   relationId: string;
   note: string;
 }
+/** How a client's items connect: the items that take part in at least one link, and the links between them. */
+export interface RelationshipMap {
+  nodes: ItemRef[];
+  edges: { id: string; from: string; to: string; note: string }[];
+}
 export interface AttachmentView {
   id: string;
   filename: string;

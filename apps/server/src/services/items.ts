@@ -147,3 +147,131 @@ export async function allowedRestricted(scope: Scope, ids: string[]): Promise<Se
   const rows = [...(await direct), ...(await viaGroup)];
   return new Set(rows.map((r) => r.id));
 }
+
+type Visible = ItemRef & { archived: boolean };
+
+/**
+ * The items among these refs that the actor may see, keyed "type:id", loaded with one query per type. Follows
+ * canSee, except that client portal users also see the passwords the vault shows them (marked visible to the
+ * client and not restricted), so read-only views match the Passwords tab.
+ */
+export async function visibleItems(scope: Scope, refs: { type: string; id: string }[]): Promise<Map<string, ItemRef>> {
+  const orgId = scope.actor.orgId;
+  const ids = (type: ItemType) => [...new Set(refs.filter((r) => r.type === type && isUuid(r.id)).map((r) => r.id))];
+  const clientName = schema.clients.name;
+  const found: (Visible & { restricted?: boolean; clientVisible?: boolean })[] = [];
+  const passwordIds = ids('password');
+  if (passwordIds.length)
+    for (const r of await scope.db
+      .select({ p: schema.passwords, clientName })
+      .from(schema.passwords)
+      .innerJoin(schema.clients, eq(schema.clients.id, schema.passwords.clientId))
+      .where(and(eq(schema.passwords.orgId, orgId), inArray(schema.passwords.id, passwordIds))))
+      found.push({
+        type: 'password',
+        id: r.p.id,
+        title: r.p.name,
+        subtitle: r.p.kind === 'bitlocker' ? 'BitLocker key' : 'Password',
+        clientId: r.p.clientId,
+        clientName: r.clientName,
+        archived: r.p.archived,
+        restricted: r.p.restricted,
+        clientVisible: r.p.clientVisible,
+      });
+  const assetIds = ids('asset');
+  if (assetIds.length)
+    for (const r of await scope.db
+      .select({ a: schema.assets, layout: schema.assetLayouts.name, clientName })
+      .from(schema.assets)
+      .innerJoin(schema.assetLayouts, eq(schema.assetLayouts.id, schema.assets.layoutId))
+      .innerJoin(schema.clients, eq(schema.clients.id, schema.assets.clientId))
+      .where(and(eq(schema.assets.orgId, orgId), inArray(schema.assets.id, assetIds))))
+      found.push({
+        type: 'asset',
+        id: r.a.id,
+        title: r.a.name,
+        subtitle: r.layout,
+        clientId: r.a.clientId,
+        clientName: r.clientName,
+        archived: r.a.archived,
+      });
+  const documentIds = ids('document');
+  if (documentIds.length)
+    for (const r of await scope.db
+      .select({ d: schema.documents, clientName })
+      .from(schema.documents)
+      .leftJoin(schema.clients, eq(schema.clients.id, schema.documents.clientId))
+      .where(and(eq(schema.documents.orgId, orgId), inArray(schema.documents.id, documentIds))))
+      found.push({
+        type: 'document',
+        id: r.d.id,
+        title: r.d.title,
+        subtitle: r.d.clientId ? 'Document' : 'Knowledge base',
+        clientId: r.d.clientId,
+        clientName: r.clientName,
+        archived: r.d.archived,
+      });
+  const contactIds = ids('contact');
+  if (contactIds.length)
+    for (const r of await scope.db
+      .select({ c: schema.contacts, clientName })
+      .from(schema.contacts)
+      .innerJoin(schema.clients, eq(schema.clients.id, schema.contacts.clientId))
+      .where(and(eq(schema.contacts.orgId, orgId), inArray(schema.contacts.id, contactIds))))
+      found.push({
+        type: 'contact',
+        id: r.c.id,
+        title: r.c.name,
+        subtitle: r.c.title || 'Contact',
+        clientId: r.c.clientId,
+        clientName: r.clientName,
+        archived: false,
+      });
+  const locationIds = ids('location');
+  if (locationIds.length)
+    for (const r of await scope.db
+      .select({ l: schema.locations, clientName })
+      .from(schema.locations)
+      .innerJoin(schema.clients, eq(schema.clients.id, schema.locations.clientId))
+      .where(and(eq(schema.locations.orgId, orgId), inArray(schema.locations.id, locationIds))))
+      found.push({
+        type: 'location',
+        id: r.l.id,
+        title: r.l.name,
+        subtitle: r.l.city || 'Location',
+        clientId: r.l.clientId,
+        clientName: r.clientName,
+        archived: false,
+      });
+
+  const info = ROLE_INFO[scope.actor.role];
+  const staffPasswords = found.filter((i) => i.type === 'password' && i.restricted);
+  const allowed =
+    info.staff && !info.admin
+      ? await allowedRestricted(
+          scope,
+          staffPasswords.map((i) => i.id),
+        )
+      : new Set();
+  const out = new Map<string, ItemRef>();
+  for (const item of found) {
+    if (item.archived) continue;
+    const level = await scope.level(item.clientId);
+    if (level === 'none') continue;
+    if (item.type === 'password') {
+      const ok = info.staff
+        ? level === 'edit_passwords' && (!item.restricted || info.admin || allowed.has(item.id))
+        : item.clientVisible && !item.restricted;
+      if (!ok) continue;
+    }
+    out.set(`${item.type}:${item.id}`, {
+      type: item.type,
+      id: item.id,
+      title: item.title,
+      subtitle: item.subtitle,
+      clientId: item.clientId,
+      clientName: item.clientName,
+    });
+  }
+  return out;
+}

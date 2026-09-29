@@ -27,7 +27,7 @@ export interface ApiKeyView {
 }
 
 // ---------- imports ----------
-export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy', 'cw-rmm'] as const;
+export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy', 'cw-rmm', 'm365'] as const;
 export type ImportSource = (typeof IMPORT_SOURCES)[number];
 export interface ImportCounts {
   created: number;
@@ -107,6 +107,59 @@ export const cwRmmMappingSchema = z.object({
       }),
     )
     .max(2000),
+});
+
+// ---------- Microsoft 365 documentation sync ----------
+/** One multi-tenant app registration in the MSP's tenant; each client tenant grants it admin consent. */
+export const m365ConnectionSchema = z.object({
+  // Any GUID shape: Microsoft's IDs aren't all RFC 4122 UUIDs.
+  clientId: z.string().trim().pipe(z.guid('Enter the Application (client) ID: a GUID from the app’s Overview page.')),
+  // Omitted keeps the saved secret.
+  clientSecret: z.string().trim().min(8).max(500).optional(),
+  autoSync: z.boolean().default(true),
+});
+/** What a Microsoft 365 sync brings in. */
+export const m365SyncOptionsSchema = z.object({
+  /** Users, as contacts. */
+  users: z.boolean().default(true),
+  /** Only users with a license (skips shared mailboxes, rooms, and service accounts). */
+  licensedOnly: z.boolean().default(true),
+  /** Subscriptions, as License assets. */
+  licenses: z.boolean().default(true),
+  /** Verified custom domains, as Domain assets. */
+  domains: z.boolean().default(true),
+});
+export type M365SyncOptions = z.infer<typeof m365SyncOptionsSchema>;
+export interface M365View {
+  clientId: string;
+  hasSecret: boolean;
+  autoSync: boolean;
+  lastSyncAt: string | null;
+  options: M365SyncOptions;
+  /** The address to add as the app's Web redirect URI, for admin consent. */
+  redirectUri: string;
+}
+/** An Atlas client and the Microsoft 365 tenant linked to it. */
+export interface M365TenantLink {
+  clientId: string;
+  clientName: string;
+  tenantId: string;
+  tenantName: string | null;
+  /** Whether the last check or sync could sign in to the tenant. */
+  status: 'unchecked' | 'ok' | 'failed';
+  detail: string | null;
+  checkedAt: string | null;
+  consentUrl: string;
+}
+export const m365LinkSchema = z.object({
+  clientId: z.string().uuid(),
+  // A tenant ID (GUID) or one of the tenant's domains, like contoso.onmicrosoft.com.
+  tenant: z
+    .string()
+    .trim()
+    .min(3)
+    .max(255)
+    .regex(/^[A-Za-z0-9.-]+$/, 'Enter the tenant ID or a domain, like contoso.onmicrosoft.com.'),
 });
 
 export interface HuduPreview {

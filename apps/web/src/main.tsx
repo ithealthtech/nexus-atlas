@@ -23,6 +23,7 @@ import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientOverview } from '@/pages/client/ClientOverview';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
+import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
 import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
@@ -189,6 +190,7 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/contacts', component: ClientContacts }),
   createRoute({ getParentRoute: () => clientRoute, path: '/locations', component: ClientLocations }),
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
 ];
 const routes = [
