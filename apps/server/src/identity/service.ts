@@ -222,7 +222,9 @@ export class IdentityService {
   stageFor(user: UserRow, session: SessionRow): SessionStage {
     if (hasMfa(user) && !session.mfaVerified) return 'mfa';
     if (user.mustChangePassword) return 'password';
-    if (this.options.requireStaffMfa && ROLE_INFO[user.role as Role].staff && !hasMfa(user)) return 'mfa-setup';
+    // A session Microsoft already verified with MFA (when the organization trusts it) needs no Atlas MFA setup.
+    if (this.options.requireStaffMfa && ROLE_INFO[user.role as Role].staff && !hasMfa(user) && !session.mfaVerified)
+      return 'mfa-setup';
     return 'active';
   }
 
@@ -459,6 +461,7 @@ export class IdentityService {
       disabled: user.disabled,
       locked: !!user.lockedUntil && user.lockedUntil.getTime() > Date.now(),
       mustChangePassword: user.mustChangePassword,
+      entra: user.entraOid ? ('linked' as const) : user.entraPendingOid ? ('pending' as const) : null,
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
     };

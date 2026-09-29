@@ -26,6 +26,7 @@ import { useActor } from '@/lib/session';
 import { useEmailSettings, useNotificationSettings, useSave } from '@/lib/queries';
 import { ApiKeysCard } from './SettingsExtra';
 import { DangerZone } from './DangerZone';
+import { EntraSettings } from './EntraSettings';
 
 const SECURITY_LABEL: Record<SmtpSecurity, string> = {
   starttls: 'STARTTLS (usually port 587)',
@@ -509,6 +510,7 @@ export function Settings() {
           <Skeleton className="h-48" />
         )}
 
+        <EntraSettings />
         <ApiKeysCard />
         {actor.isAdmin && <DangerZone />}
       </div>

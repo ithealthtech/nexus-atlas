@@ -3,6 +3,8 @@ import { schema, type Database } from '@atlas/db';
 import {
   brandingSchema,
   cwRmmConnectionSchema,
+  entraSettingsSchema,
+  type EntraView,
   passwordHealthSettingsSchema,
   type PasswordHealthSettings,
   cwRmmSyncOptionsSchema,
@@ -56,6 +58,15 @@ interface StoredSettings {
   /** A pending "erase all data" request, during its waiting period. */
   erase?: EraseRequest;
   health?: PasswordHealthSettings & { lastRunAt?: string };
+  entra?: StoredEntra;
+}
+export interface StoredEntra {
+  tenantId: string;
+  clientId: string;
+  secretSealed: string;
+  enabled: boolean;
+  trustMfa: boolean;
+  requireSso: boolean;
 }
 export interface EraseRequest {
   requestedAt: string;
@@ -84,6 +95,7 @@ export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientS
   clientSecret: string;
 }
 
+const entraAad = (orgId: string) => `org|${orgId}|entra`;
 const cwAad = (orgId: string) => `org|${orgId}|cw-rmm`;
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
 const graphAad = (orgId: string) => `org|${orgId}|graph`;
@@ -149,6 +161,11 @@ export class SettingsService {
         });
       if (stored.hudu)
         await this.put(id, 'hudu', { ...stored.hudu, keySealed: reseal(stored.hudu.keySealed, `org|${id}|hudu`)! });
+      if (stored.entra)
+        await this.put(id, 'entra', {
+          ...stored.entra,
+          secretSealed: reseal(stored.entra.secretSealed, entraAad(id))!,
+        });
       if (stored.cwRmm)
         await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
     }
@@ -324,6 +341,61 @@ export class SettingsService {
   async saveHealthRun(orgId: string, at: string) {
     const current = await this.passwordHealth(orgId);
     await this.put(orgId, 'health', { breachChecks: current.breachChecks, lastRunAt: at });
+  }
+
+  /** Entra ID sign-in settings with the client secret decrypted, or null when not set up. */
+  async entra(orgId: string): Promise<(StoredEntra & { clientSecret: string }) | null> {
+    const saved = (await this.load(orgId)).entra;
+    return saved ? { ...saved, clientSecret: open(this.keys, saved.secretSealed, entraAad(orgId)) } : null;
+  }
+
+  entraView(orgId: string, publicOrigin: string): Promise<EntraView | null> {
+    return this.load(orgId).then((all) =>
+      all.entra
+        ? {
+            tenantId: all.entra.tenantId,
+            clientId: all.entra.clientId,
+            hasSecret: true,
+            enabled: all.entra.enabled,
+            trustMfa: all.entra.trustMfa,
+            requireSso: all.entra.requireSso,
+            redirectUri: `${publicOrigin}/api/auth/entra/callback`,
+          }
+        : null,
+    );
+  }
+
+  async saveEntra(orgId: string, input: unknown) {
+    const body = entraSettingsSchema.parse(input);
+    const current = await this.entra(orgId);
+    const secret = body.clientSecret ?? current?.clientSecret;
+    if (!secret)
+      throw new HttpError(400, 'Enter the client secret.', undefined, { clientSecret: 'Enter the client secret.' });
+    await this.put(orgId, 'entra', {
+      tenantId: body.tenantId,
+      clientId: body.clientId,
+      secretSealed: seal(this.keys, secret, entraAad(orgId)),
+      enabled: body.enabled,
+      trustMfa: body.trustMfa,
+      requireSso: body.requireSso && body.enabled,
+    });
+  }
+
+  async forgetEntra(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${schema.orgs.settings} - 'entra'` })
+      .where(eq(schema.orgs.id, orgId));
+  }
+
+  /** The organization whose Entra sign-in is on, for the sign-in page (Atlas serves one organization). */
+  async entraOrg(): Promise<{ orgId: string; settings: StoredEntra } | null> {
+    const rows = await this.db.select({ id: schema.orgs.id, settings: schema.orgs.settings }).from(schema.orgs);
+    for (const r of rows) {
+      const e = (r.settings as StoredSettings | null)?.entra;
+      if (e?.enabled) return { orgId: r.id, settings: e };
+    }
+    return null;
   }
 
   async eraseRequest(orgId: string): Promise<EraseRequest | null> {

@@ -50,6 +50,9 @@ export const users = pgTable(
     recoveryCodes: jsonb('recovery_codes').$type<string[]>().notNull().default([]),
     passkeyCount: integer('passkey_count').notNull().default(0),
     notifyDigest: boolean('notify_digest').notNull().default(true),
+    // Microsoft Entra ID: the account's object ID once linked, and a match waiting for an administrator to confirm.
+    entraOid: text('entra_oid'),
+    entraPendingOid: text('entra_pending_oid'),
     disabled: boolean('disabled').notNull().default(false),
     failedAttempts: integer('failed_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -59,6 +62,7 @@ export const users = pgTable(
   },
   (t) => [
     uniqueIndex('users_email_unique').on(t.email),
+    uniqueIndex('users_entra_oid').on(t.entraOid),
     check(
       'users_role_check',
       sql`${t.role} in ('owner','admin','technician','readonly_technician','client_editor','client_viewer')`,

@@ -1,5 +1,6 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState, type FormEvent } from 'react';
-import { KeyRound, LogOut, Plus, RefreshCw, ShieldCheck, UserPlus, Users as UsersIcon } from 'lucide-react';
+import { KeyRound, LogIn, LogOut, Plus, RefreshCw, ShieldCheck, UserPlus, Users as UsersIcon } from 'lucide-react';
 import {
   ACCESS_LEVELS,
   LEVEL_INFO,
@@ -76,6 +77,7 @@ function TempPassword({ name = 'password' }: { name?: string }) {
 function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; onClose: () => void }) {
   const actor = useActor();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const clients = useClients();
   const [role, setRole] = useState<Role>(user?.role ?? 'technician');
   const [allClients, setAllClients] = useState<AccessLevel>(user?.allClients ?? 'none');
@@ -140,6 +142,29 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
               <Button variant="ghost" onClick={() => setResetting(true)}>
                 <KeyRound /> Reset sign-in
               </Button>
+              {user.entra && (
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      if (user.entra === 'pending')
+                        await api(`/users/${user.id}/entra/confirm`, { method: 'POST', body: {} });
+                      else await api(`/users/${user.id}/entra`, { method: 'DELETE' });
+                      await queryClient.invalidateQueries({ queryKey: ['users'] });
+                      toast(
+                        user.entra === 'pending'
+                          ? `${user.name} can now sign in with Microsoft.`
+                          : 'Microsoft account unlinked.',
+                      );
+                      onClose();
+                    } catch (err) {
+                      toast((err as Error).message, 'error');
+                    }
+                  }}
+                >
+                  <LogIn /> {user.entra === 'pending' ? 'Confirm Microsoft account' : 'Unlink Microsoft'}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 onClick={async () => {
@@ -403,6 +428,11 @@ export function Users() {
                           <Badge tone="warning">Invited</Badge>
                         ) : (
                           <Badge tone="success">Active</Badge>
+                        )}
+                        {u.entra && (
+                          <Badge tone={u.entra === 'linked' ? 'primary' : 'warning'}>
+                            {u.entra === 'linked' ? 'Microsoft' : 'Confirm Microsoft link'}
+                          </Badge>
                         )}
                         {u.mfa && (
                           <Badge tone="primary">
