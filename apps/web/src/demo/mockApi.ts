@@ -1525,6 +1525,46 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
 on('POST', '/assets/detect-manufacturers', () => ({ checked: 3, filled: 2 }));
+// Password rotation: policies can be edited; rotations need a real ConnectWise RMM.
+let rotationSettings = { enabled: false, scriptId: '' };
+const rotationPolicies: Json[] = [];
+on('GET', '/rotation/settings', () => rotationSettings);
+on('PUT', '/rotation/settings', (_m, b) => {
+  rotationSettings = { enabled: b.enabled === true, scriptId: String(b.scriptId ?? '') };
+  if (rotationSettings.enabled && !rotationSettings.scriptId)
+    throw new MockError(400, 'Enter the ConnectWise RMM script ID before turning rotation on.');
+  return rotationSettings;
+});
+on('GET', '/rotation/policies', () => rotationPolicies);
+on('PUT', '/rotation/policies', (_m, b) => {
+  const clientId = (b.clientId as string | null) ?? null;
+  const existing = rotationPolicies.findIndex((p) => p.clientId === clientId && p.accountType === b.accountType);
+  const policy = {
+    id: existing >= 0 ? rotationPolicies[existing]!.id : uuid(),
+    clientId,
+    clientName: clientId ? find(db.clients, clientId, 'Client').name : null,
+    accountType: b.accountType,
+    intervalDays: Number(b.intervalDays ?? 30),
+    complexity: b.complexity,
+    enabled: b.enabled !== false,
+    updatedAt: now(),
+  };
+  if (existing >= 0) rotationPolicies[existing] = policy;
+  else rotationPolicies.push(policy);
+  return policy;
+});
+on('DELETE', '/rotation/policies/:id', (m) => {
+  rotationPolicies.splice(
+    rotationPolicies.findIndex((p) => p.id === m[1]),
+    1,
+  );
+  return { ok: true };
+});
+on('GET', '/rotation/targets', () => []);
+on('GET', '/rotation/runs', () => []);
+on('GET', '/rotation/clients/:id/devices', () => []);
+on('POST', '/rotation/targets', () => notInDemo('Rotating passwords through a real ConnectWise RMM'));
+on('POST', '/rotation/revoke-tokens', () => ({ revoked: 0 }));
 // Microsoft 365: the first client is connected, the second waits for consent.
 const m365Redirect = 'https://atlas.example.com/api/integrations/m365/consent';
 let m365: {

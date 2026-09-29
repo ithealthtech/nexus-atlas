@@ -22,6 +22,8 @@ import {
   notificationSettingsSchema,
   rmmHealthSettingsSchema,
   type RmmHealthSettings,
+  rotationSettingsSchema,
+  type RotationSettings,
   warrantySettingsSchema,
   type WarrantySettings,
   smtpSettingsSchema,
@@ -68,6 +70,7 @@ interface StoredSettings {
   health?: PasswordHealthSettings & { lastRunAt?: string };
   entra?: StoredEntra;
   rmmHealth?: RmmHealthSettings;
+  rotation?: RotationSettings;
   warranty?: WarrantySettings;
   m365?: StoredM365;
 }
@@ -260,6 +263,16 @@ export class SettingsService {
   async saveRmmHealth(orgId: string, input: unknown): Promise<RmmHealthSettings> {
     const body = rmmHealthSettingsSchema.parse(input);
     await this.put(orgId, 'rmmHealth', body);
+    return body;
+  }
+
+  async rotation(orgId: string): Promise<RotationSettings> {
+    return rotationSettingsSchema.parse((await this.load(orgId)).rotation ?? {});
+  }
+
+  async saveRotation(orgId: string, input: unknown): Promise<RotationSettings> {
+    const body = rotationSettingsSchema.parse(input);
+    await this.put(orgId, 'rotation', body);
     return body;
   }
 

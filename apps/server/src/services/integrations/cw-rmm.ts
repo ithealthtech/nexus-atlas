@@ -19,6 +19,8 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
   au: 'https://openapi.service.auplatform.connectwise.com',
 };
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
+/** Running the rotation script needs automation scopes too. Only rotation asks for them, so a key without them still syncs. */
+export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.automation.create`;
 const RETRY_MS = 2000;
 // Five attempts at this length, plus the lead-in and the company prefix, fit an import job message (800 characters).
 const ATTEMPT_CHARS = 100;
@@ -447,12 +449,18 @@ export class CwRmmClient {
   // One client (and so one token) per set of credentials, shared by every request and sync: signing in for
   // each page load gets the key locked.
   private static shared = new WeakMap<typeof fetch, Map<string, CwRmmClient>>();
-  static for(region: CwRmmRegion, clientId: string, clientSecret: string, fetcher: typeof fetch = fetch) {
-    const key = [region, clientId, createHash('sha256').update(clientSecret).digest('hex')].join('|');
+  static for(
+    region: CwRmmRegion,
+    clientId: string,
+    clientSecret: string,
+    fetcher: typeof fetch = fetch,
+    scopes: string = SCOPES,
+  ) {
+    const key = [region, clientId, createHash('sha256').update(clientSecret).digest('hex'), scopes].join('|');
     let clients = CwRmmClient.shared.get(fetcher);
     if (!clients) CwRmmClient.shared.set(fetcher, (clients = new Map()));
     let client = clients.get(key);
-    if (!client) clients.set(key, (client = new CwRmmClient(region, clientId, clientSecret, fetcher)));
+    if (!client) clients.set(key, (client = new CwRmmClient(region, clientId, clientSecret, fetcher, scopes)));
     return client;
   }
 
@@ -464,6 +472,7 @@ export class CwRmmClient {
     private readonly clientId: string,
     private readonly clientSecret: string,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly scopes: string = SCOPES,
   ) {
     this.base = CW_RMM_BASE[region];
   }
@@ -505,7 +514,7 @@ export class CwRmmClient {
           grant_type: 'client_credentials',
           client_id: this.clientId,
           client_secret: this.clientSecret,
-          scope: SCOPES,
+          scope: this.scopes,
         }),
         signal: AbortSignal.timeout(20_000),
       }),
@@ -555,6 +564,31 @@ export class CwRmmClient {
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
     return res.json();
+  }
+
+  /**
+   * Runs a script from the ConnectWise RMM script library on one device, now, with these parameters. Returns the
+   * task ID ConnectWise gives back ('' when it gives none).
+   *
+   * This follows ConnectWise's automation task shape (a script task targeting one endpoint, run once); it has not
+   * been checked against a live tenant, so ConnectWise's own answer is passed on whole when it refuses.
+   */
+  async runScript(input: {
+    companyId: string;
+    endpointId: string;
+    scriptId: string;
+    name: string;
+    parameters: Record<string, string>;
+  }): Promise<string> {
+    const body = await this.call('POST', '/api/platform/v1/automation/tasks', {
+      name: input.name.slice(0, 100),
+      scriptId: input.scriptId,
+      companyId: input.companyId,
+      targets: [{ type: 'endpoint', id: input.endpointId }],
+      parameters: Object.entries(input.parameters).map(([name, value]) => ({ name, value })),
+      schedule: { type: 'runOnce', runNow: true },
+    });
+    return text((body ?? {}) as Json, 'id', 'taskId', 'data.id', 'data.taskId');
   }
 
   async companies(): Promise<RmmCompany[]> {
