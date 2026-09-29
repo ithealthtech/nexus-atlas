@@ -179,6 +179,7 @@ describe('Microsoft Entra ID sign-in', () => {
 
     // Now the account ID is what counts: a different email claim for the same account still signs in.
     const ok = await signInWithMicrosoft(tess({ email: 'renamed@atlas.test' }));
+    console.log('DEBUG', JSON.stringify(ok.back.headers), ok.back.statusCode, ok.back.body);
     expect(ok.location).toBe('/');
     const session = await sessionOf(ok.session!);
     expect(session.actor).toMatchObject({ email: 'tess@atlas.test', role: 'technician' });
