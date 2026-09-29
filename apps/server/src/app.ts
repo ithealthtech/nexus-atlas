@@ -188,10 +188,13 @@ export async function buildApp({
     const origin = req.headers.origin;
     if (origin && origin !== config.publicOrigin && !(devHosts.length && origin === `${req.protocol}://${host}`))
       throw new HttpError(403, 'Origin is not allowed.');
-    // Microsoft's redirect back to the sign-in callback is a cross-site navigation by nature. That one route is
-    // exempt; it verifies its own state, nonce, and PKCE before it does anything.
-    const isSsoReturn = req.method === 'GET' && req.url.split('?')[0] === '/api/auth/entra/callback';
-    if (req.headers['sec-fetch-site'] === 'cross-site' && !isSsoReturn)
+    // Microsoft's redirect back to the sign-in callback is a cross-site navigation by nature, and browsers keep
+    // that label on the redirect that follows it, which lands on a page. So only API paths are refused, and the
+    // callback is exempt; it verifies its own state, nonce, and PKCE before it does anything.
+    const path = req.url.split('?')[0]!;
+    const isSsoReturn = req.method === 'GET' && path === '/api/auth/entra/callback';
+    const isPage = req.method === 'GET' && !path.startsWith('/api/');
+    if (req.headers['sec-fetch-site'] === 'cross-site' && !isSsoReturn && !isPage)
       throw new HttpError(403, 'Cross-site requests are not allowed.');
   });
   app.addHook('onSend', async (req, reply) => {
