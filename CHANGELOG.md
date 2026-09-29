@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **Password health:** a report of weak, reused, overdue, expired, old, and breached passwords across the clients you can open, with a score per client, filters, a CSV export, and a health tile on the dashboard. Breached passwords are found with Have I Been Pwned's k-anonymity check: only the first 5 characters of a scrambled fingerprint leave the server, and only a count is stored. Checks run daily and when a password changes; an administrator can run them now or turn them off for servers without internet access. (#81)
+- **Password health:** a report of weak, reused, overdue, expired, old, and breached passwords across the clients you can open, with a score per client, filters, a CSV export, and a health tile on the dashboard. Breached passwords are found with Have I Been Pwned's k-anonymity check: only the first 5 characters of a scrambled fingerprint leave the server, and only a count is stored. New and changed passwords are checked within about ten minutes, older results are re-checked daily; an administrator can run them now or turn them off for servers without internet access. (#81)
 
 ## [1.3.2] - 2026-09-29
 

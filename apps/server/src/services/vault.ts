@@ -817,9 +817,10 @@ export class VaultService {
     db: Database,
     orgId: string,
     limit: number,
-    staleDays = 30,
+    // null: only those never checked (new or changed passwords), not the re-check of old results.
+    staleDays: number | null = 30,
   ): Promise<{ id: string; secret: string }[]> {
-    const cutoff = new Date(Date.now() - staleDays * 86_400_000);
+    const cutoff = new Date(Date.now() - (staleDays ?? 0) * 86_400_000);
     const rows = await db
       .select({ id: schema.passwords.id, secret: schema.passwords.secret })
       .from(schema.passwords)
@@ -828,7 +829,9 @@ export class VaultService {
           eq(schema.passwords.orgId, orgId),
           eq(schema.passwords.kind, 'login'),
           eq(schema.passwords.archived, false),
-          or(isNull(schema.passwords.breachCheckedAt), lt(schema.passwords.breachCheckedAt, cutoff)),
+          staleDays === null
+            ? isNull(schema.passwords.breachCheckedAt)
+            : or(isNull(schema.passwords.breachCheckedAt), lt(schema.passwords.breachCheckedAt, cutoff)),
         ),
       )
       .orderBy(sql`${schema.passwords.breachCheckedAt} asc nulls first`)
