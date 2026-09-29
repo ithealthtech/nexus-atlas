@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-09-29
+
+### Changed
+
+- **ConnectWise RMM sync imports every field:** besides hostname, IP, MAC, and the other named fields, every other value ConnectWise sends about a device (IDs, types, agent details, tags, nested details) goes into a field on the asset, matching existing fields by label and adding the ones the layout lacks. (#77)
+
 ## [1.3.0] - 2026-09-26
 
 ### Added
