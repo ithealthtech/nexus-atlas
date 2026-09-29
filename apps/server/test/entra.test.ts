@@ -271,7 +271,11 @@ describe('Microsoft Entra ID sign-in', () => {
     });
     expect(other.statusCode).toBe(403);
     // The redirect after the callback keeps the cross-site label; the page it lands on must still load.
-    const page = await t.app.inject({ method: 'GET', url: '/?sso=pending', headers: { 'sec-fetch-site': 'cross-site' } });
+    const page = await t.app.inject({
+      method: 'GET',
+      url: '/?sso=pending',
+      headers: { 'sec-fetch-site': 'cross-site' },
+    });
     expect(page.statusCode).not.toBe(403);
   });
 
