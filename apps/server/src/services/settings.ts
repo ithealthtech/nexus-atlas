@@ -24,6 +24,8 @@ import {
   type RmmHealthSettings,
   warrantySettingsSchema,
   type WarrantySettings,
+  assetStatsSettingsSchema,
+  type AssetStatsSettings,
   smtpSettingsSchema,
   type MailMethod,
   type NotificationSettings,
@@ -69,6 +71,7 @@ interface StoredSettings {
   entra?: StoredEntra;
   rmmHealth?: RmmHealthSettings;
   warranty?: WarrantySettings;
+  assetStats?: AssetStatsSettings;
   m365?: StoredM365;
 }
 export interface StoredEntra {
@@ -270,6 +273,18 @@ export class SettingsService {
   async saveWarranty(orgId: string, input: unknown): Promise<WarrantySettings> {
     const body = warrantySettingsSchema.parse(input);
     await this.put(orgId, 'warranty', body);
+    return body;
+  }
+
+  async assetStats(orgId: string): Promise<AssetStatsSettings> {
+    return assetStatsSettingsSchema.parse((await this.load(orgId)).assetStats ?? {});
+  }
+
+  /** Saves which layouts count as which kind of device; "auto" entries aren't stored, since that's the default. */
+  async saveAssetStats(orgId: string, input: unknown): Promise<AssetStatsSettings> {
+    const body = assetStatsSettingsSchema.parse(input);
+    body.layouts = Object.fromEntries(Object.entries(body.layouts).filter(([, v]) => v !== 'auto'));
+    await this.put(orgId, 'assetStats', body);
     return body;
   }
 

@@ -27,6 +27,15 @@ import {
   type WarrantyFilter,
   type WarrantyReport,
   type WarrantySettings,
+  ASSET_KINDS,
+  ASSET_OS,
+  ASSET_OS_INFO,
+  type AssetKind,
+  type AssetKindCounts,
+  type AssetOs,
+  type AssetStatsAsset,
+  type AssetStatsReport,
+  type AssetStatsSettings,
   type ItemType,
   type LayoutField,
   type RichText,
@@ -232,6 +241,74 @@ function warrantyReport(client: string | null): WarrantyReport {
     counts: warrantyCounts(list.filter((a) => a.clientId === id)),
   }));
   return { soonDays: warrantySettings.soonDays, totals: warrantyCounts(list), clients };
+}
+
+// ---------- asset statistics (kinds and operating systems for the RMM sample's devices) ----------
+let assetStatsSettings: AssetStatsSettings = { layouts: {} };
+const SAMPLE_OS: Record<'server' | 'workstation', [AssetOs, string][]> = {
+  server: [
+    ['server-2022', 'Windows Server 2022 Standard'],
+    ['server-2019', 'Windows Server 2019 Standard'],
+    ['server-old', 'Windows Server 2012 R2 Standard'],
+    ['server-2016', 'Windows Server 2016 Standard'],
+  ],
+  workstation: [
+    ['windows-11', 'Windows 11 Pro'],
+    ['windows-11', 'Windows 11 Pro'],
+    ['windows-10', 'Windows 10 Pro'],
+    ['macos', 'macOS Sonoma'],
+    ['windows-11', 'Windows 11 Enterprise'],
+    ['unknown', ''],
+  ],
+};
+const OTHER_KINDS: AssetKind[] = ['switch', 'network', 'printer', 'phone'];
+const STATS_SAMPLE: AssetStatsAsset[] = RMM_SAMPLE.map((d, i) => {
+  const kind: AssetKind = d.kind === 'other' ? OTHER_KINDS[i % OTHER_KINDS.length]! : d.kind;
+  const choices = d.kind === 'other' ? null : SAMPLE_OS[d.kind];
+  const [os, osName] = choices ? choices[i % choices.length]! : (['unknown', ''] as [AssetOs, string]);
+  return {
+    assetId: d.assetId,
+    name: d.name,
+    clientId: d.clientId,
+    clientName: d.clientName,
+    layoutName: 'Configurations',
+    kind,
+    os,
+    osName,
+  };
+});
+// The sample devices all sit in Configurations, so the administrator's choice for that layout applies to all of them.
+const statsAssets = (client: string | null): AssetStatsAsset[] => {
+  const layout = db.layouts.find((l) => l.key === 'configuration');
+  const chosen = (layout && assetStatsSettings.layouts[layout.id]) ?? 'auto';
+  if (chosen === 'none') return [];
+  return STATS_SAMPLE.filter((a) => !client || a.clientId === client).map((a) =>
+    chosen === 'auto' ? a : { ...a, kind: chosen },
+  );
+};
+function kindCounts(list: AssetStatsAsset[]): AssetKindCounts {
+  const c = { total: list.length, ...Object.fromEntries(ASSET_KINDS.map((k) => [k, 0])) } as AssetKindCounts;
+  for (const a of list) c[a.kind]++;
+  return c;
+}
+function assetStatsReport(client: string | null): AssetStatsReport {
+  const list = statsAssets(client);
+  const os = Object.fromEntries(ASSET_OS.map((o) => [o, list.filter((a) => a.os === o).length])) as Record<
+    AssetOs,
+    number
+  >;
+  const clients = [...new Set(list.map((a) => a.clientId))]
+    .map((id) => {
+      const mine = list.filter((a) => a.clientId === id);
+      return {
+        clientId: id,
+        clientName: clientName(id) ?? '',
+        counts: kindCounts(mine),
+        endOfSupport: mine.filter((a) => ASSET_OS_INFO[a.os].endOfSupport).length,
+      };
+    })
+    .sort((a, b) => b.counts.total - a.counts.total);
+  return { totals: kindCounts(list), os, clients };
 }
 
 // ---------- documentation ----------
@@ -1357,6 +1434,20 @@ on('GET', '/warranty/assets', (_m, _b, q) =>
     .filter((a) => warrantyStanding(a) === q.get('filter'))
     .sort((a, b) => (a.warrantyExpires ?? '').localeCompare(b.warrantyExpires ?? '') || a.name.localeCompare(b.name)),
 );
+on('GET', '/asset-stats', (_m, _b, q) => assetStatsReport(q.get('client')));
+on('GET', '/asset-stats/assets', (_m, _b, q) => {
+  const [what, value] = (q.get('filter') ?? '').split(':');
+  return statsAssets(q.get('client'))
+    .filter((a) =>
+      what === 'eos' ? ASSET_OS_INFO[a.os].endOfSupport : what === 'kind' ? a.kind === value : a.os === value,
+    )
+    .sort((a, b) => a.clientName.localeCompare(b.clientName) || a.name.localeCompare(b.name));
+});
+on('GET', '/settings/asset-stats', () => assetStatsSettings);
+on('PUT', '/settings/asset-stats', (_m, b) => {
+  const layouts = Object.entries((b as AssetStatsSettings).layouts).filter(([, v]) => v !== 'auto');
+  return (assetStatsSettings = { layouts: Object.fromEntries(layouts) });
+});
 on('GET', '/settings/warranty', () => warrantySettings);
 on('PUT', '/settings/warranty', (_m, b) => (warrantySettings = b as WarrantySettings));
 on('GET', '/rmm-health/trend', (_m, _b, q) => rmmTrend(q.get('client')));
