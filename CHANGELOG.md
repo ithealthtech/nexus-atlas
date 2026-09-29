@@ -2,6 +2,15 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-09-29
+
+### Added
+
+- **Microsoft 365 sync:** document each client's tenant from one multi-tenant app registration (Directory.Read.All, admin consent per tenant). Users become contacts (with their licenses and admin roles), paid subscriptions become License assets with seats bought and assigned, custom domains become Domain assets, and a Microsoft 365 asset lists the tenant's domains, subscriptions, and administrators. Runs every six hours or on demand; cancelled subscriptions and removed domains are archived. Set up under Administration → Import & export. (#103)
+- **Runnable checklists:** reusable checklists for all clients or one, run step by step for a client with who ticked each step and when, notes, an assignee, and a due date. New Checklists page and client tab; runs export to Markdown or print to PDF. (#101)
+- **Relationship map:** a Map tab on each client showing how its assets, passwords, documents, contacts, and locations link together, with the same links as a list. (#100)
+- **Manufacturer detection:** a blank Manufacturer is filled in from the model (OptiPlex → Dell, ThinkPad → Lenovo), operating system, device name, or MAC address whenever a device is saved or synced; entered values are never replaced. ConnectWise RMM firmware names are tidied ("Dell Inc." → Dell). A Fill in manufacturers button handles existing assets. (#104)
+
 ## [1.5.3] - 2026-09-29
 
 ### Fixed
