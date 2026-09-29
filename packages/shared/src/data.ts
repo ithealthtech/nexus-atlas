@@ -239,3 +239,32 @@ export interface MergeResult {
   /** Fields added to the kept asset's layout for values it had no field for. */
   fieldsAdded: string[];
 }
+
+// ---------- Microsoft Entra ID sign-in ----------
+export const entraSettingsSchema = z.object({
+  /** The directory (tenant) ID, or its domain name. */
+  tenantId: z
+    .string()
+    .trim()
+    .min(3, 'Enter the Directory (tenant) ID.')
+    .max(200)
+    .regex(/^[A-Za-z0-9.-]+$/, 'Enter the Directory (tenant) ID from the app’s Overview page.'),
+  clientId: z.string().trim().uuid('Enter the Application (client) ID from the app’s Overview page.'),
+  // Omitted keeps the saved secret.
+  clientSecret: z.string().trim().min(8).max(500).optional(),
+  enabled: z.boolean().default(false),
+  /** Accept Microsoft's own multi-factor sign-in as the second step, instead of also asking for an Atlas code. */
+  trustMfa: z.boolean().default(false),
+  /** Staff must sign in with Microsoft; only the owner can still use a password (break-glass). */
+  requireSso: z.boolean().default(false),
+});
+export interface EntraView {
+  tenantId: string;
+  clientId: string;
+  hasSecret: boolean;
+  enabled: boolean;
+  trustMfa: boolean;
+  requireSso: boolean;
+  /** Add this as the app registration's Web redirect URI. */
+  redirectUri: string;
+}

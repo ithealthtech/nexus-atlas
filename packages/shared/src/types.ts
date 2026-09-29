@@ -41,6 +41,8 @@ export interface UserView {
   disabled: boolean;
   locked: boolean;
   mustChangePassword: boolean;
+  /** Microsoft Entra ID: linked, or matched by email and waiting for an administrator to confirm. */
+  entra: 'linked' | 'pending' | null;
   lastLoginAt: string | null;
   createdAt: string;
 }

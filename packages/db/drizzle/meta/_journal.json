@@ -106,6 +106,13 @@
       "when": 1790698634895,
       "tag": "0014_password_health",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790700695786,
+      "tag": "0015_entra_sign_in",
+      "breakpoints": true
     }
   ]
 }

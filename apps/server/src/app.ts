@@ -9,11 +9,13 @@ import { eq, sql } from 'drizzle-orm';
 import { schema, type DatabaseHandle } from '@atlas/db';
 import {
   DEFAULT_BRANDING,
+  ROLE_INFO,
   changePasswordSchema,
   mfaSchema,
   reauthSchema,
   recoveryCodeSchema,
   signInSchema,
+  type Role,
   type SessionView,
 } from '@atlas/shared';
 import type { Config } from './config.js';
@@ -34,7 +36,9 @@ import { SettingsService } from './services/settings.js';
 import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
+import { registerEntraRoutes } from './routes/entra.js';
 import { registerEraseRoutes } from './routes/erase.js';
+import { EntraService } from './services/entra.js';
 import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
@@ -64,6 +68,8 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Replaces fetch for Hudu imports (tests use a fake Hudu). */
   huduFetch?: typeof fetch;
+  /** Replaces fetch for Microsoft Entra ID sign-in (tests use a fake Microsoft). */
+  entraFetch?: typeof fetch;
   /** Replaces fetch for breach checks (tests use a fake Have I Been Pwned). */
   breachFetch?: typeof fetch;
   /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
@@ -120,6 +126,7 @@ export async function buildApp({
   huduFetch,
   cwRmmFetch,
   breachFetch,
+  entraFetch,
   domainLookup,
   updateFetch,
 }: AppOptions): Promise<FastifyInstance> {
@@ -325,6 +332,15 @@ export async function buildApp({
       if (error instanceof HttpError && (error.status === 401 || error.status === 429)) limiter.fail(req.ip);
       throw error;
     }
+    // When the organization requires Microsoft sign-in, staff can't use a password; the owner always can, so a
+    // problem with Microsoft never locks everyone out.
+    const sso = await settings.entra(user.orgId);
+    if (sso?.enabled && sso.requireSso && user.role !== 'owner' && ROLE_INFO[user.role as Role].staff)
+      throw new HttpError(
+        403,
+        'Your organization signs in with Microsoft. Use Sign in with Microsoft.',
+        'sso_required',
+      );
     const previous = await identity.resolve(req.cookies[cookieName]);
     if (previous) await identity.signOut(previous, req.ip);
     // A remembered device stands in for the second step on this browser.
@@ -548,6 +564,19 @@ export async function buildApp({
     status: new StatusService(database, { config, keys, backups, settings, notifier, version: APP_VERSION }),
   });
   registerPasswordHealthRoutes(app, { db, authed, recent, settings, health });
+  registerEntraRoutes(app, {
+    db,
+    authed,
+    recent,
+    identity,
+    settings,
+    entra: new EntraService(keys, entraFetch),
+    publicOrigin: config.publicOrigin,
+    secureCookies: config.secureCookies,
+    sessionToken: setSession,
+    currentSession: (req) => identity.resolve(req.cookies[cookieName]),
+    fetcher: entraFetch,
+  });
   registerEraseRoutes(app, { db, authed, recent, identity, settings, mail, backups, storage: files });
   registerUpdateRoutes(app, {
     db,
