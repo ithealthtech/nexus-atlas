@@ -169,6 +169,7 @@ const passwordView = (p: (typeof passwords)[0]) => ({
   lastUsedAt: lastUsed.get(p.id) ?? null,
   customFields: (customFields.get(p.id) ?? []).map((f) => ({ ...f, value: f.secret ? null : f.value })),
   id: p.id,
+  breachCount: p.name.toLowerCase().includes('wi-fi') ? 52133 : (0 as number | null),
   clientId: p.clientId,
   clientName: clientName(p.clientId)!,
   kind: p.kind,
@@ -835,6 +836,60 @@ on('POST', '/clients/:id/passwords', (m, b) => {
   record('Added a password', 'password', p.id, p.name, p.clientId);
   return passwordView(p);
 });
+// Password health, computed from the sample passwords (the front desk Wi-Fi counts as breached).
+let healthBreach = true;
+on('GET', '/password-health', () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const list = passwords.filter((p) => !p.archived).map(passwordView);
+  const issuesOf = (p: (typeof list)[0]) => {
+    const out: string[] = [];
+    if ((p.breachCount ?? 0) > 0) out.push('breached');
+    if (p.kind === 'login' && p.strength < 2) out.push('weak');
+    if (p.reused > 0) out.push('reused');
+    if (p.rotationDue && p.rotationDue <= today) out.push('overdue');
+    if (!p.rotationDays && Date.now() - Date.parse(p.changedAt) > 365 * 86_400_000) out.push('old');
+    return out;
+  };
+  const counts: Record<string, number> = { breached: 0, weak: 0, reused: 0, overdue: 0, expired: 0, old: 0 };
+  const clients = new Map<string, { id: string; name: string; total: number; withIssues: number }>();
+  const items = [];
+  for (const p of list) {
+    const c = clients.get(p.clientId) ?? { id: p.clientId, name: p.clientName, total: 0, withIssues: 0 };
+    c.total++;
+    const issues = issuesOf(p);
+    if (issues.length) {
+      c.withIssues++;
+      for (const i of issues) counts[i]!++;
+      items.push({
+        id: p.id,
+        name: p.name,
+        clientId: p.clientId,
+        clientName: p.clientName,
+        category: p.category,
+        issues,
+      });
+    }
+    clients.set(p.clientId, c);
+  }
+  const pct = (t: number, bad: number) => (t ? Math.round(((t - bad) / t) * 100) : null);
+  return {
+    score: pct(list.length, items.length),
+    total: list.length,
+    counts,
+    clients: [...clients.values()]
+      .map((c) => ({ ...c, score: pct(c.total, c.withIssues) }))
+      .sort((a, b) => (a.score ?? 101) - (b.score ?? 101)),
+    items,
+    breach: {
+      enabled: healthBreach,
+      checked: list.length,
+      unchecked: 0,
+      lastRunAt: new Date(Date.now() - 6 * 3_600_000).toISOString(),
+    },
+  };
+});
+on('PUT', '/password-health/settings', (_m, b) => ({ breachChecks: (healthBreach = b.breachChecks !== false) }));
+on('POST', '/password-health/check', () => notInDemo('Checking passwords against known breaches'));
 on('GET', '/passwords/:id', (m) => passwordView(find(passwords, m[1]!, 'Password')));
 const folderView = (f: (typeof passwordFolders)[0]) => ({
   ...f,

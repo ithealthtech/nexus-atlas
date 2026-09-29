@@ -40,6 +40,7 @@ import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
 import { Duplicates } from '@/pages/Duplicates';
+import { PasswordHealth } from '@/pages/PasswordHealth';
 import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
 import './styles.css';
@@ -233,6 +234,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
+  createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
 ];
 const router = createRouter({

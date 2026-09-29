@@ -1,4 +1,8 @@
-import { ArrowRight, BookOpen, Building2, CheckCircle2, Circle, Clock, Info, Server } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, BookOpen, Building2, CheckCircle2, Circle, Clock, Info, Server, ShieldCheck } from 'lucide-react';
+import type { PasswordHealthReport } from '@atlas/shared';
+import { api } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { useBranding } from '@/lib/branding';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton, Stat } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
@@ -20,6 +24,11 @@ export function Dashboard() {
   const users = useUsers(actor.isAdmin);
   const assets = useAssets({});
   const docs = useDocuments({});
+  const health = useQuery({
+    queryKey: ['password-health'],
+    queryFn: () => api<PasswordHealthReport>('/password-health'),
+    enabled: actor.isStaff,
+  });
   const activity = useActivity({ limit: '8' });
   const expiring = useExpirations(30);
   const branding = useBranding().data;
@@ -59,7 +68,7 @@ export function Dashboard() {
           <p className="text-sm whitespace-pre-line text-text-2">{branding.portalWelcome}</p>
         </Card>
       )}
-      <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={cn('mb-7 grid gap-4 sm:grid-cols-2', actor.isStaff ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
         <Stat
           label="Client workspaces"
           value={clients.isLoading ? skeleton : list.length}
@@ -78,6 +87,22 @@ export function Dashboard() {
           hint="Runbooks, checklists, references"
           icon={BookOpen}
         />
+        {actor.isStaff && (
+          <AppLink to="/password-health" className="block">
+            <Stat
+              label="Password health"
+              value={
+                health.isLoading
+                  ? skeleton
+                  : health.data?.score === null || !health.data
+                    ? '—'
+                    : `${health.data.score}%`
+              }
+              hint={health.data ? `${health.data.items.length} need attention` : 'Weak, reused, breached'}
+              icon={ShieldCheck}
+            />
+          </AppLink>
+        )}
         <Stat
           label="Due for review"
           value={docs.isLoading ? skeleton : review.length}
