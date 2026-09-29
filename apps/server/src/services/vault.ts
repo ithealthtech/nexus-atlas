@@ -1015,21 +1015,23 @@ export class VaultService {
     run: { id: string; passwordId: string; candidate: string; label: string },
     also: (tx: Parameters<Parameters<Database['transaction']>[0]>[0]) => Promise<void>,
   ) {
-    const [p] = await db
-      .select()
-      .from(schema.passwords)
-      .where(and(eq(schema.passwords.id, run.passwordId), eq(schema.passwords.orgId, orgId)));
-    if (!p) throw notFound();
     const secret = await this.keys.open(orgId, run.candidate, rotationAad(run.id));
-    const historyId = randomUUID();
-    const previous = await this.keys.seal(
-      orgId,
-      await this.keys.open(orgId, p.secret, aad(p.id, 'secret')),
-      historyAad(historyId),
-    );
-    const sealed = await this.keys.seal(orgId, secret, aad(p.id, 'secret'));
+    const sealed = await this.keys.seal(orgId, secret, aad(run.passwordId, 'secret'));
     const fingerprint = await this.keys.fingerprint(orgId, secret);
+    const historyId = randomUUID();
     await db.transaction(async (tx) => {
+      // Locked and read here, so history keeps the password actually replaced, even one a technician saved moments ago.
+      const [p] = await tx
+        .select()
+        .from(schema.passwords)
+        .where(and(eq(schema.passwords.id, run.passwordId), eq(schema.passwords.orgId, orgId)))
+        .for('update');
+      if (!p) throw notFound();
+      const previous = await this.keys.seal(
+        orgId,
+        await this.keys.open(orgId, p.secret, aad(p.id, 'secret')),
+        historyAad(historyId),
+      );
       // Applied even if someone edited the entry meanwhile: the device now has this password, so the vault must too.
       await tx
         .update(schema.passwords)

@@ -116,6 +116,9 @@ describe('automated password rotation', () => {
   });
 
   const turnOn = async () => {
+    // Refused settings are not saved.
+    expect((await owner.call('PUT', '/api/rotation/settings', { enabled: true, scriptId: '' })).status).toBe(400);
+    expect((await owner.call('GET', '/api/rotation/settings')).data).toEqual({ enabled: false, scriptId: '' });
     expect((await owner.call('PUT', '/api/rotation/settings', { enabled: true, scriptId: 'script-42' })).status).toBe(
       200,
     );

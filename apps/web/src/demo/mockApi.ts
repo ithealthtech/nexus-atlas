@@ -1530,10 +1530,10 @@ let rotationSettings = { enabled: false, scriptId: '' };
 const rotationPolicies: Json[] = [];
 on('GET', '/rotation/settings', () => rotationSettings);
 on('PUT', '/rotation/settings', (_m, b) => {
-  rotationSettings = { enabled: b.enabled === true, scriptId: String(b.scriptId ?? '') };
-  if (rotationSettings.enabled && !rotationSettings.scriptId)
+  const next = { enabled: b.enabled === true, scriptId: String(b.scriptId ?? '') };
+  if (next.enabled && !next.scriptId)
     throw new MockError(400, 'Enter the ConnectWise RMM script ID before turning rotation on.');
-  return rotationSettings;
+  return (rotationSettings = next);
 });
 on('GET', '/rotation/policies', () => rotationPolicies);
 on('PUT', '/rotation/policies', (_m, b) => {

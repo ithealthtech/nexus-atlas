@@ -7,6 +7,7 @@ import {
   rotationComplexitySchema,
   rotationPolicySchema,
   rotationResultSchema,
+  rotationSettingsSchema,
   rotationTargetSchema,
   rotationTargetUpdateSchema,
   ROTATION_ACCOUNT_TYPE_LABELS,
@@ -78,11 +79,13 @@ export class RotationService {
 
   async saveSettings(actor: Actor, input: unknown, ip: string): Promise<RotationSettings> {
     requireAdmin(actor);
-    const saved = await this.deps.settings.saveRotation(actor.orgId, input);
-    if (saved.enabled && !saved.scriptId)
+    // Checked before saving, so refused settings never take effect.
+    const body = rotationSettingsSchema.parse(input);
+    if (body.enabled && !body.scriptId)
       throw new HttpError(400, 'Enter the ConnectWise RMM script ID before turning rotation on.', undefined, {
         scriptId: 'Enter the script ID.',
       });
+    const saved = await this.deps.settings.saveRotation(actor.orgId, body);
     await this.event(
       actor,
       'Password rotation settings changed',
