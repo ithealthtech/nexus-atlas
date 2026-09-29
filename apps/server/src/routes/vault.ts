@@ -4,10 +4,20 @@ import { z } from 'zod';
 import type { VaultKeys } from '../crypto/vault-keys.js';
 import { HttpError } from '../errors.js';
 import { Scope } from '../services/scope.js';
+import { SendService } from '../services/sends.js';
+import type { FileStorage } from '../services/storage.js';
 import { VaultService, openShare } from '../services/vault.js';
 
 type Params = { id: string };
 const archiveSchema = z.object({ archived: z.boolean() });
+// Files in the vault and in Sends are held in memory while they're encrypted or decrypted, so they're capped.
+const MAX_VAULT_FILE_BYTES = 25 * 1024 * 1024;
+const fileHeaders = (filename: string) => ({
+  'Content-Type': 'application/octet-stream',
+  'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+  'Content-Security-Policy': "default-src 'none'; sandbox",
+  'Cache-Control': 'private, no-store',
+});
 
 export function registerVaultRoutes(
   app: FastifyInstance,
@@ -15,11 +25,15 @@ export function registerVaultRoutes(
     db: Database;
     authed: { onRequest: onRequestHookHandler };
     keys: VaultKeys;
+    storage: FileStorage;
+    maxUploadBytes: number;
     shareLimiter: { check(key: string): void; fail(key: string): void };
   },
 ) {
   const { db, authed } = deps;
-  const vault = new VaultService(deps.keys);
+  const maxBytes = Math.min(deps.maxUploadBytes, MAX_VAULT_FILE_BYTES);
+  const vault = new VaultService(deps.keys, { storage: deps.storage, maxBytes });
+  const sends = new SendService(db, deps.storage, maxBytes);
   const scopeOf = (req: FastifyRequest) => new Scope(db, req.session!.actor);
 
   app.get<{ Querystring: { client?: string; archived?: string } }>('/api/passwords', authed, async (req) =>
@@ -89,6 +103,71 @@ export function registerVaultRoutes(
     return { ok: true };
   });
 
+  // Files on an entry: encrypted at rest; a download is checked and recorded like a reveal.
+  app.get<{ Params: Params }>('/api/passwords/:id/attachments', authed, async (req) =>
+    vault.attachments(scopeOf(req), req.params.id),
+  );
+  app.post<{ Params: Params }>('/api/passwords/:id/attachments', authed, async (req, reply) =>
+    reply.status(201).send(await vault.attach(scopeOf(req), req.params.id, await req.file(), req.ip)),
+  );
+  app.post<{ Params: Params & { attachmentId: string } }>(
+    '/api/passwords/:id/attachments/:attachmentId/download',
+    authed,
+    async (req, reply) => {
+      const { filename, data } = await vault.downloadAttachment(
+        scopeOf(req),
+        req.params.id,
+        req.params.attachmentId,
+        req.body,
+        req.ip,
+      );
+      return reply.headers(fileHeaders(filename)).send(data);
+    },
+  );
+  app.delete<{ Params: Params & { attachmentId: string } }>(
+    '/api/passwords/:id/attachments/:attachmentId',
+    authed,
+    async (req) => {
+      await vault.removeAttachment(scopeOf(req), req.params.id, req.params.attachmentId, req.ip);
+      return { ok: true };
+    },
+  );
+
+  // Sends: one-time text and files, encrypted in the browser.
+  app.get<{ Querystring: { all?: string } }>('/api/sends', authed, async (req) =>
+    sends.list(scopeOf(req), req.query.all === 'true'),
+  );
+  app.post('/api/sends', authed, async (req, reply) =>
+    reply.status(201).send(await sends.createText(scopeOf(req), req.body, req.ip)),
+  );
+  app.post('/api/sends/file', authed, async (req, reply) =>
+    reply.status(201).send(await sends.createFile(scopeOf(req), await req.file(), req.ip)),
+  );
+  app.delete<{ Params: Params }>('/api/sends/:id', authed, async (req) => {
+    await sends.revoke(scopeOf(req), req.params.id, req.ip);
+    return { ok: true };
+  });
+  // Opening a Send needs no account. A file comes back as the encrypted bytes, with its encrypted name in a header.
+  app.post<{ Params: { token: string } }>('/api/sends/:token/open', async (req, reply) => {
+    deps.shareLimiter.check(req.ip);
+    let opened;
+    try {
+      opened = await sends.open(req.params.token, req.ip);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404) deps.shareLimiter.fail(req.ip);
+      throw error;
+    }
+    reply.header('Referrer-Policy', 'no-referrer');
+    if (opened.kind === 'text') return reply.send(opened);
+    return reply
+      .headers({
+        ...fileHeaders('send.bin'),
+        'X-Send-Meta': opened.meta,
+        'X-Send-Remaining-Views': String(opened.remainingViews),
+      })
+      .send(opened.data);
+  });
+
   // Opening a share link needs no account; failures count toward the per-address limit.
   app.post<{ Params: { token: string } }>('/api/shares/:token/open', async (req, reply) => {
     deps.shareLimiter.check(req.ip);
@@ -99,5 +178,5 @@ export function registerVaultRoutes(
       throw error;
     }
   });
-  return vault;
+  return { vault, sends };
 }

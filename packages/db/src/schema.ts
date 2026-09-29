@@ -492,6 +492,9 @@ export const attachments = pgTable(
     size: bigint('size', { mode: 'number' }).notNull(),
     sha256: text('sha256').notNull(),
     storageKey: text('storage_key').notNull(),
+    // Files on password entries are encrypted at rest: each has its own data key, stored here sealed with the
+    // organization's vault key. Null for documentation files, which are stored as uploaded.
+    sealedKey: text('sealed_key'),
     uploadedBy: uuid('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: created(),
   },
@@ -603,7 +606,7 @@ export const passwords = pgTable(
     index('passwords_client').on(t.clientId),
     index('passwords_fingerprint').on(t.orgId, t.fingerprint),
     index('passwords_name_trgm').using('gin', sql`${t.name} gin_trgm_ops`),
-    check('passwords_kind_check', sql`${t.kind} in ('login','bitlocker')`),
+    check('passwords_kind_check', sql`${t.kind} in ('login','bitlocker','note')`),
   ],
 );
 
@@ -672,6 +675,37 @@ export const shareLinks = pgTable(
     createdAt: created(),
   },
   (t) => [uniqueIndex('share_links_token').on(t.tokenHash), index('share_links_item').on(t.passwordId)],
+);
+
+// Send: one-time text or files for someone without an account, not tied to a password. Like share links, the
+// server holds only browser-encrypted content (text in `ciphertext`, a file in storage with its encrypted name in
+// `ciphertext`); the key is in the link's #fragment. Content is deleted once the Send is used up, revoked, or expired.
+export const sends = pgTable(
+  'sends',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    ciphertext: text('ciphertext'),
+    storageKey: text('storage_key'),
+    size: bigint('size', { mode: 'number' }).notNull().default(0),
+    maxViews: integer('max_views').notNull(),
+    views: integer('views').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revoked: boolean('revoked').notNull().default(false),
+    createdBy: createdBy(),
+    createdByName: text('created_by_name').notNull(),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('sends_token').on(t.tokenHash),
+    index('sends_creator').on(t.orgId, t.createdBy, t.createdAt),
+    check('sends_kind_check', sql`${t.kind} in ('text','file')`),
+  ],
 );
 
 export const vaultAudit = pgTable(

@@ -550,10 +550,12 @@ export async function buildApp({
     domains: domainLookup ?? (config.NODE_ENV === 'test' ? undefined : new DomainLookup()),
   });
 
-  const vault = registerVaultRoutes(app, {
+  const { vault, sends } = registerVaultRoutes(app, {
     db,
     authed,
     keys: new VaultKeys(db, keys),
+    storage: files,
+    maxUploadBytes,
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
 
@@ -616,6 +618,7 @@ export async function buildApp({
     if (interrupted) app.log.warn({ interrupted }, 'Imports stopped by the restart were marked as stopped');
     notifier.start();
     backups.start();
+    sends.start();
     const cwRmm = new CwRmmScheduler(db, settings, (err) => app.log.error({ err }, 'ConnectWise RMM sync'), cwRmmFetch);
     cwRmm.start();
     const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
@@ -623,6 +626,7 @@ export async function buildApp({
     app.addHook('onClose', async () => {
       notifier.stop();
       backups.stop();
+      sends.stop();
       cwRmm.stop();
       m365.stop();
     });

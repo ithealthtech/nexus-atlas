@@ -19,6 +19,8 @@ export const SKIPPED_TABLES = new Set([
   'password_resets',
   'trusted_devices',
   'backup_runs',
+  // One-time Sends: the files aren't backed up, and a restored Send shouldn't open again.
+  'sends',
 ]);
 const BATCH = 500;
 const FILE_NAME = /^atlas-\d{8}-\d{6}(-\d+)?\.atlasbak$/;

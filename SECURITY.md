@@ -21,7 +21,7 @@ Do not disclose a suspected vulnerability in a public issue. Use GitHub's privat
 
 | Threat | Protection |
 |---|---|
-| Stolen database or database backup | Passwords, notes, one-time code keys, MFA secrets, and the SMTP and Hudu credentials are encrypted with AES-256-GCM. Each value is bound to its row and field. The keys are wrapped by a master key that is never stored in the database. Backup files are encrypted with a key derived from the master key. |
+| Stolen database or database backup | Passwords, notes, secure notes, files on vault entries, one-time code keys, MFA secrets, and the SMTP and Hudu credentials are encrypted with AES-256-GCM. Each value is bound to its row and field. The keys are wrapped by a master key that is never stored in the database. Backup files are encrypted with a key derived from the master key. |
 | Password guessing and credential stuffing | scrypt password hashes; lockout after 5 failures; per-address rate limits; MFA required for staff (authenticator app or passkey); passkeys can't be phished. |
 | Stolen session | `HttpOnly`, `Secure`, `SameSite=Strict`, `__Host-` cookies; sessions expire after 2 hours idle or 12 hours; people can see and end their sessions; sensitive actions need the password again within 10 minutes. |
 | Cross-site attacks | Host and Origin checks against `PUBLIC_URL`, `Sec-Fetch-Site` checks, a per-session CSRF token on every change, and a strict Content Security Policy (no inline or third-party scripts, no framing). |
@@ -29,7 +29,7 @@ Do not disclose a suspected vulnerability in a public issue. Use GitHub's privat
 | Malicious uploads | Files are stored outside the web root under random names. Only images that pass a content check display inline; everything else downloads with a sandboxing CSP. |
 | Tampering with the audit trail | Security events are hash-chained by database triggers that refuse edits, with a checkpoint signed by a key derived from the master key. Verification detects edited, reordered, and deleted events. |
 | Leaked API key | Keys are stored as hashes. Scopes limit what a key can do, and passwords need their own scope. A key can't reach account, people, settings, backup, or log endpoints, and can expire. Every use is recorded. |
-| One-time share links | The password is encrypted in the browser. The key lives only in the link's `#fragment`, which the server never receives. |
+| One-time share links and Sends | The password, text, or file is encrypted in the browser. The key lives only in the link's `#fragment`, which the server never receives. A Send's content is deleted once it's used up, revoked, or expired. |
 
 ## What Atlas does not protect against
 

@@ -27,6 +27,7 @@ import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
 import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
+import { SendPage, Sends } from '@/pages/Sends';
 import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
 import { Groups } from '@/pages/Groups';
@@ -239,6 +240,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
+  createRoute({ getParentRoute: () => appRoute, path: '/sends', component: Sends }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklists', component: ChecklistsPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklist-runs/$runId', component: RunPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
@@ -246,6 +248,7 @@ const routes = [
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/share/$token', component: SharePage }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/send/$token', component: SendPage }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/reset-password',

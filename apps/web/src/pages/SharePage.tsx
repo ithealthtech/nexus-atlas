@@ -79,14 +79,17 @@ export function SharePage() {
               <h1 className="text-xl font-semibold">{payload.name}</h1>
               <p className="mt-1 text-sm text-muted">
                 {remaining === 0
-                  ? 'This link has now been used up. Save the password somewhere safe before closing this page.'
+                  ? `This link has now been used up. Save the ${payload.kind === 'note' ? 'note' : 'password'} somewhere safe before closing this page.`
                   : `This link can be opened ${remaining} more time${remaining === 1 ? '' : 's'}.`}
               </p>
               <ul className="mt-5 divide-y divide-border rounded-xl border border-border">
                 {(
                   [
                     [payload.kind === 'bitlocker' ? 'Recovery key ID' : 'Username', payload.username],
-                    [payload.kind === 'bitlocker' ? 'Recovery key' : 'Password', payload.secret],
+                    [
+                      payload.kind === 'bitlocker' ? 'Recovery key' : payload.kind === 'note' ? 'Note' : 'Password',
+                      payload.secret,
+                    ],
                     ['Website', payload.url],
                   ] as const
                 )
@@ -95,7 +98,15 @@ export function SharePage() {
                     <li key={label} className="flex items-center gap-3 px-4 py-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-muted">{label}</p>
-                        <p className="mt-0.5 font-mono text-sm break-all">{value}</p>
+                        <p
+                          className={
+                            label === 'Note'
+                              ? 'mt-0.5 text-sm break-words whitespace-pre-wrap'
+                              : 'mt-0.5 font-mono text-sm break-all'
+                          }
+                        >
+                          {value}
+                        </p>
                       </div>
                       <Button
                         variant="ghost"

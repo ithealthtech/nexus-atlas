@@ -1,7 +1,16 @@
 import { z } from 'zod';
 
-export const PASSWORD_KINDS = ['login', 'bitlocker'] as const;
+export const PASSWORD_KINDS = ['login', 'bitlocker', 'note'] as const;
 export type PasswordKind = (typeof PASSWORD_KINDS)[number];
+/** How each kind is named in lists, search results, and links. */
+export const PASSWORD_KIND_LABELS: Record<PasswordKind, string> = {
+  login: 'Password',
+  bitlocker: 'BitLocker key',
+  note: 'Secure note',
+};
+/** A secure note keeps its text where a login keeps its password, so it can be longer. */
+export const MAX_SECRET_LENGTH = 4096;
+export const MAX_NOTE_LENGTH = 20000;
 
 /** What a login is for. Stored when someone picks one; otherwise guessed from the name, username, and address. */
 export const PASSWORD_CATEGORIES = [
@@ -111,7 +120,8 @@ const base = {
     .max(2000)
     .default('')
     .refine((v) => v === '' || /^https?:\/\/\S+$/i.test(v), 'Enter an http:// or https:// address.'),
-  secret: z.string().min(1, 'The password is required.').max(4096),
+  // Checked against the kind below: a secure note's text may be longer than a password.
+  secret: z.string().max(MAX_NOTE_LENGTH),
   notes: z.string().max(20000).default(''),
   totp: totpSecret.default(''),
   rotationDays: z.number().int().min(1).max(3650).nullable().default(null),
@@ -127,15 +137,28 @@ const base = {
 
 export const createPasswordSchema = z
   .object({ kind: z.enum(PASSWORD_KINDS).default('login'), ...base })
+  .superRefine((p, ctx) => {
+    if (!p.secret.length)
+      ctx.addIssue({
+        code: 'custom',
+        message: p.kind === 'note' ? 'Write the note.' : 'The password is required.',
+        path: ['secret'],
+      });
+  })
   .refine((p) => p.kind !== 'bitlocker' || BITLOCKER_KEY.test(p.secret.trim()), {
     message: 'A BitLocker recovery key is 8 groups of 6 digits, separated by dashes.',
+    path: ['secret'],
+  })
+  .refine((p) => p.kind === 'note' || p.secret.length <= MAX_SECRET_LENGTH, {
+    message: `A password can be up to ${MAX_SECRET_LENGTH} characters.`,
     path: ['secret'],
   });
 export const updatePasswordSchema = z.object({
   name: base.name.optional(),
   username: z.string().trim().max(254).optional(),
   url: base.url.optional(),
-  secret: base.secret.optional(),
+  // The entry's kind sets the upper limit (checked by the server); empty is never a change.
+  secret: z.string().min(1, 'The password is required.').max(MAX_NOTE_LENGTH).optional(),
   notes: z.string().max(20000).optional(),
   totp: totpSecret.optional(),
   rotationDays: z.number().int().min(1).max(3650).nullable().optional(),
@@ -252,6 +275,15 @@ export interface VaultAuditView {
   ip: string;
   createdAt: string;
 }
+/** A file kept with a password entry. Its contents are encrypted at rest and only come back through a download,
+ *  which is checked and recorded like a reveal. */
+export interface PasswordAttachmentView {
+  id: string;
+  filename: string;
+  size: number;
+  uploadedByName: string | null;
+  createdAt: string;
+}
 export interface ShareView {
   id: string;
   maxViews: number;
@@ -289,4 +321,51 @@ export interface PasswordFolderView {
   clientId: string;
   name: string;
   count: number;
+}
+
+// ---------- Send: one-time text and files, not tied to a password ----------
+export const SEND_KINDS = ['text', 'file'] as const;
+export type SendKind = (typeof SEND_KINDS)[number];
+/** Browser-encrypted, base64url. The key never reaches the server; it's after the # in the link. */
+const sendCiphertext = (max: number) =>
+  z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .min(24)
+    .max(max);
+const sendOptions = {
+  // Only the sender sees the name (their list and the audit trail); the recipient sees the content.
+  name: z.string().trim().min(1, 'Give it a name you’ll recognize.').max(120),
+  maxViews: z.coerce.number().int().min(1).max(20).default(1),
+  expiresHours: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 30)
+    .default(24),
+};
+/** A text Send: up to 20,000 characters before encryption. */
+export const sendTextSchema = z.object({ ...sendOptions, ciphertext: sendCiphertext(120000) });
+/** The form fields that come with a file Send; `meta` is the encrypted file name and type. */
+export const sendFileSchema = z.object({ ...sendOptions, meta: sendCiphertext(4000) });
+export const MAX_SEND_TEXT = 20000;
+export interface SendView {
+  id: string;
+  kind: SendKind;
+  name: string;
+  /** Encrypted size in bytes, for files. */
+  size: number;
+  maxViews: number;
+  views: number;
+  expiresAt: string;
+  revoked: boolean;
+  /** Still openable: not revoked, used up, or expired. */
+  active: boolean;
+  createdByName: string;
+  createdAt: string;
+}
+export interface SendCreated {
+  id: string;
+  token: string;
+  expiresAt: string;
 }

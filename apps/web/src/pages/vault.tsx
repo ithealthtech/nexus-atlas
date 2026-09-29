@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useParams, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -25,6 +25,10 @@ import {
   Share2,
   ShieldCheck,
   Star,
+  StickyNote,
+  Upload,
+  Download,
+  FileLock,
   Timer,
   Trash2,
   UserRound,
@@ -33,6 +37,7 @@ import {
 import {
   PASSWORD_CATEGORIES,
   MAX_CUSTOM_FIELDS,
+  MAX_NOTE_LENGTH,
   PASSWORD_CATEGORY_LABELS,
   STRENGTH_LABELS,
   passwordStrength,
@@ -45,7 +50,14 @@ import {
   type RelationView,
   type UserView,
 } from '@atlas/shared';
-import { PasswordIcon, hostOf } from '@/lib/password-categories';
+import {
+  PASSWORD_TYPE_LABELS,
+  PasswordIcon,
+  hostOf,
+  passwordType,
+  passwordTypeLabel,
+  type PasswordType,
+} from '@/lib/password-categories';
 import {
   Badge,
   Button,
@@ -88,6 +100,9 @@ import {
   usePasswords,
   useReveal,
   useShares,
+  useDownloadPasswordFile,
+  usePasswordFiles,
+  uploadPasswordFile,
   type GeneratorOptions,
 } from '@/lib/vault';
 
@@ -426,6 +441,7 @@ export function PasswordDialog({
   const queryClient = useQueryClient();
   const reveal = useReveal();
   const [kind, setKind] = useState<PasswordKind>(item?.kind ?? 'login');
+  const note = kind === 'note';
   const folders = usePasswordFolders(clientId).data ?? [];
   const [folderId, setFolderId] = useState(item?.folderId ?? '');
   const [secret, setSecret] = useState('');
@@ -445,7 +461,7 @@ export function PasswordDialog({
     const rotation = text('rotationDays');
     const body: Record<string, unknown> = {
       name: text('name'),
-      username: text('username'),
+      username: note ? '' : text('username'),
       url: kind === 'login' ? text('url') : '',
       rotationDays: rotation ? Number(rotation) : null,
       expiresOn: text('expiresOn') || null,
@@ -462,8 +478,8 @@ export function PasswordDialog({
       folderId: text('folderId') || null,
     };
     // On edit, secrets are sent only when changed, so unrevealed values are never round-tripped.
-    if (!item || secret) body.secret = secret;
-    if (!item || form.get('notes') !== null) body.notes = text('notes');
+    if (!item || (secret && secret !== shownNote)) body.secret = secret;
+    if (!note && (!item || form.get('notes') !== null)) body.notes = text('notes');
     if (kind === 'login' && (!item || text('totp'))) body.totp = text('totp');
     setBusy(true);
     setError(null);
@@ -502,6 +518,15 @@ export function PasswordDialog({
     const result = item && (await reveal(item, { field: 'notes' }, 'Why do you need to see these notes?'));
     if (result) setNotes(result.value);
   };
+  // A secure note is edited in place: shown (and recorded as viewed) first, then saved only if it changed.
+  const [shownNote, setShownNote] = useState<string | null>(null);
+  const loadNote = async () => {
+    const result = item && (await reveal(item, {}, 'Why do you need to see this note?'));
+    if (result) {
+      setShownNote(result.value);
+      setSecret(result.value);
+    }
+  };
   return (
     <Dialog
       open
@@ -527,6 +552,7 @@ export function PasswordDialog({
               [
                 ['login', 'Login', KeyRound],
                 ['bitlocker', 'BitLocker recovery key', HardDrive],
+                ['note', 'Secure note', StickyNote],
               ] as const
             ).map(([value, label, Icon]) => (
               <button
@@ -551,22 +577,26 @@ export function PasswordDialog({
                 required
                 maxLength={200}
                 autoFocus
-                placeholder={kind === 'bitlocker' ? 'e.g. HDG-DC-01 · C:' : 'e.g. Firewall admin'}
+                placeholder={
+                  kind === 'bitlocker' ? 'e.g. HDG-DC-01 · C:' : note ? 'e.g. Alarm panel codes' : 'e.g. Firewall admin'
+                }
               />
             )}
           </Field>
-          <Field label={kind === 'bitlocker' ? 'Recovery key ID' : 'Username'} error={error?.fields?.username}>
-            {(p) => (
-              <Input
-                {...p}
-                name="username"
-                defaultValue={item?.username}
-                maxLength={254}
-                autoComplete="off"
-                className={kind === 'bitlocker' ? 'font-mono' : undefined}
-              />
-            )}
-          </Field>
+          {!note && (
+            <Field label={kind === 'bitlocker' ? 'Recovery key ID' : 'Username'} error={error?.fields?.username}>
+              {(p) => (
+                <Input
+                  {...p}
+                  name="username"
+                  defaultValue={item?.username}
+                  maxLength={254}
+                  autoComplete="off"
+                  className={kind === 'bitlocker' ? 'font-mono' : undefined}
+                />
+              )}
+            </Field>
+          )}
         </div>
         {kind === 'login' && (
           <Field
@@ -611,45 +641,68 @@ export function PasswordDialog({
             </Select>
           )}
         </Field>
-        <Field
-          label={kind === 'bitlocker' ? 'Recovery key' : item ? 'New password' : 'Password'}
-          error={error?.fields?.secret}
-          help={item ? 'Leave empty to keep the current one. Changing it keeps the old one in history.' : undefined}
-        >
-          {(p) => (
-            <div>
-              <div className="flex gap-2">
-                <Input
-                  {...p}
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                  type={showSecret ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  spellCheck={false}
-                  className="font-mono"
-                  placeholder={
-                    kind === 'bitlocker' ? '000000-000000-000000-000000-000000-000000-000000-000000' : undefined
-                  }
-                  required={!item}
-                />
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  aria-label={showSecret ? 'Hide' : 'Show'}
-                  onClick={() => setShowSecret((v) => !v)}
-                >
-                  {showSecret ? <EyeOff /> : <Eye />}
-                </Button>
-                {kind === 'login' && (
-                  <Button variant="secondary" onClick={() => setGenerating((v) => !v)} aria-expanded={generating}>
-                    <RefreshCw /> Generate
+        {note && item && shownNote === null ? (
+          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 text-sm">
+            <span className="text-muted">The note is encrypted.</span>
+            <Button variant="ghost" size="sm" onClick={loadNote}>
+              <Eye /> Show to edit
+            </Button>
+          </div>
+        ) : note ? (
+          <Field label="Note (encrypted)" error={error?.fields?.secret}>
+            {(p) => (
+              <Textarea
+                {...p}
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                rows={8}
+                maxLength={MAX_NOTE_LENGTH}
+                spellCheck={false}
+                required
+              />
+            )}
+          </Field>
+        ) : (
+          <Field
+            label={kind === 'bitlocker' ? 'Recovery key' : item ? 'New password' : 'Password'}
+            error={error?.fields?.secret}
+            help={item ? 'Leave empty to keep the current one. Changing it keeps the old one in history.' : undefined}
+          >
+            {(p) => (
+              <div>
+                <div className="flex gap-2">
+                  <Input
+                    {...p}
+                    value={secret}
+                    onChange={(e) => setSecret(e.target.value)}
+                    type={showSecret ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    spellCheck={false}
+                    className="font-mono"
+                    placeholder={
+                      kind === 'bitlocker' ? '000000-000000-000000-000000-000000-000000-000000-000000' : undefined
+                    }
+                    required={!item}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    aria-label={showSecret ? 'Hide' : 'Show'}
+                    onClick={() => setShowSecret((v) => !v)}
+                  >
+                    {showSecret ? <EyeOff /> : <Eye />}
                   </Button>
-                )}
+                  {kind === 'login' && (
+                    <Button variant="secondary" onClick={() => setGenerating((v) => !v)} aria-expanded={generating}>
+                      <RefreshCw /> Generate
+                    </Button>
+                  )}
+                </div>
+                {kind === 'login' && <StrengthMeter value={secret} />}
               </div>
-              {kind === 'login' && <StrengthMeter value={secret} />}
-            </div>
-          )}
-        </Field>
+            )}
+          </Field>
+        )}
         {generating && (
           <Generator
             onUse={(value) => {
@@ -688,7 +741,7 @@ export function PasswordDialog({
             </Field>
           </div>
         )}
-        {notes === null ? (
+        {note ? null : notes === null ? (
           <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 text-sm">
             <span className="text-muted">{item?.hasNotes ? 'Notes are encrypted.' : 'No notes.'}</span>
             {item?.hasNotes ? (
@@ -896,7 +949,8 @@ function QuickActions({ item }: { item: PasswordView }) {
   const actor = useActor();
   const { share: quickShare, dialog: quickShareDialog } = useQuickShare();
   const bitlocker = item.kind === 'bitlocker';
-  const openable = !bitlocker && /^https?:\/\//i.test(item.url);
+  const openable = item.kind === 'login' && /^https?:\/\//i.test(item.url);
+  const secretName = bitlocker ? 'recovery key' : item.kind === 'note' ? 'note' : 'password';
   return (
     <div className="flex items-center justify-end">
       {quickShareDialog}
@@ -914,13 +968,13 @@ function QuickActions({ item }: { item: PasswordView }) {
         <Slot />
       )}
       <QuickAction
-        label={`Copy ${bitlocker ? 'recovery key' : 'password'} for ${item.name}`}
+        label={`Copy ${secretName} for ${item.name}`}
         icon={Copy}
         action={async () => {
           const result = await reveal(item, { copy: true });
           if (!result) return null;
           await copySecret(result.value);
-          return `${bitlocker ? 'Recovery key' : 'Password'} copied. The clipboard clears in 30 seconds.`;
+          return `${secretName.replace(/^./, (c) => c.toUpperCase())} copied. The clipboard clears in 30 seconds.`;
         }}
       />
       {item.hasTotp ? (
@@ -1126,8 +1180,7 @@ function saveListView(view: ListView) {
     /* Storage can be blocked; the choice still applies until the page reloads. */
   }
 }
-const typeLabel = (p: PasswordView) =>
-  p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category];
+const typeLabel = passwordTypeLabel;
 /** Higher is worse: rotation overdue, then reused, then weak. */
 const attention = (p: PasswordView) =>
   (rotationOverdue(p) ? 4 : 0) + (p.reused > 0 ? 2 : 0) + (p.kind === 'login' && p.strength < 2 ? 1 : 0);
@@ -1165,7 +1218,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   const canUse = clientId ? client.data?.access === 'edit_passwords' || !actor.isStaff : true;
   const list = usePasswords({ client: clientId, archived: search.archived });
   const [query, setQuery] = useState('');
-  const [type, setType] = useState<PasswordCategory | 'bitlocker' | ''>('');
+  const [type, setType] = useState<PasswordType | ''>('');
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [show, setShow] = useState<'all' | 'favorites' | 'recent'>('all');
@@ -1187,11 +1240,10 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
   };
   // Grouping by client makes no sense inside one client.
   const groupBy = clientId && view.group === 'client' ? 'none' : view.group;
-  const typeOf = (p: PasswordView) => (p.kind === 'bitlocker' ? 'bitlocker' : p.category);
   // Only offer the types that are actually in the list.
   const types = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const p of list.data ?? []) counts.set(typeOf(p), (counts.get(typeOf(p)) ?? 0) + 1);
+    for (const p of list.data ?? []) counts.set(passwordType(p), (counts.get(passwordType(p)) ?? 0) + 1);
     return counts;
   }, [list.data]);
   const rows = useMemo(
@@ -1200,16 +1252,9 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
         (p) =>
           (show !== 'favorites' || p.favorite) &&
           (show !== 'recent' || p.lastUsedAt) &&
-          (!type || typeOf(p) === type) &&
+          (!type || passwordType(p) === type) &&
           (!folder || (folder === 'none' ? !p.folderId : p.folderId === folder)) &&
-          [
-            p.name,
-            p.username,
-            p.url,
-            p.clientName,
-            PASSWORD_CATEGORY_LABELS[p.category],
-            ...p.linkedAssets.map((a) => a.name),
-          ]
+          [p.name, p.username, p.url, p.clientName, typeLabel(p), ...p.linkedAssets.map((a) => a.name)]
             .join(' ')
             .toLowerCase()
             .includes(query.trim().toLowerCase()),
@@ -1287,11 +1332,11 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
               <span className="sr-only">Type</span>
               <Select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
                 <option value="">All types</option>
-                {[...PASSWORD_CATEGORIES, 'bitlocker' as const]
+                {[...PASSWORD_CATEGORIES, 'bitlocker' as const, 'note' as const]
                   .filter((c) => types.has(c))
                   .map((c) => (
                     <option key={c} value={c}>
-                      {c === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[c]} ({types.get(c)})
+                      {PASSWORD_TYPE_LABELS[c]} ({types.get(c)})
                     </option>
                   ))}
               </Select>
@@ -1416,9 +1461,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                           <AppLink to={`/passwords/${p.id}`} className="flex min-w-0 items-center gap-3">
                             <span
                               className="grid size-8 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning"
-                              title={
-                                p.kind === 'bitlocker' ? 'BitLocker recovery key' : PASSWORD_CATEGORY_LABELS[p.category]
-                              }
+                              title={typeLabel(p)}
                             >
                               <PasswordIcon item={p} className="size-4" />
                             </span>
@@ -1431,9 +1474,7 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                               <span className="block truncate text-xs text-muted">
                                 {[
                                   p.folderName ? `${p.folderName} folder` : '',
-                                  p.kind === 'bitlocker'
-                                    ? 'BitLocker recovery key'
-                                    : PASSWORD_CATEGORY_LABELS[p.category],
+                                  typeLabel(p),
                                   p.kind === 'login' && p.url ? hostOf(p.url) : '',
                                   p.linkedAssets.length
                                     ? `on ${p.linkedAssets
@@ -1656,12 +1697,14 @@ function SecretRow({
   field,
   fieldId,
   mono = true,
+  multiline = field === 'notes',
 }: {
   label: string;
   item: PasswordView;
   field: 'secret' | 'notes' | 'custom';
   fieldId?: string;
   mono?: boolean;
+  multiline?: boolean;
 }) {
   const reveal = useReveal();
   const toast = useToast();
@@ -1692,7 +1735,7 @@ function SecretRow({
           className={cn(
             'mt-0.5 text-sm break-all',
             mono && 'font-mono',
-            field === 'notes' && value && 'font-sans whitespace-pre-wrap',
+            multiline && value && 'font-sans whitespace-pre-wrap',
           )}
           aria-live="polite"
         >
@@ -1833,6 +1876,126 @@ function AuditCard({ item }: { item: PasswordView }) {
           </li>
         ))}
       </ul>
+    </Card>
+  );
+}
+
+const fileSize = (bytes: number) =>
+  bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1048576
+      ? `${(bytes / 1024).toFixed(0)} KB`
+      : `${(bytes / 1048576).toFixed(1)} MB`;
+
+/** License files, certificates, SSH keys: encrypted like the entry, and each download is recorded. */
+function FilesCard({ item }: { item: PasswordView }) {
+  const { data, isLoading } = usePasswordFiles(item.id);
+  const downloadFile = useDownloadPasswordFile();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const canEdit = !item.archived;
+  const refresh = () =>
+    Promise.all(
+      ['password-files', 'password-audit'].map((k) => queryClient.invalidateQueries({ queryKey: [k, item.id] })),
+    );
+  const upload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy(true);
+    try {
+      for (const file of Array.from(files))
+        queryClient.setQueryData(['password-files', item.id], await uploadPasswordFile(item.id, file));
+      await refresh();
+      toast(
+        files.length === 1 ? `${files[0]!.name} encrypted and saved.` : `${files.length} files encrypted and saved.`,
+      );
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = '';
+    }
+  };
+  return (
+    <Card>
+      <CardHeader
+        title="Files"
+        actions={
+          canEdit && (
+            <>
+              <input
+                ref={input}
+                type="file"
+                multiple
+                className="sr-only"
+                aria-label="Choose files to add to this entry"
+                onChange={(e) => upload(e.target.files)}
+              />
+              <Button variant="ghost" size="sm" loading={busy} onClick={() => input.current?.click()}>
+                <Upload /> Add
+              </Button>
+            </>
+          )
+        }
+      />
+      {isLoading ? (
+        <Skeleton className="m-4 h-10" />
+      ) : !data?.length ? (
+        <p className="px-5 py-4 text-sm text-muted">
+          Keep license files, certificates, or SSH keys with this entry. They&rsquo;re encrypted, and every download is
+          recorded.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {data.map((f) => (
+            <li key={f.id} className="flex items-center gap-3 px-4 py-2.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-3 text-text-2">
+                <FileLock className="size-4" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{f.filename}</span>
+                <span className="block text-xs text-muted">
+                  {fileSize(f.size)} · {f.uploadedByName ?? 'Someone'} · {relativeTime(f.createdAt)}
+                </span>
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Download ${f.filename}`}
+                onClick={async () => {
+                  try {
+                    await downloadFile(item, f);
+                  } catch (e) {
+                    toast((e as Error).message, 'error');
+                  }
+                }}
+              >
+                <Download />
+              </Button>
+              {canEdit && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Delete ${f.filename}`}
+                  onClick={async () => {
+                    if (!confirm(`Delete ${f.filename}? This can't be undone.`)) return;
+                    try {
+                      await api(`/passwords/${item.id}/attachments/${f.id}`, { method: 'DELETE' });
+                      await refresh();
+                      toast('File deleted.');
+                    } catch (e) {
+                      toast((e as Error).message, 'error');
+                    }
+                  }}
+                >
+                  <Trash2 />
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
@@ -2139,13 +2302,15 @@ export function PasswordDetail() {
           <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-warning-soft text-warning">
             {item.kind === 'bitlocker' ? (
               <HardDrive className="size-6" aria-hidden />
+            ) : item.kind === 'note' ? (
+              <StickyNote className="size-6" aria-hidden />
             ) : (
               <KeyRound className="size-6" aria-hidden />
             )}
           </span>
           <div className="min-w-0">
             <p className="text-xs font-bold tracking-[0.14em] text-muted uppercase">
-              {item.kind === 'bitlocker' ? 'BitLocker recovery key' : 'Password'}
+              {item.kind === 'bitlocker' ? 'BitLocker recovery key' : item.kind === 'note' ? 'Secure note' : 'Password'}
             </p>
             <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
               {actor.isStaff && <FavoriteButton item={item} />}
@@ -2201,7 +2366,7 @@ export function PasswordDetail() {
         <div className="space-y-6">
           <Card>
             <CardHeader
-              title="Credentials"
+              title={item.kind === 'note' ? 'Note' : 'Credentials'}
               description={
                 requireReason
                   ? 'This client asks for a reason each time a secret is viewed.'
@@ -2227,7 +2392,11 @@ export function PasswordDetail() {
                   </Button>
                 </div>
               )}
-              <SecretRow label={item.kind === 'bitlocker' ? 'Recovery key' : 'Password'} item={item} field="secret" />
+              {item.kind === 'note' ? (
+                <SecretRow label="Note" item={item} field="secret" mono={false} multiline />
+              ) : (
+                <SecretRow label={item.kind === 'bitlocker' ? 'Recovery key' : 'Password'} item={item} field="secret" />
+              )}
               {item.hasTotp && <TotpRow item={item} />}
               {item.url && (
                 <div className="flex items-center gap-3 px-5 py-3.5">
@@ -2271,7 +2440,7 @@ export function PasswordDetail() {
               {item.hasNotes && <SecretRow label="Notes" item={item} field="notes" mono={false} />}
             </div>
           </Card>
-          {actor.isStaff && (
+          {actor.isStaff && item.kind !== 'note' && (
             <Card>
               <CardHeader title="Health" />
               <dl className="grid gap-4 px-5 py-4 text-sm sm:grid-cols-3">
@@ -2328,6 +2497,7 @@ export function PasswordDetail() {
           {actor.isStaff && (
             <RelatedPanel type="password" id={item.id} clientId={item.clientId} canEdit={!item.archived} />
           )}
+          {actor.isStaff && <FilesCard item={item} />}
           {actor.isStaff && !item.archived && <SharesCard item={item} />}
           {actor.isStaff && item.kind === 'login' && <HistoryCard item={item} />}
           {actor.isAdmin && item.restricted && <AccessCard item={item} />}
