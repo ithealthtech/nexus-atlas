@@ -95,7 +95,7 @@ export function EntraSettings() {
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Directory (tenant) ID" error={error?.fields?.tenantId}>
+            <Field label="Sign-in tenant ID" error={error?.fields?.tenantId}>
               {(p) => (
                 <Input
                   {...p}
@@ -107,7 +107,7 @@ export function EntraSettings() {
                 />
               )}
             </Field>
-            <Field label="Application (client) ID" error={error?.fields?.clientId}>
+            <Field label="Sign-in app ID" error={error?.fields?.clientId}>
               {(p) => (
                 <Input
                   {...p}
@@ -121,7 +121,7 @@ export function EntraSettings() {
             </Field>
           </div>
           <Field
-            label="Client secret"
+            label="Sign-in secret"
             error={error?.fields?.clientSecret}
             help={
               configured ? 'Saved and encrypted. Leave empty to keep it; paste a new one before it expires.' : undefined
