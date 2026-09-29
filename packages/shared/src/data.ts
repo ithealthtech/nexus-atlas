@@ -112,7 +112,8 @@ export const cwRmmMappingSchema = z.object({
 // ---------- Microsoft 365 documentation sync ----------
 /** One multi-tenant app registration in the MSP's tenant; each client tenant grants it admin consent. */
 export const m365ConnectionSchema = z.object({
-  clientId: z.string().trim().uuid('Enter the Application (client) ID: a GUID from the app’s Overview page.'),
+  // Any GUID shape: Microsoft's IDs aren't all RFC 4122 UUIDs.
+  clientId: z.string().trim().pipe(z.guid('Enter the Application (client) ID: a GUID from the app’s Overview page.')),
   // Omitted keeps the saved secret.
   clientSecret: z.string().trim().min(8).max(500).optional(),
   autoSync: z.boolean().default(true),
