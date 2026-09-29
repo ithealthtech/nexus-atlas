@@ -31,6 +31,7 @@ describe('checklists', () => {
   });
 
   async function person(email: string, next: string, body: Record<string, unknown>, staff = false) {
+    // A new password may not contain the person's name, so tests use unrelated words.
     const created = await owner.call('POST', '/api/users', {
       email,
       name: email.split('@')[0],
@@ -39,7 +40,8 @@ describe('checklists', () => {
     });
     expect(created.status).toBe(201);
     const { b } = await signIn(t.app, email, TEMP);
-    await b.call('POST', '/api/account/password', { current: TEMP, next });
+    const changed = await b.call('POST', '/api/account/password', { current: TEMP, next });
+    expect(changed.status, JSON.stringify(changed.data)).toBe(200);
     if (staff) await enroll(b);
     return { b, id: created.data.id as string };
   }
@@ -59,7 +61,12 @@ describe('checklists', () => {
       (await owner.call('POST', '/api/checklists', { title: 'Empty', steps: [] })).data.fields?.steps,
     ).toBeTruthy();
 
-    const tech = await person('tech@msp.test', 'technician pass one', { role: 'technician', allClients: 'edit' }, true);
+    const tech = await person(
+      'tech@msp.test',
+      'cobalt fresh pass 12',
+      { role: 'technician', allClients: 'edit' },
+      true,
+    );
     const started = await owner.call('POST', `/api/clients/${harbor}/checklist-runs`, {
       checklistId: template.data.id,
       assigneeId: tech.id,
@@ -127,7 +134,7 @@ describe('checklists', () => {
     // Read-only access: sees the run, can't tick it or start one.
     const reader = await person(
       'reader@msp.test',
-      'reader pass for harbor',
+      'amber quiet lake 47',
       { role: 'readonly_technician', grants: [{ clientId: harbor, level: 'read' }] },
       true,
     );
@@ -157,7 +164,7 @@ describe('checklists', () => {
     ).toBe(400);
 
     // Only someone on the team can be assigned.
-    const contact = await person('viewer@harbor.test', 'viewer pass for harbor', {
+    const contact = await person('viewer@harbor.test', 'maple north orbit 9', {
       role: 'client_viewer',
       grants: [{ clientId: harbor, level: 'read' }],
     });
