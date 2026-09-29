@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, like } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
   m365SyncOptionsSchema,
   type Actor,
   type ContactView,
   type LayoutField,
-  type M365SyncOptions,
   type M365TenantLink,
 } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
@@ -170,7 +169,7 @@ export class M365Client {
     return { tenantId: String(org.id), name: String(org.displayName ?? '') };
   }
 
-  async snapshot(tenant: string, options: M365SyncOptions): Promise<M365Snapshot> {
+  async snapshot(tenant: string): Promise<M365Snapshot> {
     const [org] = await this.all(tenant, '/organization?$select=id,displayName,verifiedDomains');
     if (!org) throw new HttpError(400, 'Microsoft returned no organization for that tenant.');
     const domains = ((org.verifiedDomains as Json[] | undefined) ?? []).map((d) => ({
@@ -190,8 +189,8 @@ export class M365Client {
         status: String(s.capabilityStatus ?? ''),
       };
     });
-    const users = options.users
-      ? (
+    // Users are read even when they aren't made into contacts: the tenant summary counts them and names its admins.
+    const users = (
           await this.all(
             tenant,
             '/users?$select=id,displayName,userPrincipalName,mail,jobTitle,businessPhones,mobilePhone,accountEnabled,assignedLicenses,userType&$top=999',
@@ -207,8 +206,7 @@ export class M365Client {
           enabled: u.accountEnabled !== false,
           member: u.userType !== 'Guest',
           skuIds: ((u.assignedLicenses as Json[] | undefined) ?? []).map((l) => String(l.skuId)),
-        }))
-      : [];
+        }));
     const roles = (await this.all(tenant, '/directoryRoles?$expand=members($select=id)'))
       .map((r) => ({
         name: String(r.displayName ?? ''),
@@ -352,6 +350,7 @@ export async function runM365Sync(
     fields: Record<string, string>,
   ) => {
     const clean = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== ''));
+    // An empty value is still passed on to a refresh, so what Microsoft no longer reports is cleared.
     return run.upsert(
       kind,
       externalId,
@@ -374,21 +373,26 @@ export async function runM365Sync(
         return (await assets.create(scope, clientId, { layoutId: layout.id, name, fields: clean, notes: SOURCE_NOTE }))
           .id;
       },
-      (id) => refresh(id, name, clean),
+      (id) => refresh(id, name, fields),
     );
   };
   const refresh = async (id: string, name: string, fields: Record<string, string>) => {
     const current = await assets.get(scope, id);
     if (current.archived) await assets.setArchived(scope, id, false);
-    const merged = { ...current.fields, ...fields };
+    const merged: Record<string, unknown> = { ...current.fields };
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === '') delete merged[key];
+      else merged[key] = value;
+    }
     if (current.name !== name || JSON.stringify(merged) !== JSON.stringify(current.fields))
       await assets.update(scope, id, { name, fields: merged, version: current.version }, 'Synced from Microsoft 365');
   };
 
+  const synced = new Set<string>();
   for (const [clientId, link] of linked) {
     let snap: M365Snapshot;
     try {
-      snap = await client.snapshot(link.tenantId, options);
+      snap = await client.snapshot(link.tenantId);
     } catch (error) {
       const detail = error instanceof HttpError ? error.message : 'The tenant could not be read.';
       run.count('tenants', 'failed');
@@ -396,19 +400,30 @@ export async function runM365Sync(
       await onTenant(clientId, { ok: false, detail });
       continue;
     }
+    // Two clients linked to the same tenant under different names (its ID and a domain): only the first is synced.
+    if (synced.has(snap.tenantId)) {
+      const detail = `This tenant is already linked to another client. Unlink one of them.`;
+      run.count('tenants', 'skipped');
+      run.note(`${snap.name}: ${detail}`);
+      await onTenant(clientId, { ok: false, detail });
+      continue;
+    }
+    synced.add(snap.tenantId);
     await onTenant(clientId, { ok: true, name: snap.name });
+    // References are per client: a tenant moved to another client gets its own assets there.
+    const ref = (id = '') => `${clientId}:${snap.tenantId}${id ? `:${id}` : ''}`;
 
     const userName = new Map(snap.users.map((u) => [u.id, u.upn || u.name]));
     const skuById = new Map(snap.skus.map((s) => [s.id, s]));
     const paid = snap.skus.filter((s) => s.enabled > 0 && s.enabled < 10_000 && s.status !== 'Deleted');
     const admins = snap.roles.find((r) => r.name === 'Global Administrator')?.members ?? [];
     const licensed = snap.users.filter((u) => u.enabled && u.member && u.skuIds.length);
-    await upsertAsset(clientId, 'tenants', snap.tenantId, tenantLayout, `Microsoft 365: ${snap.name || snap.defaultDomain}`, {
+    await upsertAsset(clientId, 'tenants', ref(), tenantLayout, `Microsoft 365: ${snap.name || snap.defaultDomain}`, {
       tenant_id: snap.tenantId,
       default_domain: snap.defaultDomain,
       domains: snap.domains.map((d) => d.name).join('\n'),
       subscriptions: paid.map((s) => `${s.name}: ${s.assigned} of ${s.enabled}`).join('\n'),
-      users: options.users ? String(licensed.length) : '',
+      users: String(licensed.length),
       global_admins: admins.map((id) => userName.get(id) ?? id).join('\n'),
       admin_roles: snap.roles
         .filter((r) => r.name !== 'Global Administrator')
@@ -418,7 +433,7 @@ export async function runM365Sync(
 
     if (licenseLayout)
       for (const s of paid)
-        await upsertAsset(clientId, 'licenses', `${snap.tenantId}:${s.id}`, licenseLayout, s.name, {
+        await upsertAsset(clientId, 'licenses', ref(s.id), licenseLayout, s.name, {
           product: s.name,
           vendor: 'Microsoft',
           seats: String(s.enabled),
@@ -427,7 +442,33 @@ export async function runM365Sync(
 
     if (domainLayout)
       for (const d of snap.domains.filter((x) => !x.initial))
-        await upsertAsset(clientId, 'domains', `${snap.tenantId}:${d.name}`, domainLayout, d.name, {});
+        await upsertAsset(clientId, 'domains', ref(d.name), domainLayout, d.name, {});
+
+    // Subscriptions and domains Microsoft no longer reports are archived (they can be restored).
+    const archiveGone = async (kind: string, current: string[]) => {
+      const keep = new Set(current.map((id) => ref(id)));
+      const refs = await db
+        .select({ externalId: schema.externalRefs.externalId, id: schema.assets.id, archived: schema.assets.archived })
+        .from(schema.externalRefs)
+        .innerJoin(schema.assets, eq(schema.assets.id, schema.externalRefs.entityId))
+        .where(
+          and(
+            eq(schema.externalRefs.orgId, actor.orgId),
+            eq(schema.externalRefs.source, 'm365'),
+            eq(schema.externalRefs.kind, kind),
+            like(schema.externalRefs.externalId, `${ref()}:%`),
+          ),
+        );
+      let archived = 0;
+      for (const r of refs)
+        if (!keep.has(r.externalId) && !r.archived) {
+          await assets.setArchived(scope, r.id, true);
+          archived++;
+        }
+      if (archived) run.note(`${snap.name}: archived ${archived} ${kind} Microsoft 365 no longer reports.`);
+    };
+    if (licenseLayout) await archiveGone('licenses', paid.map((s) => s.id));
+    if (domainLayout) await archiveGone('domains', snap.domains.filter((x) => !x.initial).map((d) => d.name));
 
     if (options.users) {
       const existing = await contacts.list(scope, clientId);
@@ -457,7 +498,7 @@ export async function runM365Sync(
         });
         await run.upsert(
           'contacts',
-          `${snap.tenantId}:${u.id}`,
+          ref(u.id),
           u.name,
           async () => {
             const same = byEmail.get(email);

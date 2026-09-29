@@ -149,6 +149,15 @@ export function registerM365Routes(
     let next: (typeof saved.tenants)[string];
     try {
       const found = await new M365Client(saved.clientId, saved.clientSecret, deps.fetcher).check(link.tenantId);
+      // Linked by a domain, it may turn out to be a tenant another client already has under its ID.
+      const other = Object.entries(saved.tenants).find(
+        ([id, t]) => id !== req.params.clientId && t.tenantId.toLowerCase() === found.tenantId.toLowerCase(),
+      );
+      if (other)
+        throw new HttpError(
+          409,
+          `That tenant (${found.name}) is already linked to another client. Unlink one of them.`,
+        );
       // A domain is swapped for the tenant's ID, which never changes.
       next = {
         tenantId: found.tenantId,

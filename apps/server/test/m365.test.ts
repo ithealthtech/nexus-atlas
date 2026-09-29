@@ -54,6 +54,9 @@ function fakeMicrosoft() {
       },
     ] as Record<string, unknown>[],
     graphCalls: [] as string[],
+    // Subscriptions cancelled and the Global Administrators, changed by tests between syncs.
+    cancelled: new Set<string>(),
+    admins: ['u1'],
   };
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -96,23 +99,25 @@ function fakeMicrosoft() {
         });
       case '/v1.0/subscribedSkus':
         return json({
-          value: [
-            {
-              skuId: 'sku-bp',
-              skuPartNumber: 'SPB',
-              capabilityStatus: 'Enabled',
-              consumedUnits: 3,
-              prepaidUnits: { enabled: 5 },
-            },
-            // Free and viral subscriptions aren't documented as licenses.
-            {
-              skuId: 'sku-free',
-              skuPartNumber: 'FLOW_FREE',
-              capabilityStatus: 'Enabled',
-              consumedUnits: 1,
-              prepaidUnits: { enabled: 10000 },
-            },
-          ],
+          value: (
+            [
+              {
+                skuId: 'sku-bp',
+                skuPartNumber: 'SPB',
+                capabilityStatus: 'Enabled',
+                consumedUnits: 3,
+                prepaidUnits: { enabled: 5 },
+              },
+              // Free and viral subscriptions aren't documented as licenses.
+              {
+                skuId: 'sku-free',
+                skuPartNumber: 'FLOW_FREE',
+                capabilityStatus: 'Enabled',
+                consumedUnits: 1,
+                prepaidUnits: { enabled: 10000 },
+              },
+            ] as { skuId: string }[]
+          ).filter((sku) => !state.cancelled.has(sku.skuId)),
         });
       case '/v1.0/users': {
         // Two pages, to follow @odata.nextLink.
@@ -125,7 +130,9 @@ function fakeMicrosoft() {
             });
       }
       case '/v1.0/directoryRoles':
-        return json({ value: [{ displayName: 'Global Administrator', members: [{ id: 'u1' }] }] });
+        return json({
+          value: [{ displayName: 'Global Administrator', members: state.admins.map((id) => ({ id })) }],
+        });
       default:
         return json({ error: { code: 'NotFound' } }, 404);
     }
@@ -236,6 +243,29 @@ describe('Microsoft 365 sync', () => {
     expect(again.counts.contacts.created ?? 0).toBe(0);
     expect(again.counts.licenses.created ?? 0).toBe(0);
     expect((await owner.call('GET', `/api/clients/${harbor}/contacts`)).data).toHaveLength(2);
+
+    // What Microsoft stops reporting goes too: a cancelled subscription is archived, a removed admin cleared.
+    ms.state.cancelled.add('sku-bp');
+    ms.state.admins = [];
+    // With contacts turned off, the tenant summary still counts users.
+    await owner.call('PUT', '/api/integrations/m365/options', { users: false, licenses: true, domains: true });
+    await waitForJob(owner, (await owner.call('POST', '/api/integrations/m365/sync', {})).data.id);
+    const now = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as typeof assets;
+    expect(now.map((a) => a.name).sort()).toEqual(['Microsoft 365: Harbor Dental Group', 'harbordental.com']);
+    const summary = now.find((a) => a.name.startsWith('Microsoft 365:'))!.fields;
+    expect(summary.global_admins).toBeUndefined();
+    expect(summary.subscriptions).toBeUndefined();
+    expect(summary.users).toBe(2);
+
+    // Moved to another client, the tenant is documented there afresh; the first client's assets stay put.
+    const other = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental (new)' })).data.id;
+    await owner.call('DELETE', `/api/integrations/m365/tenants/${harbor}`);
+    await owner.call('POST', '/api/integrations/m365/tenants', { clientId: other, tenant: TENANT });
+    await waitForJob(owner, (await owner.call('POST', '/api/integrations/m365/sync', {})).data.id);
+    expect(
+      ((await owner.call('GET', `/api/assets?client=${other}`)).data as typeof assets).map((a) => a.name).sort(),
+    ).toEqual(['Microsoft 365: Harbor Dental Group', 'harbordental.com']);
+    expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
   });
 
   it('reports a tenant it can no longer read without stopping the others, and refuses a tenant linked twice', async () => {
@@ -245,6 +275,17 @@ describe('Microsoft 365 sync', () => {
     expect(
       (await owner.call('POST', '/api/integrations/m365/tenants', { clientId: northline, tenant: TENANT })).status,
     ).toBe(409);
+    // The same tenant under one of its domains is caught once the check finds its ID.
+    await owner.call('POST', '/api/integrations/m365/tenants', {
+      clientId: northline,
+      tenant: 'harbordental.onmicrosoft.com',
+    });
+    const alias = (await owner.call('POST', `/api/integrations/m365/tenants/${northline}/check`, {})).data;
+    expect(alias.tenants.find((l: { clientId: string }) => l.clientId === northline)).toMatchObject({
+      status: 'failed',
+      tenantId: 'harbordental.onmicrosoft.com',
+    });
+    expect(alias.tenants.find((l: { clientId: string }) => l.clientId === northline).detail).toMatch(/already linked/);
     await owner.call('POST', '/api/integrations/m365/tenants', {
       clientId: northline,
       tenant: 'northline.onmicrosoft.com',
