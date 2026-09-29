@@ -221,11 +221,13 @@ const audit = (p: (typeof passwords)[0], action: string, reason = '') =>
   });
 
 // ---------- admin ----------
-const users = db.users.map((u) => ({
+const users = db.users.map((u, i) => ({
   ...u,
   disabled: false,
   locked: false,
   mustChangePassword: false,
+  // The demo shows both a linked Microsoft account and one waiting for an administrator to confirm it.
+  entra: (i === 1 ? 'linked' : i === 2 ? 'pending' : null) as 'linked' | 'pending' | null,
   createdAt: ago(60 * 24 * 120),
 }));
 const groups = [...db.groups];
@@ -1055,12 +1057,49 @@ on('POST', '/users', (_m, b) => {
     disabled: false,
     locked: false,
     mustChangePassword: true,
+    entra: null,
     lastLoginAt: null as unknown as string,
     createdAt: now(),
   };
   users.push(u as (typeof users)[0]);
   event('User created', `${u.email} · ${ROLE_INFO[u.role].label}`);
   return u;
+});
+// Microsoft Entra sign-in: settings and linking work; the sign-in itself needs a real Microsoft tenant.
+let entraSettings: {
+  tenantId: string;
+  clientId: string;
+  hasSecret: true;
+  enabled: boolean;
+  trustMfa: boolean;
+  requireSso: boolean;
+} | null = null;
+const entraRedirect = 'https://atlas.example.com/api/auth/entra/callback';
+on('GET', '/auth/entra', () => ({ enabled: false, requireSso: false }));
+on('GET', '/settings/entra', () => ({ ...(entraSettings ?? {}), redirectUri: entraRedirect }));
+on('PUT', '/settings/entra', (_m, b) => {
+  if (!/^[0-9a-f-]{36}$/i.test(String(b.clientId ?? '')))
+    throw new MockError(400, 'Enter the Application (client) ID from the app’s Overview page.');
+  if (!entraSettings && !b.clientSecret) throw new MockError(400, 'Enter the client secret.');
+  entraSettings = {
+    tenantId: String(b.tenantId),
+    clientId: String(b.clientId),
+    hasSecret: true,
+    enabled: !!b.enabled,
+    trustMfa: !!b.trustMfa,
+    requireSso: !!b.requireSso && !!b.enabled,
+  };
+  return { ...entraSettings, redirectUri: entraRedirect };
+});
+on('DELETE', '/settings/entra', () => ((entraSettings = null), { ok: true }));
+on('POST', '/settings/entra/test', () => ({ ok: true }));
+on('POST', '/users/:id/entra/confirm', (m) => {
+  find(users, m[1]!, 'User').entra = 'linked';
+  return { ok: true };
+});
+on('DELETE', '/users/:id/entra', (m) => {
+  find(users, m[1]!, 'User').entra = null;
+  return { ok: true };
 });
 on('PATCH', '/users/:id', (m, b) => Object.assign(find(users, m[1]!, 'User'), b));
 on('POST', '/users/:id/reset', (m) => find(users, m[1]!, 'User'));
