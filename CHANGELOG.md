@@ -2,6 +2,14 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Atlas for Windows (preview):** a tray app for technicians. Ctrl+Shift+Space opens quick search over the clients, assets, documents, and passwords you can see; copy a username, password, or one-time code (recorded like a reveal, and cleared from the clipboard after 30 seconds, never kept in clipboard history), open the sign-in address, or open the record in Atlas. It signs in through your browser with your usual password and second step or passkey, keeps only a DPAPI-protected session token, and can start with Windows and remind you about items expiring in the next 14 days. Signed MSIX packages and automatic updates come next. (#23)
+- **Desktop app sign-in:** the authorization code flow with PKCE and a loopback redirect, issuing app sessions with `read`, `write`, and `reveal` scopes. Signed-in apps are listed on the Account page, where they can be signed out, and end with every other kind of sign-out. (#23)
+- **Quick search API:** `GET /api/v1/search` takes a `limit`, for as-you-type use. (#23)
+
 ## [1.6.0] - 2026-09-29
 
 ### Added

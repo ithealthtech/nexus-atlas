@@ -182,15 +182,18 @@ export class IdentityService {
       await tx
         .delete(schema.sessions)
         .where(
-          or(
-            lt(schema.sessions.lastSeenAt, new Date(now - LIMITS.idleMs)),
-            lt(schema.sessions.createdAt, new Date(now - LIMITS.absoluteMs)),
+          and(
+            eq(schema.sessions.kind, 'browser'),
+            or(
+              lt(schema.sessions.lastSeenAt, new Date(now - LIMITS.idleMs)),
+              lt(schema.sessions.createdAt, new Date(now - LIMITS.absoluteMs)),
+            ),
           ),
         );
       const existing = await tx
         .select({ tokenHash: schema.sessions.tokenHash })
         .from(schema.sessions)
-        .where(eq(schema.sessions.userId, user.id))
+        .where(and(eq(schema.sessions.userId, user.id), eq(schema.sessions.kind, 'browser')))
         .orderBy(desc(schema.sessions.lastSeenAt))
         .offset(LIMITS.sessionsPerUser - 1);
       for (const row of existing) await tx.delete(schema.sessions).where(eq(schema.sessions.tokenHash, row.tokenHash));
@@ -236,7 +239,8 @@ export class IdentityService {
       .from(schema.sessions)
       .innerJoin(schema.users, eq(schema.users.id, schema.sessions.userId))
       .innerJoin(schema.orgs, eq(schema.orgs.id, schema.users.orgId))
-      .where(eq(schema.sessions.tokenHash, hash));
+      // A desktop app's token is never a browser session, even if someone puts it in a cookie.
+      .where(and(eq(schema.sessions.tokenHash, hash), eq(schema.sessions.kind, 'browser')));
     if (!row) return null;
     const now = Date.now();
     const { session, user, org } = row;

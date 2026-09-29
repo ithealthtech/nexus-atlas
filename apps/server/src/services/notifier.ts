@@ -83,6 +83,7 @@ export class Notifier {
     await this.db.delete(schema.passwordResets).where(lt(schema.passwordResets.expiresAt, now));
     await this.db.delete(schema.authChallenges).where(lt(schema.authChallenges.expiresAt, now));
     await this.db.delete(schema.trustedDevices).where(lt(schema.trustedDevices.expiresAt, now));
+    await this.db.delete(schema.nativeAuthCodes).where(lt(schema.nativeAuthCodes.expiresAt, now));
     await this.db
       .delete(schema.notificationLog)
       .where(lt(schema.notificationLog.sentAt, new Date(now.getTime() - 120 * 86_400_000)));

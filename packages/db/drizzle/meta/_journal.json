@@ -134,6 +134,13 @@
       "when": 1790717760651,
       "tag": "0018_rmm_health",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790721031806,
+      "tag": "0019_native_app_sessions",
+      "breakpoints": true
     }
   ]
 }

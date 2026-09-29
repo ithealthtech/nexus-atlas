@@ -11,12 +11,15 @@ import {
 } from '@simplewebauthn/server';
 import { schema, type Database } from '@atlas/db';
 import {
+  NATIVE_CLIENTS,
   forgotPasswordSchema,
   notificationPrefsSchema,
   passkeyNameSchema,
   resetPasswordSchema,
   type AccountSecurityView,
   type Actor,
+  type AppScope,
+  type NativeClientId,
 } from '@atlas/shared';
 import { fail } from '../errors.js';
 import type { MailService } from '../services/mail.js';
@@ -84,14 +87,27 @@ export class AccountSecurity {
         createdAt: p.createdAt.toISOString(),
         lastUsedAt: p.lastUsedAt?.toISOString() ?? null,
       })),
-      sessions: sessions.map((s) => ({
-        id: s.id,
-        current: s.tokenHash === context.hash,
-        ip: s.ip,
-        userAgent: s.userAgent,
-        createdAt: s.createdAt.toISOString(),
-        lastSeenAt: s.lastSeenAt.toISOString(),
-      })),
+      sessions: sessions
+        .filter((s) => s.kind === 'browser')
+        .map((s) => ({
+          id: s.id,
+          current: s.tokenHash === context.hash,
+          ip: s.ip,
+          userAgent: s.userAgent,
+          createdAt: s.createdAt.toISOString(),
+          lastSeenAt: s.lastSeenAt.toISOString(),
+        })),
+      apps: sessions
+        .filter((s) => s.kind === 'app')
+        .map((s) => ({
+          id: s.id,
+          client: NATIVE_CLIENTS[s.client as NativeClientId]?.name ?? 'Desktop app',
+          deviceName: s.deviceName,
+          scopes: s.scopes as AppScope[],
+          ip: s.ip,
+          createdAt: s.createdAt.toISOString(),
+          lastSeenAt: s.lastSeenAt.toISOString(),
+        })),
       devices: devices.map((d) => ({
         id: d.id,
         userAgent: d.userAgent,
@@ -197,9 +213,22 @@ export class AccountSecurity {
           ne(schema.sessions.tokenHash, context.hash),
         ),
       )
-      .returning({ ip: schema.sessions.ip });
+      .returning({
+        ip: schema.sessions.ip,
+        kind: schema.sessions.kind,
+        client: schema.sessions.client,
+        deviceName: schema.sessions.deviceName,
+      });
     if (!removed.length) fail(404, 'Session not found. To end this session, sign out.');
-    await this.identity.event(context.user, 'Session ended remotely', `Session from ${removed[0]!.ip}`, ip);
+    const ended = removed[0]!;
+    if (ended.kind === 'app')
+      await this.identity.event(
+        context.user,
+        'Desktop app signed out remotely',
+        `${NATIVE_CLIENTS[ended.client as NativeClientId]?.name ?? 'Desktop app'} on ${ended.deviceName}`,
+        ip,
+      );
+    else await this.identity.event(context.user, 'Session ended remotely', `Session from ${ended.ip}`, ip);
   }
 
   async endOtherSessions(context: SessionContext, ip: string) {

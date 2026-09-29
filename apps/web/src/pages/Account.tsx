@@ -6,13 +6,14 @@ import {
   LifeBuoy,
   Laptop,
   LogOut,
+  MonitorDown,
   MonitorSmartphone,
   ShieldAlert,
   ShieldCheck,
   Smartphone,
   Trash2,
 } from 'lucide-react';
-import type { SessionView } from '@atlas/shared';
+import { APP_SCOPE_LABELS, type SessionView } from '@atlas/shared';
 import {
   Avatar,
   Badge,
@@ -209,7 +210,7 @@ export function Account() {
     );
 
   const data = security.data;
-  const otherSessions = data?.sessions.filter((s) => !s.current).length ?? 0;
+  const otherSessions = (data?.sessions.filter((s) => !s.current).length ?? 0) + (data?.apps.length ?? 0);
   return (
     <>
       <PageHeader eyebrow="Your account" title="Profile & sign-in" />
@@ -397,6 +398,40 @@ export function Account() {
             ))}
           </ul>
         </Card>
+
+        {!!data?.apps.length && (
+          <Card>
+            <CardHeader
+              title="Desktop apps"
+              description="Apps signed in as you. Each stays signed in for up to 90 days, or 30 days unused."
+            />
+            <ul className="divide-y divide-border">
+              {data.apps.map((a) => (
+                <li key={a.id}>
+                  <Row
+                    icon={<MonitorDown className="size-5" aria-hidden />}
+                    title={`${a.client} on ${a.deviceName}`}
+                    detail={
+                      <>
+                        {`${a.ip || 'Unknown address'} · signed in ${formatDate(a.createdAt)} · active ${relativeTime(a.lastSeenAt)}`}
+                        <br />
+                        {a.scopes.map((s) => APP_SCOPE_LABELS[s].split(' (')[0]).join(' · ')}
+                      </>
+                    }
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => run({ path: `/account/sessions/${a.id}`, method: 'DELETE' }, 'App signed out.')}
+                    >
+                      Sign out
+                    </Button>
+                  </Row>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         {!!data?.devices.length && (
           <Card>

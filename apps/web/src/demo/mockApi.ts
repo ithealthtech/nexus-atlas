@@ -612,6 +612,7 @@ on('GET', '/account/security', () => ({
   passkeys,
   sessions,
   devices,
+  apps: [],
   notifyDigest,
 }));
 on('PATCH', '/account/preferences', (_m, b) => {
