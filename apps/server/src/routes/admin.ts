@@ -4,6 +4,7 @@ import { schema, type Database } from '@atlas/db';
 import {
   RMM_HEALTH_FILTERS,
   WARRANTY_FILTERS,
+  isAssetStatsFilter,
   testEmailSchema,
   type RmmHealthFilter,
   type WarrantyFilter,
@@ -17,13 +18,14 @@ import { graphPermissions, type MailService } from '../services/mail.js';
 import { Notifier } from '../services/notifier.js';
 import { RmmHealthService } from '../services/rmm-health.js';
 import { WarrantyService } from '../services/warranty.js';
+import { AssetStatsService } from '../services/asset-stats.js';
 import { Scope, isUuid } from '../services/scope.js';
 import type { SettingsService, SmtpConfig } from '../services/settings.js';
 import type { VaultService } from '../services/vault.js';
 
 type Params = { id: string };
 
-/** Groups, email and notification settings, expirations, RMM health, asset warranty, and the audit log. Returns the background notifier. */
+/** Groups, email and notification settings, expirations, RMM health, asset warranty, asset statistics, and the audit log. Returns the background notifier. */
 export function registerAdminRoutes(
   app: FastifyInstance,
   deps: {
@@ -46,6 +48,7 @@ export function registerAdminRoutes(
   const expirations = new ExpirationService(deps.vault);
   const rmmHealth = new RmmHealthService(settings);
   const warranty = new WarrantyService(settings);
+  const assetStats = new AssetStatsService(settings);
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const admin = (req: FastifyRequest) => {
     requireAdmin(actorOf(req));
@@ -211,6 +214,41 @@ export function registerAdminRoutes(
     recent(req);
     const saved = await settings.saveWarranty(orgId, req.body);
     await event(req, 'Warranty settings changed', `Expiring soon within ${saved.soonDays} days`);
+    return saved;
+  });
+
+  // ---- asset statistics ----
+  type StatsQuery = { client?: string; filter?: string };
+  const statsScope = async (req: FastifyRequest<{ Querystring: StatsQuery }>) => {
+    const scope = new Scope(db, actorOf(req));
+    const { client } = req.query;
+    if (client !== undefined) {
+      if (!isUuid(client)) throw new HttpError(404, 'Client not found.');
+      await scope.require(client, 'read', 'Client');
+    }
+    return { scope, opts: { clientId: client } };
+  };
+  app.get<{ Querystring: StatsQuery }>('/api/asset-stats', authed, async (req) => {
+    const { scope, opts } = await statsScope(req);
+    return assetStats.report(scope, opts);
+  });
+  app.get<{ Querystring: StatsQuery }>('/api/asset-stats/assets', authed, async (req) => {
+    const filter = req.query.filter;
+    if (!isAssetStatsFilter(filter)) throw new HttpError(400, 'Choose which assets to list.');
+    const { scope, opts } = await statsScope(req);
+    return assetStats.assets(scope, filter, opts);
+  });
+  app.get('/api/settings/asset-stats', authed, async (req) => settings.assetStats(actorOf(req).orgId));
+  app.put('/api/settings/asset-stats', authed, async (req) => {
+    const orgId = admin(req);
+    recent(req);
+    const saved = await settings.saveAssetStats(orgId, req.body);
+    const chosen = Object.keys(saved.layouts).length;
+    await event(
+      req,
+      'Asset statistics settings changed',
+      chosen ? `${chosen} layout${chosen === 1 ? '' : 's'} set by hand` : 'Every layout automatic',
+    );
     return saved;
   });
 
