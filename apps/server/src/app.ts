@@ -188,7 +188,10 @@ export async function buildApp({
     const origin = req.headers.origin;
     if (origin && origin !== config.publicOrigin && !(devHosts.length && origin === `${req.protocol}://${host}`))
       throw new HttpError(403, 'Origin is not allowed.');
-    if (req.headers['sec-fetch-site'] === 'cross-site')
+    // Microsoft's redirect back to the sign-in callback is a cross-site navigation by nature. That one route is
+    // exempt; it verifies its own state, nonce, and PKCE before it does anything.
+    const isSsoReturn = req.method === 'GET' && req.url.split('?')[0] === '/api/auth/entra/callback';
+    if (req.headers['sec-fetch-site'] === 'cross-site' && !isSsoReturn)
       throw new HttpError(403, 'Cross-site requests are not allowed.');
   });
   app.addHook('onSend', async (req, reply) => {
@@ -327,6 +330,16 @@ export async function buildApp({
     return reply.status(201).send(view((await identity.resolve(token))!));
   });
 
+  // Where Microsoft sign-in is required, staff (other than the owner) can't get in with a password or a passkey.
+  const requireNoSso = async (user: { orgId: string; role: string }) => {
+    const sso = await settings.entra(user.orgId);
+    if (sso?.enabled && sso.requireSso && user.role !== 'owner' && ROLE_INFO[user.role as Role].staff)
+      throw new HttpError(
+        403,
+        'Your organization signs in with Microsoft. Use Sign in with Microsoft.',
+        'sso_required',
+      );
+  };
   app.post('/api/session', async (req, reply) => {
     limiter.check(req.ip);
     const body = signInSchema.parse(req.body ?? {});
@@ -339,13 +352,7 @@ export async function buildApp({
     }
     // When the organization requires Microsoft sign-in, staff can't use a password; the owner always can, so a
     // problem with Microsoft never locks everyone out.
-    const sso = await settings.entra(user.orgId);
-    if (sso?.enabled && sso.requireSso && user.role !== 'owner' && ROLE_INFO[user.role as Role].staff)
-      throw new HttpError(
-        403,
-        'Your organization signs in with Microsoft. Use Sign in with Microsoft.',
-        'sso_required',
-      );
+    await requireNoSso(user);
     const previous = await identity.resolve(req.cookies[cookieName]);
     if (previous) await identity.signOut(previous, req.ip);
     // A remembered device stands in for the second step on this browser.
@@ -409,6 +416,7 @@ export async function buildApp({
       if (error instanceof HttpError && error.status < 500) limiter.fail(req.ip);
       throw error;
     }
+    await requireNoSso(user);
     const previous = await identity.resolve(req.cookies[cookieName]);
     if (previous) await identity.signOut(previous, req.ip);
     const { token } = await identity.createSession(user, meta(req), true, 'Passkey');

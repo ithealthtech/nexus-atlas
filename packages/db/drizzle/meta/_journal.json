@@ -113,6 +113,13 @@
       "when": 1790700695786,
       "tag": "0015_entra_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790703402938,
+      "tag": "0016_entra_pending_details",
+      "breakpoints": true
     }
   ]
 }

@@ -462,6 +462,10 @@ export class IdentityService {
       locked: !!user.lockedUntil && user.lockedUntil.getTime() > Date.now(),
       mustChangePassword: user.mustChangePassword,
       entra: user.entraOid ? ('linked' as const) : user.entraPendingOid ? ('pending' as const) : null,
+      entraPending:
+        !user.entraOid && user.entraPendingOid
+          ? { oid: user.entraPendingOid, email: user.entraPendingEmail ?? '', name: user.entraPendingName ?? '' }
+          : null,
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
     };

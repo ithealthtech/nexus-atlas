@@ -142,13 +142,19 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
               <Button variant="ghost" onClick={() => setResetting(true)}>
                 <KeyRound /> Reset sign-in
               </Button>
+              {user.entra === 'pending' && user.entraPending && (
+                <p className="basis-full text-xs text-text-2">
+                  Waiting: {user.entraPending.name} &lt;{user.entraPending.email}&gt; (ID {user.entraPending.oid}). Confirm only
+                  if this is {user.name}.
+                </p>
+              )}
               {user.entra && (
                 <Button
                   variant="ghost"
                   onClick={async () => {
                     try {
                       if (user.entra === 'pending')
-                        await api(`/users/${user.id}/entra/confirm`, { method: 'POST', body: {} });
+                        await api(`/users/${user.id}/entra/confirm`, { method: 'POST', body: { oid: user.entraPending?.oid } });
                       else await api(`/users/${user.id}/entra`, { method: 'DELETE' });
                       await queryClient.invalidateQueries({ queryKey: ['users'] });
                       toast(

@@ -53,6 +53,9 @@ export const users = pgTable(
     // Microsoft Entra ID: the account's object ID once linked, and a match waiting for an administrator to confirm.
     entraOid: text('entra_oid'),
     entraPendingOid: text('entra_pending_oid'),
+    // What the pending Microsoft account claimed, so an administrator can see who they are approving.
+    entraPendingEmail: text('entra_pending_email'),
+    entraPendingName: text('entra_pending_name'),
     disabled: boolean('disabled').notNull().default(false),
     failedAttempts: integer('failed_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
