@@ -210,7 +210,7 @@ describe('Microsoft 365 sync', () => {
 
     const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
       name: string;
-      fields: Record<string, string>;
+      fields: Record<string, unknown>;
     }[];
     expect(assets.map((a) => a.name).sort()).toEqual([
       'Microsoft 365 Business Premium',
@@ -221,12 +221,13 @@ describe('Microsoft 365 sync', () => {
     expect(tenant.fields).toMatchObject({
       tenant_id: TENANT,
       default_domain: 'harbordental.com',
-      users: '2',
+      // Number fields are stored as numbers.
+      users: 2,
       global_admins: 'dana@harbordental.com',
     });
     expect(assets.find((a) => a.name === 'Microsoft 365 Business Premium')!.fields).toMatchObject({
-      seats: '5',
-      assigned: '3',
+      seats: 5,
+      assigned: 3,
       vendor: 'Microsoft',
     });
 
