@@ -727,6 +727,32 @@ async function ensureLabelledFields(
   return keys;
 }
 
+/** The value in the form a field of that type accepts, or undefined when it can't hold it. */
+export function valueFor(field: LayoutField, value: string): string | undefined {
+  const v = value.trim();
+  if (!v) return undefined;
+  switch (field.type) {
+    case 'text':
+    case 'textarea':
+      return v;
+    case 'select':
+      return field.options.find((o) => o.toLowerCase() === v.toLowerCase());
+    case 'ip':
+      return /^[0-9a-f.:]+$/i.test(v) ? v : undefined;
+    case 'url':
+      return /^https?:\/\/\S+$/i.test(v) ? v : undefined;
+    case 'email':
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? v : undefined;
+    case 'number':
+      return Number.isFinite(Number(v)) ? v : undefined;
+    case 'date':
+      return /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : undefined;
+    default:
+      // Checkbox, multiselect, and the like: not something free text should be forced into.
+      return undefined;
+  }
+}
+
 /** A field key from a label: lowercase letters, digits, and underscores, starting with a letter. */
 const slugKey = (label: string) =>
   `f_${label}`
@@ -960,7 +986,16 @@ export async function runCwRmmSync(
           existing.layoutFields,
           d.extra.map(([label]) => label),
         );
-        return Object.fromEntries(d.extra.flatMap(([label, value]) => (keys.has(label) ? [[keys.get(label)!, value]] : [])));
+        const layoutFields = existing.layoutFields.get(layoutId) ?? [];
+        const out: Record<string, string> = {};
+        for (const [label, value] of d.extra) {
+          const field = layoutFields.find((f) => f.key === keys.get(label));
+          // A value goes only into a field that can hold it (a choice list takes one of its options, a date a
+          // date); anything else is left out rather than making the whole asset fail to save.
+          const fitted = field && !(field.key in out) ? valueFor(field, value) : undefined;
+          if (field && fitted !== undefined) out[field.key] = fitted;
+        }
+        return out;
       };
       /** Writes the device's values into an asset of another layout, where that layout's fields can take them. */
       const updateOther = async (id: string) => {
@@ -974,7 +1009,8 @@ export async function runCwRmmSync(
           fields,
         );
         const fitted = fitFields(layoutFields, fields);
-        const merged = { ...current.fields, ...fitted, ...(await extras(current.layoutId)) };
+        // The named mapping wins over the extras where both carry a field.
+        const merged = { ...current.fields, ...(await extras(current.layoutId)), ...fitted };
         if (current.archived) await assets.setArchived(scope, id, false);
         if (JSON.stringify(merged) !== JSON.stringify(current.fields))
           await assets.update(scope, id, { fields: merged, version: current.version }, 'Synced from ConnectWise RMM');
@@ -995,7 +1031,7 @@ export async function runCwRmmSync(
             await assets.create(scope, clientId, {
               layoutId: layout.id,
               name,
-              fields: { ...fields, ...(await extras(layout.id)) },
+              fields: { ...(await extras(layout.id)), ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)) },
               notes: 'Synced from ConnectWise RMM.',
             })
           ).id;
@@ -1016,8 +1052,8 @@ export async function runCwRmmSync(
           // Fields Atlas users added stay; the RMM's own values are refreshed.
           const merged = {
             ...current.fields,
-            ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)),
             ...(await extras(layout.id)),
+            ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)),
           };
           if (current.archived) await assets.setArchived(scope, existingId, false);
           if (current.name !== name || JSON.stringify(merged) !== JSON.stringify(current.fields))

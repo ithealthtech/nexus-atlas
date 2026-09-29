@@ -265,6 +265,35 @@ describe('ConnectWise RMM sync', () => {
     expect(devicesOnly.counts.assets.updated).toBe(2);
   });
 
+  it('keeps a device whose extra values a field cannot hold, instead of failing it', async () => {
+    asio.state.devices.set('c1', [
+      {
+        endpointId: 'e1',
+        siteId: 's1',
+        friendlyName: '-MikeC-PC',
+        endpointType: 'Desktop',
+        // "Type" is a choice list in Configurations; none of these is one of its options.
+        type: 'Windows',
+        subResourceType: 'workstation',
+        installDate: 'not a date',
+        agentUrl: 'not a url',
+      },
+    ]);
+    await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [{ companyId: 'c1', action: 'link', clientId: harbor }],
+    });
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(job.counts.assets).toMatchObject({ created: 1, failed: 0 });
+    expect(job.messages.join(' ')).not.toContain('Choose a listed option');
+    const [asset] = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as { id: string }[];
+    const pc = (await owner.call('GET', `/api/assets/${asset!.id}`)).data;
+    // The named mapping's Type wins; the odd values are still kept, in fields that take any text.
+    expect(pc.fields.type).toBe('Workstation');
+    expect(pc.fields).toMatchObject({ sub_resource_type: 'workstation' });
+  });
+
   it('imports every value the RMM sends, adding a field for each one the layout lacks', async () => {
     asio.state.devices.set('c1', [
       {
