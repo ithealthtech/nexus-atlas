@@ -1,9 +1,9 @@
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { schema } from '@atlas/db';
-import { relationSchema, type ItemRef, type ItemType, type RelationView, type RelationshipMap } from '@atlas/shared';
+import { relationSchema, type ItemType, type RelationView, type RelationshipMap } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
-import { canSee, loadItem, requireItem } from './items.js';
+import { requireItem, visibleItems } from './items.js';
 import type { Scope } from './scope.js';
 
 const order = (x: { type: string; id: string }, y: { type: string; id: string }) =>
@@ -25,14 +25,13 @@ export class RelationService {
           ),
         ),
       );
+    const others = rows.map((r) => (r.aId === id ? { type: r.bType, id: r.bId } : { type: r.aType, id: r.aId }));
+    const visible = await visibleItems(scope, others);
     const out: RelationView[] = [];
-    for (const r of rows) {
-      const [otherType, otherId] = r.aId === id ? [r.bType, r.bId] : [r.aType, r.aId];
-      const item = await loadItem(scope.db, scope.actor.orgId, otherType as ItemType, otherId);
-      if (!item || item.archived || !(await canSee(scope, item))) continue;
-      const { archived: _archived, ...ref } = item;
-      out.push({ ...ref, relationId: r.id, note: r.note });
-    }
+    rows.forEach((r, i) => {
+      const ref = visible.get(`${others[i]!.type}:${others[i]!.id}`);
+      if (ref) out.push({ ...ref, relationId: r.id, note: r.note });
+    });
     return out.sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
   }
 
@@ -71,23 +70,18 @@ export class RelationService {
           or(inArray(schema.relations.aId, inClient), inArray(schema.relations.bId, inClient)),
         ),
       );
-    const seen = new Map<string, ItemRef | null>();
-    const visible = async (type: string, id: string) => {
-      const key = `${type}:${id}`;
-      if (!seen.has(key)) {
-        const item = await loadItem(scope.db, orgId, type as ItemType, id);
-        if (!item || item.archived || !(await canSee(scope, item))) seen.set(key, null);
-        else {
-          const { archived: _archived, ...ref } = item;
-          seen.set(key, ref);
-        }
-      }
-      return seen.get(key)!;
-    };
+    // Every endpoint's visibility in one pass (a query per type), not a round trip per item.
+    const seen = await visibleItems(
+      scope,
+      rows.flatMap((r) => [
+        { type: r.aType, id: r.aId },
+        { type: r.bType, id: r.bId },
+      ]),
+    );
     const edges: RelationshipMap['edges'] = [];
     const used = new Set<string>();
     for (const rel of rows) {
-      const [a, b] = [await visible(rel.aType, rel.aId), await visible(rel.bType, rel.bId)];
+      const [a, b] = [seen.get(`${rel.aType}:${rel.aId}`), seen.get(`${rel.bType}:${rel.bId}`)];
       if (!a || !b) continue;
       edges.push({ id: rel.id, from: `${a.type}:${a.id}`, to: `${b.type}:${b.id}`, note: rel.note });
       used.add(`${a.type}:${a.id}`).add(`${b.type}:${b.id}`);

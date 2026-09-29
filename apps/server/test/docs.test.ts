@@ -382,7 +382,35 @@ describe('documentation', () => {
     const relationId = linked.data[0].relationId;
     expect((await viewer.call('DELETE', `/api/items/asset/${asset.id}/relations/${relationId}`)).status).toBe(403);
     expect((await owner.call('DELETE', `/api/items/asset/${asset.id}/relations/${relationId}`)).status).toBe(200);
-    expect((await owner.call('GET', `/api/items/asset/${asset.id}/relations`)).data).toHaveLength(1);
+    expect((await owner.call('GET', `/api/items/asset/${asset.id}/relations`)).data).toHaveLength(1); // Passwords follow the vault: the viewer sees the one shown to the client, never a hidden or restricted one.
+    const password = async (name: string, extra: Record<string, unknown>) => {
+      const r = await owner.call('POST', `/api/clients/${harbor}/passwords`, {
+        name,
+        secret: 'S3cret-value!',
+        ...extra,
+      });
+      expect(r.status, JSON.stringify(r.data)).toBe(201);
+      await owner.call('POST', `/api/items/asset/${asset.id}/relations`, { type: 'password', id: r.data.id });
+      return r.data.id as string;
+    };
+    await password('Firewall portal login', { clientVisible: true });
+    await password('Firewall admin', {});
+    await password('Firewall break-glass', { clientVisible: true, restricted: true });
+    const titles = async (b: typeof owner) =>
+      ((await b.call('GET', `/api/items/asset/${asset.id}/relations`)).data as { type: string; title: string }[])
+        .filter((r) => r.type === 'password')
+        .map((r) => r.title)
+        .sort();
+    expect(await titles(owner)).toEqual(['Firewall admin', 'Firewall break-glass', 'Firewall portal login']);
+    expect(await titles(viewer)).toEqual(['Firewall portal login']);
+    const portalMap = (await viewer.call('GET', `/api/clients/${harbor}/relationships`)).data as Map;
+    expect(portalMap.nodes.map((n) => n.title).sort()).toEqual(['Firewall portal login', 'HDG-FW-01']);
+    expect(portalMap.edges).toHaveLength(1);
+    // Seeing it doesn't mean linking to it: the viewer still can't change links.
+    expect(
+      (await viewer.call('POST', `/api/items/asset/${asset.id}/relations`, { type: 'document', id: runbook.id }))
+        .status,
+    ).toBe(403);
   });
 
   it('stores attachments safely and follows the item’s access', async () => {

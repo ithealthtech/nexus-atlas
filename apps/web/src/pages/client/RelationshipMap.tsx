@@ -20,6 +20,9 @@ const COL_W = 220;
 const NODE_W = 184;
 const ROW_H = 52;
 const TOP = 32;
+/** How far a same-column loop reaches past its nodes (a curve with 36px control points bulges 27px). */
+const LOOP = 36;
+const LOOP_ROOM = 32;
 
 const keyOf = (n: Pick<ItemRef, 'type' | 'id'>) => `${n.type}:${n.id}`;
 
@@ -52,7 +55,8 @@ export function ClientRelationshipMap() {
       columns,
       pos,
       neighbors,
-      width: Math.max(NODE_W, columns.length * COL_W - (COL_W - NODE_W)),
+      // Room on the right for a loop between two items in the last column.
+      width: Math.max(NODE_W, columns.length * COL_W - (COL_W - NODE_W)) + LOOP_ROOM,
       height: TOP + rows * ROW_H,
     };
   }, [data]);
@@ -102,7 +106,7 @@ export function ClientRelationshipMap() {
                 if (l.x === r.x) {
                   // Two items of the same kind: loop out to the right of the column.
                   const x = l.x + NODE_W;
-                  d = `M${x},${y1} C${x + 36},${y1} ${x + 36},${y2} ${x},${y2}`;
+                  d = `M${x},${y1} C${x + LOOP},${y1} ${x + LOOP},${y2} ${x},${y2}`;
                 } else {
                   const x1 = l.x + NODE_W;
                   const x2 = r.x;
