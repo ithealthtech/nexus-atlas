@@ -458,7 +458,9 @@ export function ActivityFeed({
         const href =
           a.entityId && ['asset', 'document', 'password'].includes(a.entityType)
             ? itemHref({ type: a.entityType as ItemType, id: a.entityId, clientId: a.clientId })
-            : null;
+            : a.entityId && a.entityType === 'checklist_run'
+              ? `/checklist-runs/${a.entityId}`
+              : null;
         return (
           <li key={a.id} className="flex items-start gap-3 px-5 py-3 text-sm">
             <ItemIcon

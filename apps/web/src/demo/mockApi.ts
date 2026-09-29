@@ -247,6 +247,22 @@ for (const p of db.passwords)
   for (const a of db.assets)
     if (a.clientId === p.clientId && p.name.startsWith(`${a.name} `))
       relations.push({ id: uuid(), a: { type: 'asset', id: a.id }, b: { type: 'password', id: p.id }, note: '' });
+// And for the relationship map: each client's first runbook and first location cover its first few assets.
+for (const c of db.clients) {
+  const doc = db.documents.find((d) => d.clientId === c.id);
+  const loc = db.locations.find((l) => l.clientId === c.id);
+  for (const asset of db.assets.filter((x) => x.clientId === c.id).slice(0, 3)) {
+    if (doc)
+      relations.push({ id: uuid(), a: { type: 'asset', id: asset.id }, b: { type: 'document', id: doc.id }, note: '' });
+    if (loc)
+      relations.push({
+        id: uuid(),
+        a: { type: 'asset', id: asset.id },
+        b: { type: 'location', id: loc.id },
+        note: 'Installed here',
+      });
+  }
+}
 for (const a of assets) snapshot(a.id, 1, a as unknown as Json);
 for (const d of documents) snapshot(d.id, 1, d as unknown as Json);
 for (const a of assets.slice(0, 4)) record('Updated', 'asset', a.id, a.name, a.clientId);
@@ -923,6 +939,19 @@ on('DELETE', '/items/:type/:id/relations/:rid', (m) => {
   return { ok: true };
 });
 on('GET', '/items/:type/:id/attachments', () => []);
+on('GET', '/clients/:id/relationships', (m) => {
+  const edges = relations.flatMap((r) => {
+    const a = itemRef(r.a.type, r.a.id);
+    const b = itemRef(r.b.type, r.b.id);
+    if (!a || !b || (a.clientId !== m[1] && b.clientId !== m[1])) return [];
+    return [{ id: r.id, from: `${a.type}:${a.id}`, to: `${b.type}:${b.id}`, note: r.note, a, b }];
+  });
+  const nodes = new Map(edges.flatMap((e) => [[e.from, e.a] as const, [e.to, e.b] as const]));
+  return {
+    nodes: [...nodes.values()],
+    edges: edges.map(({ a: _a, b: _b, ...e }) => e),
+  };
+});
 on('GET', '/search', (_m, _b, q) => search(q.get('q') ?? '', q.get('client') ?? undefined));
 on('GET', '/activity', (_m, _b, q) =>
   activity
@@ -1495,6 +1524,104 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
   return cwView();
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
+on('POST', '/assets/detect-manufacturers', () => ({ checked: 3, filled: 2 }));
+// Microsoft 365: the first client is connected, the second waits for consent.
+const m365Redirect = 'https://atlas.example.com/api/integrations/m365/consent';
+let m365: {
+  clientId: string;
+  hasSecret: boolean;
+  autoSync: boolean;
+  lastSyncAt: string | null;
+  options: { users: boolean; licensedOnly: boolean; licenses: boolean; domains: boolean };
+  redirectUri: string;
+} | null = null;
+const m365Tenants = new Map<
+  string,
+  {
+    tenantId: string;
+    tenantName: string | null;
+    status: 'ok' | 'failed' | 'unchecked';
+    detail: string | null;
+    checkedAt: string | null;
+  }
+>();
+const m365View = () => ({
+  connection: m365,
+  redirectUri: m365Redirect,
+  tenants: m365
+    ? [...m365Tenants].map(([clientId, t]) => ({
+        clientId,
+        clientName: clientName(clientId)!,
+        ...t,
+        consentUrl: `https://login.microsoftonline.com/${t.tenantId}/adminconsent?client_id=${m365!.clientId}`,
+      }))
+    : [],
+});
+on('GET', '/integrations/m365', () => m365View());
+on('PUT', '/integrations/m365', (_m, b) => {
+  if (!/^[0-9a-f-]{36}$/i.test(String(b.clientId ?? '')))
+    throw new MockError(400, 'Enter the Application (client) ID: a GUID from the app’s Overview page.');
+  if (!m365 && !b.clientSecret) throw new MockError(400, 'Enter the client secret.');
+  m365 = {
+    clientId: String(b.clientId),
+    hasSecret: true,
+    autoSync: b.autoSync !== false,
+    lastSyncAt: m365?.lastSyncAt ?? null,
+    options: m365?.options ?? { users: true, licensedOnly: true, licenses: true, domains: true },
+    redirectUri: m365Redirect,
+  };
+  if (!m365Tenants.size && db.clients[0] && db.clients[1]) {
+    m365Tenants.set(db.clients[0].id, {
+      tenantId: '3f2a9c1e-7b44-4d0e-9a51-0c6e2b8d1f77',
+      tenantName: db.clients[0].name,
+      status: 'ok',
+      detail: null,
+      checkedAt: ago(90),
+    });
+    m365Tenants.set(db.clients[1].id, {
+      tenantId: 'northline.onmicrosoft.com',
+      tenantName: null,
+      status: 'unchecked',
+      detail: null,
+      checkedAt: null,
+    });
+  }
+  return m365View();
+});
+on('DELETE', '/integrations/m365', () => ((m365 = null), m365Tenants.clear(), { ok: true }));
+on('PUT', '/integrations/m365/options', (_m, b) => {
+  if (!m365) throw new MockError(400, 'Connect Microsoft 365 first.');
+  m365.options = {
+    users: b.users !== false,
+    licensedOnly: b.licensedOnly !== false,
+    licenses: b.licenses !== false,
+    domains: b.domains !== false,
+  };
+  return m365View();
+});
+on('POST', '/integrations/m365/tenants', (_m, b) => {
+  m365Tenants.set(String(b.clientId), {
+    tenantId: String(b.tenant),
+    tenantName: null,
+    status: 'unchecked',
+    detail: null,
+    checkedAt: null,
+  });
+  return m365View();
+});
+on('POST', '/integrations/m365/tenants/:id/check', (m) => {
+  const t = m365Tenants.get(m[1]!);
+  if (t && t.status !== 'ok')
+    Object.assign(t, {
+      status: 'failed',
+      detail:
+        'This tenant hasn’t granted consent to the app yet. Open the consent link as one of its Global Administrators.',
+      checkedAt: now(),
+    });
+  return m365View();
+});
+on('DELETE', '/integrations/m365/tenants/:id', (m) => (m365Tenants.delete(m[1]!), m365View()));
+on('POST', '/integrations/m365/sync', () => notInDemo('Syncing from a real Microsoft 365 tenant'));
 on('GET', '/import/jobs', () => importJobs);
 on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
 on('POST', '/import/csv', (_m, b) => {
@@ -1616,6 +1743,194 @@ on('GET', '/status', (): SystemStatus => ({
   audit: { events: db.events.length, lastCheckpointAt: ago(5 * 60) },
   background: { lastRunAt: new Date(Date.now() - 4 * 60_000).toISOString() },
 }));
+
+// checklists and their runs
+type DemoStep = { id: string; text: string; doneAt: string | null; doneBy: string | null; note: string };
+const checklists = [
+  {
+    id: uuid(),
+    clientId: null as string | null,
+    title: 'New user onboarding',
+    description: 'For every new hire, before their first day.',
+    steps: [
+      'Create the Microsoft 365 account and assign a license',
+      'Add to security and distribution groups',
+      'Enroll the laptop in Intune',
+      'Set up MFA with the user',
+      'Add to the password manager and share the team vault',
+    ].map((text) => ({ id: uuid(), text })),
+    archived: false,
+    updatedAt: ago(60 * 24 * 12),
+  },
+  {
+    id: uuid(),
+    clientId: null as string | null,
+    title: 'User offboarding',
+    description: 'Same day as the last day.',
+    steps: [
+      'Block sign-in and reset the password',
+      'Convert the mailbox to shared and set up forwarding',
+      'Remove licenses',
+      'Collect and wipe devices',
+      'Rotate any shared passwords they knew',
+    ].map((text) => ({ id: uuid(), text })),
+    archived: false,
+    updatedAt: ago(60 * 24 * 30),
+  },
+];
+const team = [...users];
+const runs: {
+  id: string;
+  clientId: string;
+  checklistId: string | null;
+  title: string;
+  steps: DemoStep[];
+  assigneeId: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  createdBy: string;
+}[] = [];
+for (const [i, c] of db.clients.slice(0, 3).entries()) {
+  const t = checklists[i % 2]!;
+  const done = i === 0 ? 2 : i === 1 ? t.steps.length : 0;
+  runs.push({
+    id: uuid(),
+    clientId: c.id,
+    checklistId: t.id,
+    title: i === 1 ? `${t.title}: Dana Whitfield` : t.title,
+    steps: t.steps.map((s, j) => ({
+      ...s,
+      doneAt: j < done ? ago(60 * (48 - j)) : null,
+      doneBy: j < done ? db.owner.id : null,
+      note: '',
+    })),
+    assigneeId: i === 1 ? (team[1]?.id ?? db.owner.id) : db.owner.id,
+    dueDate: i === 2 ? daysFromNow(-1) : daysFromNow(3 + i),
+    completedAt: i === 1 ? ago(60 * 20) : null,
+    createdAt: ago(60 * 24 * (3 + i)),
+    createdBy: db.owner.id,
+  });
+}
+const nameOf = (id: string | null) => (id ? (users.find((u) => u.id === id)?.name ?? null) : null);
+const checklistView = (c: (typeof checklists)[0]) => ({ ...c, clientName: clientName(c.clientId), canEdit: true });
+const runView = (r: (typeof runs)[0]) => ({
+  ...r,
+  clientName: clientName(r.clientId)!,
+  steps: r.steps.map((s) => ({ ...s, doneByName: nameOf(s.doneBy) })),
+  done: r.steps.filter((s) => s.doneAt).length,
+  total: r.steps.length,
+  assigneeName: nameOf(r.assigneeId),
+  createdByName: nameOf(r.createdBy),
+  canEdit: true,
+});
+on('GET', '/checklists', (_m, _b, q) => {
+  const client = q.get('client');
+  const archived = q.get('archived') === 'true';
+  return checklists
+    .filter(
+      (c) =>
+        c.archived === archived &&
+        (!client || (client === 'global' ? c.clientId === null : c.clientId === null || c.clientId === client)),
+    )
+    .map(checklistView);
+});
+on('GET', '/checklists/team', () => team.map((u) => ({ id: u.id, name: u.name })));
+on('POST', '/checklists', (_m, b) => {
+  const steps = ((b.steps as { text: string }[]) ?? []).filter((x) => x.text?.trim());
+  if (!String(b.title ?? '').trim()) throw new MockError(400, 'Title is required.');
+  if (!steps.length) throw new MockError(400, 'Add at least one step.');
+  const c = {
+    id: uuid(),
+    clientId: (b.clientId as string | null) ?? null,
+    title: String(b.title),
+    description: String(b.description ?? ''),
+    steps: steps.map((x) => ({ id: uuid(), text: x.text })),
+    archived: false,
+    updatedAt: now(),
+  };
+  checklists.push(c);
+  return checklistView(c);
+});
+on('POST', '/checklists/:id/archive', (m, b) => {
+  const c = find(checklists, m[1]!, 'Checklist');
+  c.archived = !!b.archived;
+  c.updatedAt = now();
+  return checklistView(c);
+});
+on('PATCH', '/checklists/:id', (m, b) => {
+  const c = find(checklists, m[1]!, 'Checklist');
+  if (b.title !== undefined) c.title = String(b.title);
+  if (b.description !== undefined) c.description = String(b.description);
+  if (b.steps)
+    c.steps = (b.steps as { id?: string; text: string }[])
+      .filter((x) => x.text?.trim())
+      .map((x) => ({ id: x.id ?? uuid(), text: x.text }));
+  c.updatedAt = now();
+  return checklistView(c);
+});
+on('POST', '/checklists/:id/archive', (m, b) => {
+  const c = find(checklists, m[1]!, 'Checklist');
+  c.archived = !!b.archived;
+  return checklistView(c);
+});
+on('GET', '/checklist-runs', (_m, _b, q) =>
+  runs
+    .filter(
+      (r) =>
+        (!q.get('client') || r.clientId === q.get('client')) &&
+        (q.get('assignee') !== 'me' || r.assigneeId === db.owner.id) &&
+        (q.get('state') !== 'open' || !r.completedAt) &&
+        (q.get('state') !== 'done' || !!r.completedAt),
+    )
+    .sort(
+      (a, b) => Number(!!a.completedAt) - Number(!!b.completedAt) || (a.dueDate ?? '~').localeCompare(b.dueDate ?? '~'),
+    )
+    .map(runView),
+);
+on('POST', '/clients/:id/checklist-runs', (m, b) => {
+  const t = b.checklistId ? find(checklists, String(b.checklistId), 'Checklist') : null;
+  const steps = t ? t.steps : ((b.steps as string[]) ?? []).map((text) => ({ id: uuid(), text }));
+  if (!steps.length) throw new MockError(400, 'Choose a checklist, or give a title and steps.');
+  const r = {
+    id: uuid(),
+    clientId: m[1]!,
+    checklistId: t?.id ?? null,
+    title: String(b.title || t?.title || 'Checklist'),
+    steps: steps.map((s) => ({ ...s, doneAt: null, doneBy: null, note: '' })),
+    assigneeId: (b.assigneeId as string | null) ?? null,
+    dueDate: (b.dueDate as string | null) ?? null,
+    completedAt: null,
+    createdAt: now(),
+    createdBy: db.owner.id,
+  };
+  runs.unshift(r);
+  record('Started', 'checklist_run', r.id, r.title, r.clientId);
+  return runView(r);
+});
+on('GET', '/checklist-runs/:id', (m) => runView(find(runs, m[1]!, 'Checklist run')));
+on('PATCH', '/checklist-runs/:id', (m, b) => {
+  const r = find(runs, m[1]!, 'Checklist run');
+  if (b.assigneeId !== undefined) r.assigneeId = (b.assigneeId as string | null) ?? null;
+  if (b.dueDate !== undefined) r.dueDate = (b.dueDate as string | null) ?? null;
+  return runView(r);
+});
+on('POST', '/checklist-runs/:id/steps/:step', (m, b) => {
+  const r = find(runs, m[1]!, 'Checklist run');
+  const s = find(r.steps, m[2]!, 'Step');
+  s.doneAt = b.done ? (s.doneAt ?? now()) : null;
+  s.doneBy = b.done ? (s.doneBy ?? db.owner.id) : null;
+  if (b.note !== undefined) s.note = String(b.note);
+  r.completedAt = r.steps.every((x) => x.doneAt) ? (r.completedAt ?? now()) : null;
+  return runView(r);
+});
+on('DELETE', '/checklist-runs/:id', (m) => {
+  runs.splice(
+    runs.findIndex((r) => r.id === m[1]),
+    1,
+  );
+  return { ok: true };
+});
 
 /** Answers an API request from memory, after a short delay so loading states show as they would for real. */
 export async function mockRequest(path: string, method: string, body: unknown): Promise<unknown> {

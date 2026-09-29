@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, CloudDownload, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
+import { CheckCircle2, CloudDownload, Factory, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
 import type { CsvImportResult, CsvTarget, HuduImportOptions, HuduPreview, ImportJobView } from '@atlas/shared';
 import {
   Badge,
@@ -20,6 +20,7 @@ import { parseCsv } from '@/lib/csv';
 import { useLayouts } from '@/lib/queries';
 import { formatDateTime } from '@/lib/format';
 import { CwRmmSync } from './CwRmm';
+import { M365Sync } from './M365';
 import { HuduImportChoices } from './ImportChoices';
 
 const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
@@ -27,6 +28,7 @@ const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
   legacy: 'Atlas 0.2',
   csv: 'CSV',
   'cw-rmm': 'ConnectWise RMM',
+  m365: 'Microsoft 365',
 };
 const KIND_LABELS: Record<string, string> = {
   clients: 'Clients',
@@ -38,6 +40,9 @@ const KIND_LABELS: Record<string, string> = {
   passwords: 'Passwords',
   users: 'People',
   links: 'Links',
+  tenants: 'Tenants',
+  licenses: 'Licenses',
+  domains: 'Domains',
 };
 
 export function JobSummary({ job }: { job: ImportJobView }) {
@@ -46,7 +51,7 @@ export function JobSummary({ job }: { job: ImportJobView }) {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge tone={job.status === 'done' ? 'success' : job.status === 'failed' ? 'danger' : 'info'}>
           {job.status === 'running'
-            ? job.source === 'cw-rmm'
+            ? job.source === 'cw-rmm' || job.source === 'm365'
               ? 'Syncing…'
               : 'Importing…'
             : job.status === 'done'
@@ -538,6 +543,49 @@ function CsvImport() {
   );
 }
 
+/** Fills in blank manufacturers from each device's model, OS, name, or MAC address. */
+function DetectManufacturers() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card>
+      <CardHeader
+        title="Device manufacturers"
+        description="Atlas fills in a blank Manufacturer from the model (OptiPlex → Dell, ThinkPad → Lenovo), the operating system, or the MAC address whenever an asset is saved. Run it once over the assets already here; anything entered by hand is left alone."
+        className="border-b-0"
+        actions={
+          <Button
+            variant="secondary"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const r = await api<{ checked: number; filled: number }>('/assets/detect-manufacturers', {
+                  method: 'POST',
+                  body: {},
+                });
+                await queryClient.invalidateQueries({ queryKey: ['assets'] });
+                toast(
+                  r.checked
+                    ? `Filled in ${r.filled} of ${r.checked} assets with no manufacturer.${r.filled < r.checked ? ' The rest have no model or name Atlas recognizes.' : ''}`
+                    : 'Every asset already has a manufacturer.',
+                );
+              } catch (err) {
+                toast((err as Error).message, 'error');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Factory /> Fill in manufacturers
+          </Button>
+        }
+      />
+    </Card>
+  );
+}
+
 function ImportHistory() {
   const jobs = useQuery({ queryKey: ['import-jobs'], queryFn: () => api<ImportJobView[]>('/import/jobs') });
   if (!jobs.data?.length) return null;
@@ -561,12 +609,14 @@ export function DataTools() {
       <PageHeader
         eyebrow="Administration"
         title="Import & export"
-        description="Sync devices from ConnectWise RMM, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
+        description="Sync devices from ConnectWise RMM and tenants from Microsoft 365, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
       />
       <div className="grid max-w-4xl gap-6">
         <CwRmmSync />
+        <M365Sync />
         <HuduImport />
         <CsvImport />
+        <DetectManufacturers />
         <ImportHistory />
         <div className="flex gap-3 rounded-xl border border-border bg-surface-2 p-4 text-sm text-text-2">
           <History className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />

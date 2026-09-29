@@ -3,6 +3,10 @@ import { schema, type Database } from '@atlas/db';
 import {
   brandingSchema,
   cwRmmConnectionSchema,
+  m365ConnectionSchema,
+  m365SyncOptionsSchema,
+  type M365SyncOptions,
+  type M365View,
   entraSettingsSchema,
   type EntraView,
   passwordHealthSettingsSchema,
@@ -65,6 +69,7 @@ interface StoredSettings {
   entra?: StoredEntra;
   rmmHealth?: RmmHealthSettings;
   warranty?: WarrantySettings;
+  m365?: StoredM365;
 }
 export interface StoredEntra {
   tenantId: string;
@@ -82,6 +87,26 @@ export interface EraseRequest {
   expiresAt: string;
   requestedBy: string;
   requestedByName: string;
+}
+export interface StoredM365 {
+  clientId: string;
+  secretSealed: string;
+  autoSync: boolean;
+  /** The administrator who connected it; scheduled syncs run as them. */
+  connectedBy: string;
+  lastSyncAt: string | null;
+  options?: M365SyncOptions;
+  /** Atlas client id → its Microsoft 365 tenant. */
+  tenants: Record<
+    string,
+    {
+      tenantId: string;
+      tenantName: string | null;
+      status: 'unchecked' | 'ok' | 'failed';
+      detail: string | null;
+      checkedAt: string | null;
+    }
+  >;
 }
 export interface StoredCwRmm {
   region: CwRmmRegion;
@@ -103,6 +128,7 @@ export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientS
 
 const entraAad = (orgId: string) => `org|${orgId}|entra`;
 const cwAad = (orgId: string) => `org|${orgId}|cw-rmm`;
+const m365Aad = (orgId: string) => `org|${orgId}|m365`;
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
 const graphAad = (orgId: string) => `org|${orgId}|graph`;
 const DEFAULT_SMTP: StoredSmtp = {
@@ -172,6 +198,8 @@ export class SettingsService {
           ...stored.entra,
           secretSealed: reseal(stored.entra.secretSealed, entraAad(id))!,
         });
+      if (stored.m365)
+        await this.put(id, 'm365', { ...stored.m365, secretSealed: reseal(stored.m365.secretSealed, m365Aad(id))! });
       if (stored.cwRmm)
         await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
     }
@@ -350,6 +378,59 @@ export class SettingsService {
     await this.db
       .update(schema.orgs)
       .set({ settings: sql`${schema.orgs.settings} - 'cwRmm'` })
+      .where(eq(schema.orgs.id, orgId));
+  }
+
+  /** Microsoft 365 connection with the client secret decrypted, or null when not connected. */
+  async m365(orgId: string): Promise<(StoredM365 & { clientSecret: string }) | null> {
+    const saved = (await this.load(orgId)).m365;
+    return saved
+      ? { ...saved, tenants: saved.tenants ?? {}, clientSecret: open(this.keys, saved.secretSealed, m365Aad(orgId)) }
+      : null;
+  }
+
+  async m365View(orgId: string, publicOrigin: string): Promise<M365View | null> {
+    const saved = (await this.load(orgId)).m365;
+    return saved
+      ? {
+          clientId: saved.clientId,
+          hasSecret: true,
+          autoSync: saved.autoSync,
+          lastSyncAt: saved.lastSyncAt,
+          options: m365SyncOptionsSchema.parse(saved.options ?? {}),
+          redirectUri: `${publicOrigin}/api/integrations/m365/consent`,
+        }
+      : null;
+  }
+
+  async saveM365(orgId: string, userId: string, input: unknown) {
+    const body = m365ConnectionSchema.parse(input);
+    const current = await this.m365(orgId);
+    const secret = body.clientSecret ?? current?.clientSecret;
+    if (!secret)
+      throw new HttpError(400, 'Enter the client secret.', undefined, { clientSecret: 'Enter the client secret.' });
+    await this.put(orgId, 'm365', {
+      clientId: body.clientId,
+      secretSealed: seal(this.keys, secret, m365Aad(orgId)),
+      autoSync: body.autoSync,
+      connectedBy: userId,
+      lastSyncAt: current?.lastSyncAt ?? null,
+      options: current?.options,
+      tenants: current?.tenants ?? {},
+    } satisfies StoredM365);
+  }
+
+  /** Updates tenants, options, or the last-sync time without touching the secret. */
+  async patchM365(orgId: string, patch: Partial<Pick<StoredM365, 'tenants' | 'lastSyncAt' | 'options'>>) {
+    const saved = (await this.load(orgId)).m365;
+    if (!saved) throw new HttpError(400, 'Connect Microsoft 365 first.');
+    await this.put(orgId, 'm365', { ...saved, tenants: saved.tenants ?? {}, ...patch });
+  }
+
+  async forgetM365(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${schema.orgs.settings} - 'm365'` })
       .where(eq(schema.orgs.id, orgId));
   }
 

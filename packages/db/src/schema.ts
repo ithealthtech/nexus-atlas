@@ -804,6 +804,54 @@ export const backupRuns = pgTable(
   ],
 );
 
+/** A checklist template: the MSP's (no client) or one client's. Steps are copied into each run. */
+export const checklists = pgTable(
+  'checklists',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    steps: jsonb('steps').$type<{ id: string; text: string }[]>().notNull().default([]),
+    archived: boolean('archived').notNull().default(false),
+    createdBy: createdBy(),
+    updatedBy: updatedBy(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [index('checklists_scope').on(t.orgId, t.clientId)],
+);
+
+/** One run of a checklist for a client, with who ticked each step and when. */
+export const checklistRuns = pgTable(
+  'checklist_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    checklistId: uuid('checklist_id').references(() => checklists.id, { onDelete: 'set null' }),
+    title: text('title').notNull(),
+    steps: jsonb('steps')
+      .$type<{ id: string; text: string; doneAt: string | null; doneBy: string | null; note: string }[]>()
+      .notNull()
+      .default([]),
+    assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    dueDate: date('due_date', { mode: 'string' }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [index('checklist_runs_client').on(t.orgId, t.clientId), index('checklist_runs_assignee').on(t.assigneeId)],
+);
+
 // Health of each device an RMM sync reports (agent online, last check-in, endpoint protection), for the RMM health
 // charts. Rewritten by every sync; a device whose asset is archived or deleted drops out of the charts.
 export const rmmDeviceStatus = pgTable(

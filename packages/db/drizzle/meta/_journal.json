@@ -124,15 +124,15 @@
     {
       "idx": 17,
       "version": "7",
-      "when": 1790707117620,
-      "tag": "0017_rmm_device_status",
+      "when": 1790707273873,
+      "tag": "0017_checklists",
       "breakpoints": true
     },
     {
       "idx": 18,
       "version": "7",
-      "when": 1790713080686,
-      "tag": "0018_rmm_health_snapshots",
+      "when": 1790717760651,
+      "tag": "0018_rmm_health",
       "breakpoints": true
     }
   ]

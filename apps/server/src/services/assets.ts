@@ -6,6 +6,7 @@ import { HttpError } from '../errors.js';
 import type { DomainLookup } from './domain-lookup.js';
 import { recordActivity } from './activity.js';
 import { validateFields, type LayoutService } from './layouts.js';
+import { detectManufacturer } from './manufacturer.js';
 import { getRevision, listRevisions, snapshot } from './revisions.js';
 import { isUuid, type Scope } from './scope.js';
 
@@ -20,6 +21,25 @@ const DETECTED: Record<string, LayoutField['type'][]> = {
   dns_host: ['text'],
 };
 const blank = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
+
+/** The layout's manufacturer field: keyed "manufacturer", or a text field labelled Manufacturer or Make. */
+export const manufacturerField = (fields: LayoutField[]) =>
+  fields.find((f) => f.type === 'text' && (f.key === 'manufacturer' || /^(manufacturer|make)$/i.test(f.label.trim())));
+
+/** Fills a blank manufacturer from the model, operating system, name, hostname, or MAC address. */
+export function withManufacturer(layoutFields: LayoutField[], name: string, fields: Record<string, unknown>) {
+  const field = manufacturerField(layoutFields);
+  if (!field || !blank(fields[field.key])) return fields;
+  const found = detectManufacturer({
+    model: str(fields.model),
+    os: str(fields.operating_system),
+    name,
+    hostname: str(fields.hostname),
+    mac: str(fields.mac_address),
+  });
+  return found ? { ...fields, [field.key]: found } : fields;
+}
 
 export class AssetService {
   constructor(
@@ -28,10 +48,12 @@ export class AssetService {
   ) {}
 
   /**
-   * For the built-in Domains layout, fills blank fields (registrar, expiry, name servers, DNS host)
+   * Fills a blank manufacturer from what else is known about the device. For the built-in Domains layout, fills
+   * blank fields (registrar, expiry, name servers, DNS host)
    * from the asset's name. Never overwrites what someone entered, and never blocks a save.
    */
-  private async detect(layout: { key: string; fields: unknown }, name: string, fields: Record<string, unknown>) {
+  private async detect(layout: { key: string; fields: unknown }, name: string, given: Record<string, unknown>) {
+    const fields = withManufacturer(layout.fields as LayoutField[], name, given);
     if (!this.domains || layout.key !== 'domain') return fields;
     const layoutFields = layout.fields as LayoutField[];
     const targets = layoutFields.filter((f) => DETECTED[f.key]?.includes(f.type) && blank(fields[f.key]));
@@ -205,6 +227,61 @@ export class AssetService {
       });
     });
     return this.get(scope, id);
+  }
+
+  /**
+   * Fills in the manufacturer of every asset, in the clients the actor can edit, where it's blank and can be
+   * worked out. Each change is saved as a new version, so it can be reviewed and undone.
+   */
+  async fillManufacturers(scope: Scope): Promise<{ checked: number; filled: number }> {
+    const layouts = (
+      await scope.db
+        .select({ id: schema.assetLayouts.id, fields: schema.assetLayouts.fields })
+        .from(schema.assetLayouts)
+        .where(eq(schema.assetLayouts.orgId, scope.actor.orgId))
+    )
+      .map((l) => ({
+        id: l.id,
+        fields: l.fields as LayoutField[],
+        field: manufacturerField(l.fields as LayoutField[]),
+      }))
+      .filter((l) => l.field);
+    const clientIds = await scope.readableClientIds();
+    let checked = 0;
+    let filled = 0;
+    if (!layouts.length || !clientIds.length) return { checked, filled };
+    const rows = await scope.db
+      .select({
+        id: schema.assets.id,
+        name: schema.assets.name,
+        clientId: schema.assets.clientId,
+        layoutId: schema.assets.layoutId,
+        fields: schema.assets.fields,
+      })
+      .from(schema.assets)
+      .where(
+        and(
+          eq(schema.assets.orgId, scope.actor.orgId),
+          eq(schema.assets.archived, false),
+          inArray(
+            schema.assets.layoutId,
+            layouts.map((l) => l.id),
+          ),
+          inArray(schema.assets.clientId, clientIds),
+        ),
+      );
+    for (const r of rows) {
+      const layout = layouts.find((l) => l.id === r.layoutId)!;
+      const fields = r.fields as Record<string, unknown>;
+      if (!blank(fields[layout.field!.key])) continue;
+      checked++;
+      if (withManufacturer(layout.fields, r.name, fields) === fields) continue;
+      if ((await scope.level(r.clientId)) === 'read') continue;
+      const current = await this.get(scope, r.id);
+      await this.update(scope, r.id, { fields: current.fields, version: current.version }, 'Manufacturer detected');
+      filled++;
+    }
+    return { checked, filled };
   }
 
   async setArchived(scope: Scope, id: string, archived: boolean): Promise<AssetView> {

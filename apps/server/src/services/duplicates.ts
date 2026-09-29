@@ -342,7 +342,7 @@ async function mergeAssets(db: Database, actor: Actor, keepId: string, mergeIds:
 }
 
 /**
- * Clients: everything in the others (contacts, locations, assets, documents, passwords and their folders, files,
+ * Clients: everything in the others (contacts, locations, assets, documents, checklists, passwords and their folders, files,
  * access grants, history) moves to the kept client, then the emptied clients are removed.
  */
 async function mergeClients(db: Database, actor: Actor, keepId: string, mergeIds: string[]): Promise<MergeResult> {
@@ -363,6 +363,8 @@ async function mergeClients(db: Database, actor: Actor, keepId: string, mergeIds
       schema.folders,
       schema.documents,
       schema.attachments,
+      schema.checklists,
+      schema.checklistRuns,
       schema.activity,
       schema.vaultAudit,
     ])

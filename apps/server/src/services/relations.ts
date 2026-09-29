@@ -1,9 +1,9 @@
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { schema } from '@atlas/db';
-import { relationSchema, type ItemType, type RelationView } from '@atlas/shared';
+import { relationSchema, type ItemType, type RelationView, type RelationshipMap } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
-import { canSee, loadItem, requireItem } from './items.js';
+import { requireItem, visibleItems } from './items.js';
 import type { Scope } from './scope.js';
 
 const order = (x: { type: string; id: string }, y: { type: string; id: string }) =>
@@ -25,15 +25,71 @@ export class RelationService {
           ),
         ),
       );
+    const others = rows.map((r) => (r.aId === id ? { type: r.bType, id: r.bId } : { type: r.aType, id: r.aId }));
+    const visible = await visibleItems(scope, others);
     const out: RelationView[] = [];
-    for (const r of rows) {
-      const [otherType, otherId] = r.aId === id ? [r.bType, r.bId] : [r.aType, r.aId];
-      const item = await loadItem(scope.db, scope.actor.orgId, otherType as ItemType, otherId);
-      if (!item || item.archived || !(await canSee(scope, item))) continue;
-      const { archived: _archived, ...ref } = item;
-      out.push({ ...ref, relationId: r.id, note: r.note });
-    }
+    rows.forEach((r, i) => {
+      const ref = visible.get(`${others[i]!.type}:${others[i]!.id}`);
+      if (ref) out.push({ ...ref, relationId: r.id, note: r.note });
+    });
     return out.sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
+  }
+
+  /**
+   * Every link that touches one of the client's items, with the items on both ends. Items the actor can't see
+   * (passwords they lack access to, archived items) are left out, along with their links.
+   */
+  async map(scope: Scope, clientId: string): Promise<RelationshipMap> {
+    await scope.require(clientId, 'read', 'Client');
+    const orgId = scope.actor.orgId;
+    const inClient = (
+      await Promise.all([
+        scope.db.select({ id: schema.assets.id }).from(schema.assets).where(eq(schema.assets.clientId, clientId)),
+        scope.db
+          .select({ id: schema.documents.id })
+          .from(schema.documents)
+          .where(eq(schema.documents.clientId, clientId)),
+        scope.db.select({ id: schema.contacts.id }).from(schema.contacts).where(eq(schema.contacts.clientId, clientId)),
+        scope.db
+          .select({ id: schema.locations.id })
+          .from(schema.locations)
+          .where(eq(schema.locations.clientId, clientId)),
+        scope.db
+          .select({ id: schema.passwords.id })
+          .from(schema.passwords)
+          .where(eq(schema.passwords.clientId, clientId)),
+      ])
+    ).flatMap((rows) => rows.map((r) => r.id));
+    if (!inClient.length) return { nodes: [], edges: [] };
+    const rows = await scope.db
+      .select()
+      .from(schema.relations)
+      .where(
+        and(
+          eq(schema.relations.orgId, orgId),
+          or(inArray(schema.relations.aId, inClient), inArray(schema.relations.bId, inClient)),
+        ),
+      );
+    // Every endpoint's visibility in one pass (a query per type), not a round trip per item.
+    const seen = await visibleItems(
+      scope,
+      rows.flatMap((r) => [
+        { type: r.aType, id: r.aId },
+        { type: r.bType, id: r.bId },
+      ]),
+    );
+    const edges: RelationshipMap['edges'] = [];
+    const used = new Set<string>();
+    for (const rel of rows) {
+      const [a, b] = [seen.get(`${rel.aType}:${rel.aId}`), seen.get(`${rel.bType}:${rel.bId}`)];
+      if (!a || !b) continue;
+      edges.push({ id: rel.id, from: `${a.type}:${a.id}`, to: `${b.type}:${b.id}`, note: rel.note });
+      used.add(`${a.type}:${a.id}`).add(`${b.type}:${b.id}`);
+    }
+    const nodes = [...used]
+      .map((k) => seen.get(k)!)
+      .sort((x, y) => x.type.localeCompare(y.type) || x.title.localeCompare(y.title));
+    return { nodes, edges };
   }
 
   async add(scope: Scope, type: ItemType, id: string, input: unknown): Promise<RelationView[]> {

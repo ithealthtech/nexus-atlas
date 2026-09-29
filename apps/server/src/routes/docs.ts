@@ -6,6 +6,7 @@ import { HttpError } from '../errors.js';
 import { listActivity } from '../services/activity.js';
 import { AssetService } from '../services/assets.js';
 import { AttachmentService } from '../services/attachments.js';
+import { ChecklistService } from '../services/checklists.js';
 import type { DomainLookup } from '../services/domain-lookup.js';
 import { DocumentService } from '../services/documents.js';
 import { LayoutService, ensureDefaultLayouts } from '../services/layouts.js';
@@ -40,6 +41,7 @@ export function registerDocumentationRoutes(
   const assets = new AssetService(layouts, deps.domains);
   const documents = new DocumentService();
   const relations = new RelationService();
+  const checklists = new ChecklistService();
   const attachments = new AttachmentService(deps.storage, deps.maxUploadBytes);
   const scopeOf = (req: FastifyRequest) => new Scope(db, req.session!.actor);
 
@@ -66,6 +68,8 @@ export function registerDocumentationRoutes(
         archived: flag(req.query.archived),
       }),
   );
+  // Fills blank manufacturers across the assets the actor can edit.
+  app.post('/api/assets/detect-manufacturers', authed, async (req) => assets.fillManufacturers(scopeOf(req)));
   app.post<{ Params: Params }>('/api/clients/:id/assets', authed, async (req, reply) =>
     reply.status(201).send(await assets.create(scopeOf(req), req.params.id, req.body)),
   );
@@ -160,6 +164,9 @@ export function registerDocumentationRoutes(
   }
 
   // ---- relationships and attachments (any item type) ----
+  app.get<{ Params: Params }>('/api/clients/:id/relationships', authed, async (req) =>
+    relations.map(scopeOf(req), req.params.id),
+  );
   app.get<{ Params: { type: string; id: string } }>('/api/items/:type/:id/relations', authed, async (req) =>
     relations.list(scopeOf(req), itemType(req.params.type), req.params.id),
   );
@@ -203,6 +210,60 @@ export function registerDocumentationRoutes(
   app.delete<{ Params: Params }>('/api/attachments/:id', authed, async (req) => {
     await attachments.remove(scopeOf(req), req.params.id);
     return { ok: true };
+  });
+
+  // ---- checklists and their runs ----
+  app.get<{ Querystring: { client?: string; archived?: string } }>('/api/checklists', authed, async (req) =>
+    checklists.list(scopeOf(req), { clientId: req.query.client || undefined, archived: flag(req.query.archived) }),
+  );
+  app.get<{ Querystring: { client?: string } }>('/api/checklists/team', authed, async (req) =>
+    checklists.team(scopeOf(req), req.query.client ?? ''),
+  );
+  app.post('/api/checklists', authed, async (req, reply) =>
+    reply.status(201).send(await checklists.create(scopeOf(req), req.body)),
+  );
+  app.get<{ Params: Params }>('/api/checklists/:id', authed, async (req) =>
+    checklists.get(scopeOf(req), req.params.id),
+  );
+  app.patch<{ Params: Params }>('/api/checklists/:id', authed, async (req) =>
+    checklists.update(scopeOf(req), req.params.id, req.body),
+  );
+  app.post<{ Params: Params }>('/api/checklists/:id/archive', authed, async (req) =>
+    checklists.archive(scopeOf(req), req.params.id, archiveSchema.parse(req.body).archived),
+  );
+  app.get<{ Querystring: { client?: string; assignee?: string; state?: string } }>(
+    '/api/checklist-runs',
+    authed,
+    async (req) =>
+      checklists.runs(scopeOf(req), {
+        clientId: req.query.client || undefined,
+        assignee: req.query.assignee === 'me' ? 'me' : undefined,
+        state: req.query.state === 'open' || req.query.state === 'done' ? req.query.state : undefined,
+      }),
+  );
+  app.post<{ Params: Params }>('/api/clients/:id/checklist-runs', authed, async (req, reply) =>
+    reply.status(201).send(await checklists.start(scopeOf(req), req.params.id, req.body)),
+  );
+  app.get<{ Params: Params }>('/api/checklist-runs/:id', authed, async (req) =>
+    checklists.run(scopeOf(req), req.params.id),
+  );
+  app.patch<{ Params: Params }>('/api/checklist-runs/:id', authed, async (req) =>
+    checklists.updateRun(scopeOf(req), req.params.id, req.body),
+  );
+  app.post<{ Params: { id: string; stepId: string } }>('/api/checklist-runs/:id/steps/:stepId', authed, async (req) =>
+    checklists.tick(scopeOf(req), req.params.id, req.params.stepId, req.body),
+  );
+  app.delete<{ Params: Params }>('/api/checklist-runs/:id', authed, async (req) => {
+    await checklists.removeRun(scopeOf(req), req.params.id);
+    return { ok: true };
+  });
+  app.get<{ Params: Params }>('/api/checklist-runs/:id/markdown', authed, async (req, reply) => {
+    const { filename, body } = await checklists.markdown(scopeOf(req), req.params.id);
+    return reply
+      .header('Content-Type', 'text/markdown; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
+      .header('Cache-Control', 'private, no-store')
+      .send(body);
   });
 
   // ---- search and activity ----

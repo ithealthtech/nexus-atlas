@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.5.3] - 2026-09-29
+
+### Fixed
+
+- **People & access:** the Manage dialog now offers Confirm Microsoft account (and Unlink Microsoft) on your own row, so an owner with no other administrator can link their own Microsoft account. (#92)
+
 ## [1.5.2] - 2026-09-29
 
 ### Fixed

@@ -497,7 +497,8 @@ describe('ConnectWise RMM device details', () => {
       os: 'Windows 11 Pro',
       ip: '10.1.2.3',
       mac: 'AA:BB:CC:DD:EE:FF',
-      manufacturer: 'Dell Inc.',
+      // The firmware's "Dell Inc." is tidied to the name Atlas shows.
+      manufacturer: 'Dell',
       model: 'OptiPlex 7090',
       serial: 'ABC1234',
     });
