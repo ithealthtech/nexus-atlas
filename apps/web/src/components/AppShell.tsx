@@ -29,6 +29,7 @@ import {
   Users,
   X,
   type LucideIcon,
+  ListChecks,
 } from 'lucide-react';
 import { ClientPicker } from '@/components/ClientPicker';
 import { CommandPalette } from '@/components/CommandPalette';
@@ -174,6 +175,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         {actor.isStaff && (
           <NavLink to="/password-health" icon={ShieldCheck} label="Password health" onNavigate={onNavigate} />
         )}
+        {actor.isStaff && <NavLink to="/checklists" icon={ListChecks} label="Checklists" onNavigate={onNavigate} />}
         <NavLink to="/expirations" icon={CalendarClock} label="Expirations" onNavigate={onNavigate} />
         {actor.isAdmin && (
           <>
@@ -204,17 +206,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   return (
-    <div className="min-h-screen lg:pl-(--sidebar-width)">
+    <div className="min-h-screen lg:pl-(--sidebar-width) print:pl-0">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:shadow"
       >
         Skip to content
       </a>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--sidebar-width) lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--sidebar-width) lg:block print:hidden">
         <Sidebar onSearch={() => setSearching(true)} />
       </aside>
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden print:hidden">
         <button
           onClick={() => setOpen(true)}
           className="rounded-lg p-2 hover:bg-surface-3"
