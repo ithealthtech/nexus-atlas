@@ -206,7 +206,7 @@ describe('ConnectWise RMM sync', () => {
     expect(all.map((a) => a.name).sort()).toEqual(['HDG-DC-01', 'HDG-WS-02']);
     const updated = (await owner.call('GET', `/api/assets/${dc.id}`)).data;
     // Existing fields take what fits; the site had no field in this layout, so the sync added one.
-    expect(updated.fields).toEqual({
+    expect(updated.fields).toMatchObject({
       notes_extra: 'Front office',
       host: 'hdg-dc-01',
       addr: '10.0.0.5',
@@ -263,6 +263,53 @@ describe('ConnectWise RMM sync', () => {
     );
     expect(devicesOnly.counts.locations).toBeUndefined();
     expect(devicesOnly.counts.assets.updated).toBe(2);
+  });
+
+  it('imports every value the RMM sends, adding a field for each one the layout lacks', async () => {
+    asio.state.devices.set('c1', [
+      {
+        endpointId: 'e1',
+        siteId: 's1',
+        friendlyName: 'HDG-DC-01',
+        hostName: 'hdg-dc-01',
+        agentVersion: '2.5.9.0',
+        lastSeen: '2026-09-26T10:00:00Z',
+        tags: ['server', 'domain controller'],
+        os: { name: 'Windows Server 2022', build: '20348' },
+      },
+    ]);
+    await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [{ companyId: 'c1', action: 'link', clientId: harbor }],
+    });
+    await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+
+    const [asset] = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as { id: string }[];
+    const dc = (await owner.call('GET', `/api/assets/${asset!.id}`)).data;
+    // Named fields as before, and everything else in fields of its own.
+    expect(dc.fields).toMatchObject({
+      hostname: 'hdg-dc-01',
+      operating_system: 'Windows Server 2022',
+      agent_version: '2.5.9.0',
+      last_seen: '2026-09-26T10:00:00Z',
+      tags: 'server, domain controller',
+      os_build: '20348',
+      endpoint_id: 'e1',
+    });
+    const layout = (await owner.call('GET', '/api/layouts')).data.find(
+      (l: { key: string }) => l.key === 'configuration',
+    );
+    expect(layout.fields.map((f: { label: string }) => f.label)).toEqual(
+      expect.arrayContaining(['Agent version', 'Last seen', 'Tags', 'OS build', 'Endpoint ID']),
+    );
+    // Stays settled: a second sync adds no more fields.
+    const before = layout.fields.length;
+    await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    const after = (await owner.call('GET', '/api/layouts')).data.find(
+      (l: { key: string }) => l.key === 'configuration',
+    );
+    expect(after.fields.length).toBe(before);
   });
 
   it('is for administrators only', async () => {
