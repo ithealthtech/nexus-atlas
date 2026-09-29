@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-09-29
+
+### Fixed
+
+- **ConnectWise RMM sync:** a device no longer fails with "Choose a listed option for Type". Extra values go only into fields that can hold them (a choice list takes one of its options), and the named mapping wins over them. (#79)
+
 ## [1.3.1] - 2026-09-29
 
 ### Changed
