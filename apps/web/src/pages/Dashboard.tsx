@@ -7,6 +7,7 @@ import { useBranding } from '@/lib/branding';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton, Stat } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
 import { ActivityFeed } from '@/components/panels';
+import { RmmHealthCard } from '@/components/RmmHealth';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
 import { useActivity, useAssets, useClients, useDocuments, useExpirations, useUsers } from '@/lib/queries';
@@ -109,6 +110,9 @@ export function Dashboard() {
           hint="Flagged or past their review date"
           icon={Clock}
         />
+      </div>
+      <div className="mb-7">
+        <RmmHealthCard />
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">

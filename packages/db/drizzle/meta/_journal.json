@@ -120,6 +120,13 @@
       "when": 1790703402938,
       "tag": "0016_entra_pending_details",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790707117620,
+      "tag": "0017_rmm_device_status",
+      "breakpoints": true
     }
   ]
 }

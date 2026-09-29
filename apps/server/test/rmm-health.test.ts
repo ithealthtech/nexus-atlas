@@ -1,0 +1,259 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { deviceKind, onlineState, protectionOf, seenAt } from '../src/services/integrations/cw-rmm.js';
+import { thresholds } from '../src/services/rmm-health.js';
+import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+
+const CLIENT_ID = 'asio-client-id-123';
+const SECRET = 'asio-secret-value-456';
+const TEMP = 'temporary pass 1234';
+const DAY = 86_400_000;
+const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
+
+type Device = Record<string, unknown>;
+
+/** A fake Asio API with two companies whose devices report agent and protection status. */
+function fakeAsio(devices: Map<string, Device[]>) {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  return (async (input: string | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/v1/token') return json({ access_token: 'tok', expires_in: 3600, token_type: 'Bearer' });
+    if (url.pathname === '/api/platform/v1/company/companies')
+      return json([
+        { id: 'c1', name: 'Harbor Dental Group' },
+        { id: 'c2', name: 'Northline Architecture' },
+      ]);
+    if (/\/sites$/.test(url.pathname)) return json([]);
+    if (url.pathname === '/api/platform/v2/device/categories/all/endpoints') {
+      const request = JSON.parse(String(init?.body));
+      if (request.resourceType !== 'company') return json({ message: 'invalid resource type' }, 400);
+      const all = devices.get(request.resources[0] as string) ?? [];
+      if (!all.length) return json({ message: 'resource not found' }, 404);
+      const cursor = Number(url.searchParams.get('cursor'));
+      return json({ endpoints: all.slice(cursor, cursor + Number(url.searchParams.get('limit'))) });
+    }
+    return json({}, 404);
+  }) as typeof fetch;
+}
+
+async function waitForJob(b: Browser, id: string) {
+  for (let i = 0; i < 200; i++) {
+    const job = (await b.call('GET', `/api/import/jobs/${id}`)).data;
+    if (job.status !== 'running') return job;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('sync did not finish');
+}
+
+describe('RMM health values', () => {
+  it('reads online state and leaves anything else unknown', () => {
+    expect(onlineState(true)).toBe(true);
+    expect(onlineState('Online')).toBe(true);
+    expect(onlineState('OFFLINE')).toBe(false);
+    expect(onlineState(0)).toBe(false);
+    expect(onlineState('Active')).toBeNull();
+    expect(onlineState(undefined)).toBeNull();
+  });
+
+  it('reads check-in times from ISO strings and Unix times, and refuses placeholders', () => {
+    const now = Date.UTC(2026, 8, 29);
+    expect(seenAt('2026-09-28T10:00:00Z', now)).toBe('2026-09-28T10:00:00.000Z');
+    expect(seenAt(Date.UTC(2026, 8, 1) / 1000, now)).toBe('2026-09-01T00:00:00.000Z');
+    expect(seenAt(String(Date.UTC(2026, 8, 1)), now)).toBe('2026-09-01T00:00:00.000Z');
+    expect(seenAt('0001-01-01T00:00:00Z', now)).toBeNull();
+    expect(seenAt('2027-01-01', now)).toBeNull();
+    expect(seenAt('never', now)).toBeNull();
+  });
+
+  it('reads endpoint protection as running, not running, or missing', () => {
+    expect(protectionOf({ endpointProtection: { name: 'SentinelOne', status: 'Running' } })).toEqual({
+      protection: 'running',
+      protectionProduct: 'SentinelOne',
+    });
+    expect(protectionOf({ antivirus: { name: 'Defender', running: false } }).protection).toBe('not_running');
+    expect(protectionOf({ antivirusStatus: 'Out of date' }).protection).toBe('not_running');
+    expect(protectionOf({ isAntivirusInstalled: false }).protection).toBe('missing');
+    expect(protectionOf({ endpointProtection: 'Not installed' }).protection).toBe('missing');
+    // Installed says nothing about whether it runs.
+    expect(protectionOf({ antivirus: { name: 'Defender', status: 'Installed' } }).protection).toBeNull();
+    expect(protectionOf({}).protection).toBeNull();
+  });
+
+  it('groups devices into servers, workstations, and others', () => {
+    expect(deviceKind({ type: 'Server', os: '' })).toBe('server');
+    expect(deviceKind({ type: '', os: 'Windows Server 2022' })).toBe('server');
+    expect(deviceKind({ type: 'Laptop', os: '' })).toBe('workstation');
+    expect(deviceKind({ type: 'Desktop', os: 'Windows 11 Pro' })).toBe('workstation');
+    expect(deviceKind({ type: 'Firewall', os: '' })).toBe('other');
+  });
+
+  it('keeps stale thresholds in range', () => {
+    expect(thresholds()).toEqual({ staleDays: 7, veryStaleDays: 30 });
+    expect(thresholds('3', '10')).toEqual({ staleDays: 3, veryStaleDays: 10 });
+    expect(thresholds('0', '-5')).toEqual({ staleDays: 7, veryStaleDays: 30 });
+    expect(thresholds('20', '5')).toEqual({ staleDays: 20, veryStaleDays: 21 });
+  });
+});
+
+describe('RMM health report', () => {
+  let t: TestApp;
+  let owner: Browser;
+  let devices: Map<string, Device[]>;
+  let harbor: string;
+  let northline: string;
+
+  beforeEach(async () => {
+    devices = new Map<string, Device[]>([
+      [
+        'c1',
+        [
+          {
+            endpointId: 'h1',
+            friendlyName: 'HDG-DC-01',
+            endpointType: 'Server',
+            availabilityStatus: 'Online',
+            lastSeen: ago(0),
+            endpointProtection: { name: 'SentinelOne', status: 'Running' },
+          },
+          {
+            endpointId: 'h2',
+            friendlyName: 'HDG-FS-01',
+            endpointType: 'Server',
+            availabilityStatus: 'Offline',
+            lastSeen: ago(10),
+            endpointProtection: { name: 'SentinelOne', status: 'Stopped' },
+          },
+          {
+            endpointId: 'h3',
+            friendlyName: 'HDG-WS-01',
+            endpointType: 'Desktop',
+            isOnline: false,
+            lastSeen: ago(45),
+            isAntivirusInstalled: false,
+          },
+          { endpointId: 'h4', friendlyName: 'HDG-WS-02', endpointType: 'Laptop' },
+        ],
+      ],
+      [
+        'c2',
+        [
+          {
+            endpointId: 'n1',
+            friendlyName: 'NLA-WS-01',
+            endpointType: 'Desktop',
+            isOnline: true,
+            lastSeen: ago(1),
+            antivirus: { name: 'Defender', running: true },
+          },
+        ],
+      ],
+    ]);
+    t = await startApp({}, { cwRmmFetch: fakeAsio(devices) });
+    owner = (await setupOwner(t.app)).b;
+    harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    northline = (await owner.call('POST', '/api/clients', { name: 'Northline Architecture' })).data.id;
+    await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [
+        { companyId: 'c1', action: 'link', clientId: harbor },
+        { companyId: 'c2', action: 'link', clientId: northline },
+      ],
+    });
+  });
+  afterEach(async () => {
+    await t.close();
+  });
+
+  const sync = async () => waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+
+  it('is empty before a sync', async () => {
+    const report = (await owner.call('GET', '/api/rmm-health')).data;
+    expect(report).toMatchObject({ updatedAt: null, clients: [], totals: { total: 0 } });
+  });
+
+  it('counts agent online, stale agents, and endpoint protection across clients, worst first', async () => {
+    expect((await sync()).status).toBe('done');
+    const report = (await owner.call('GET', '/api/rmm-health')).data;
+    expect(report.staleDays).toBe(7);
+    expect(report.updatedAt).not.toBeNull();
+    expect(report.totals).toEqual({
+      total: 5,
+      servers: 2,
+      workstations: 3,
+      online: 2,
+      offline: 2,
+      onlineUnknown: 1,
+      offlineServers: 1,
+      current: 2,
+      stale: 1,
+      veryStale: 1,
+      seenUnknown: 1,
+      protectionRunning: 2,
+      protectionNotRunning: 1,
+      protectionMissing: 1,
+      protectionUnknown: 1,
+    });
+    expect(report.clients.map((c: { clientName: string }) => c.clientName)).toEqual([
+      'Harbor Dental Group',
+      'Northline Architecture',
+    ]);
+
+    // Thresholds move devices between current, stale, and very stale.
+    const strict = (await owner.call('GET', '/api/rmm-health?staleDays=1&veryStaleDays=5')).data;
+    expect(strict.totals).toMatchObject({ current: 1, stale: 1, veryStale: 2 });
+
+    const one = (await owner.call('GET', `/api/rmm-health?client=${northline}`)).data;
+    expect(one.totals).toMatchObject({ total: 1, online: 1, protectionRunning: 1 });
+  });
+
+  it('lists the devices behind a slice, most overdue first', async () => {
+    await sync();
+    const offline = (await owner.call('GET', '/api/rmm-health/devices?filter=offline')).data;
+    expect(offline.map((d: { name: string }) => d.name)).toEqual(['HDG-WS-01', 'HDG-FS-01']);
+    expect(offline[1]).toMatchObject({
+      kind: 'server',
+      online: false,
+      protection: 'not_running',
+      protectionProduct: 'SentinelOne',
+    });
+    const missing = (await owner.call('GET', `/api/rmm-health/devices?filter=protection_missing&client=${harbor}`))
+      .data;
+    expect(missing).toHaveLength(1);
+    expect((await owner.call('GET', '/api/rmm-health/devices?filter=everything')).status).toBe(400);
+  });
+
+  it('drops devices the RMM no longer reports, and archived assets', async () => {
+    await sync();
+    devices.set('c1', devices.get('c1')!.slice(0, 3));
+    await sync();
+    expect((await owner.call('GET', '/api/rmm-health')).data.totals.total).toBe(4);
+    const [dc] = (await owner.call('GET', '/api/rmm-health/devices?filter=protection_not_running')).data;
+    expect((await owner.call('POST', `/api/assets/${dc.assetId}/archive`, { archived: true })).status).toBeLessThan(
+      300,
+    );
+    const after = (await owner.call('GET', '/api/rmm-health')).data.totals;
+    expect(after).toMatchObject({ total: 3, protectionNotRunning: 0 });
+  });
+
+  it('shows only clients the viewer can read, and hides others as not found', async () => {
+    await sync();
+    const created = await owner.call('POST', '/api/users', {
+      email: 'viewer@northline.test',
+      name: 'Northline Viewer',
+      role: 'client_viewer',
+      password: TEMP,
+      grants: [{ clientId: northline, level: 'read' }],
+    });
+    expect(created.status).toBe(201);
+    const { b } = await signIn(t.app, 'viewer@northline.test', TEMP);
+    const changed = await b.call('POST', '/api/account/password', { current: TEMP, next: 'harbor lights read only 7' });
+    expect(changed.data.stage, JSON.stringify(changed.data)).toBe('active');
+    const report = (await b.call('GET', '/api/rmm-health')).data;
+    expect(report.totals.total).toBe(1);
+    expect(report.clients.map((c: { clientId: string }) => c.clientId)).toEqual([northline]);
+    expect((await b.call('GET', `/api/rmm-health?client=${harbor}`)).status).toBe(404);
+    expect((await b.call('GET', '/api/rmm-health?client=not-a-uuid')).status).toBe(404);
+    expect((await b.call('GET', `/api/rmm-health/devices?filter=offline&client=${harbor}`)).status).toBe(404);
+    expect((await b.call('GET', '/api/rmm-health/devices?filter=offline')).data).toEqual([]);
+  });
+});

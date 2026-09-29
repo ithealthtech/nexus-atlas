@@ -803,3 +803,37 @@ export const backupRuns = pgTable(
     check('backup_runs_status_check', sql`${t.status} in ('running','done','failed')`),
   ],
 );
+
+// Health of each device an RMM sync reports (agent online, last check-in, endpoint protection), for the RMM health
+// charts. Rewritten by every sync; a device whose asset is archived or deleted drops out of the charts.
+export const rmmDeviceStatus = pgTable(
+  'rmm_device_status',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    source: text('source').notNull(),
+    externalId: text('external_id').notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    online: boolean('online'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    protection: text('protection'),
+    protectionProduct: text('protection_product').notNull().default(''),
+    updatedAt: updated(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.source, t.externalId] }),
+    index('rmm_device_status_client').on(t.orgId, t.clientId),
+    check('rmm_device_status_kind_check', sql`${t.kind} in ('server','workstation','other')`),
+    check(
+      'rmm_device_status_protection_check',
+      sql`${t.protection} is null or ${t.protection} in ('running','not_running','missing')`,
+    ),
+  ],
+);

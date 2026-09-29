@@ -16,6 +16,10 @@ import {
   type CsvImportResult,
   type ImportJobView,
   type ExpirationItem,
+  type RmmHealthCounts,
+  type RmmHealthDevice,
+  type RmmHealthFilter,
+  type RmmHealthReport,
   type ItemType,
   type LayoutField,
   type RichText,
@@ -101,6 +105,74 @@ const event = (action: string, detail = '') =>
     ip: '203.0.113.24',
     createdAt: now(),
   });
+
+// ---------- RMM health (sample agents, as a ConnectWise RMM sync would record them) ----------
+const RMM_SAMPLE = db.clients.flatMap((c, ci) => {
+  const own = db.assets.filter((a) => a.clientId === c.id);
+  if (!own.length) return [];
+  const prefix = c.name.replace(/[^A-Z]/g, '').slice(0, 3) || 'DEV';
+  return Array.from({ length: [34, 21, 12, 9][ci % 4]! }, (_, i): RmmHealthDevice => {
+    const server = i < 3;
+    const n = (i * 7 + ci * 3) % 20;
+    return {
+      assetId: own[i % own.length]!.id,
+      clientId: c.id,
+      clientName: c.name,
+      name: `${prefix}-${server ? 'SRV' : 'WS'}-${String(i + 1).padStart(2, '0')}`,
+      kind: server ? 'server' : 'workstation',
+      online: n === 19 ? null : n > 15 ? false : true,
+      // ago() takes minutes.
+      lastSeenAt: n === 19 ? null : ago((n > 17 ? 40 * 24 : n > 15 ? 9 * 24 : (n % 5) * 3) * 60),
+      protection: n === 18 ? 'missing' : n === 17 ? 'not_running' : n === 16 ? null : 'running',
+      protectionProduct: n === 18 ? '' : 'SentinelOne',
+    };
+  });
+});
+const RMM_DAY = 86_400_000;
+const rmmAge = (d: RmmHealthDevice) => (d.lastSeenAt ? (Date.now() - Date.parse(d.lastSeenAt)) / RMM_DAY : null);
+const RMM_MATCH: Record<RmmHealthFilter, (d: RmmHealthDevice) => boolean> = {
+  offline: (d) => d.online === false,
+  online_unknown: (d) => d.online === null,
+  stale: (d) => (rmmAge(d) ?? -1) >= 7 && (rmmAge(d) ?? 0) < 30,
+  very_stale: (d) => (rmmAge(d) ?? -1) >= 30,
+  seen_unknown: (d) => d.lastSeenAt === null,
+  protection_not_running: (d) => d.protection === 'not_running',
+  protection_missing: (d) => d.protection === 'missing',
+  protection_unknown: (d) => d.protection === null,
+};
+const rmmDevices = (client: string | null) => RMM_SAMPLE.filter((d) => !client || d.clientId === client);
+function rmmCounts(list: RmmHealthDevice[]): RmmHealthCounts {
+  const count = (f: (d: RmmHealthDevice) => boolean) => list.filter(f).length;
+  return {
+    total: list.length,
+    servers: count((d) => d.kind === 'server'),
+    workstations: count((d) => d.kind === 'workstation'),
+    online: count((d) => d.online === true),
+    offline: count(RMM_MATCH.offline),
+    onlineUnknown: count(RMM_MATCH.online_unknown),
+    offlineServers: count((d) => d.kind === 'server' && d.online === false),
+    current: count((d) => (rmmAge(d) ?? 99) < 7),
+    stale: count(RMM_MATCH.stale),
+    veryStale: count(RMM_MATCH.very_stale),
+    seenUnknown: count(RMM_MATCH.seen_unknown),
+    protectionRunning: count((d) => d.protection === 'running'),
+    protectionNotRunning: count(RMM_MATCH.protection_not_running),
+    protectionMissing: count(RMM_MATCH.protection_missing),
+    protectionUnknown: count(RMM_MATCH.protection_unknown),
+  };
+}
+function rmmHealth(client: string | null): RmmHealthReport {
+  const list = rmmDevices(client);
+  const clients = [...new Set(list.map((d) => d.clientId))].map((id) => ({
+    clientId: id,
+    clientName: clientName(id) ?? '',
+    counts: rmmCounts(list.filter((d) => d.clientId === id)),
+  }));
+  const trouble = (k: RmmHealthCounts) =>
+    (k.offline + k.veryStale + k.protectionMissing + k.protectionNotRunning) / k.total;
+  clients.sort((a, b) => trouble(b.counts) - trouble(a.counts));
+  return { staleDays: 7, veryStaleDays: 30, updatedAt: ago(25), totals: rmmCounts(list), clients };
+}
 
 // ---------- documentation ----------
 const assets = db.assets.map((a) => ({ ...a, ...meta() }));
@@ -1189,6 +1261,12 @@ on('POST', '/settings/email/permissions', () => notInDemo('Checking Microsoft 36
 on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
+on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+on('GET', '/rmm-health/devices', (_m, _b, q) =>
+  rmmDevices(q.get('client'))
+    .filter(RMM_MATCH[q.get('filter') as RmmHealthFilter] ?? (() => false))
+    .sort((a, b) => (a.lastSeenAt ?? '').localeCompare(b.lastSeenAt ?? '')),
+);
 on('GET', '/security-events', () => db.events);
 on('POST', '/audit/verify', () => ({
   ok: true,

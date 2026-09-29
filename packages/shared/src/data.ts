@@ -109,6 +109,62 @@ export const cwRmmMappingSchema = z.object({
     .max(2000),
 });
 
+// ---------- RMM health ----------
+export type RmmDeviceKind = 'server' | 'workstation' | 'other';
+export type RmmProtection = 'running' | 'not_running' | 'missing';
+/** Days since last check-in after which an agent counts as stale, and as very stale. */
+export const RMM_STALE_DAYS = { stale: 7, veryStale: 30 } as const;
+/** Device counts behind the RMM health charts. Unknown means the RMM didn't report it. */
+export interface RmmHealthCounts {
+  total: number;
+  servers: number;
+  workstations: number;
+  online: number;
+  offline: number;
+  onlineUnknown: number;
+  offlineServers: number;
+  current: number;
+  stale: number;
+  veryStale: number;
+  seenUnknown: number;
+  protectionRunning: number;
+  protectionNotRunning: number;
+  protectionMissing: number;
+  protectionUnknown: number;
+}
+export interface RmmHealthReport {
+  staleDays: number;
+  veryStaleDays: number;
+  /** When the newest device status was written, or null before any sync. */
+  updatedAt: string | null;
+  totals: RmmHealthCounts;
+  /** One row per client with synced devices, worst first. */
+  clients: { clientId: string; clientName: string; counts: RmmHealthCounts }[];
+}
+/** Which devices to list when a chart slice is chosen. */
+export const RMM_HEALTH_FILTERS = [
+  'offline',
+  'online_unknown',
+  'stale',
+  'very_stale',
+  'seen_unknown',
+  'protection_not_running',
+  'protection_missing',
+  'protection_unknown',
+] as const;
+export type RmmHealthFilter = (typeof RMM_HEALTH_FILTERS)[number];
+export interface RmmHealthDevice {
+  assetId: string;
+  clientId: string;
+  clientName: string;
+  name: string;
+  kind: RmmDeviceKind;
+  online: boolean | null;
+  lastSeenAt: string | null;
+  protection: RmmProtection | null;
+  protectionProduct: string;
+}
+
 export interface HuduPreview {
   companies: number;
   assetLayouts: number;

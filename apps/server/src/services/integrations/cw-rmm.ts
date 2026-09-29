@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField, MAX_LAYOUT_FIELDS } from '@atlas/shared';
+import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField, type RmmDeviceKind, type RmmProtection, MAX_LAYOUT_FIELDS } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
@@ -179,8 +179,94 @@ function mapDevice(id: string, companyId: string, siteId: string, record: Json):
       'baseBoard.serialNumber',
       'serial',
     ),
+    online: onlineState(pick(d, ...ONLINE_KEYS)),
+    lastSeenAt: seenAt(pick(d, ...LAST_SEEN_KEYS)),
+    ...protectionOf(d),
     extra: extraValues(d),
   };
+}
+
+// Health values for the RMM health charts. ConnectWise doesn't document these names for every endpoint type, so,
+// as above, the first name present is used; a value that can't be read counts as unknown, never as a guess.
+const ONLINE_KEYS = [
+  'isOnline',
+  'online',
+  'availabilityStatus',
+  'availability',
+  'onlineStatus',
+  'connectivity.status',
+  'agent.status',
+  'agentStatus',
+];
+const LAST_SEEN_KEYS = [
+  'lastSeen',
+  'lastSeenAt',
+  'lastSeenDate',
+  'lastContact',
+  'lastContactTime',
+  'lastCheckIn',
+  'lastCheckin',
+  'lastCheckInTime',
+  'lastHeartbeat',
+  'lastCommunicated',
+  'agent.lastContact',
+  'agent.lastSeen',
+];
+const PROTECTION_OBJECTS = ['endpointProtection', 'antivirus', 'antiVirus', 'av', 'securityProduct', 'security.antivirus'];
+
+/** true for online, false for offline, null when the value doesn't say. */
+export function onlineState(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1 ? true : value === 0 ? false : null;
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  if (/^(online|up|connected|available|true|yes)$/.test(v)) return true;
+  if (/^(offline|down|disconnected|unavailable|unreachable|false|no)$/.test(v)) return false;
+  return null;
+}
+
+/** A check-in time as ISO, from an ISO string or a Unix time in seconds or milliseconds; null if unreadable. */
+export function seenAt(value: unknown, now = Date.now()): string | null {
+  let ms: number;
+  if (typeof value === 'number') ms = value < 1e11 ? value * 1000 : value;
+  else if (typeof value === 'string' && /^\d{9,13}$/.test(value.trim())) return seenAt(Number(value), now);
+  else if (typeof value === 'string') ms = Date.parse(value);
+  else return null;
+  // Before 2000 or more than a day ahead is a placeholder or a bad clock, not a check-in.
+  if (!Number.isFinite(ms) || ms < Date.UTC(2000, 0, 1) || ms > now + 86_400_000) return null;
+  return new Date(ms).toISOString();
+}
+
+/** Endpoint protection: running, installed but not running, or missing, with the product name when given. */
+export function protectionOf(d: Json): { protection: RmmProtection | null; protectionProduct: string } {
+  const obj = PROTECTION_OBJECTS.map((k) => pick(d, k)).find(
+    (v): v is Json => !!v && typeof v === 'object' && !Array.isArray(v),
+  );
+  const product = (
+    (obj && text(obj, 'name', 'product', 'productName', 'vendor')) ||
+    text(d, 'antivirusProduct', 'antivirusName', 'avProduct', 'endpointProtectionProduct', 'securityProductName')
+  ).slice(0, 200);
+  const installed = pick(obj ?? {}, 'installed', 'isInstalled') ?? pick(d, 'isAntivirusInstalled', 'antivirusInstalled');
+  const running =
+    pick(obj ?? {}, 'running', 'isRunning', 'enabled', 'isEnabled', 'active') ??
+    pick(d, 'isAntivirusRunning', 'antivirusRunning', 'antivirusEnabled');
+  const bare = pick(d, ...PROTECTION_OBJECTS);
+  const status = String(
+    pick(obj ?? {}, 'status', 'state', 'protectionStatus') ??
+      pick(d, 'antivirusStatus', 'avStatus', 'endpointProtectionStatus', 'protectionStatus') ??
+      (typeof bare === 'string' ? bare : ''),
+  )
+    .trim()
+    .toLowerCase();
+  // "Installed" on its own doesn't say whether it runs, so it stays unknown.
+  let protection: RmmProtection | null = null;
+  if (installed === false || /^(not ?installed|none|missing|absent|no ?av|unprotected)$/.test(status))
+    protection = 'missing';
+  else if (running === true || /^(running|active|enabled|protected|on|ok|healthy|up ?to ?date)$/.test(status))
+    protection = 'running';
+  else if (running === false || /^(disabled|stopped|not ?running|inactive|off|expired|out ?of ?date|outdated|at ?risk)$/.test(status))
+    protection = 'not_running';
+  return { protection, protectionProduct: product };
 }
 
 // Values the named fields above already carry; everything else ConnectWise sends is kept as its own field.
@@ -309,6 +395,12 @@ export interface RmmDevice {
   manufacturer: string;
   model: string;
   serial: string;
+  /** Agent online (true), offline (false), or not reported (null). */
+  online: boolean | null;
+  /** The agent's last check-in, ISO, or null when not reported. */
+  lastSeenAt: string | null;
+  protection: RmmProtection | null;
+  protectionProduct: string;
   /** Everything else ConnectWise sent about the device, as [label, value]. */
   extra: [string, string][];
 }
@@ -820,6 +912,35 @@ export function deviceType(d: Pick<RmmDevice, 'type' | 'os'>): string {
   return 'Other';
 }
 
+/** Server, workstation, or other, for the RMM health counts. */
+export function deviceKind(d: Pick<RmmDevice, 'type' | 'os'>): RmmDeviceKind {
+  const type = deviceType(d);
+  if (type === 'Server') return 'server';
+  if (type === 'Workstation' || type === 'Laptop') return 'workstation';
+  return 'other';
+}
+
+/** Records a device's health for the RMM health charts, against the asset it was synced into. */
+async function saveStatus(db: Database, orgId: string, clientId: string, assetId: string, d: RmmDevice) {
+  const values = {
+    clientId,
+    assetId,
+    kind: deviceKind(d),
+    online: d.online,
+    lastSeenAt: d.lastSeenAt ? new Date(d.lastSeenAt) : null,
+    protection: d.protection,
+    protectionProduct: d.protectionProduct,
+    updatedAt: new Date(),
+  };
+  await db
+    .insert(schema.rmmDeviceStatus)
+    .values({ orgId, source: 'cw-rmm', externalId: d.id, ...values })
+    .onConflictDoUpdate({
+      target: [schema.rmmDeviceStatus.orgId, schema.rmmDeviceStatus.source, schema.rmmDeviceStatus.externalId],
+      set: values,
+    });
+}
+
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** RMM companies with the decision for each, and a same-name Atlas client to suggest. */
@@ -1016,7 +1137,7 @@ export async function runCwRmmSync(
           await assets.update(scope, id, { fields: merged, version: current.version }, 'Synced from ConnectWise RMM');
         claimed.add(id);
       };
-      await run.upsert(
+      const synced = await run.upsert(
         'assets',
         d.id,
         name,
@@ -1065,6 +1186,9 @@ export async function runCwRmmSync(
             );
         },
       );
+      // The asset the device now lives in (a copy folded into an existing asset has moved).
+      const assetId = synced && (await run.ref('assets', d.id));
+      if (assetId) await saveStatus(db, actor.orgId, clientId, assetId, d);
     }
     // Only a company whose devices were read counts toward archiving devices the RMM dropped.
     if (options.devices) complete.push(clientId);
@@ -1080,6 +1204,28 @@ export async function runCwRmmSync(
 
   // Archive devices removed from the RMM, within the companies read in full.
   if (complete.length) {
+    // Their health drops out of the charts with them.
+    const statuses = await db
+      .select({ externalId: schema.rmmDeviceStatus.externalId })
+      .from(schema.rmmDeviceStatus)
+      .where(
+        and(
+          eq(schema.rmmDeviceStatus.orgId, actor.orgId),
+          eq(schema.rmmDeviceStatus.source, 'cw-rmm'),
+          inArray(schema.rmmDeviceStatus.clientId, complete),
+        ),
+      );
+    const gone = statuses.map((r) => r.externalId).filter((id) => !seen.has(id));
+    if (gone.length)
+      await db
+        .delete(schema.rmmDeviceStatus)
+        .where(
+          and(
+            eq(schema.rmmDeviceStatus.orgId, actor.orgId),
+            eq(schema.rmmDeviceStatus.source, 'cw-rmm'),
+            inArray(schema.rmmDeviceStatus.externalId, gone),
+          ),
+        );
     const refs = await db
       .select({ externalId: schema.externalRefs.externalId, id: schema.assets.id, archived: schema.assets.archived })
       .from(schema.externalRefs)
