@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-09-29
+
+### Fixed
+
+- **Sign in with Microsoft:** returning from Microsoft no longer fails with "Cross-site requests are not allowed."; passkey sign-in now respects "Require Microsoft sign-in" for staff; and confirming a Microsoft link now shows the account's name, email and ID and approves exactly that account. (#87)
+
 ## [1.5.0] - 2026-09-29
 
 ### Added
