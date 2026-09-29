@@ -42,6 +42,7 @@ import { EntraService } from './services/entra.js';
 import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
+import { M365Scheduler, registerM365Routes } from './routes/m365.js';
 import { failInterruptedJobs } from './services/importers/common.js';
 import { ApiKeyService } from './services/api-keys.js';
 import { BackupService } from './backup/service.js';
@@ -74,6 +75,8 @@ export interface AppOptions {
   breachFetch?: typeof fetch;
   /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
   cwRmmFetch?: typeof fetch;
+  /** Replaces fetch for the Microsoft 365 sync (tests use a fake Microsoft Graph). */
+  m365Fetch?: typeof fetch;
   /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
   domainLookup?: DomainLookup;
   /** Replaces fetch for the GitHub release check (tests use fake releases). */
@@ -130,6 +133,7 @@ export async function buildApp({
   mailTransport = defaultTransport,
   huduFetch,
   cwRmmFetch,
+  m365Fetch,
   breachFetch,
   entraFetch,
   domainLookup,
@@ -192,7 +196,8 @@ export async function buildApp({
     // that label on the redirect that follows it, which lands on a page. So only API paths are refused, and the
     // callback is exempt; it verifies its own state, nonce, and PKCE before it does anything.
     const path = req.url.split('?')[0]!;
-    const isSsoReturn = req.method === 'GET' && path === '/api/auth/entra/callback';
+    const isSsoReturn =
+      req.method === 'GET' && (path === '/api/auth/entra/callback' || path === '/api/integrations/m365/consent');
     const isPage = req.method === 'GET' && !path.startsWith('/api/');
     if (req.headers['sec-fetch-site'] === 'cross-site' && !isSsoReturn && !isPage)
       throw new HttpError(403, 'Cross-site requests are not allowed.');
@@ -613,10 +618,13 @@ export async function buildApp({
     backups.start();
     const cwRmm = new CwRmmScheduler(db, settings, (err) => app.log.error({ err }, 'ConnectWise RMM sync'), cwRmmFetch);
     cwRmm.start();
+    const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
+    m365.start();
     app.addHook('onClose', async () => {
       notifier.stop();
       backups.stop();
       cwRmm.stop();
+      m365.stop();
     });
   }
 
@@ -654,6 +662,7 @@ export async function buildApp({
   });
   registerDataRoutes(app, { db, authed, recent, settings, keys, vault, storage: files, huduFetch });
   registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch });
+  registerM365Routes(app, { db, authed, recent, settings, publicOrigin: config.publicOrigin, fetcher: m365Fetch });
 
   app.all('/api/*', async () => {
     throw new HttpError(404, 'Not found.');
