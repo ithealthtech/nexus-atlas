@@ -137,11 +137,13 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
       description={user ? user.email : 'Give a teammate or client contact their own sign-in.'}
       footer={
         <>
-          {user && user.id !== actor.id && (
+          {user && (
             <div className="mr-auto flex flex-wrap gap-1">
-              <Button variant="ghost" onClick={() => setResetting(true)}>
-                <KeyRound /> Reset sign-in
-              </Button>
+              {user.id !== actor.id && (
+                <Button variant="ghost" onClick={() => setResetting(true)}>
+                  <KeyRound /> Reset sign-in
+                </Button>
+              )}
               {user.entra === 'pending' && user.entraPending && (
                 <p className="basis-full text-xs text-text-2">
                   Waiting: {user.entraPending.name} &lt;{user.entraPending.email}&gt; (ID {user.entraPending.oid}).
@@ -174,19 +176,21 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
                   <LogIn /> {user.entra === 'pending' ? 'Confirm Microsoft account' : 'Unlink Microsoft'}
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  try {
-                    await api(`/users/${user.id}/sign-out`, { method: 'POST', body: {} });
-                    toast(`${user.name} was signed out everywhere.`);
-                  } catch (err) {
-                    toast((err as Error).message, 'error');
-                  }
-                }}
-              >
-                <LogOut /> Sign out everywhere
-              </Button>
+              {user.id !== actor.id && (
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      await api(`/users/${user.id}/sign-out`, { method: 'POST', body: {} });
+                      toast(`${user.name} was signed out everywhere.`);
+                    } catch (err) {
+                      toast((err as Error).message, 'error');
+                    }
+                  }}
+                >
+                  <LogOut /> Sign out everywhere
+                </Button>
+              )}
             </div>
           )}
           <Button variant="secondary" onClick={onClose}>
