@@ -180,8 +180,6 @@ describe('Microsoft Entra ID sign-in', () => {
     // Now the account ID is what counts: a different email claim for the same account still signs in.
     const ok = await signInWithMicrosoft(tess({ email: 'renamed@atlas.test' }));
     expect(ok.location).toBe('/');
-    const raw = await t.app.inject({ method: 'GET', url: '/api/session', headers: { cookie: ok.session! } });
-    console.log('DEBUG', raw.statusCode, raw.body.slice(0, 300), ok.session);
     const session = await sessionOf(ok.session!);
     expect(session.actor).toMatchObject({ email: 'tess@atlas.test', role: 'technician' });
     // Atlas still wants its own MFA unless Microsoft's is trusted.

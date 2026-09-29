@@ -81,15 +81,20 @@ export interface AppOptions {
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
+// Reading the session itself is allowed at every stage: after Microsoft sign-in the page loads with a session that
+// may still need a step, and it has to learn which.
+const READ_SESSION = 'GET /api/session';
 const STAGE_ROUTES: Record<string, string[]> = {
   mfa: [
+    READ_SESSION,
     'POST /api/session/mfa',
     'POST /api/session/recovery',
     'POST /api/session/passkey/options',
     'POST /api/session/passkey',
   ],
-  password: ['POST /api/account/password'],
+  password: [READ_SESSION, 'POST /api/account/password'],
   'mfa-setup': [
+    READ_SESSION,
     'POST /api/account/mfa/setup',
     'POST /api/account/mfa/confirm',
     'POST /api/account/passkeys/options',
