@@ -46,27 +46,28 @@ describe('password health', () => {
     await add('Weak one', 'password1');
     await add('Reused A', 'Tr0ub4dor&3-Reused-Harbor!');
     await add('Reused B', 'Tr0ub4dor&3-Reused-Harbor!');
+    await add('Clean', 'unique-Lantern-quartz-3381-wave');
     await add('Fine', 'correct-Horse-battery-77-staple');
     await t.handle.db.execute(sql`update passwords set changed_at = now() - interval '400 days' where name = 'Fine'`);
 
     const before = (await owner.call('GET', '/api/password-health')).data;
-    expect(before.breach).toMatchObject({ enabled: true, unchecked: 5 });
+    expect(before.breach).toMatchObject({ enabled: true, unchecked: 6 });
     expect(before.counts.breached).toBe(0);
 
     const check = await owner.call('POST', '/api/password-health/check', {});
-    expect(check.data).toEqual({ checked: 5, failed: false });
+    expect(check.data).toEqual({ checked: 6, failed: false });
     // Only the first five characters of each hash left the server.
     expect(pwned.state.urls.every((u) => /\/range\/[0-9A-F]{5}$/.test(u))).toBe(true);
     expect(pwned.state.urls.some((u) => u.includes(sha1(BREACHED).slice(5, 12)))).toBe(false);
 
     const report = (await owner.call('GET', '/api/password-health')).data;
     expect(report.counts).toMatchObject({ breached: 1, weak: 1, reused: 2, old: 1 });
-    expect(report.total).toBe(5);
-    expect(report.breach).toMatchObject({ checked: 5, unchecked: 0 });
-    // 4 of 5 passwords have an issue.
-    expect(report.score).toBe(20);
+    expect(report.total).toBe(6);
+    expect(report.breach).toMatchObject({ checked: 6, unchecked: 0 });
+    // 5 of 6 passwords have an issue (the aged one counts), so 1 of 6 is clean.
+    expect(report.score).toBe(17);
     expect(report.clients).toEqual([
-      expect.objectContaining({ name: 'Harbor Dental Group', total: 5, withIssues: 4, score: 20 }),
+      expect.objectContaining({ name: 'Harbor Dental Group', total: 6, withIssues: 5, score: 17 }),
     ]);
     // Breached first.
     expect(report.items[0]).toMatchObject({ id: leaked.id, issues: expect.arrayContaining(['breached']) });
