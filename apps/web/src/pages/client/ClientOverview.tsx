@@ -6,6 +6,7 @@ import { Card, CardHeader } from '@/components/ui';
 import { ActivityFeed } from '@/components/panels';
 import { ItemIcon } from '@/components/ItemIcon';
 import { RmmHealthCard } from '@/components/RmmHealth';
+import { TrackerCard } from '@/components/Trackers';
 import { WarrantyCard } from '@/components/Warranty';
 import { useActivity, useAssets, useClient, useContacts, useDocuments, useLayouts, useLocations } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
@@ -68,6 +69,7 @@ export function ClientOverview() {
           )}
         </Card>
         <RmmHealthCard clientId={clientId} />
+        <TrackerCard clientId={clientId} />
         <Card>
           <CardHeader
             title="Recently updated documents"

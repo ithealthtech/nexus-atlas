@@ -24,6 +24,7 @@ import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientOverview } from '@/pages/client/ClientOverview';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
+import { DomainTracker, SslTracker } from '@/components/Trackers';
 import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
@@ -192,6 +193,8 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/trackers/domains', component: DomainTracker }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/trackers/ssl', component: SslTracker }),
 ];
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
