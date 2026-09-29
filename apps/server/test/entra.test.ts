@@ -176,7 +176,11 @@ describe('Microsoft Entra ID sign-in', () => {
 
     // Not confirmed, so a second try still doesn't get in.
     expect((await signInWithMicrosoft(tess())).session).toBeUndefined();
-    expect((await owner.call('POST', `/api/users/${person.id}/entra/confirm`, {})).status).toBe(200);
+    // Confirming has to name the account the administrator looked at.
+    expect((await owner.call('POST', `/api/users/${person.id}/entra/confirm`, { oid: 'someone-else' })).status).toBe(
+      409,
+    );
+    expect((await owner.call('POST', `/api/users/${person.id}/entra/confirm`, { oid: tessOid })).status).toBe(200);
 
     // Now the account ID is what counts: a different email claim for the same account still signs in.
     const ok = await signInWithMicrosoft(tess({ email: 'renamed@atlas.test' }));
@@ -202,7 +206,7 @@ describe('Microsoft Entra ID sign-in', () => {
       (p) => p.email === 'tess@atlas.test',
     )!;
     await signInWithMicrosoft(tess());
-    await owner.call('POST', `/api/users/${person.id}/entra/confirm`, {});
+    await owner.call('POST', `/api/users/${person.id}/entra/confirm`, { oid: tessOid });
 
     const withMfa = await signInWithMicrosoft(tess({ amr: ['pwd', 'mfa'] }));
     expect((await sessionOf(withMfa.session!)).stage).toBe('active');
@@ -250,6 +254,22 @@ describe('Microsoft Entra ID sign-in', () => {
     // The owner is never locked out by a problem on Microsoft's side.
     expect((await password(OWNER.email, OWNER.password)).statusCode).toBe(200);
     expect((await t.app.inject({ method: 'GET', url: '/api/auth/entra' })).json().requireSso).toBe(true);
+  });
+
+  it('accepts the return from Microsoft even though it is a cross-site navigation, and nothing else', async () => {
+    await configure();
+    const back = await t.app.inject({
+      method: 'GET',
+      url: '/api/auth/entra/callback?error=access_denied',
+      headers: { 'sec-fetch-site': 'cross-site' },
+    });
+    expect(back.statusCode).toBe(302);
+    const other = await t.app.inject({
+      method: 'GET',
+      url: '/api/auth/entra/start',
+      headers: { 'sec-fetch-site': 'cross-site' },
+    });
+    expect(other.statusCode).toBe(403);
   });
 
   it('checks the tenant on request and is for administrators only', async () => {
@@ -305,7 +325,7 @@ describe('Microsoft Entra ID sign-in with an optional setting', () => {
       const person = ((await owner.call('GET', '/api/users')).data as { id: string; email: string }[]).find(
         (p) => p.email === 'tess@atlas.test',
       )!;
-      await owner.call('POST', `/api/users/${person.id}/entra/confirm`, {});
+      await owner.call('POST', `/api/users/${person.id}/entra/confirm`, { oid });
       const back = await trip();
       const cookie = ([] as string[])
         .concat(back.headers['set-cookie'] ?? [])

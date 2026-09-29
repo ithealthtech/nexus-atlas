@@ -228,6 +228,7 @@ const users = db.users.map((u, i) => ({
   mustChangePassword: false,
   // The demo shows both a linked Microsoft account and one waiting for an administrator to confirm it.
   entra: (i === 1 ? 'linked' : i === 2 ? 'pending' : null) as 'linked' | 'pending' | null,
+  entraPending: i === 2 ? { oid: '7c1e-demo', email: u.email, name: u.name } : null,
   createdAt: ago(60 * 24 * 120),
 }));
 const groups = [...db.groups];
@@ -1058,6 +1059,7 @@ on('POST', '/users', (_m, b) => {
     locked: false,
     mustChangePassword: true,
     entra: null,
+    entraPending: null,
     lastLoginAt: null as unknown as string,
     createdAt: now(),
   };
@@ -1094,11 +1096,11 @@ on('PUT', '/settings/entra', (_m, b) => {
 on('DELETE', '/settings/entra', () => ((entraSettings = null), { ok: true }));
 on('POST', '/settings/entra/test', () => ({ ok: true }));
 on('POST', '/users/:id/entra/confirm', (m) => {
-  find(users, m[1]!, 'User').entra = 'linked';
+  Object.assign(find(users, m[1]!, 'User'), { entra: 'linked', entraPending: null });
   return { ok: true };
 });
 on('DELETE', '/users/:id/entra', (m) => {
-  find(users, m[1]!, 'User').entra = null;
+  Object.assign(find(users, m[1]!, 'User'), { entra: null, entraPending: null });
   return { ok: true };
 });
 on('PATCH', '/users/:id', (m, b) => Object.assign(find(users, m[1]!, 'User'), b));

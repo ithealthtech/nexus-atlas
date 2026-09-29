@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { and, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { schema, type Database } from '@atlas/db';
 import { ROLE_INFO, type Role } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
@@ -122,11 +123,18 @@ export function registerEntraRoutes(
           return back(reply, 'conflict');
         }
         // A match by email only: an administrator has to confirm before it can sign in.
-        await db.update(schema.users).set({ entraPendingOid: who.oid }).where(eq(schema.users.id, byEmail.id));
+        await db
+          .update(schema.users)
+          .set({
+            entraPendingOid: who.oid,
+            entraPendingEmail: who.email.slice(0, 254),
+            entraPendingName: who.name.slice(0, 200),
+          })
+          .where(eq(schema.users.id, byEmail.id));
         await identity.event(
           byEmail,
           'Microsoft sign-in awaiting confirmation',
-          `Matched by email ${who.email}`,
+          `Matched by email ${who.email}; Microsoft account ${who.oid}`,
           req.ip,
         );
         return back(reply, 'pending');
@@ -231,22 +239,34 @@ export function registerEntraRoutes(
     const user = await targetUser(req);
     deps.recent(req);
     if (!user.entraPendingOid) throw new HttpError(409, 'There is no Microsoft account waiting to be confirmed.');
+    // Confirming approves the account the administrator looked at. If another sign-in has replaced it since,
+    // they have to look again.
+    const { oid } = z.object({ oid: z.string().min(1).max(100) }).parse(req.body ?? {});
+    if (oid !== user.entraPendingOid)
+      throw new HttpError(409, 'A different Microsoft account is waiting now. Review it, then confirm again.');
     try {
       await db
         .update(schema.users)
-        .set({ entraOid: user.entraPendingOid, entraPendingOid: null })
+        .set({ entraOid: user.entraPendingOid, entraPendingOid: null, entraPendingEmail: null, entraPendingName: null })
         .where(eq(schema.users.id, user.id));
     } catch {
       throw new HttpError(409, 'That Microsoft account is already linked to another person.');
     }
-    await event(req, 'Microsoft account linked', user.email);
+    await event(
+      req,
+      'Microsoft account linked',
+      `${user.email}: ${user.entraPendingName ?? ''} <${user.entraPendingEmail ?? ''}> (${user.entraPendingOid})`,
+    );
     return { ok: true };
   });
 
   app.delete('/api/users/:id/entra', authed, async (req) => {
     const user = await targetUser(req);
     deps.recent(req);
-    await db.update(schema.users).set({ entraOid: null, entraPendingOid: null }).where(eq(schema.users.id, user.id));
+    await db
+      .update(schema.users)
+      .set({ entraOid: null, entraPendingOid: null, entraPendingEmail: null, entraPendingName: null })
+      .where(eq(schema.users.id, user.id));
     // Sessions stay: unlinking removes Microsoft as a way in, it doesn't sign anyone out.
     await event(req, 'Microsoft account unlinked', user.email);
     return { ok: true };
