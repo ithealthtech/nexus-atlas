@@ -225,28 +225,44 @@ describe('ticket sync and dashboard', () => {
     expect((await b.call('GET', '/api/tickets/list?status=New')).data).toEqual([]);
   });
 
-  it('keeps syncing devices when the key has no ticket access, and notes why', async () => {
+  it('keeps syncing devices when the key has no ticket access, signing in for tickets only once', async () => {
     await connect(tickets, { ticketScope: false });
     await link();
     const job = await sync();
     expect(job.status).toBe('done');
-    expect(job.counts.tickets).toMatchObject({ failed: 2 });
-    expect(job.messages.join(' ')).toMatch(/Tickets for company c1: ConnectWise wouldn't list tickets.*invalid_scope/);
+    expect(job.counts.tickets).toMatchObject({ failed: 1 });
+    expect(job.messages.join(' ')).toMatch(/Tickets for company c1: ConnectWise RMM rejected .*invalid_scope/);
+    expect(job.messages).toContain('Tickets not read for the other 1 company.');
+    // No other request shape or company is tried once the key can't sign in, so it isn't locked for signing in often.
+    expect(platform.calls.filter((c) => c.startsWith('POST /v1/token')).length).toBe(2);
+    expect(platform.calls.some((c) => c.includes('/ticket'))).toBe(false);
     const rows = await t.handle.db.execute(sql`select count(*)::int as n from tickets`);
     expect(rows.rows[0]).toEqual({ n: 0 });
   });
 
-  it('syncs no tickets when switched off, and says the client is not linked for tickets', async () => {
+  it('drops tickets when switched off or disconnected, and syncs none while off', async () => {
     await connect(tickets);
     await link();
+    await sync();
+    expect((await owner.call('GET', '/api/tickets')).data.open).toBe(4);
     const options = await owner.call('PUT', '/api/integrations/cw-rmm/options', {
       locations: true,
       devices: true,
       tickets: false,
     });
     expect(options.data.options.tickets).toBe(false);
-    await sync();
-    expect(platform.calls.some((c) => c.includes('/ticket/'))).toBe(false);
+    // Gone at once, not frozen at the last sync.
     expect((await owner.call('GET', `/api/tickets?client=${harbor}`)).data).toMatchObject({ linked: false, open: 0 });
+    expect((await owner.call('GET', '/api/tickets/list')).data).toEqual([]);
+    const calls = platform.calls.length;
+    await sync();
+    expect(platform.calls.slice(calls).some((c) => c.includes('/ticket'))).toBe(false);
+
+    await owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: true, devices: true, tickets: true });
+    await sync();
+    expect((await owner.call('GET', '/api/tickets')).data.open).toBe(4);
+    expect((await owner.call('DELETE', '/api/integrations/cw-rmm')).status).toBe(200);
+    const rows = await t.handle.db.execute(sql`select count(*)::int as n from tickets`);
+    expect(rows.rows[0]).toEqual({ n: 0 });
   });
 });

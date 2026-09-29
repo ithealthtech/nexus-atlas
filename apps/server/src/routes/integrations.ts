@@ -13,7 +13,7 @@ import {
   saveMapping,
   TICKET_SCOPES,
 } from '../services/integrations/cw-rmm.js';
-import { CwTicketReader, runTicketSync } from '../services/integrations/cw-tickets.js';
+import { clearTickets, CwTicketReader, runTicketSync } from '../services/integrations/cw-tickets.js';
 import { RmmHealthService } from '../services/rmm-health.js';
 import type { SettingsService } from '../services/settings.js';
 
@@ -40,7 +40,7 @@ async function startSync(
       if (options.tickets) {
         const tickets = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, TICKET_SCOPES);
         await runTicketSync(db, actor.orgId, new CwTicketReader(tickets), run, saved.map);
-      }
+      } else await clearTickets(db, actor.orgId);
       await run.flush('done');
       await settings.patchCwRmm(actor.orgId, { lastSyncAt: new Date().toISOString() });
     })
@@ -101,6 +101,8 @@ export function registerIntegrationRoutes(
     const actor = admin(req);
     recent(req);
     await settings.forgetCwRmm(actor.orgId);
+    // Synced devices stay as documentation; tickets are only a copy of ConnectWise's, so they go.
+    await clearTickets(db, actor.orgId);
     await event(req, 'ConnectWise RMM connection removed');
     return { ok: true };
   });
@@ -117,7 +119,10 @@ export function registerIntegrationRoutes(
   });
   app.put('/api/integrations/cw-rmm/options', authed, async (req) => {
     const actor = admin(req);
-    await settings.patchCwRmm(actor.orgId, { options: cwRmmSyncOptionsSchema.parse(req.body) });
+    const options = cwRmmSyncOptionsSchema.parse(req.body);
+    await settings.patchCwRmm(actor.orgId, { options });
+    // Tickets switched off leave the dashboard at once, rather than staying frozen at the last sync.
+    if (!options.tickets) await clearTickets(db, actor.orgId);
     return settings.cwRmmView(actor.orgId);
   });
   app.post('/api/integrations/cw-rmm/sync', authed, async (req, reply) => {

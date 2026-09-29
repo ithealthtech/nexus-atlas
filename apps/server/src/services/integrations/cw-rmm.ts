@@ -22,6 +22,8 @@ const SCOPES = 'platform.companies.read platform.sites.read platform.devices.rea
 /** Tickets get their own token, so a key without ticket access still syncs devices. */
 export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
 const RETRY_MS = 2000;
+/** The code on errors that mean the key can't sign in or lacks a permission: no other request shape will help. */
+export const ACCESS_DENIED = 'cw_access_denied';
 // Five attempts at this length, plus the lead-in and the company prefix, fit an import job message (800 characters).
 const ATTEMPT_CHARS = 100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -523,11 +525,13 @@ export class CwRmmClient {
       throw new HttpError(
         400,
         `ConnectWise RMM rejected the client ID or secret, or the key is missing a scope.${await detail(res)}`,
+        ACCESS_DENIED,
       );
     if (res.status === 423)
       throw new HttpError(
         502,
         'ConnectWise RMM has temporarily locked this API key after too many sign-ins. Wait a few minutes, then sync again.',
+        ACCESS_DENIED,
       );
     if (!res.ok) throw new HttpError(502, `ConnectWise RMM returned ${res.status} when signing in.${await detail(res)}`);
     const body = (await res.json()) as Json;
@@ -562,6 +566,7 @@ export class CwRmmClient {
       throw new HttpError(
         400,
         `ConnectWise RMM refused ${where}. Check the key's scopes in API Access.${await detail(res)}`,
+        ACCESS_DENIED,
       );
     if (!res.ok)
       throw new HttpError(

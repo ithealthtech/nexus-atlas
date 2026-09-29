@@ -3,7 +3,7 @@ import { schema, type Database } from '@atlas/db';
 import { HttpError } from '../../errors.js';
 import type { ImportRun } from '../importers/common.js';
 import type { StoredCwRmm } from '../settings.js';
-import { listOf, pick, shapeOf, text, type CwRmmClient } from './cw-rmm.js';
+import { ACCESS_DENIED, listOf, pick, shapeOf, text, type CwRmmClient } from './cw-rmm.js';
 
 type Json = Record<string, unknown>;
 
@@ -110,7 +110,9 @@ export class CwTicketReader {
           .filter((t): t is CwTicket => !!t)
           .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt)?.getTime() ?? 0) >= since);
       } catch (error) {
-        if (!(error instanceof HttpError && (error.status === 400 || error.status === 404))) throw error;
+        // A sign-in or permission failure isn't about the request shape: trying the others only signs in again.
+        if (!(error instanceof HttpError && (error.status === 400 || error.status === 404)) || error.code === ACCESS_DENIED)
+          throw error;
         if (error.status === 404) notFound++;
         const said = /ConnectWise said: (.*)$/.exec(error.message)?.[1] ?? error.message;
         tried.push(`${shape.label}: ${said.slice(0, 100)}`);
@@ -149,6 +151,11 @@ export class CwTicketReader {
   }
 }
 
+/** Deletes an organization's synced tickets, when ticket syncing is switched off or ConnectWise disconnected. */
+export async function clearTickets(db: Database, orgId: string) {
+  await db.delete(schema.tickets).where(and(eq(schema.tickets.orgId, orgId), eq(schema.tickets.source, TICKET_SOURCE)));
+}
+
 /**
  * Syncs the tickets of every linked company. Read-only: nothing is ever written to ConnectWise. Tickets a company
  * no longer returns are deleted, but only when that company was read; tickets of unlinked companies are deleted.
@@ -182,6 +189,13 @@ export async function runTicketSync(
     } catch (error) {
       run.count('tickets', 'failed');
       run.note(`Tickets for company ${companyId}: ${error instanceof HttpError ? error.message : 'could not be read.'}`);
+      // The key can't read tickets at all: the other companies would only sign in and fail again, and ConnectWise
+      // locks a key that signs in too often. Nothing is deleted, since nothing was read.
+      if (error instanceof HttpError && error.code === ACCESS_DENIED) {
+        const rest = linked.length - linked.findIndex(([c]) => c === companyId) - 1;
+        if (rest) run.note(`Tickets not read for the other ${rest} compan${rest === 1 ? 'y' : 'ies'}.`);
+        return;
+      }
       continue;
     }
     try {
