@@ -37,6 +37,8 @@ export class Notifier {
       settings: SettingsService;
       expirations: ExpirationService;
       audit: AuditService;
+      /** Daily breach checks for stored passwords. */
+      health?: { nightly(orgId: string): Promise<void> };
       publicOrigin: string;
       /** Local hour (0–23) after which the day's emails go out. */
       sendHour: number;
@@ -63,6 +65,7 @@ export class Notifier {
         const orgs = await this.db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs);
         for (const org of orgs) {
           await this.deps.audit.applyRetention(org.id);
+          await this.deps.health?.nightly(org.id).catch(() => undefined);
           await this.deps.audit.checkpoint(org.id);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
         }

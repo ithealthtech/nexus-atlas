@@ -35,6 +35,8 @@ import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
 import { registerEraseRoutes } from './routes/erase.js';
+import { registerPasswordHealthRoutes } from './routes/password-health.js';
+import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
 import { failInterruptedJobs } from './services/importers/common.js';
 import { ApiKeyService } from './services/api-keys.js';
@@ -62,6 +64,8 @@ export interface AppOptions {
   mailTransport?: MailTransport;
   /** Replaces fetch for Hudu imports (tests use a fake Hudu). */
   huduFetch?: typeof fetch;
+  /** Replaces fetch for breach checks (tests use a fake Have I Been Pwned). */
+  breachFetch?: typeof fetch;
   /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
   cwRmmFetch?: typeof fetch;
   /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
@@ -115,6 +119,7 @@ export async function buildApp({
   mailTransport = defaultTransport,
   huduFetch,
   cwRmmFetch,
+  breachFetch,
   domainLookup,
   updateFetch,
 }: AppOptions): Promise<FastifyInstance> {
@@ -515,7 +520,9 @@ export async function buildApp({
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
 
+  const health = new PasswordHealthService(db, vault, settings, breachFetch);
   const notifier = registerAdminRoutes(app, {
+    health,
     db,
     authed,
     recent,
@@ -540,6 +547,7 @@ export async function buildApp({
     backups,
     status: new StatusService(database, { config, keys, backups, settings, notifier, version: APP_VERSION }),
   });
+  registerPasswordHealthRoutes(app, { db, authed, recent, settings, health });
   registerEraseRoutes(app, { db, authed, recent, identity, settings, mail, backups, storage: files });
   registerUpdateRoutes(app, {
     db,
