@@ -186,6 +186,8 @@ describe('domain and SSL trackers', () => {
     const [{ id: orgId }] = (await t.handle.db.execute(sql`select id from orgs`)).rows as { id: string }[];
     const actor = await service.trackerActor(orgId);
     expect(actor?.name).toBe('Domain and SSL tracker');
+    // The same site entered twice gets one certificate, not two.
+    await asset(northline, domainLayout, 'https://northline.example/');
     const first = await service.run(actor!);
     expect(first.created).toBe(1);
     const second = await service.run(actor!);
@@ -193,6 +195,21 @@ describe('domain and SSL trackers', () => {
     const northlineCerts = (await owner.call('GET', `/api/trackers/items?kind=ssl&client=${northline}`)).data;
     expect(northlineCerts.map((c: { name: string }) => c.name)).toEqual(['northline.example', 'Wildcard']);
     expect(northlineCerts[1]).toMatchObject({ ok: false, detail: expect.stringMatching(/No host to check/) });
+    // A scheduled tick takes and releases its lock on one connection, so the next tick can run.
+    const { TrackerScheduler } = await import('../src/services/trackers.js');
+    const scheduler = new TrackerScheduler(
+      t.handle,
+      new SettingsService(t.handle.db, staticKeyProvider([Buffer.alloc(32)])),
+      service,
+      (e) => {
+        throw e;
+      },
+    );
+    await scheduler.tick();
+    const held = await t.handle.db.execute(
+      sql`select count(*)::int as n from pg_locks where locktype = 'advisory' and objid = 727278`,
+    );
+    expect((held.rows[0] as { n: number }).n).toBe(0);
     const activity = await t.handle.db.execute(
       sql`select author_name from revisions where version = 1 and author_name = 'Domain and SSL tracker'`,
     );

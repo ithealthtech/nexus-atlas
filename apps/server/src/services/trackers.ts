@@ -1,5 +1,5 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
-import { schema, type Database } from '@atlas/db';
+import { and, asc, eq, inArray } from 'drizzle-orm';
+import { schema, type Database, type DatabaseHandle } from '@atlas/db';
 import {
   TRACKER_SOON_DAYS,
   atLeast,
@@ -26,6 +26,8 @@ const PER_RUN = 40;
 /** How many lookups run at once. */
 const PARALLEL = 5;
 const MAX_ITEMS = 1000;
+/** Keeps two servers sharing a database from running the same checks. */
+const LOCK = 727278;
 const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 const today = () => new Date().toISOString().slice(0, 10);
@@ -306,6 +308,8 @@ export class TrackerService {
         !covered.has(`${r.clientId}:${certificateHost(r.name)}`) &&
         isDue(r, 'ssl')
       ) {
+        // Two Domains assets for the same host would otherwise each add a certificate.
+        covered.add(`${r.clientId}:${certificateHost(r.name)}`);
         limit--;
         jobs.push({ run: () => this.certificateFor(scope, assets, layouts, r, result) });
       }
@@ -438,7 +442,7 @@ export class TrackerScheduler {
   private running = false;
 
   constructor(
-    private readonly db: Database,
+    private readonly handle: DatabaseHandle,
     private readonly settings: SettingsService,
     private readonly trackers: TrackerService,
     private readonly log: (error: unknown) => void,
@@ -456,19 +460,22 @@ export class TrackerScheduler {
   async tick() {
     if (this.running) return;
     this.running = true;
+    // Advisory locks belong to one database session, so take and release it on one pooled connection.
+    const client = await this.handle.pool.connect();
     try {
-      const locked = await this.db.execute(sql`select pg_try_advisory_lock(727278) as ok`);
-      if (!(locked.rows[0] as { ok: boolean }).ok) return;
+      const { rows } = await client.query<{ ok: boolean }>('select pg_try_advisory_lock($1) as ok', [LOCK]);
+      if (!rows[0]!.ok) return;
       try {
-        for (const { id } of await this.db.select({ id: schema.orgs.id }).from(schema.orgs)) {
+        for (const { id } of await this.handle.db.select({ id: schema.orgs.id }).from(schema.orgs)) {
           if (!(await this.settings.trackers(id)).enabled) continue;
           const actor = await this.trackers.trackerActor(id);
           if (actor) await this.trackers.run(actor).catch(this.log);
         }
       } finally {
-        await this.db.execute(sql`select pg_advisory_unlock(727278)`);
+        await client.query('select pg_advisory_unlock($1)', [LOCK]).catch(() => undefined);
       }
     } finally {
+      client.release();
       this.running = false;
     }
   }

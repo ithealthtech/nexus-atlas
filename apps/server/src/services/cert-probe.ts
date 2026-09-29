@@ -131,38 +131,53 @@ export function certProbe(
     if (!addresses.length) throw new Error('The name does not resolve.');
     if (addresses.some((a) => !isPublicAddress(a.address)))
       throw new Error('The name resolves to a private address, which the tracker does not check.');
-    const address = addresses[0]!.address;
-    return new Promise<ServedCertificate>((resolve, reject) => {
-      const socket = connect({ host: address, port, servername: host, rejectUnauthorized: false, timeout: timeoutMs });
-      const fail = (message: string) => {
-        socket.destroy();
-        reject(new Error(message));
-      };
-      socket.once('timeout', () => fail('The server did not answer in time.'));
-      socket.once('error', (error: Error & { code?: string }) =>
-        fail(
-          error.code === 'ECONNREFUSED'
-            ? 'Nothing answers on port 443.'
-            : `The secure connection failed (${error.code ?? error.message}).`,
-        ),
-      );
-      socket.once('secureConnect', () => {
-        const cert = socket.getPeerCertificate();
-        const authorized = socket.authorized;
-        const problem = authorized ? '' : String(socket.authorizationError ?? '');
-        socket.end();
-        const expires = cert?.valid_to ? new Date(cert.valid_to) : null;
-        if (!cert || !expires || Number.isNaN(expires.getTime())) return fail('The server sent no certificate.');
-        resolve({
-          host,
-          expires: expires.toISOString().slice(0, 10),
-          issuer: issuerOf(cert),
-          commonName: name(cert.subject?.CN).toLowerCase(),
-          altNames: altNamesOf(cert),
-          trusted: authorized,
-          problem,
-        });
+    // Try each checked address in turn (an IPv6 address may be listed first where there's no IPv6 route).
+    let last: Error = new Error('The name does not resolve.');
+    for (const { address } of addresses.slice(0, 4)) {
+      try {
+        return await read(host, address, port, timeoutMs);
+      } catch (error) {
+        last = error as Error;
+        if (!(error as { retry?: boolean }).retry) break;
+      }
+    }
+    throw last;
+  };
+}
+
+/** One TLS handshake with one address. Connection failures are marked so the next address can be tried. */
+function read(host: string, address: string, port: number, timeoutMs: number) {
+  return new Promise<ServedCertificate>((resolve, reject) => {
+    const socket = connect({ host: address, port, servername: host, rejectUnauthorized: false, timeout: timeoutMs });
+    const fail = (message: string, retry = false) => {
+      socket.destroy();
+      reject(Object.assign(new Error(message), { retry }));
+    };
+    socket.once('timeout', () => fail('The server did not answer in time.', true));
+    socket.once('error', (error: Error & { code?: string }) =>
+      fail(
+        error.code === 'ECONNREFUSED'
+          ? 'Nothing answers on port 443.'
+          : `The secure connection failed (${error.code ?? error.message}).`,
+        true,
+      ),
+    );
+    socket.once('secureConnect', () => {
+      const cert = socket.getPeerCertificate();
+      const authorized = socket.authorized;
+      const problem = authorized ? '' : String(socket.authorizationError ?? '');
+      socket.end();
+      const expires = cert?.valid_to ? new Date(cert.valid_to) : null;
+      if (!cert || !expires || Number.isNaN(expires.getTime())) return fail('The server sent no certificate.');
+      resolve({
+        host,
+        expires: expires.toISOString().slice(0, 10),
+        issuer: issuerOf(cert),
+        commonName: name(cert.subject?.CN).toLowerCase(),
+        altNames: altNamesOf(cert),
+        trusted: authorized,
+        problem,
       });
     });
-  };
+  });
 }

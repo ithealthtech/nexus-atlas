@@ -632,7 +632,7 @@ export async function buildApp({
     cwRmm.start();
     const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
     m365.start();
-    const trackerSchedule = new TrackerScheduler(db, settings, trackers, (err) =>
+    const trackerSchedule = new TrackerScheduler(database, settings, trackers, (err) =>
       app.log.error({ err }, 'Domain and SSL tracker'),
     );
     trackerSchedule.start();
