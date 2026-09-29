@@ -37,6 +37,35 @@ Changes to access apply to people who are already signed in, straight away.
 - **Access history:** every reveal, copy, change, and share is recorded on the password and in **Security log → Vault access**.
 - **Sharing with the client:** ticking *Share with the client's own accounts* on an entry lets that client's own contacts see it, read-only.
 
+## Vault policies
+
+**Vault policies** holds the rules for the whole vault. Everyone who administers Atlas can see them; only the owner can change them.
+
+- **MFA:** staff must set up MFA before they can do anything (the server's `ATLAS_REQUIRE_STAFF_MFA`). The page lists every active account that can reach passwords without it, such as client accounts.
+- **Generator:** the shortest password the generator makes, whether it always includes numbers or symbols, and whether it offers PINs.
+- **Reasons everywhere:** *Require a reason for every reveal, copy, and share* applies to every client, on top of each client's own setting.
+- **Read-only accounts:** *Don't let read-only accounts reveal passwords* stops client viewers revealing or copying the passwords shared with them. They still see which ones are shared.
+- **Restricted means listed:** with *Restricted passwords are for the people listed on them*, administrators need a place on an entry's list like everyone else. The owner always has access. An administrator who restricts an entry is listed on it automatically.
+
+### Emergency access
+
+For when the owner can't be reached and a restricted password is needed.
+
+1. The owner adds trusted administrators under **Emergency access**, each with a wait (one hour to a week).
+2. A trusted administrator requests access and says why. The owner is emailed at once.
+3. During the wait the owner can **Deny** it, or **Approve now**. Otherwise access starts when the wait ends, and everyone involved is emailed.
+4. Access covers every restricted password for 24 hours. The owner can end it early, and removing the administrator from the list ends it too.
+
+Each step is in the security log, and each password used this way says *Emergency access* in its access history. It only matters once *Restricted passwords are for the people listed on them* is on; before that, administrators already see restricted passwords.
+
+### Streaming logs to a SIEM
+
+**Stream logs to a SIEM** sends new security events and password access as they happen, about every 30 seconds.
+
+- **HTTPS webhook:** each batch is POSTed as `{ "events": [...] }`. With a signing secret, the `X-Atlas-Signature` header is `sha256=` and the HMAC-SHA256 of the body, in hex. Redirects count as failures.
+- **Syslog:** RFC 5424 lines (facility *log audit*) with the event as JSON, over TLS (recommended), TCP with octet counting, or UDP.
+- **What's sent:** streaming starts with what happens after you turn it on. If the SIEM can't be reached, Atlas records the error on the page and tries again from the same place, so nothing is skipped. **Send a test event** checks the connection without sending real events.
+
 ## Keeping Atlas healthy
 
 Check **System status** every week or so. It shows:

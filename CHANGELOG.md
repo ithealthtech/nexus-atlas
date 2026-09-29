@@ -2,6 +2,14 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Vault policies:** a new Administration → Vault policies page. It shows that MFA is required for staff and lists anyone who can reach passwords without it. The owner can set the password generator's minimum length and required numbers or symbols (and turn off PINs), require a reason for every reveal in every client, stop read-only accounts from revealing passwords, and make restricted passwords available only to the people listed on them, administrators included. (#35)
+- **Emergency access:** the owner names trusted administrators, each with a waiting period. A trusted administrator can request access to every restricted password; the owner is emailed at once and can deny it during the wait or approve it sooner. Access lasts 24 hours, every step is in the security log, and each password used is marked "Emergency access" in its access history. (#35)
+- **SIEM streaming:** send the security log and the password access log to a SIEM as they happen, by HTTPS webhook (JSON, optionally HMAC-signed) or syslog (RFC 5424 over TLS, TCP, or UDP). Failed sends are retried from where they stopped. (#35)
+
 ## [1.6.0] - 2026-09-29
 
 ### Added

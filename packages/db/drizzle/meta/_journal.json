@@ -134,6 +134,13 @@
       "when": 1790717760651,
       "tag": "0018_rmm_health",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790721081886,
+      "tag": "0019_vault_policies",
+      "breakpoints": true
     }
   ]
 }

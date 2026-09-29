@@ -8,6 +8,7 @@ import { staticKeyProvider, type KeyProvider } from '../src/crypto/keys.js';
 import { totp } from '../src/identity/totp.js';
 import type { SendArgs } from '../src/services/mail.js';
 import type { DomainLookup } from '../src/services/domain-lookup.js';
+import type { SiemSender } from '../src/services/siem.js';
 
 export const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5432/postgres';
 export const SETUP_CODE = 'test-setup-code-123';
@@ -62,6 +63,7 @@ export async function startApp(
     entraFetch?: typeof fetch;
     domainLookup?: DomainLookup;
     updateFetch?: typeof fetch;
+    siemSender?: SiemSender;
     keys?: KeyProvider;
     /** An existing database (for example one a backup was restored into) instead of a fresh one. */
     database?: Awaited<ReturnType<typeof freshDatabase>>;

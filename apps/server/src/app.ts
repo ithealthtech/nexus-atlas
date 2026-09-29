@@ -38,6 +38,9 @@ import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
 import { registerEntraRoutes } from './routes/entra.js';
 import { registerEraseRoutes } from './routes/erase.js';
+import { registerPolicyRoutes } from './routes/policies.js';
+import { EmergencyAccessService } from './services/emergency.js';
+import { SiemForwarder, defaultSender, type SiemSender } from './services/siem.js';
 import { EntraService } from './services/entra.js';
 import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
@@ -81,6 +84,8 @@ export interface AppOptions {
   domainLookup?: DomainLookup;
   /** Replaces fetch for the GitHub release check (tests use fake releases). */
   updateFetch?: typeof fetch;
+  /** Replaces SIEM delivery (tests capture events instead of sending them). */
+  siemSender?: SiemSender;
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
@@ -138,6 +143,7 @@ export async function buildApp({
   entraFetch,
   domainLookup,
   updateFetch,
+  siemSender,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     // The versioned REST API (/api/v1/…) serves the same routes as the app, authenticated by API key.
@@ -558,7 +564,19 @@ export async function buildApp({
   });
 
   const health = new PasswordHealthService(db, vault, settings, breachFetch);
+  const emergency = new EmergencyAccessService(db, mail, config.publicOrigin);
+  const siem = new SiemForwarder(db, settings, config.publicHost.replace(/:\d+$/, ''), siemSender ?? defaultSender());
+  registerPolicyRoutes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    emergency,
+    siem,
+    requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA,
+  });
   const notifier = registerAdminRoutes(app, {
+    emergency,
     health,
     db,
     authed,
@@ -615,6 +633,7 @@ export async function buildApp({
     const interrupted = await failInterruptedJobs(db);
     if (interrupted) app.log.warn({ interrupted }, 'Imports stopped by the restart were marked as stopped');
     notifier.start();
+    siem.start();
     backups.start();
     const cwRmm = new CwRmmScheduler(db, settings, (err) => app.log.error({ err }, 'ConnectWise RMM sync'), cwRmmFetch);
     cwRmm.start();
@@ -622,6 +641,7 @@ export async function buildApp({
     m365.start();
     app.addHook('onClose', async () => {
       notifier.stop();
+      siem.stop();
       backups.stop();
       cwRmm.stop();
       m365.stop();

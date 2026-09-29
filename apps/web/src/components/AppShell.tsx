@@ -9,6 +9,7 @@ import {
   Gauge,
   BookOpen,
   KeyRound,
+  LockKeyhole,
   Building2,
   ChevronsUpDown,
   LayoutDashboard,
@@ -186,6 +187,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
             <NavLink to="/admin/groups" icon={UsersRound} label="Groups" onNavigate={onNavigate} />
             <NavLink to="/admin/layouts" icon={LayoutTemplate} label="Asset layouts" onNavigate={onNavigate} />
             <NavLink to="/admin/security" icon={ScrollText} label="Security log" onNavigate={onNavigate} />
+            <NavLink to="/admin/vault-policies" icon={LockKeyhole} label="Vault policies" onNavigate={onNavigate} />
             <NavLink to="/admin/data" icon={ArrowDownUp} label="Import & export" onNavigate={onNavigate} />
             <NavLink to="/admin/duplicates" icon={CopyCheck} label="Duplicates" onNavigate={onNavigate} />
             <NavLink to="/admin/status" icon={Gauge} label="System status" onNavigate={onNavigate} />

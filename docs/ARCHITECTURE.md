@@ -34,9 +34,11 @@
   - `npm run rewrap-keys` re-encrypts data keys under a new master key.
 - **Reuse detection:** a keyed HMAC of each secret (the key is derived from the organization's first data key) lets Atlas spot the same password used twice without storing anything reversible. Strength is a rough score used for guidance only.
 - **Access:**
-  - Vault entries need `edit_passwords` on their client. Restricted entries also need an administrator or a place on the entry's allow-list. Everyone else gets 404.
+  - Vault entries need `edit_passwords` on their client. Restricted entries also need a place on the entry's allow-list, or access to every restricted entry (`Scope.restrictedAccess`): the owner always, administrators unless the *restricted means listed* policy is on, and a trusted administrator during emergency access. Everyone else gets 404.
+  - Vault policies live in `orgs.settings.vaultPolicy`; emergency access in `emergency_contacts` and `emergency_requests`, whose state follows from their timestamps, so access starts and ends on time without a background job.
   - Search and relationship lists apply the same rule, and match only names, usernames, and URLs, never secrets.
-- **Audit:** each reveal, copy, TOTP view, change, share, and restriction change goes into `vault_audit`, with the person, IP address, and optional reason. A client setting (`require_reveal_reason`) makes the reason mandatory.
+- **Audit:** each reveal, copy, TOTP view, change, share, and restriction change goes into `vault_audit`, with the person, IP address, and optional reason. A client setting (`require_reveal_reason`), or the organization's policy, makes the reason mandatory.
+- **SIEM streaming** (`services/siem.ts`): a cursor per log (the last row delivered) is kept in `orgs.settings.siem`; each pass sends rows after it in batches and moves it forward only after the SIEM accepts them.
 - **Share links:**
   - The browser reveals the secret (which is audited), encrypts it with a fresh AES-GCM key using WebCrypto, and uploads only the ciphertext.
   - The key goes in the link's `#fragment`, which browsers never send to the server. The server stores a hash of the link token.

@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql, type SQL } fro
 import { alias } from 'drizzle-orm/pg-core';
 import { schema, type Database } from '@atlas/db';
 import {
+  READ_ONLY_ROLES,
   ROLE_INFO,
   createPasswordSchema,
   guessPasswordCategory,
@@ -48,6 +49,7 @@ const REVEAL_ACTIONS = {
 // Audit actions that count as "using" a password, for Recently used (plus creating a share link).
 const USED_ACTIONS = ['Revealed password', 'Copied password', 'Viewed one-time code', 'Viewed notes'] as const;
 type Personal = { favorites: Set<string>; lastUsed: Map<string, string> };
+type Rules = { reasons: boolean; canReveal: boolean };
 
 export class VaultService {
   constructor(private readonly keys: VaultKeys) {}
@@ -88,13 +90,18 @@ export class VaultService {
       : [];
     // Anyone without vault access to the client, or outside a restricted item's list, gets the same 404.
     if (!row) throw notFound();
+    row.requireReason ||= (await scope.policy()).requireRevealReason;
     if (this.isPortal(scope)) {
       if (!portalOk || !row.p.clientVisible || row.p.restricted || (await scope.level(row.p.clientId)) === 'none')
         throw notFound();
       return row;
     }
     if ((await scope.level(row.p.clientId)) !== 'edit_passwords') throw notFound();
-    if (row.p.restricted && !this.isAdmin(scope) && !(await this.allowedRestricted(scope, [id])).has(id))
+    if (
+      row.p.restricted &&
+      (await scope.restrictedAccess()) === 'listed' &&
+      !(await this.allowedRestricted(scope, [id])).has(id)
+    )
       throw notFound();
     return row;
   }
@@ -164,6 +171,7 @@ export class VaultService {
 
   private view(
     r: { p: Row; clientName: string; requireReason: boolean; editor: string | null },
+    rules: Rules,
     reuse: Map<string, number>,
     links: Map<string, { id: string; name: string }[]> = new Map(),
     folders: Map<string, string> = new Map(),
@@ -194,7 +202,8 @@ export class VaultService {
       archived: r.p.archived,
       updatedAt: r.p.updatedAt.toISOString(),
       updatedByName: r.editor,
-      requireReason: r.requireReason,
+      requireReason: r.requireReason || rules.reasons,
+      canReveal: rules.canReveal,
       category: (r.p.category as PasswordCategory | null) ?? guessPasswordCategory(r.p.name, r.p.username, r.p.url),
       categoryGuessed: !r.p.category,
       linkedAssets: links.get(r.p.id) ?? [],
@@ -209,6 +218,16 @@ export class VaultService {
       folderName: r.p.folderId ? (folders.get(r.p.folderId) ?? null) : null,
       favorite: mine.favorites.has(r.p.id),
       lastUsedAt: mine.lastUsed.get(r.p.id) ?? null,
+    };
+  }
+
+  /** What the organization's vault policies mean for this actor. */
+  private async rules(scope: Scope): Promise<Rules> {
+    const policy = await scope.policy();
+    return {
+      reasons: policy.requireRevealReason,
+      // Read-only roles can't reveal anything when the organization blocks it.
+      canReveal: !(policy.blockReadOnlyReveal && READ_ONLY_ROLES.includes(scope.actor.role)),
     };
   }
 
@@ -365,7 +384,20 @@ export class VaultService {
     return { ok: true };
   }
 
-  private async audit(scope: Scope, row: Pick<Row, 'id' | 'clientId' | 'name'>, action: string, reason = '', ip = '') {
+  private async audit(
+    scope: Scope,
+    row: Pick<Row, 'id' | 'clientId' | 'name'> & { restricted?: boolean },
+    action: string,
+    reason = '',
+    ip = '',
+  ) {
+    // Using a restricted password the actor isn't listed on, through emergency access, says so in the log.
+    if (
+      row.restricted &&
+      (await scope.restrictedAccess()) === 'emergency' &&
+      !(await this.allowedRestricted(scope, [row.id])).has(row.id)
+    )
+      reason = reason ? `Emergency access: ${reason}` : 'Emergency access';
     await scope.db.insert(schema.vaultAudit).values({
       orgId: scope.actor.orgId,
       clientId: row.clientId,
@@ -407,12 +439,13 @@ export class VaultService {
       .where(and(...conditions))
       .orderBy(asc(sql`lower(${schema.passwords.name})`))
       .limit(5000);
-    const allowed = this.isAdmin(scope)
-      ? null
-      : await this.allowedRestricted(
-          scope,
-          rows.filter((r) => r.p.restricted).map((r) => r.p.id),
-        );
+    const allowed =
+      (await scope.restrictedAccess()) !== 'listed'
+        ? null
+        : await this.allowedRestricted(
+            scope,
+            rows.filter((r) => r.p.restricted).map((r) => r.p.id),
+          );
     const visible = rows.filter((r) => !r.p.restricted || !allowed || allowed.has(r.p.id));
     const reuse = await this.reuseCounts(
       scope,
@@ -430,7 +463,8 @@ export class VaultService {
       scope,
       visible.map((r) => r.p.id),
     );
-    return visible.map((r) => this.view(r, reuse, links, folders, mine));
+    const rules = await this.rules(scope);
+    return visible.map((r) => this.view(r, rules, reuse, links, folders, mine));
   }
 
   /** Portal: passwords shared with the client accounts of clients the actor can read. */
@@ -462,15 +496,18 @@ export class VaultService {
       scope,
       rows.map((r) => r.p),
     );
-    return rows.map((r) => this.view(r, new Map(), new Map(), folders));
+    const rules = await this.rules(scope);
+    return rows.map((r) => this.view(r, rules, new Map(), new Map(), folders));
   }
 
   async get(scope: Scope, id: string): Promise<PasswordView> {
     const row = await this.load(scope, id, true);
     const folders = await this.folderNames(scope, [row.p]);
-    if (this.isPortal(scope)) return this.view(row, new Map(), new Map(), folders);
+    const rules = await this.rules(scope);
+    if (this.isPortal(scope)) return this.view(row, rules, new Map(), new Map(), folders);
     return this.view(
       row,
+      rules,
       await this.reuseCounts(scope, [row.p]),
       await this.linkedAssets(scope, [row.p.id]),
       folders,
@@ -512,8 +549,11 @@ export class VaultService {
       createdBy: scope.actor.id,
       updatedBy: scope.actor.id,
     };
+    // Where restricted passwords are for listed people only, restricting one lists its author, so they keep it.
+    const listAuthor = body.restricted && (await scope.restrictedAccess()) === 'listed';
     await scope.db.transaction(async (tx) => {
       await tx.insert(schema.passwords).values(values);
+      if (listAuthor) await tx.insert(schema.passwordAccess).values({ passwordId: id, userId: scope.actor.id });
       await tx.insert(schema.vaultAudit).values({
         orgId: org,
         clientId,
@@ -575,6 +615,7 @@ export class VaultService {
       set.breachCheckedAt = null;
       set.changedAt = new Date();
     }
+    const listEditor = body.restricted === true && !p.restricted && (await scope.restrictedAccess()) === 'listed';
     const historyId = randomUUID();
     // The previous secret is re-sealed for its history row, bound to that row.
     const previous = changedSecret
@@ -587,6 +628,8 @@ export class VaultService {
         .where(and(eq(schema.passwords.id, id), eq(schema.passwords.version, p.version)))
         .returning({ id: schema.passwords.id });
       if (!updated.length) throw conflict();
+      if (listEditor)
+        await tx.insert(schema.passwordAccess).values({ passwordId: id, userId: scope.actor.id }).onConflictDoNothing();
       if (previous)
         await tx.insert(schema.passwordHistory).values({
           id: historyId,
@@ -695,8 +738,14 @@ export class VaultService {
     return out;
   }
 
+  private async requireReveal(scope: Scope) {
+    if (!(await this.rules(scope)).canReveal)
+      throw new HttpError(403, 'Your organization doesn’t let read-only accounts reveal passwords.', 'reveal_blocked');
+  }
+
   async reveal(scope: Scope, id: string, input: unknown, ip: string): Promise<RevealResult> {
     const { p, requireReason } = await this.load(scope, id, true);
+    await this.requireReveal(scope);
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
@@ -740,6 +789,7 @@ export class VaultService {
 
   async revealHistory(scope: Scope, id: string, historyId: string, input: unknown, ip: string): Promise<RevealResult> {
     const { p, requireReason } = await this.load(scope, id);
+    await this.requireReveal(scope);
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
@@ -855,6 +905,14 @@ export class VaultService {
       .select()
       .from(schema.passwords)
       .where(and(eq(schema.passwords.orgId, org), eq(schema.passwords.clientId, clientId)));
+    // Restricted passwords the administrator may not use stay out of the export.
+    const allowed =
+      (await scope.restrictedAccess()) === 'listed'
+        ? await this.allowedRestricted(
+            scope,
+            rows.filter((p) => p.restricted).map((p) => p.id),
+          )
+        : null;
     const out: {
       id: string;
       secret: string;
@@ -863,6 +921,7 @@ export class VaultService {
       customFields: { label: string; secret: boolean; value: string }[];
     }[] = [];
     for (const p of rows) {
+      if (p.restricted && allowed && !allowed.has(p.id)) continue;
       out.push({
         id: p.id,
         secret: await this.keys.open(org, p.secret, aad(p.id, 'secret')),
@@ -937,6 +996,7 @@ export class VaultService {
     ip: string,
   ): Promise<{ id: string; token: string; expiresAt: string }> {
     const { p, requireReason } = await this.load(scope, id);
+    await this.requireReveal(scope);
     const body = shareSchema.parse(input);
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before sharing passwords.', 'reason_required');
