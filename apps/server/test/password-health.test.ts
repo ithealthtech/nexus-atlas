@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
+import { VaultKeys } from '../src/crypto/vault-keys.js';
+import { staticKeyProvider } from '../src/crypto/keys.js';
+import { PasswordHealthService } from '../src/services/password-health.js';
+import { SettingsService } from '../src/services/settings.js';
+import { VaultService } from '../src/services/vault.js';
 import { setupOwner, startApp, type Browser, type TestApp } from './helpers.js';
 
 const BREACHED = 'Summer2024!Password';
@@ -27,10 +33,12 @@ describe('password health', () => {
   let owner: Browser;
   let harbor: string;
   let pwned: ReturnType<typeof fakePwned>;
+  let masterKeys: ReturnType<typeof staticKeyProvider>;
 
   beforeEach(async () => {
     pwned = fakePwned();
-    t = await startApp({}, { breachFetch: pwned.fetcher });
+    masterKeys = staticKeyProvider([randomBytes(32)]);
+    t = await startApp({}, { breachFetch: pwned.fetcher, keys: masterKeys });
     owner = (await setupOwner(t.app)).b;
     harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
   });
@@ -83,6 +91,36 @@ describe('password health', () => {
     const after = (await owner.call('GET', '/api/password-health')).data;
     expect(after.counts.breached).toBe(0);
     expect(after.breach.unchecked).toBe(1);
+  });
+
+  it('checks a new or changed password on the next background pass, without waiting for the daily one', async () => {
+    const db = t.handle.db;
+    const health = new PasswordHealthService(
+      db,
+      new VaultService(new VaultKeys(db, masterKeys)),
+      new SettingsService(db, masterKeys),
+      pwned.fetcher,
+    );
+    const org = ((await db.execute(sql`select id from orgs`)).rows[0] as { id: string }).id;
+    const leaked = (await add('Old portal', BREACHED)).data;
+    await health.nightly(org);
+    const count = async () =>
+      (await db.execute(sql`select breach_count from passwords where id = ${leaked.id}`)).rows[0] as {
+        breach_count: number | null;
+      };
+    expect(await count()).toEqual({ breach_count: 52133 });
+
+    // The daily run has happened, so the full re-check is skipped; a changed password is still picked up.
+    pwned.state.urls.length = 0;
+    await owner.call('PATCH', `/api/passwords/${leaked.id}`, {
+      version: leaked.version,
+      secret: 'a-brand-new-Secret-91!x',
+    });
+    expect(await count()).toEqual({ breach_count: null });
+    await health.nightly(org);
+    expect(await count()).toEqual({ breach_count: 0 });
+    // Only the changed one was looked up; nothing already checked was asked about again.
+    expect(pwned.state.urls).toHaveLength(1);
   });
 
   it('can be turned off, and copes with no internet', async () => {

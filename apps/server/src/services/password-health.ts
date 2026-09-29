@@ -26,8 +26,12 @@ export class PasswordHealthService {
   ) {}
 
   /** Checks logins never checked (or not for 30 days). Returns how many were checked and whether it stopped early. */
-  async checkBreaches(orgId: string, limit = BATCH): Promise<{ checked: number; failed: boolean }> {
-    const todo = await this.vault.secretsToCheck(this.db, orgId, limit);
+  async checkBreaches(
+    orgId: string,
+    limit = BATCH,
+    newOnly = false,
+  ): Promise<{ checked: number; failed: boolean }> {
+    const todo = await this.vault.secretsToCheck(this.db, orgId, limit, newOnly ? null : 30);
     // Passwords sharing a hash prefix share one request.
     const byPrefix = new Map<string, { id: string; suffix: string }[]>();
     for (const { id, secret } of todo) {
@@ -67,10 +71,19 @@ export class PasswordHealthService {
     return (await this.settings.passwordHealth(orgId)).breachChecks;
   }
 
-  /** Called by the background loop: about once a day per organization, and only when checks are on. */
+  /**
+   * Called by the background loop, only when checks are on: new and changed passwords on every pass, and the
+   * re-check of older results about once a day per organization.
+   */
   async nightly(orgId: string, now = Date.now()) {
     const s = await this.settings.passwordHealth(orgId);
     if (!s.breachChecks) return;
+    // New and changed passwords are checked on every pass (about every ten minutes), so a change shows up soon.
+    for (let round = 0; round < 3; round++) {
+      const { checked, failed } = await this.checkBreaches(orgId, BATCH, true);
+      if (failed || checked < BATCH) break;
+    }
+    // The re-check of older results happens about once a day.
     if (s.lastRunAt && now - Date.parse(s.lastRunAt) < 20 * 3_600_000) return;
     // Everything due, a batch at a time.
     for (let round = 0; round < 10; round++) {
