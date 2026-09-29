@@ -211,6 +211,67 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(page.getByRole('link', { name: /Internet outage response/ })).toBeVisible();
   });
 
+  test('owner stars a client, leaves a quick note, and arranges their dashboard', async ({ page }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .first()
+      .click();
+    const sections = page.getByRole('navigation', { name: 'Client sections' });
+    await expect(sections.getByRole('link', { name: 'Assets (1)' })).toBeVisible();
+    // The overview header shows every field, empty or not.
+    await expect(page.getByText('Maintenance window')).toBeVisible();
+    await expect(page.getByText('Not set').first()).toBeVisible();
+
+    await page.getByRole('button', { name: 'Add Harbor Dental Group to favorites' }).click();
+    await expect(page.getByRole('button', { name: 'Remove Harbor Dental Group from favorites' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Add a quick note for technicians' }).click();
+    await page.getByLabel('Quick note').fill('Call the office manager before touching the firewall.');
+    await page.getByRole('button', { name: 'Save note' }).click();
+    await expect(page.getByText('Call the office manager before touching the firewall.')).toBeVisible();
+    await expect(page.getByText(/Edited .* by Avery Owner · Version 1/)).toBeVisible();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByLabel('Quick note').fill('Call Dana before touching the firewall.');
+    await page.getByRole('button', { name: 'Save note' }).click();
+    await expect(page.getByText(/Version 2/)).toBeVisible();
+    await page.getByRole('button', { name: 'History' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Compare' }).click();
+    await expect(page.getByText('+ Call Dana before touching the firewall.')).toBeVisible();
+    await accessible(page);
+    await page.getByRole('button', { name: /Restore version 1/ }).click();
+    await expect(page.getByText(/Version 3/)).toBeVisible();
+
+    // Hide a section, then bring it back.
+    await page.getByRole('button', { name: 'Choose which sections show' }).click();
+    await page.getByRole('dialog').getByLabel('Map').uncheck();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+    await expect(sections.getByRole('link', { name: 'Map' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Choose which sections show' }).click();
+    await page.getByRole('dialog').getByLabel('Map').check();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+    await expect(sections.getByRole('link', { name: 'Map' })).toBeVisible();
+
+    await nav(page, 'Dashboard');
+    const favorites = page.getByRole('region', { name: 'Clients' });
+    await expect(favorites.getByRole('link', { name: /Harbor Dental Group/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Customize' }).click();
+    const dialog = page.getByRole('dialog');
+    await accessible(page);
+    await dialog.getByRole('checkbox', { name: /Recent activity/ }).uncheck();
+    await dialog.getByRole('button', { name: 'Move Favorites down' }).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('heading', { name: 'Recent activity' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Favorites' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Recent activity' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Customize' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Reset to default' }).click();
+    await expect(page.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
+  });
+
   test('admin adds a custom asset layout and writes an MSP knowledge-base article', async ({ page }) => {
     watch(page);
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);

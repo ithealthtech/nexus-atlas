@@ -175,6 +175,8 @@ export interface ExpirationItem {
   title: string;
   /** What expires, for example "SSL certificate · Expires" or "Password rotation". */
   label: string;
+  /** For assets, the layout's key (for example "domain" or "ssl_certificate"). */
+  layoutKey?: string;
   clientId: string | null;
   clientName: string | null;
   date: string;

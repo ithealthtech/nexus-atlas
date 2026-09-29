@@ -1,6 +1,6 @@
 import { AppLink } from '@/components/AppLink';
 import { useParams } from '@tanstack/react-router';
-import { BookOpen, Mail, MapPin, Phone, User } from 'lucide-react';
+import { BookOpen, Clock, Mail, MapPin, Phone, User, Wrench } from 'lucide-react';
 import { DOCUMENT_STATUS_LABELS } from '@atlas/shared';
 import { Card, CardHeader } from '@/components/ui';
 import { ActivityFeed } from '@/components/panels';
@@ -18,6 +18,8 @@ export function ClientOverview() {
   const docs = useDocuments({ client: clientId }).data ?? [];
   const contact = useContacts(clientId).data?.find((c) => c.primary);
   const location = useLocations(clientId).data?.find((l) => l.primary);
+  // The primary contact's number, else the primary location's main line.
+  const phone = contact?.phone || contact?.mobile || location?.phone;
   const activity = useActivity({ client: clientId, limit: '8' }).data;
   const counts = layouts
     .map((l) => ({ ...l, count: assets.filter((a) => a.layoutId === l.id).length }))
@@ -25,12 +27,42 @@ export function ClientOverview() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-6">
-        {client?.notes && (
-          <Card className="border-warning/40 bg-warning-soft/40 px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap text-text-2">
-            <p className="mb-1 text-xs font-bold tracking-wide text-warning uppercase">Quick notes</p>
-            {client.notes}
-          </Card>
-        )}
+        <Card>
+          {/* Every field shows, even when empty, so the gaps are easy to spot and fill. */}
+          <dl className="grid gap-x-6 gap-y-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                label: 'Primary contact',
+                icon: User,
+                value: contact && (
+                  <AppLink to={`/clients/${clientId}/contacts`} className="hover:underline">
+                    {contact.name}
+                  </AppLink>
+                ),
+              },
+              {
+                label: 'Phone',
+                icon: Phone,
+                value: phone && (
+                  <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="text-primary hover:underline">
+                    {phone}
+                  </a>
+                ),
+              },
+              { label: 'Hours of operation', icon: Clock, value: client?.hours },
+              { label: 'Maintenance window', icon: Wrench, value: client?.maintenanceWindow },
+            ].map((f) => (
+              <div key={f.label} className="min-w-0">
+                <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                  <f.icon className="size-3.5" aria-hidden /> {f.label}
+                </dt>
+                <dd className="mt-1 truncate text-sm font-medium">
+                  {f.value || <span className="font-normal text-muted">Not set</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
         <Card>
           <CardHeader
             title="Assets"
@@ -63,7 +95,11 @@ export function ClientOverview() {
             </div>
           ) : (
             <p className="px-5 py-4 text-sm text-muted">
-              No assets yet. Start with the firewall, servers, and the internet circuit.
+              No assets yet.{' '}
+              <AppLink to={`/clients/${clientId}/assets`} className="text-primary underline underline-offset-2">
+                Start with the firewall
+              </AppLink>
+              , servers, and the internet circuit.
             </p>
           )}
         </Card>
@@ -98,7 +134,13 @@ export function ClientOverview() {
                 ))}
             </ul>
           ) : (
-            <p className="px-5 py-4 text-sm text-muted">No documents yet.</p>
+            <p className="px-5 py-4 text-sm text-muted">
+              No documents yet.{' '}
+              <AppLink to={`/clients/${clientId}/documents`} className="text-primary underline underline-offset-2">
+                Write a runbook
+              </AppLink>{' '}
+              for this client.
+            </p>
           )}
         </Card>
       </div>
@@ -153,7 +195,12 @@ export function ClientOverview() {
               </p>
             </div>
           ) : (
-            <p className="px-5 py-4 text-sm text-muted">No primary location yet.</p>
+            <p className="px-5 py-4 text-sm text-muted">
+              <AppLink to={`/clients/${clientId}/locations`} className="text-primary underline underline-offset-2">
+                Add locations
+              </AppLink>{' '}
+              and mark one as primary.
+            </p>
           )}
         </Card>
         <Card>

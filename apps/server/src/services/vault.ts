@@ -380,8 +380,12 @@ export class VaultService {
   }
 
   // ---------- list and read ----------
-  async list(scope: Scope, filter: { clientId?: string; archived?: boolean }): Promise<PasswordView[]> {
-    if (this.isPortal(scope)) return this.portalList(scope, filter.clientId);
+  async list(
+    scope: Scope,
+    filter: { clientId?: string; archived?: boolean; favorites?: boolean },
+  ): Promise<PasswordView[]> {
+    if (this.isPortal(scope))
+      return (await this.portalList(scope, filter.clientId)).filter((p) => !filter.favorites || p.favorite);
     let ids = await this.vaultClients(scope);
     if (filter.clientId) {
       const level = await scope.require(filter.clientId, 'read', 'Client');
@@ -394,6 +398,16 @@ export class VaultService {
       inArray(schema.passwords.clientId, ids),
       eq(schema.passwords.archived, !!filter.archived),
     ];
+    if (filter.favorites)
+      conditions.push(
+        inArray(
+          schema.passwords.id,
+          scope.db
+            .select({ id: schema.passwordFavorites.passwordId })
+            .from(schema.passwordFavorites)
+            .where(eq(schema.passwordFavorites.userId, scope.actor.id)),
+        ),
+      );
     const rows = await scope.db
       .select({
         p: schema.passwords,

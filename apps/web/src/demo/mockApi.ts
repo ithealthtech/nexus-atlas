@@ -6,6 +6,7 @@ import {
   ROLE_INFO,
   guessPasswordCategory,
   passwordStrength,
+  resolveWorkspace,
   type PasswordCategory,
   type AccessLevel,
   type ActivityView,
@@ -450,6 +451,7 @@ function expirations(days: number): ExpirationItem[] {
           id: a.id,
           title: a.name,
           label: `${l.name} · ${f.label}`,
+          layoutKey: l.key,
           clientId: a.clientId,
           clientName: clientName(a.clientId),
           date: v,
@@ -672,6 +674,11 @@ on('POST', '/clients', (_m, b) => {
     type: String(b.type || 'Customer'),
     status: 'active' as const,
     notes: String(b.notes ?? ''),
+    notesVersion: b.notes ? 1 : 0,
+    notesUpdatedAt: b.notes ? now() : null,
+    notesUpdatedByName: b.notes ? db.owner.name : null,
+    hours: String(b.hours ?? ''),
+    maintenanceWindow: String(b.maintenanceWindow ?? ''),
     requireRevealReason: false,
     createdAt: now(),
     updatedAt: now(),
@@ -684,7 +691,17 @@ on('POST', '/clients', (_m, b) => {
 on('GET', '/clients/:id', (m) => clientSummary(find(db.clients, m[1]!, 'Client')));
 on('PATCH', '/clients/:id', (m, b) => {
   const c = find(db.clients, m[1]!, 'Client');
-  Object.assign(c, b, { updatedAt: now() });
+  const { notesVersion, ...rest } = b;
+  if (rest.notes !== undefined && rest.notes !== c.notes) {
+    if (notesVersion !== undefined && notesVersion !== c.notesVersion)
+      throw new MockError(409, 'Someone else changed these notes. Reload to see their changes before saving.');
+    if (!revisions.has(`notes:${c.id}`) && c.notesVersion)
+      snapshot(`notes:${c.id}`, c.notesVersion, { notes: c.notes });
+    Object.assign(c, { notesVersion: c.notesVersion + 1, notesUpdatedAt: now(), notesUpdatedByName: db.owner.name });
+    snapshot(`notes:${c.id}`, c.notesVersion, { notes: String(rest.notes) });
+    record('Updated quick notes of', 'client', c.id, c.name, c.id);
+  }
+  Object.assign(c, rest, { updatedAt: now() });
   return clientSummary(c);
 });
 
@@ -1646,6 +1663,11 @@ on('POST', '/import/csv', (_m, b) => {
       type: r.type || 'Customer',
       status: 'active' as const,
       notes: r.notes ?? '',
+      notesVersion: 0,
+      notesUpdatedAt: null,
+      notesUpdatedByName: null,
+      hours: '',
+      maintenanceWindow: '',
       requireRevealReason: false,
       createdAt: now(),
       updatedAt: now(),
@@ -1931,6 +1953,101 @@ on('DELETE', '/checklist-runs/:id', (m) => {
   );
   return { ok: true };
 });
+
+// personal workspace: favorites, dashboard cards, section counts, quick notes history
+const starred: { type: 'client' | 'document' | 'asset'; id: string }[] = [];
+let workspace: Json = {};
+const favoriteTarget = (type: string, id: string) => {
+  const item =
+    type === 'client'
+      ? db.clients.find((c) => c.id === id)
+      : type === 'document'
+        ? documents.find((d) => d.id === id)
+        : type === 'asset'
+          ? assets.find((a) => a.id === id)
+          : undefined;
+  if (!item) throw new MockError(404, 'Not found.');
+  return item;
+};
+on('GET', '/favorites', () => [
+  ...starred.flatMap(({ type, id }): Json[] => {
+    if (type === 'client') {
+      const c = db.clients.find((x) => x.id === id);
+      return c ? [{ type, id, name: c.name, clientId: null, clientName: null }] : [];
+    }
+    if (type === 'document') {
+      const d = documents.find((x) => x.id === id && !x.archived);
+      return d ? [{ type, id, name: d.title, clientId: d.clientId, clientName: clientName(d.clientId) }] : [];
+    }
+    const a = assets.find((x) => x.id === id && !x.archived);
+    return a ? [{ type, id, name: a.name, clientId: a.clientId, clientName: clientName(a.clientId) }] : [];
+  }),
+  ...passwords
+    .filter((p) => favorites.has(p.id) && !p.archived)
+    .map((p) => ({
+      type: 'password',
+      id: p.id,
+      name: p.name,
+      clientId: p.clientId,
+      clientName: clientName(p.clientId),
+    })),
+]);
+on('PUT', '/favorites/:type/:id', (m) => {
+  favoriteTarget(m[1]!, m[2]!);
+  if (!starred.some((s) => s.type === m[1] && s.id === m[2]))
+    starred.push({ type: m[1] as 'client' | 'document' | 'asset', id: m[2]! });
+  return { favorite: true };
+});
+on('DELETE', '/favorites/:type/:id', (m) => {
+  const i = starred.findIndex((s) => s.type === m[1] && s.id === m[2]);
+  if (i >= 0) starred.splice(i, 1);
+  return { favorite: false };
+});
+on('GET', '/account/workspace', () => resolveWorkspace(workspace));
+on('PUT', '/account/workspace', (_m, b) => {
+  workspace = b;
+  return resolveWorkspace(workspace);
+});
+on('DELETE', '/account/workspace', () => {
+  workspace = {};
+  return resolveWorkspace(workspace);
+});
+on('GET', '/workspace/clients/:id/counts', (m) => {
+  const id = find(db.clients, m[1]!, 'Client').id;
+  return {
+    assets: assets.filter((a) => a.clientId === id && !a.archived).length,
+    documents: documents.filter((d) => d.clientId === id && !d.archived).length,
+    passwords: passwords.filter((p) => p.clientId === id && !p.archived).length,
+    contacts: contacts.filter((c) => c.clientId === id).length,
+    locations: locations.filter((l) => l.clientId === id).length,
+    checklists: checklists.filter((c) => c.clientId === id && !c.archived).length,
+  };
+});
+const notesHistory = (id: string) => {
+  const c = find(db.clients, id, 'Client');
+  if (!revisions.has(`notes:${id}`) && c.notesVersion) snapshot(`notes:${id}`, c.notesVersion, { notes: c.notes });
+  return revisions.get(`notes:${id}`) ?? [];
+};
+on('GET', '/clients/:id/notes/revisions', (m) =>
+  [...notesHistory(m[1]!)].reverse().map(({ version, authorName, createdAt }) => ({ version, authorName, createdAt })),
+);
+on('GET', '/clients/:id/notes/revisions/:version', (m) => {
+  const r = notesHistory(m[1]!).find((x) => x.version === Number(m[2]));
+  if (!r) throw new MockError(404, 'That version was not found.');
+  return r.snapshot;
+});
+on('POST', '/clients/:id/notes/restore', (m, b) => {
+  const r = notesHistory(m[1]!).find((x) => x.version === Number(b.version));
+  if (!r) throw new MockError(404, 'That version was not found.');
+  return mockRequestSync('PATCH', `/clients/${m[1]}`, { notes: r.snapshot.notes, notesVersion: b.expectedVersion });
+});
+const mockRequestSync = (method: string, path: string, body: Json) => {
+  for (const [m, pattern, handler] of routes) {
+    const match = m === method && path.match(pattern);
+    if (match) return handler(match, body, new URLSearchParams());
+  }
+  throw new MockError(404, 'Not found.');
+};
 
 /** Answers an API request from memory, after a short delay so loading states show as they would for real. */
 export async function mockRequest(path: string, method: string, body: unknown): Promise<unknown> {
