@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.5.2] - 2026-09-29
+
+### Fixed
+
+- **Sign in with Microsoft:** the page Atlas redirects to after returning from Microsoft no longer fails with "Cross-site requests are not allowed."; cross-site requests are still refused for API paths. (#90)
+
 ## [1.5.1] - 2026-09-29
 
 ### Fixed
