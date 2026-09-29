@@ -903,3 +903,33 @@ export const rmmHealthSnapshots = pgTable(
   },
   (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('rmm_health_snapshots_day').on(t.orgId, t.day)],
 );
+
+/**
+ * The domain and SSL trackers' last check of each Domains or SSL certificates asset: when it ran, whether it
+ * worked, and what it found. The dates themselves are saved on the asset, so Expirations and alerts see them.
+ */
+export const trackerChecks = pgTable(
+  'tracker_checks',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    host: text('host').notNull(),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+    ok: boolean('ok').notNull(),
+    /** What went wrong, or a short note of what was found. */
+    detail: text('detail').notNull().default(''),
+  },
+  (t) => [
+    primaryKey({ columns: [t.assetId, t.kind] }),
+    index('tracker_checks_due').on(t.orgId, t.kind, t.checkedAt),
+    check('tracker_checks_kind_check', sql`${t.kind} in ('domain','ssl')`),
+  ],
+);

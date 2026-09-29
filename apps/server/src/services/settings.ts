@@ -24,6 +24,8 @@ import {
   type RmmHealthSettings,
   warrantySettingsSchema,
   type WarrantySettings,
+  trackerSettingsSchema,
+  type TrackerSettings,
   smtpSettingsSchema,
   type MailMethod,
   type NotificationSettings,
@@ -69,6 +71,7 @@ interface StoredSettings {
   entra?: StoredEntra;
   rmmHealth?: RmmHealthSettings;
   warranty?: WarrantySettings;
+  trackers?: TrackerSettings;
   m365?: StoredM365;
 }
 export interface StoredEntra {
@@ -270,6 +273,16 @@ export class SettingsService {
   async saveWarranty(orgId: string, input: unknown): Promise<WarrantySettings> {
     const body = warrantySettingsSchema.parse(input);
     await this.put(orgId, 'warranty', body);
+    return body;
+  }
+
+  async trackers(orgId: string): Promise<TrackerSettings> {
+    return trackerSettingsSchema.parse((await this.load(orgId)).trackers ?? {});
+  }
+
+  async saveTrackers(orgId: string, input: unknown): Promise<TrackerSettings> {
+    const body = trackerSettingsSchema.parse(input);
+    await this.put(orgId, 'trackers', body);
     return body;
   }
 

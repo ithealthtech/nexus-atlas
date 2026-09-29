@@ -429,3 +429,56 @@ export interface EntraView {
   /** Add this as the app registration's Web redirect URI. */
   redirectUri: string;
 }
+
+// ---------- domain and SSL trackers ----------
+/** Scheduled re-checks of Domains assets (RDAP) and served certificates (TLS). Set per organization. */
+export const trackerSettingsSchema = z.object({
+  /** Check on a schedule; off leaves only "Check now". */
+  enabled: z.boolean().default(true),
+  /** Add an SSL certificates asset for a domain whose website serves a certificate and has none yet. */
+  createCertificates: z.boolean().default(true),
+});
+export type TrackerSettings = z.infer<typeof trackerSettingsSchema>;
+export const TRACKER_KINDS = ['domain', 'ssl'] as const;
+export type TrackerKind = (typeof TRACKER_KINDS)[number];
+/** Days ahead within which a domain or certificate counts as expiring soon (the first alert). */
+export const TRACKER_SOON_DAYS = 30;
+export const TRACKER_FILTERS = ['expired', 'soon', 'active', 'unknown'] as const;
+export type TrackerFilter = (typeof TRACKER_FILTERS)[number];
+export interface TrackerCounts {
+  total: number;
+  expired: number;
+  soon: number;
+  active: number;
+  unknown: number;
+}
+export interface TrackerReport {
+  soonDays: number;
+  domain: TrackerCounts;
+  ssl: TrackerCounts;
+  /** One row per client with tracked items, most expired and expiring first. */
+  clients: { clientId: string; clientName: string; domain: TrackerCounts; ssl: TrackerCounts }[];
+}
+export interface TrackerItem {
+  assetId: string;
+  kind: TrackerKind;
+  name: string;
+  clientId: string;
+  clientName: string;
+  /** Registrar for a domain, issuer for a certificate. */
+  source: string;
+  /** YYYY-MM-DD, or null when not known. */
+  expires: string | null;
+  daysLeft: number | null;
+  standing: TrackerFilter;
+  /** The tracker's last check, or null when it hasn't run. */
+  checkedAt: string | null;
+  ok: boolean | null;
+  detail: string;
+}
+export interface TrackerRunResult {
+  domains: number;
+  certificates: number;
+  created: number;
+  failed: number;
+}
