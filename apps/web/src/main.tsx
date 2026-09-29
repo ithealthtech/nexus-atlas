@@ -42,6 +42,7 @@ import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
+import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
 import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
 import './styles.css';
@@ -135,7 +136,7 @@ function Root() {
     <>
       <Outlet />
       {DEMO && (
-        <p className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md">
+        <p className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full print:hidden bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md">
           Demo · sample data · resets when you reload
         </p>
       )}
@@ -188,6 +189,7 @@ const clientRoutes = [
   }),
   createRoute({ getParentRoute: () => clientRoute, path: '/contacts', component: ClientContacts }),
   createRoute({ getParentRoute: () => clientRoute, path: '/locations', component: ClientLocations }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
 ];
@@ -237,6 +239,8 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
+  createRoute({ getParentRoute: () => appRoute, path: '/checklists', component: ChecklistsPage }),
+  createRoute({ getParentRoute: () => appRoute, path: '/checklist-runs/$runId', component: RunPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
 ];
 const router = createRouter({

@@ -1595,6 +1595,194 @@ on('GET', '/status', (): SystemStatus => ({
   background: { lastRunAt: new Date(Date.now() - 4 * 60_000).toISOString() },
 }));
 
+// checklists and their runs
+type DemoStep = { id: string; text: string; doneAt: string | null; doneBy: string | null; note: string };
+const checklists = [
+  {
+    id: uuid(),
+    clientId: null as string | null,
+    title: 'New user onboarding',
+    description: 'For every new hire, before their first day.',
+    steps: [
+      'Create the Microsoft 365 account and assign a license',
+      'Add to security and distribution groups',
+      'Enroll the laptop in Intune',
+      'Set up MFA with the user',
+      'Add to the password manager and share the team vault',
+    ].map((text) => ({ id: uuid(), text })),
+    archived: false,
+    updatedAt: ago(60 * 24 * 12),
+  },
+  {
+    id: uuid(),
+    clientId: null as string | null,
+    title: 'User offboarding',
+    description: 'Same day as the last day.',
+    steps: [
+      'Block sign-in and reset the password',
+      'Convert the mailbox to shared and set up forwarding',
+      'Remove licenses',
+      'Collect and wipe devices',
+      'Rotate any shared passwords they knew',
+    ].map((text) => ({ id: uuid(), text })),
+    archived: false,
+    updatedAt: ago(60 * 24 * 30),
+  },
+];
+const team = [...users];
+const runs: {
+  id: string;
+  clientId: string;
+  checklistId: string | null;
+  title: string;
+  steps: DemoStep[];
+  assigneeId: string | null;
+  dueDate: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  createdBy: string;
+}[] = [];
+for (const [i, c] of db.clients.slice(0, 3).entries()) {
+  const t = checklists[i % 2]!;
+  const done = i === 0 ? 2 : i === 1 ? t.steps.length : 0;
+  runs.push({
+    id: uuid(),
+    clientId: c.id,
+    checklistId: t.id,
+    title: i === 1 ? `${t.title}: Dana Whitfield` : t.title,
+    steps: t.steps.map((s, j) => ({
+      ...s,
+      doneAt: j < done ? ago(60 * (48 - j)) : null,
+      doneBy: j < done ? db.owner.id : null,
+      note: '',
+    })),
+    assigneeId: i === 1 ? (team[1]?.id ?? db.owner.id) : db.owner.id,
+    dueDate: i === 2 ? daysFromNow(-1) : daysFromNow(3 + i),
+    completedAt: i === 1 ? ago(60 * 20) : null,
+    createdAt: ago(60 * 24 * (3 + i)),
+    createdBy: db.owner.id,
+  });
+}
+const nameOf = (id: string | null) => (id ? (users.find((u) => u.id === id)?.name ?? null) : null);
+const checklistView = (c: (typeof checklists)[0]) => ({ ...c, clientName: clientName(c.clientId), canEdit: true });
+const runView = (r: (typeof runs)[0]) => ({
+  ...r,
+  clientName: clientName(r.clientId)!,
+  steps: r.steps.map((s) => ({ ...s, doneByName: nameOf(s.doneBy) })),
+  done: r.steps.filter((s) => s.doneAt).length,
+  total: r.steps.length,
+  assigneeName: nameOf(r.assigneeId),
+  createdByName: nameOf(r.createdBy),
+  canEdit: true,
+});
+on('GET', '/checklists', (_m, _b, q) => {
+  const client = q.get('client');
+  const archived = q.get('archived') === 'true';
+  return checklists
+    .filter(
+      (c) =>
+        c.archived === archived &&
+        (!client || (client === 'global' ? c.clientId === null : c.clientId === null || c.clientId === client)),
+    )
+    .map(checklistView);
+});
+on('GET', '/checklists/team', () => team.map((u) => ({ id: u.id, name: u.name })));
+on('POST', '/checklists', (_m, b) => {
+  const steps = ((b.steps as { text: string }[]) ?? []).filter((x) => x.text?.trim());
+  if (!String(b.title ?? '').trim()) throw new MockError(400, 'Title is required.');
+  if (!steps.length) throw new MockError(400, 'Add at least one step.');
+  const c = {
+    id: uuid(),
+    clientId: (b.clientId as string | null) ?? null,
+    title: String(b.title),
+    description: String(b.description ?? ''),
+    steps: steps.map((x) => ({ id: uuid(), text: x.text })),
+    archived: false,
+    updatedAt: now(),
+  };
+  checklists.push(c);
+  return checklistView(c);
+});
+on('POST', '/checklists/:id/archive', (m, b) => {
+  const c = find(checklists, m[1]!, 'Checklist');
+  c.archived = !!b.archived;
+  c.updatedAt = now();
+  return checklistView(c);
+});
+on('PATCH', '/checklists/:id', (m, b) => {
+  const c = find(checklists, m[1]!, 'Checklist');
+  if (b.title !== undefined) c.title = String(b.title);
+  if (b.description !== undefined) c.description = String(b.description);
+  if (b.steps)
+    c.steps = (b.steps as { id?: string; text: string }[])
+      .filter((x) => x.text?.trim())
+      .map((x) => ({ id: x.id ?? uuid(), text: x.text }));
+  c.updatedAt = now();
+  return checklistView(c);
+});
+on('POST', '/checklists/:id/archive', (m, b) => {
+  const c = find(checklists, m[1]!, 'Checklist');
+  c.archived = !!b.archived;
+  return checklistView(c);
+});
+on('GET', '/checklist-runs', (_m, _b, q) =>
+  runs
+    .filter(
+      (r) =>
+        (!q.get('client') || r.clientId === q.get('client')) &&
+        (q.get('assignee') !== 'me' || r.assigneeId === db.owner.id) &&
+        (q.get('state') !== 'open' || !r.completedAt) &&
+        (q.get('state') !== 'done' || !!r.completedAt),
+    )
+    .sort(
+      (a, b) => Number(!!a.completedAt) - Number(!!b.completedAt) || (a.dueDate ?? '~').localeCompare(b.dueDate ?? '~'),
+    )
+    .map(runView),
+);
+on('POST', '/clients/:id/checklist-runs', (m, b) => {
+  const t = b.checklistId ? find(checklists, String(b.checklistId), 'Checklist') : null;
+  const steps = t ? t.steps : ((b.steps as string[]) ?? []).map((text) => ({ id: uuid(), text }));
+  if (!steps.length) throw new MockError(400, 'Choose a checklist, or give a title and steps.');
+  const r = {
+    id: uuid(),
+    clientId: m[1]!,
+    checklistId: t?.id ?? null,
+    title: String(b.title || t?.title || 'Checklist'),
+    steps: steps.map((s) => ({ ...s, doneAt: null, doneBy: null, note: '' })),
+    assigneeId: (b.assigneeId as string | null) ?? null,
+    dueDate: (b.dueDate as string | null) ?? null,
+    completedAt: null,
+    createdAt: now(),
+    createdBy: db.owner.id,
+  };
+  runs.unshift(r);
+  record('Started', 'checklist_run', r.id, r.title, r.clientId);
+  return runView(r);
+});
+on('GET', '/checklist-runs/:id', (m) => runView(find(runs, m[1]!, 'Checklist run')));
+on('PATCH', '/checklist-runs/:id', (m, b) => {
+  const r = find(runs, m[1]!, 'Checklist run');
+  if (b.assigneeId !== undefined) r.assigneeId = (b.assigneeId as string | null) ?? null;
+  if (b.dueDate !== undefined) r.dueDate = (b.dueDate as string | null) ?? null;
+  return runView(r);
+});
+on('POST', '/checklist-runs/:id/steps/:step', (m, b) => {
+  const r = find(runs, m[1]!, 'Checklist run');
+  const s = find(r.steps, m[2]!, 'Step');
+  s.doneAt = b.done ? (s.doneAt ?? now()) : null;
+  s.doneBy = b.done ? (s.doneBy ?? db.owner.id) : null;
+  if (b.note !== undefined) s.note = String(b.note);
+  r.completedAt = r.steps.every((x) => x.doneAt) ? (r.completedAt ?? now()) : null;
+  return runView(r);
+});
+on('DELETE', '/checklist-runs/:id', (m) => {
+  runs.splice(
+    runs.findIndex((r) => r.id === m[1]),
+    1,
+  );
+  return { ok: true };
+});
+
 /** Answers an API request from memory, after a short delay so loading states show as they would for real. */
 export async function mockRequest(path: string, method: string, body: unknown): Promise<unknown> {
   await new Promise((r) => setTimeout(r, 120 + Math.random() * 180));
