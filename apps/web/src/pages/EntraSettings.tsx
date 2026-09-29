@@ -77,7 +77,7 @@ export function EntraSettings() {
               </li>
             </ol>
             <div className="mt-1 flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded bg-surface px-2 py-1 font-mono text-xs">
+              <code className="min-w-0 flex-1 rounded bg-surface px-2 py-1 font-mono text-xs break-all">
                 {data.redirectUri}
               </code>
               <Button
