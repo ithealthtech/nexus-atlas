@@ -9,10 +9,12 @@ import {
   tickStepSchema,
   updateChecklistSchema,
   updateRunSchema,
+  type Actor,
   type ChecklistView,
   type Role,
   type RunView,
 } from '@atlas/shared';
+import { clientLevels } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
 import { isUuid, type Scope } from './scope.js';
@@ -159,15 +161,39 @@ export class ChecklistService {
     return this.get(scope, id);
   }
 
-  /** People a run can be assigned to: active staff. Offered to staff only. */
-  async team(scope: Scope): Promise<{ id: string; name: string }[]> {
+  /**
+   * Active staff who can work on runs for this client (edit access to it), so a run is never assigned to someone
+   * who can't open it. Offered to staff only.
+   */
+  async team(scope: Scope, clientId: string): Promise<{ id: string; name: string }[]> {
     if (!scope.canReadGlobal) throw new HttpError(403, 'Only staff assign checklists.');
+    if (!isUuid(clientId)) throw new HttpError(404, 'Client not found.');
+    await scope.require(clientId, 'read', 'Client');
     const rows = await scope.db
-      .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role })
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        role: schema.users.role,
+        allClients: schema.users.allClients,
+      })
       .from(schema.users)
       .where(and(eq(schema.users.orgId, scope.actor.orgId), eq(schema.users.disabled, false)))
       .orderBy(asc(sql`lower(${schema.users.name})`));
-    return rows.filter((u) => ROLE_INFO[u.role as Role].staff).map(({ id, name }) => ({ id, name }));
+    const out: { id: string; name: string }[] = [];
+    for (const u of rows)
+      if (ROLE_INFO[u.role as Role].staff && (await this.canWork(scope, u, clientId)))
+        out.push({ id: u.id, name: u.name });
+    return out;
+  }
+
+  /** Whether this person has edit access to the client, as their own requests would. */
+  private async canWork(
+    scope: Scope,
+    user: { id: string; role: string; allClients: string },
+    clientId: string,
+  ): Promise<boolean> {
+    const actor = { ...scope.actor, id: user.id, role: user.role, allClients: user.allClients } as Actor;
+    return atLeast((await clientLevels(scope.db, actor)).get(clientId) ?? 'none', 'edit');
   }
 
   // ---- runs ----
@@ -262,13 +288,20 @@ export class ChecklistService {
     return (await this.runViews(scope, [await this.loadRun(scope, id, 'read')]))[0]!;
   }
 
-  private async checkAssignee(scope: Scope, assigneeId: string | null | undefined) {
+  private async checkAssignee(scope: Scope, assigneeId: string | null | undefined, clientId: string) {
     if (!assigneeId) return;
-    const [user] = await scope.db
-      .select({ role: schema.users.role, disabled: schema.users.disabled })
-      .from(schema.users)
-      .where(and(eq(schema.users.id, assigneeId), eq(schema.users.orgId, scope.actor.orgId)));
-    if (!user || user.disabled || !ROLE_INFO[user.role as Role].staff)
+    const [user] = isUuid(assigneeId)
+      ? await scope.db
+          .select({
+            id: schema.users.id,
+            role: schema.users.role,
+            allClients: schema.users.allClients,
+            disabled: schema.users.disabled,
+          })
+          .from(schema.users)
+          .where(and(eq(schema.users.id, assigneeId), eq(schema.users.orgId, scope.actor.orgId)))
+      : [];
+    if (!user || user.disabled || !ROLE_INFO[user.role as Role].staff || !(await this.canWork(scope, user, clientId)))
       throw new HttpError(400, 'Assign the checklist to someone on your team.', undefined, {
         assigneeId: 'Choose someone on your team.',
       });
@@ -277,7 +310,7 @@ export class ChecklistService {
   async start(scope: Scope, clientId: string, input: unknown): Promise<RunView> {
     const body = startRunSchema.parse(input);
     await scope.require(clientId, 'edit', 'Client');
-    await this.checkAssignee(scope, body.assigneeId);
+    await this.checkAssignee(scope, body.assigneeId, clientId);
     let title = body.title ?? '';
     let steps: { id: string; text: string }[] = (body.steps ?? []).map((text) => ({ id: randomUUID(), text }));
     if (body.checklistId) {
@@ -311,9 +344,9 @@ export class ChecklistService {
   }
 
   async updateRun(scope: Scope, id: string, input: unknown): Promise<RunView> {
-    await this.loadRun(scope, id, 'edit');
+    const { r } = await this.loadRun(scope, id, 'edit');
     const body = updateRunSchema.parse(input);
-    await this.checkAssignee(scope, body.assigneeId);
+    await this.checkAssignee(scope, body.assigneeId, r.clientId);
     await scope.db
       .update(schema.checklistRuns)
       .set({
@@ -329,7 +362,10 @@ export class ChecklistService {
   /** Ticks or unticks one step. The run is complete when every step is done, and reopens if one is unticked. */
   async tick(scope: Scope, id: string, stepId: string, input: unknown): Promise<RunView> {
     const body = tickStepSchema.parse(input);
-    return scope.db.transaction(async (tx) => {
+    // Access is checked, and the answer built, outside the transaction: queries on the pool while it holds a
+    // connection could leave every request waiting for one more.
+    await this.loadRun(scope, id, 'edit');
+    await scope.db.transaction(async (tx) => {
       // Lock the row so two people ticking at once don't overwrite each other's steps.
       const [locked] = await tx
         .select()
@@ -337,7 +373,6 @@ export class ChecklistService {
         .where(and(eq(schema.checklistRuns.id, id), eq(schema.checklistRuns.orgId, scope.actor.orgId)))
         .for('update');
       if (!locked) throw new HttpError(404, 'Checklist run not found.');
-      await scope.require(locked.clientId, 'edit', 'Checklist run');
       const step = locked.steps.find((s) => s.id === stepId);
       if (!step) throw new HttpError(404, 'Step not found.');
       const now = new Date().toISOString();
@@ -368,13 +403,8 @@ export class ChecklistService {
           entityId: id,
           title: locked.title,
         });
-      const [row] = await tx
-        .select({ r: schema.checklistRuns, clientName: schema.clients.name })
-        .from(schema.checklistRuns)
-        .innerJoin(schema.clients, eq(schema.clients.id, schema.checklistRuns.clientId))
-        .where(eq(schema.checklistRuns.id, id));
-      return (await this.runViews(scope, [row!]))[0]!;
     });
+    return this.run(scope, id);
   }
 
   async removeRun(scope: Scope, id: string) {

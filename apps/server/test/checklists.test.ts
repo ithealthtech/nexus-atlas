@@ -162,6 +162,12 @@ describe('checklists', () => {
     expect(
       (await owner.call('POST', `/api/clients/${harbor}/checklist-runs`, { checklistId: harborOnly.id })).status,
     ).toBe(400);
+    // …but they're listed as archived and can be restored.
+    const archivedList = (await owner.call('GET', `/api/checklists?client=${harbor}&archived=true`)).data;
+    expect(archivedList.map((c: { title: string }) => c.title)).toEqual(['Harbor badge reset']);
+    await owner.call('POST', `/api/checklists/${harborOnly.id}/archive`, { archived: false });
+    expect((await owner.call('GET', `/api/checklists?client=${harbor}`)).data).toHaveLength(1);
+    await owner.call('POST', `/api/checklists/${harborOnly.id}/archive`, { archived: true });
 
     // Only someone on the team can be assigned.
     const contact = await person('viewer@harbor.test', 'maple north orbit 9', {
@@ -172,13 +178,57 @@ describe('checklists', () => {
       (await owner.call('PATCH', `/api/checklist-runs/${oneOff.data.id}`, { assigneeId: contact.id })).status,
     ).toBe(400);
 
-    expect((await owner.call('GET', '/api/checklists/team')).data.map((u: { name: string }) => u.name)).toEqual([
-      'Avery Owner',
-      'reader',
-    ]);
-    expect((await contact.b.call('GET', '/api/checklists/team')).status).toBe(403);
+    // The team for a client is the staff who can edit it: not the read-only reader, and not a technician who
+    // only has Northline.
+    const northTech = await person(
+      'north@msp.test',
+      'granite slow river 8',
+      { role: 'technician', grants: [{ clientId: northline, level: 'edit' }] },
+      true,
+    );
+    const team = async (client: string) =>
+      (await owner.call('GET', `/api/checklists/team?client=${client}`)).data.map((u: { name: string }) => u.name);
+    expect(await team(harbor)).toEqual(['Avery Owner']);
+    expect(await team(northline)).toEqual(['Avery Owner', 'north']);
+    expect(
+      (await owner.call('PATCH', `/api/checklist-runs/${oneOff.data.id}`, { assigneeId: northTech.id })).status,
+    ).toBe(400);
+    expect(
+      (
+        await owner.call('POST', `/api/clients/${harbor}/checklist-runs`, {
+          title: 'x',
+          steps: ['y'],
+          assigneeId: northTech.id,
+        })
+      ).status,
+    ).toBe(400);
+    expect((await owner.call('PATCH', `/api/checklist-runs/${northRun.id}`, { assigneeId: northTech.id })).status).toBe(
+      200,
+    );
+    expect((await contact.b.call('GET', `/api/checklists/team?client=${harbor}`)).status).toBe(403);
+    expect((await owner.call('GET', '/api/checklists/team')).status).toBe(404);
 
     expect((await owner.call('DELETE', `/api/checklist-runs/${oneOff.data.id}`)).status).toBe(200);
     expect((await owner.call('GET', `/api/checklist-runs/${oneOff.data.id}`)).status).toBe(404);
+  });
+
+  it('handles many ticks at once without running out of database connections', async () => {
+    const run = (
+      await owner.call('POST', `/api/clients/${harbor}/checklist-runs`, {
+        title: 'Rack audit',
+        steps: Array.from({ length: 8 }, (_, i) => `Shelf ${i + 1}`),
+      })
+    ).data as Run;
+    // More ticks than the pool has connections (5 in tests), all on the same run.
+    const ticks = Promise.all(
+      run.steps.map((s) => owner.call('POST', `/api/checklist-runs/${run.id}/steps/${s.id}`, { done: true })),
+    );
+    const timeout = new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), 10_000));
+    const result = await Promise.race([ticks, timeout]);
+    expect(result).not.toBe('hung');
+    expect((result as { status: number }[]).every((r) => r.status === 200)).toBe(true);
+    const after = (await owner.call('GET', `/api/checklist-runs/${run.id}`)).data as Run;
+    expect(after.done).toBe(8);
+    expect(after.completedAt).not.toBeNull();
   });
 });

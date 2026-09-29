@@ -32,11 +32,12 @@ const useChecklists = (client?: string) =>
   });
 const useRuns = (query: string) =>
   useQuery({ queryKey: ['checklist-runs', query], queryFn: () => api<RunView[]>(`/checklist-runs?${query}`) });
-const useTeam = (enabled: boolean) =>
+/** Staff who can work on this client's runs: the only people a run for it can be assigned to. */
+const useTeam = (clientId: string | undefined, enabled: boolean) =>
   useQuery({
-    queryKey: ['checklist-team'],
-    queryFn: () => api<{ id: string; name: string }[]>('/checklists/team'),
-    enabled,
+    queryKey: ['checklist-team', clientId],
+    queryFn: () => api<{ id: string; name: string }[]>(`/checklists/team?client=${clientId}`),
+    enabled: enabled && !!clientId,
   });
 
 // Today in the viewer's own time zone, as YYYY-MM-DD.
@@ -219,7 +220,7 @@ function StartRunDialog({ open, onClose, clientId }: { open: boolean; onClose: (
   const navigate = useNavigate();
   const actor = useActor();
   const templates = useChecklists(clientId).data ?? [];
-  const team = useTeam(open && actor.isStaff).data ?? [];
+  const team = useTeam(clientId, open && actor.isStaff).data ?? [];
   const [checklistId, setChecklistId] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -316,12 +317,33 @@ function StartRunDialog({ open, onClose, clientId }: { open: boolean; onClose: (
   );
 }
 
-function TemplateList({ templates, clientId }: { templates: ChecklistView[] | undefined; clientId: string | null }) {
+function TemplateList({
+  templates,
+  clientId,
+  canEditClient,
+}: {
+  templates: ChecklistView[] | undefined;
+  clientId: string | null;
+  /** On a client's page: whether the viewer can edit that client, as creating a checklist there needs. */
+  canEditClient?: boolean;
+}) {
   const [editing, setEditing] = useState<ChecklistView | 'new' | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
   const actor = useActor();
-  const canCreate = clientId ? true : actor.isStaff && actor.role !== 'readonly_technician';
+  const canCreate = clientId ? !!canEditClient : actor.isStaff && actor.role !== 'readonly_technician';
+  // Archived checklists stay restorable: the same list, archived ones only, each with Restore.
+  const archived = useQuery({
+    queryKey: ['checklists', clientId ?? 'global', 'archived'],
+    queryFn: () => api<ChecklistView[]>(`/checklists?client=${clientId ?? 'global'}&archived=true`),
+    enabled: showArchived,
+  }).data?.filter((t) => t.clientId === clientId);
+  const setArchived = async (t: ChecklistView, value: boolean) => {
+    await api(`/checklists/${t.id}/archive`, { method: 'POST', body: { archived: value } });
+    await queryClient.invalidateQueries({ queryKey: ['checklists'] });
+    toast(value ? `${t.title} archived.` : `${t.title} restored.`);
+  };
   return (
     <Card>
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
@@ -361,11 +383,7 @@ function TemplateList({ templates, clientId }: { templates: ChecklistView[] | un
                     variant="ghost"
                     size="icon"
                     aria-label={`Archive ${t.title}`}
-                    onClick={async () => {
-                      await api(`/checklists/${t.id}/archive`, { method: 'POST', body: { archived: true } });
-                      await queryClient.invalidateQueries({ queryKey: ['checklists'] });
-                      toast(`${t.title} archived.`);
-                    }}
+                    onClick={() => setArchived(t, true)}
                   >
                     <Trash2 />
                   </Button>
@@ -375,6 +393,35 @@ function TemplateList({ templates, clientId }: { templates: ChecklistView[] | un
           ))}
         </ul>
       )}
+      <div className="border-t border-border px-5 py-3">
+        <button
+          type="button"
+          aria-expanded={showArchived}
+          onClick={() => setShowArchived(!showArchived)}
+          className="text-sm font-semibold text-primary hover:underline"
+        >
+          {showArchived ? 'Hide archived checklists' : 'Show archived checklists'}
+        </button>
+        {showArchived &&
+          (!archived ? (
+            <Skeleton className="mt-3 h-10" />
+          ) : !archived.length ? (
+            <p className="mt-2 text-sm text-muted">Nothing is archived.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-border">
+              {archived.map((t) => (
+                <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate text-muted">{t.title}</span>
+                  {t.canEdit && (
+                    <Button variant="secondary" size="sm" onClick={() => setArchived(t, false)}>
+                      Restore
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ))}
+      </div>
       {editing && (
         <ChecklistDialog
           open
@@ -447,7 +494,7 @@ export function ClientChecklists() {
           <RunList runs={runs} showClient={false} empty="" />
         )}
       </Card>
-      {actor.isStaff && <TemplateList templates={templates} clientId={clientId} />}
+      {actor.isStaff && <TemplateList templates={templates} clientId={clientId} canEditClient={canEdit} />}
       {starting && <StartRunDialog open onClose={() => setStarting(false)} clientId={clientId} />}
     </div>
   );
@@ -468,7 +515,7 @@ export function RunPage() {
     queryKey: ['checklist-runs', 'one', runId],
     queryFn: () => api<RunView>(`/checklist-runs/${runId}`),
   });
-  const team = useTeam(!!run?.canEdit && actor.isStaff).data ?? [];
+  const team = useTeam(run?.clientId, !!run?.canEdit && actor.isStaff).data ?? [];
   const [noting, setNoting] = useState<string | null>(null);
   const [note, setNote] = useState('');
 

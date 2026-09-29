@@ -1548,11 +1548,17 @@ const runView = (r: (typeof runs)[0]) => ({
   createdByName: nameOf(r.createdBy),
   canEdit: true,
 });
-on('GET', '/checklists', (_m, _b, q) =>
-  checklists
-    .filter((c) => !c.archived && (!q.get('client') || c.clientId === null || c.clientId === q.get('client')))
-    .map(checklistView),
-);
+on('GET', '/checklists', (_m, _b, q) => {
+  const client = q.get('client');
+  const archived = q.get('archived') === 'true';
+  return checklists
+    .filter(
+      (c) =>
+        c.archived === archived &&
+        (!client || (client === 'global' ? c.clientId === null : c.clientId === null || c.clientId === client)),
+    )
+    .map(checklistView);
+});
 on('GET', '/checklists/team', () => team.map((u) => ({ id: u.id, name: u.name })));
 on('POST', '/checklists', (_m, b) => {
   const steps = ((b.steps as { text: string }[]) ?? []).filter((x) => x.text?.trim());
@@ -1568,6 +1574,12 @@ on('POST', '/checklists', (_m, b) => {
     updatedAt: now(),
   };
   checklists.push(c);
+  return checklistView(c);
+});
+on('POST', '/checklists/:id/archive', (m, b) => {
+  const c = find(checklists, m[1]!, 'Checklist');
+  c.archived = !!b.archived;
+  c.updatedAt = now();
   return checklistView(c);
 });
 on('PATCH', '/checklists/:id', (m, b) => {

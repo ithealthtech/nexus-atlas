@@ -211,7 +211,9 @@ export function registerDocumentationRoutes(
   app.get<{ Querystring: { client?: string; archived?: string } }>('/api/checklists', authed, async (req) =>
     checklists.list(scopeOf(req), { clientId: req.query.client || undefined, archived: flag(req.query.archived) }),
   );
-  app.get('/api/checklists/team', authed, async (req) => checklists.team(scopeOf(req)));
+  app.get<{ Querystring: { client?: string } }>('/api/checklists/team', authed, async (req) =>
+    checklists.team(scopeOf(req), req.query.client ?? ''),
+  );
   app.post('/api/checklists', authed, async (req, reply) =>
     reply.status(201).send(await checklists.create(scopeOf(req), req.body)),
   );
