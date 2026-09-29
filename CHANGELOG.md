@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-09-26
+
+### Added
+
+- **Duplicates:** Administration → Duplicates lists assets, contacts, and locations with the same name in the same client, and clients with the same name. Choose the record to keep and merge the rest into it: blank fields are filled, values without a field get a new field, links, files, and Hudu/ConnectWise RMM IDs move over, and merged assets are archived so they can be restored. Merging clients moves everything in them. (#75)
+
 ## [1.2.0] - 2026-09-26
 
 ### Added
