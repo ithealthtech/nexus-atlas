@@ -153,7 +153,7 @@ function CompanyMapping() {
   );
 }
 
-/** ConnectWise RMM (Asio): connect, link companies to clients, sync devices. */
+/** ConnectWise RMM (Asio): connect, link companies to clients, sync devices and tickets. */
 export function CwRmmSync() {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -213,7 +213,7 @@ export function CwRmmSync() {
     <Card>
       <CardHeader
         title="ConnectWise RMM"
-        description="Sync devices from ConnectWise RMM (Asio) into each client's Configurations, and sites into Locations. Runs hourly; devices removed from the RMM are archived."
+        description="Sync devices from the ConnectWise platform (Asio) into each client's Configurations, sites into Locations, and tickets into the ticket dashboard (read-only). Runs hourly; devices removed from the RMM are archived."
       />
       <div className="space-y-5 p-5">
         {connection.isLoading ? (
@@ -240,7 +240,7 @@ export function CwRmmSync() {
                 help={
                   data
                     ? 'Saved and encrypted. Leave empty to keep it.'
-                    : 'Needs companies, sites and devices read scopes.'
+                    : 'Needs companies, sites and devices read scopes, and tickets read for tickets.'
                 }
               >
                 {(p) => (
@@ -298,11 +298,12 @@ export function CwRmmSync() {
             {job.data && <JobSummary job={job.data} />}
             <fieldset className="space-y-2">
               <legend className="text-sm font-semibold">What to sync</legend>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-3">
                 {(
                   [
                     ['locations', 'Sites', 'Each linked company’s sites, as locations.'],
                     ['devices', 'Devices', 'As assets: updating same-named ones, or in Configurations.'],
+                    ['tickets', 'Tickets', 'Read-only, for the ticket dashboard. Needs the tickets read permission.'],
                   ] as const
                 ).map(([key, label, help]) => (
                   <Checkbox

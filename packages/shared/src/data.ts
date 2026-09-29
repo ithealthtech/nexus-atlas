@@ -83,6 +83,8 @@ export const cwRmmSyncOptionsSchema = z.object({
   locations: z.boolean().default(true),
   /** Devices, as assets. */
   devices: z.boolean().default(true),
+  /** Tickets, read-only, for the ticket dashboard. */
+  tickets: z.boolean().default(true),
 });
 export type CwRmmSyncOptions = z.infer<typeof cwRmmSyncOptionsSchema>;
 /** A ConnectWise RMM company and what Atlas does with it. */
@@ -108,6 +110,47 @@ export const cwRmmMappingSchema = z.object({
     )
     .max(2000),
 });
+
+// ---------- tickets (ConnectWise platform) ----------
+/** The periods the ticket statistics chart can cover, in days. */
+export const TICKET_DAYS = [7, 30, 90] as const;
+export type TicketDays = (typeof TICKET_DAYS)[number];
+export interface TicketStatusCount {
+  /** The status as ConnectWise names it. */
+  name: string;
+  count: number;
+  /** A closed status: open tickets are counted in full, closed ones only within the period. */
+  closed: boolean;
+}
+export interface TicketReport {
+  /** Whether a ConnectWise company is linked (to this client, when one is asked for). */
+  linked: boolean;
+  /** When tickets were last synced, or null before any sync. */
+  updatedAt: string | null;
+  days: TicketDays;
+  open: number;
+  /** Tickets per status, open statuses first; statuses with no tickets are left out. */
+  statuses: TicketStatusCount[];
+  /** Tickets opened and closed on each day of the period, oldest first, days with none included. */
+  trend: { day: string; opened: number; closed: number }[];
+}
+export interface TicketView {
+  id: string;
+  /** The ticket number ConnectWise shows. */
+  number: string;
+  summary: string;
+  status: string;
+  closed: boolean;
+  priority: string;
+  clientId: string;
+  clientName: string;
+  openedAt: string | null;
+  closedAt: string | null;
+  /** When the ticket last changed in ConnectWise. */
+  updatedAt: string | null;
+  /** The ticket in ConnectWise, when it gave a link. */
+  url: string | null;
+}
 
 // ---------- RMM health ----------
 export type RmmDeviceKind = 'server' | 'workstation' | 'other';

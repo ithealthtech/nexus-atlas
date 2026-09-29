@@ -16,6 +16,7 @@ import { GroupService } from '../services/groups.js';
 import { graphPermissions, type MailService } from '../services/mail.js';
 import { Notifier } from '../services/notifier.js';
 import { RmmHealthService } from '../services/rmm-health.js';
+import { TicketService } from '../services/tickets.js';
 import { WarrantyService } from '../services/warranty.js';
 import { Scope, isUuid } from '../services/scope.js';
 import type { SettingsService, SmtpConfig } from '../services/settings.js';
@@ -23,7 +24,7 @@ import type { VaultService } from '../services/vault.js';
 
 type Params = { id: string };
 
-/** Groups, email and notification settings, expirations, RMM health, asset warranty, and the audit log. Returns the background notifier. */
+/** Groups, email and notification settings, expirations, RMM health, tickets, asset warranty, and the audit log. Returns the background notifier. */
 export function registerAdminRoutes(
   app: FastifyInstance,
   deps: {
@@ -45,6 +46,7 @@ export function registerAdminRoutes(
   const groups = new GroupService(db);
   const expirations = new ExpirationService(deps.vault);
   const rmmHealth = new RmmHealthService(settings);
+  const tickets = new TicketService(settings);
   const warranty = new WarrantyService(settings);
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const admin = (req: FastifyRequest) => {
@@ -182,6 +184,27 @@ export function registerAdminRoutes(
     if (!RMM_HEALTH_FILTERS.includes(filter)) throw new HttpError(400, 'Choose which devices to list.');
     const { scope, opts } = await healthScope(req);
     return rmmHealth.devices(scope, filter, opts);
+  });
+
+  // ---- tickets (read-only, from the ConnectWise platform) ----
+  type TicketQuery = { client?: string; days?: string; status?: string };
+  const ticketScope = async (req: FastifyRequest<{ Querystring: TicketQuery }>) => {
+    const scope = new Scope(db, actorOf(req));
+    const { client } = req.query;
+    if (client !== undefined) {
+      if (!isUuid(client)) throw new HttpError(404, 'Client not found.');
+      await scope.require(client, 'read', 'Client');
+    }
+    return scope;
+  };
+  app.get<{ Querystring: TicketQuery }>('/api/tickets', authed, async (req) =>
+    tickets.report(await ticketScope(req), { clientId: req.query.client, days: req.query.days }),
+  );
+  app.get<{ Querystring: TicketQuery }>('/api/tickets/list', authed, async (req) => {
+    const { status } = req.query;
+    if (status !== undefined && (typeof status !== 'string' || status.length > 100))
+      throw new HttpError(400, 'Choose which tickets to list.');
+    return tickets.list(await ticketScope(req), { clientId: req.query.client, status, days: req.query.days });
   });
 
   // ---- asset warranty ----

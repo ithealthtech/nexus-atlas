@@ -903,3 +903,31 @@ export const rmmHealthSnapshots = pgTable(
   },
   (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('rmm_health_snapshots_day').on(t.orgId, t.day)],
 );
+
+// Tickets synced from the ConnectWise platform, read-only in Atlas: every open ticket of each linked company, and
+// those closed in the last 90 days. A ticket ConnectWise stops returning is deleted when its company is read in full.
+export const tickets = pgTable(
+  'tickets',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    source: text('source').notNull(),
+    externalId: text('external_id').notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    companyId: text('company_id').notNull(),
+    summary: text('summary').notNull().default(''),
+    status: text('status').notNull().default(''),
+    closed: boolean('closed').notNull().default(false),
+    number: text('number').notNull().default(''),
+    priority: text('priority').notNull().default(''),
+    openedAt: timestamp('opened_at', { withTimezone: true }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    remoteUpdatedAt: timestamp('remote_updated_at', { withTimezone: true }),
+    url: text('url'),
+    syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.source, t.externalId] }), index('tickets_client').on(t.orgId, t.clientId)],
+);

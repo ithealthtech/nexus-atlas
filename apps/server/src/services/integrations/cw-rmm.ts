@@ -19,6 +19,8 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
   au: 'https://openapi.service.auplatform.connectwise.com',
 };
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
+/** Tickets get their own token, so a key without ticket access still syncs devices. */
+export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
 const RETRY_MS = 2000;
 // Five attempts at this length, plus the lead-in and the company prefix, fit an import job message (800 characters).
 const ATTEMPT_CHARS = 100;
@@ -40,21 +42,21 @@ const DEVICE_QUERIES: DeviceQuery[] = [
 
 // The Asio API's field names vary between endpoints and versions, so each value is read from the first
 // name that's present.
-const pick = (o: Json, ...keys: string[]): unknown => {
+export const pick = (o: Json, ...keys: string[]): unknown => {
   for (const key of keys) {
     const value = key.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Json)[k] : undefined), o);
     if (value !== undefined && value !== null && value !== '') return value;
   }
   return undefined;
 };
-const text = (o: Json, ...keys: string[]) => {
+export const text = (o: Json, ...keys: string[]) => {
   const v = pick(o, ...keys);
   if (Array.isArray(v)) return v.filter((x) => typeof x === 'string').join(', ');
   return typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
 };
 /** The list inside a response, whatever it's called. */
-const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices'];
-const listOf = (body: unknown, depth = 0): Json[] => {
+const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices', 'tickets'];
+export const listOf = (body: unknown, depth = 0): Json[] => {
   if (Array.isArray(body)) return body as Json[];
   if (!body || typeof body !== 'object' || depth > 3) return [];
   const obj = body as Json;
@@ -368,7 +370,7 @@ function recordsOf(body: unknown, depth = 0): Json[] {
   });
 }
 /** A response's field names (never values), two levels deep, for diagnosing an unexpected shape. */
-const shapeOf = (body: unknown): string => {
+export const shapeOf = (body: unknown): string => {
   if (Array.isArray(body)) return `a list of ${body.length}`;
   if (!body || typeof body !== 'object') return typeof body;
   return Object.entries(body as Json)
@@ -447,12 +449,18 @@ export class CwRmmClient {
   // One client (and so one token) per set of credentials, shared by every request and sync: signing in for
   // each page load gets the key locked.
   private static shared = new WeakMap<typeof fetch, Map<string, CwRmmClient>>();
-  static for(region: CwRmmRegion, clientId: string, clientSecret: string, fetcher: typeof fetch = fetch) {
-    const key = [region, clientId, createHash('sha256').update(clientSecret).digest('hex')].join('|');
+  static for(
+    region: CwRmmRegion,
+    clientId: string,
+    clientSecret: string,
+    fetcher: typeof fetch = fetch,
+    scopes = SCOPES,
+  ) {
+    const key = [region, clientId, createHash('sha256').update(clientSecret).digest('hex'), scopes].join('|');
     let clients = CwRmmClient.shared.get(fetcher);
     if (!clients) CwRmmClient.shared.set(fetcher, (clients = new Map()));
     let client = clients.get(key);
-    if (!client) clients.set(key, (client = new CwRmmClient(region, clientId, clientSecret, fetcher)));
+    if (!client) clients.set(key, (client = new CwRmmClient(region, clientId, clientSecret, fetcher, scopes)));
     return client;
   }
 
@@ -464,6 +472,7 @@ export class CwRmmClient {
     private readonly clientId: string,
     private readonly clientSecret: string,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly scopes = SCOPES,
   ) {
     this.base = CW_RMM_BASE[region];
   }
@@ -505,7 +514,7 @@ export class CwRmmClient {
           grant_type: 'client_credentials',
           client_id: this.clientId,
           client_secret: this.clientSecret,
-          scope: SCOPES,
+          scope: this.scopes,
         }),
         signal: AbortSignal.timeout(20_000),
       }),
@@ -527,6 +536,11 @@ export class CwRmmClient {
     const seconds = Number(pick(body, 'expires_in', 'expiresIn')) || 3600;
     this.token = { value, expires: Date.now() + seconds * 1000 };
     return value;
+  }
+
+  /** A GET for another part of the platform API (tickets), with the same sign-in, retries, and errors. */
+  get(path: string): Promise<unknown> {
+    return this.call('GET', path);
   }
 
   private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
