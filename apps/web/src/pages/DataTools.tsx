@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, CloudDownload, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
+import { CheckCircle2, CloudDownload, Factory, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
 import type { CsvImportResult, CsvTarget, HuduImportOptions, HuduPreview, ImportJobView } from '@atlas/shared';
 import {
   Badge,
@@ -543,6 +543,49 @@ function CsvImport() {
   );
 }
 
+/** Fills in blank manufacturers from each device's model, OS, name, or MAC address. */
+function DetectManufacturers() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card>
+      <CardHeader
+        title="Device manufacturers"
+        description="Atlas fills in a blank Manufacturer from the model (OptiPlex → Dell, ThinkPad → Lenovo), the operating system, or the MAC address whenever an asset is saved. Run it once over the assets already here; anything entered by hand is left alone."
+        className="border-b-0"
+        actions={
+          <Button
+            variant="secondary"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const r = await api<{ checked: number; filled: number }>('/assets/detect-manufacturers', {
+                  method: 'POST',
+                  body: {},
+                });
+                await queryClient.invalidateQueries({ queryKey: ['assets'] });
+                toast(
+                  r.checked
+                    ? `Filled in ${r.filled} of ${r.checked} assets with no manufacturer.${r.filled < r.checked ? ' The rest have no model or name Atlas recognizes.' : ''}`
+                    : 'Every asset already has a manufacturer.',
+                );
+              } catch (err) {
+                toast((err as Error).message, 'error');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Factory /> Fill in manufacturers
+          </Button>
+        }
+      />
+    </Card>
+  );
+}
+
 function ImportHistory() {
   const jobs = useQuery({ queryKey: ['import-jobs'], queryFn: () => api<ImportJobView[]>('/import/jobs') });
   if (!jobs.data?.length) return null;
@@ -573,6 +616,7 @@ export function DataTools() {
         <M365Sync />
         <HuduImport />
         <CsvImport />
+        <DetectManufacturers />
         <ImportHistory />
         <div className="flex gap-3 rounded-xl border border-border bg-surface-2 p-4 text-sm text-text-2">
           <History className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />

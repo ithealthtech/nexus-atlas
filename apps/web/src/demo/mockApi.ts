@@ -1375,6 +1375,7 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
   return cwView();
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
+on('POST', '/assets/detect-manufacturers', () => ({ checked: 3, filled: 2 }));
 // Microsoft 365: the first client is connected, the second waits for consent.
 const m365Redirect = 'https://atlas.example.com/api/integrations/m365/consent';
 let m365: {

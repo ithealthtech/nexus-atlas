@@ -10,6 +10,7 @@ import { locations } from '../people.js';
 import { Scope } from '../scope.js';
 import type { SettingsService, StoredCwRmm } from '../settings.js';
 import { ImportRun } from '../importers/common.js';
+import { normalizeManufacturer } from '../manufacturer.js';
 import { readableLabel } from '../importers/hudu.js';
 
 export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
@@ -160,7 +161,8 @@ function mapDevice(id: string, companyId: string, siteId: string, record: Json):
       'networks.0.macAddress',
       'macAddresses',
     ),
-    manufacturer: text(
+    // Firmware names ("Dell Inc.", "To be filled by O.E.M.") are tidied; a blank one is filled in when the asset is saved.
+    manufacturer: normalizeManufacturer(text(
       d,
       'manufacturer',
       'system.manufacturer',
@@ -168,7 +170,7 @@ function mapDevice(id: string, companyId: string, siteId: string, record: Json):
       'bios.manufacturer',
       'baseBoard.manufacturer',
       'vendor',
-    ),
+    )),
     model: text(d, 'model', 'system.model', 'hardware.model', 'systemModel', 'productName'),
     serial: text(
       d,
