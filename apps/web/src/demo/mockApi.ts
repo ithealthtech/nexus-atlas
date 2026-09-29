@@ -1346,6 +1346,103 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
   return cwView();
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
+// Microsoft 365: the first client is connected, the second waits for consent.
+const m365Redirect = 'https://atlas.example.com/api/integrations/m365/consent';
+let m365: {
+  clientId: string;
+  hasSecret: boolean;
+  autoSync: boolean;
+  lastSyncAt: string | null;
+  options: { users: boolean; licensedOnly: boolean; licenses: boolean; domains: boolean };
+  redirectUri: string;
+} | null = null;
+const m365Tenants = new Map<
+  string,
+  {
+    tenantId: string;
+    tenantName: string | null;
+    status: 'ok' | 'failed' | 'unchecked';
+    detail: string | null;
+    checkedAt: string | null;
+  }
+>();
+const m365View = () => ({
+  connection: m365,
+  redirectUri: m365Redirect,
+  tenants: m365
+    ? [...m365Tenants].map(([clientId, t]) => ({
+        clientId,
+        clientName: clientName(clientId)!,
+        ...t,
+        consentUrl: `https://login.microsoftonline.com/${t.tenantId}/adminconsent?client_id=${m365!.clientId}`,
+      }))
+    : [],
+});
+on('GET', '/integrations/m365', () => m365View());
+on('PUT', '/integrations/m365', (_m, b) => {
+  if (!/^[0-9a-f-]{36}$/i.test(String(b.clientId ?? '')))
+    throw new MockError(400, 'Enter the Application (client) ID: a GUID from the app’s Overview page.');
+  if (!m365 && !b.clientSecret) throw new MockError(400, 'Enter the client secret.');
+  m365 = {
+    clientId: String(b.clientId),
+    hasSecret: true,
+    autoSync: b.autoSync !== false,
+    lastSyncAt: m365?.lastSyncAt ?? null,
+    options: m365?.options ?? { users: true, licensedOnly: true, licenses: true, domains: true },
+    redirectUri: m365Redirect,
+  };
+  if (!m365Tenants.size && db.clients[0] && db.clients[1]) {
+    m365Tenants.set(db.clients[0].id, {
+      tenantId: '3f2a9c1e-7b44-4d0e-9a51-0c6e2b8d1f77',
+      tenantName: db.clients[0].name,
+      status: 'ok',
+      detail: null,
+      checkedAt: ago(90),
+    });
+    m365Tenants.set(db.clients[1].id, {
+      tenantId: 'northline.onmicrosoft.com',
+      tenantName: null,
+      status: 'unchecked',
+      detail: null,
+      checkedAt: null,
+    });
+  }
+  return m365View();
+});
+on('DELETE', '/integrations/m365', () => ((m365 = null), m365Tenants.clear(), { ok: true }));
+on('PUT', '/integrations/m365/options', (_m, b) => {
+  if (!m365) throw new MockError(400, 'Connect Microsoft 365 first.');
+  m365.options = {
+    users: b.users !== false,
+    licensedOnly: b.licensedOnly !== false,
+    licenses: b.licenses !== false,
+    domains: b.domains !== false,
+  };
+  return m365View();
+});
+on('POST', '/integrations/m365/tenants', (_m, b) => {
+  m365Tenants.set(String(b.clientId), {
+    tenantId: String(b.tenant),
+    tenantName: null,
+    status: 'unchecked',
+    detail: null,
+    checkedAt: null,
+  });
+  return m365View();
+});
+on('POST', '/integrations/m365/tenants/:id/check', (m) => {
+  const t = m365Tenants.get(m[1]!);
+  if (t && t.status !== 'ok')
+    Object.assign(t, {
+      status: 'failed',
+      detail:
+        'This tenant hasn’t granted consent to the app yet. Open the consent link as one of its Global Administrators.',
+      checkedAt: now(),
+    });
+  return m365View();
+});
+on('DELETE', '/integrations/m365/tenants/:id', (m) => (m365Tenants.delete(m[1]!), m365View()));
+on('POST', '/integrations/m365/sync', () => notInDemo('Syncing from a real Microsoft 365 tenant'));
 on('GET', '/import/jobs', () => importJobs);
 on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
 on('POST', '/import/csv', (_m, b) => {

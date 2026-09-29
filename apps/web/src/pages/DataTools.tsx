@@ -20,6 +20,7 @@ import { parseCsv } from '@/lib/csv';
 import { useLayouts } from '@/lib/queries';
 import { formatDateTime } from '@/lib/format';
 import { CwRmmSync } from './CwRmm';
+import { M365Sync } from './M365';
 import { HuduImportChoices } from './ImportChoices';
 
 const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
@@ -27,6 +28,7 @@ const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
   legacy: 'Atlas 0.2',
   csv: 'CSV',
   'cw-rmm': 'ConnectWise RMM',
+  m365: 'Microsoft 365',
 };
 const KIND_LABELS: Record<string, string> = {
   clients: 'Clients',
@@ -38,6 +40,9 @@ const KIND_LABELS: Record<string, string> = {
   passwords: 'Passwords',
   users: 'People',
   links: 'Links',
+  tenants: 'Tenants',
+  licenses: 'Licenses',
+  domains: 'Domains',
 };
 
 export function JobSummary({ job }: { job: ImportJobView }) {
@@ -46,7 +51,7 @@ export function JobSummary({ job }: { job: ImportJobView }) {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge tone={job.status === 'done' ? 'success' : job.status === 'failed' ? 'danger' : 'info'}>
           {job.status === 'running'
-            ? job.source === 'cw-rmm'
+            ? job.source === 'cw-rmm' || job.source === 'm365'
               ? 'Syncing…'
               : 'Importing…'
             : job.status === 'done'
@@ -561,10 +566,11 @@ export function DataTools() {
       <PageHeader
         eyebrow="Administration"
         title="Import & export"
-        description="Sync devices from ConnectWise RMM, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
+        description="Sync devices from ConnectWise RMM and tenants from Microsoft 365, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
       />
       <div className="grid max-w-4xl gap-6">
         <CwRmmSync />
+        <M365Sync />
         <HuduImport />
         <CsvImport />
         <ImportHistory />
