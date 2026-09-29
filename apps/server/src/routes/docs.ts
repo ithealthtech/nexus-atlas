@@ -162,6 +162,9 @@ export function registerDocumentationRoutes(
   }
 
   // ---- relationships and attachments (any item type) ----
+  app.get<{ Params: Params }>('/api/clients/:id/relationships', authed, async (req) =>
+    relations.map(scopeOf(req), req.params.id),
+  );
   app.get<{ Params: { type: string; id: string } }>('/api/items/:type/:id/relations', authed, async (req) =>
     relations.list(scopeOf(req), itemType(req.params.type), req.params.id),
   );
