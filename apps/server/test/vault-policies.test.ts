@@ -8,7 +8,7 @@ import { staticKeyProvider } from '../src/crypto/keys.js';
 import { EmergencyAccessService } from '../src/services/emergency.js';
 import { MailService } from '../src/services/mail.js';
 import { SettingsService, type SiemConfig } from '../src/services/settings.js';
-import { defaultSender, signBody, syslogLine } from '../src/services/siem.js';
+import { SiemForwarder, defaultSender, signBody, syslogLine } from '../src/services/siem.js';
 import { OWNER, enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TEMP = 'temporary pass 1234';
@@ -166,7 +166,11 @@ describe('vault policies and emergency access', () => {
     // The owner always sees everything.
     expect((await owner.call('GET', `/api/passwords/${item.id}`)).status).toBe(200);
 
-    // Listing the administrator gives them the password again.
+    // Listing the administrator, directly or through a group, gives them the password again, search included.
+    const group = (await owner.call('POST', '/api/groups', { name: 'Network team', memberIds: [admin.id] })).data;
+    await owner.call('PUT', `/api/passwords/${item.id}/access`, { userIds: [], groupIds: [group.id] });
+    expect((await admin.b.call('GET', `/api/passwords/${item.id}`)).status).toBe(200);
+    expect((await admin.b.call('GET', '/api/search?q=HDG')).data.map((r: { id: string }) => r.id)).toContain(item.id);
     await owner.call('PUT', `/api/passwords/${item.id}/access`, { userIds: [admin.id], groupIds: [] });
     expect((await admin.b.call('GET', `/api/passwords/${item.id}`)).status).toBe(200);
 
@@ -400,6 +404,24 @@ describe('SIEM streaming', () => {
     const logs = (await owner.call('POST', '/api/settings/siem/send', {})).data;
     expect(sent.at(-1)!.events.every((e) => e.log === 'security')).toBe(true);
     expect(logs.pending).toBe(0);
+  });
+
+  it('forwards in the background under a lock it releases', async () => {
+    await owner.call('PUT', '/api/settings/siem', { enabled: true, method: 'webhook', url: 'https://siem.example/in' });
+    const got: SiemEvent[] = [];
+    const forwarder = new SiemForwarder(
+      t.handle.db,
+      t.handle.pool,
+      new SettingsService(t.handle.db, staticKeyProvider([randomBytes(32)])),
+      'atlas.test',
+      async (_c, e) => void got.push(...e),
+    );
+    await forwarder.tick();
+    expect(got.map((e) => e.action)).toEqual(['SIEM streaming changed']);
+    const held = await t.handle.pool.query(
+      `select count(*)::int as n from pg_locks where locktype = 'advisory' and objid = 727279`,
+    );
+    expect(held.rows[0].n).toBe(0);
   });
 
   it('is for administrators only', async () => {

@@ -565,7 +565,13 @@ export async function buildApp({
 
   const health = new PasswordHealthService(db, vault, settings, breachFetch);
   const emergency = new EmergencyAccessService(db, mail, config.publicOrigin);
-  const siem = new SiemForwarder(db, settings, config.publicHost.replace(/:\d+$/, ''), siemSender ?? defaultSender());
+  const siem = new SiemForwarder(
+    db,
+    database.pool,
+    settings,
+    config.publicHost.replace(/:\d+$/, ''),
+    siemSender ?? defaultSender(),
+  );
   registerPolicyRoutes(app, {
     db,
     authed,

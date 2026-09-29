@@ -3,7 +3,7 @@ import dgram from 'node:dgram';
 import net from 'node:net';
 import tls from 'node:tls';
 import { and, asc, count, eq, gt, sql } from 'drizzle-orm';
-import { schema, type Database } from '@atlas/db';
+import { schema, type Database, type DatabaseHandle } from '@atlas/db';
 import type { SiemEvent, SiemSettingsView } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import type { SettingsService, SiemConfig } from './settings.js';
@@ -108,6 +108,8 @@ export class SiemForwarder {
 
   constructor(
     private readonly db: Database,
+    /** For the lock, which must be taken and released on one connection. */
+    private readonly pool: DatabaseHandle['pool'],
     private readonly settings: SettingsService,
     private readonly hostname: string,
     private readonly sender: SiemSender = defaultSender(),
@@ -126,14 +128,20 @@ export class SiemForwarder {
     if (this.running) return;
     this.running = true;
     try {
-      // A lock of its own, so two servers don't both send, without waiting on the notifier's work.
-      const locked = await this.db.execute(sql`select pg_try_advisory_lock(727279) as ok`);
-      if (!(locked.rows[0] as { ok: boolean }).ok) return;
+      // A lock of its own, so two servers don't both send, without waiting on the notifier's work. A session lock
+      // belongs to one connection, so this one is held for the whole pass and released on it.
+      const lock = await this.pool.connect();
       try {
-        for (const org of await this.db.select({ id: schema.orgs.id }).from(schema.orgs))
-          await this.forward(org.id).catch(() => undefined);
+        const { rows } = await lock.query<{ ok: boolean }>('select pg_try_advisory_lock(727279) as ok');
+        if (!rows[0]?.ok) return;
+        try {
+          for (const org of await this.db.select({ id: schema.orgs.id }).from(schema.orgs))
+            await this.forward(org.id).catch(() => undefined);
+        } finally {
+          await lock.query('select pg_advisory_unlock(727279)').catch(() => undefined);
+        }
       } finally {
-        await this.db.execute(sql`select pg_advisory_unlock(727279)`);
+        lock.release();
       }
     } finally {
       this.running = false;
