@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-09-29
+
+### Added
+
+- **Sign in with Microsoft Entra ID:** staff can sign in with their Microsoft 365 account (OpenID Connect with PKCE, state, and nonce; the sign-in token is checked in full). Accounts are never created by signing in: a Microsoft account must match an existing Atlas user, by account ID once linked, and the first match by email waits for an administrator to confirm it under People & access. An option trusts Microsoft's own multi-factor sign-in; another requires Microsoft sign-in for staff while the owner can always still use a password. Set up under Settings → Microsoft sign-in. (#85)
+
+### Changed
+
+- New and changed passwords are breach-checked within about ten minutes, not at the next daily run. (#83)
+- A sign-in with a step still to finish (Atlas MFA, MFA setup, or a password change) can now be reloaded without an error.
+
 ## [1.4.0] - 2026-09-29
 
 ### Added
