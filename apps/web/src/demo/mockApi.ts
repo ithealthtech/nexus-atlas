@@ -1346,6 +1346,7 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
   return cwView();
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
+on('POST', '/assets/detect-manufacturers', () => ({ checked: 3, filled: 2 }));
 on('GET', '/import/jobs', () => importJobs);
 on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
 on('POST', '/import/csv', (_m, b) => {

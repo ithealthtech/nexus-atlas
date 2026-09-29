@@ -66,6 +66,8 @@ export function registerDocumentationRoutes(
         archived: flag(req.query.archived),
       }),
   );
+  // Fills blank manufacturers across the assets the actor can edit.
+  app.post('/api/assets/detect-manufacturers', authed, async (req) => assets.fillManufacturers(scopeOf(req)));
   app.post<{ Params: Params }>('/api/clients/:id/assets', authed, async (req, reply) =>
     reply.status(201).send(await assets.create(scopeOf(req), req.params.id, req.body)),
   );
