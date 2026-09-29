@@ -161,7 +161,8 @@ describe('Microsoft Entra ID sign-in', () => {
   });
 
   it('matches by email only after an administrator confirms, then signs in by account ID', async () => {
-    await configure();
+    // Required, as it normally would be: the temporary password an administrator set isn't asked for again.
+    await configure({ requireSso: true });
     const first = await signInWithMicrosoft(tess());
     expect(first.location).toBe('/?sso=pending');
     expect(first.session).toBeUndefined();
@@ -196,7 +197,7 @@ describe('Microsoft Entra ID sign-in', () => {
   });
 
   it('can rely on Microsoft’s multi-factor sign-in, but only when told to and only if Microsoft did it', async () => {
-    await configure({ trustMfa: true });
+    await configure({ trustMfa: true, requireSso: true });
     const person = ((await owner.call('GET', '/api/users')).data as { id: string; email: string }[]).find(
       (p) => p.email === 'tess@atlas.test',
     )!;
@@ -263,5 +264,57 @@ describe('Microsoft Entra ID sign-in', () => {
     expect((await owner.call('PUT', '/api/settings/entra', { tenantId: 'x', clientId: 'not-a-guid' })).status).toBe(
       400,
     );
+  });
+});
+
+describe('Microsoft Entra ID sign-in with an optional setting', () => {
+  it('still asks for a real password when Microsoft sign-in is optional and the temporary one is still set', async () => {
+    const ms = fakeMicrosoft();
+    const t = await startApp({}, { entraFetch: ms.fetcher });
+    try {
+      const owner = (await setupOwner(t.app)).b;
+      await owner.call('POST', '/api/users', {
+        email: 'tess@atlas.test',
+        name: 'Tess Tech',
+        password: TEMP,
+        role: 'technician',
+        allClients: 'edit',
+      });
+      await owner.call('PUT', '/api/settings/entra', {
+        tenantId: TENANT,
+        clientId: CLIENT,
+        clientSecret: SECRET,
+        enabled: true,
+      });
+      const oid = 'abc123';
+      const trip = async () => {
+        const start = await t.app.inject({ method: 'GET', url: '/api/auth/entra/start' });
+        const cookie = String(([] as string[]).concat(start.headers['set-cookie'] ?? [])[0]).split(';')[0]!;
+        const { code, state } = ms.approve(String(start.headers.location), {
+          oid,
+          email: 'tess@atlas.test',
+          name: 'Tess',
+        });
+        return t.app.inject({
+          method: 'GET',
+          url: `/api/auth/entra/callback?code=${code}&state=${state}`,
+          headers: { cookie },
+        });
+      };
+      await trip();
+      const person = ((await owner.call('GET', '/api/users')).data as { id: string; email: string }[]).find(
+        (p) => p.email === 'tess@atlas.test',
+      )!;
+      await owner.call('POST', `/api/users/${person.id}/entra/confirm`, {});
+      const back = await trip();
+      const cookie = ([] as string[])
+        .concat(back.headers['set-cookie'] ?? [])
+        .map((c) => c.split(';')[0]!)
+        .find((c) => c.startsWith('atlas_session='))!;
+      const session = await t.app.inject({ method: 'GET', url: '/api/session', headers: { cookie } });
+      expect(session.json().stage).toBe('password');
+    } finally {
+      await t.close();
+    }
   });
 });
