@@ -115,6 +115,22 @@ for (const p of db.passwords)
   for (const a of db.assets)
     if (a.clientId === p.clientId && p.name.startsWith(`${a.name} `))
       relations.push({ id: uuid(), a: { type: 'asset', id: a.id }, b: { type: 'password', id: p.id }, note: '' });
+// And for the relationship map: each client's first runbook and first location cover its first few assets.
+for (const c of db.clients) {
+  const doc = db.documents.find((d) => d.clientId === c.id);
+  const loc = db.locations.find((l) => l.clientId === c.id);
+  for (const asset of db.assets.filter((x) => x.clientId === c.id).slice(0, 3)) {
+    if (doc)
+      relations.push({ id: uuid(), a: { type: 'asset', id: asset.id }, b: { type: 'document', id: doc.id }, note: '' });
+    if (loc)
+      relations.push({
+        id: uuid(),
+        a: { type: 'asset', id: asset.id },
+        b: { type: 'location', id: loc.id },
+        note: 'Installed here',
+      });
+  }
+}
 for (const a of assets) snapshot(a.id, 1, a as unknown as Json);
 for (const d of documents) snapshot(d.id, 1, d as unknown as Json);
 for (const a of assets.slice(0, 4)) record('Updated', 'asset', a.id, a.name, a.clientId);
@@ -791,6 +807,19 @@ on('DELETE', '/items/:type/:id/relations/:rid', (m) => {
   return { ok: true };
 });
 on('GET', '/items/:type/:id/attachments', () => []);
+on('GET', '/clients/:id/relationships', (m) => {
+  const edges = relations.flatMap((r) => {
+    const a = itemRef(r.a.type, r.a.id);
+    const b = itemRef(r.b.type, r.b.id);
+    if (!a || !b || (a.clientId !== m[1] && b.clientId !== m[1])) return [];
+    return [{ id: r.id, from: `${a.type}:${a.id}`, to: `${b.type}:${b.id}`, note: r.note, a, b }];
+  });
+  const nodes = new Map(edges.flatMap((e) => [[e.from, e.a] as const, [e.to, e.b] as const]));
+  return {
+    nodes: [...nodes.values()],
+    edges: edges.map(({ a: _a, b: _b, ...e }) => e),
+  };
+});
 on('GET', '/search', (_m, _b, q) => search(q.get('q') ?? '', q.get('client') ?? undefined));
 on('GET', '/activity', (_m, _b, q) =>
   activity

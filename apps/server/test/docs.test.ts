@@ -370,6 +370,15 @@ describe('documentation', () => {
     expect(
       (await viewer.call('GET', `/api/items/asset/${asset.id}/relations`)).data.map((r: { title: string }) => r.title),
     ).toEqual(['WAN outage']);
+    // The client's map shows each link once, with both ends; the viewer's leaves out what they can't see.
+    type Map = { nodes: { title: string }[]; edges: { from: string; to: string }[] };
+    const full = (await owner.call('GET', `/api/clients/${harbor}/relationships`)).data as Map;
+    expect(full.nodes.map((n) => n.title).sort()).toEqual(['Firewall standard', 'HDG-FW-01', 'WAN outage']);
+    expect(full.edges).toHaveLength(2);
+    const partial = (await viewer.call('GET', `/api/clients/${harbor}/relationships`)).data as Map;
+    expect(partial.nodes.map((n) => n.title).sort()).toEqual(['HDG-FW-01', 'WAN outage']);
+    expect(partial.edges).toHaveLength(1);
+    expect((await viewer.call('GET', `/api/clients/${northline}/relationships`)).status).toBe(404);
     const relationId = linked.data[0].relationId;
     expect((await viewer.call('DELETE', `/api/items/asset/${asset.id}/relations/${relationId}`)).status).toBe(403);
     expect((await owner.call('DELETE', `/api/items/asset/${asset.id}/relations/${relationId}`)).status).toBe(200);

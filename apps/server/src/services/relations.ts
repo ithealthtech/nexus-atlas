@@ -1,6 +1,6 @@
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { schema } from '@atlas/db';
-import { relationSchema, type ItemType, type RelationView } from '@atlas/shared';
+import { relationSchema, type ItemRef, type ItemType, type RelationView, type RelationshipMap } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
 import { canSee, loadItem, requireItem } from './items.js';
@@ -34,6 +34,68 @@ export class RelationService {
       out.push({ ...ref, relationId: r.id, note: r.note });
     }
     return out.sort((a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
+  }
+
+  /**
+   * Every link that touches one of the client's items, with the items on both ends. Items the actor can't see
+   * (passwords they lack access to, archived items) are left out, along with their links.
+   */
+  async map(scope: Scope, clientId: string): Promise<RelationshipMap> {
+    await scope.require(clientId, 'read', 'Client');
+    const orgId = scope.actor.orgId;
+    const inClient = (
+      await Promise.all([
+        scope.db.select({ id: schema.assets.id }).from(schema.assets).where(eq(schema.assets.clientId, clientId)),
+        scope.db
+          .select({ id: schema.documents.id })
+          .from(schema.documents)
+          .where(eq(schema.documents.clientId, clientId)),
+        scope.db.select({ id: schema.contacts.id }).from(schema.contacts).where(eq(schema.contacts.clientId, clientId)),
+        scope.db
+          .select({ id: schema.locations.id })
+          .from(schema.locations)
+          .where(eq(schema.locations.clientId, clientId)),
+        scope.db
+          .select({ id: schema.passwords.id })
+          .from(schema.passwords)
+          .where(eq(schema.passwords.clientId, clientId)),
+      ])
+    ).flatMap((rows) => rows.map((r) => r.id));
+    if (!inClient.length) return { nodes: [], edges: [] };
+    const rows = await scope.db
+      .select()
+      .from(schema.relations)
+      .where(
+        and(
+          eq(schema.relations.orgId, orgId),
+          or(inArray(schema.relations.aId, inClient), inArray(schema.relations.bId, inClient)),
+        ),
+      );
+    const seen = new Map<string, ItemRef | null>();
+    const visible = async (type: string, id: string) => {
+      const key = `${type}:${id}`;
+      if (!seen.has(key)) {
+        const item = await loadItem(scope.db, orgId, type as ItemType, id);
+        if (!item || item.archived || !(await canSee(scope, item))) seen.set(key, null);
+        else {
+          const { archived: _archived, ...ref } = item;
+          seen.set(key, ref);
+        }
+      }
+      return seen.get(key)!;
+    };
+    const edges: RelationshipMap['edges'] = [];
+    const used = new Set<string>();
+    for (const rel of rows) {
+      const [a, b] = [await visible(rel.aType, rel.aId), await visible(rel.bType, rel.bId)];
+      if (!a || !b) continue;
+      edges.push({ id: rel.id, from: `${a.type}:${a.id}`, to: `${b.type}:${b.id}`, note: rel.note });
+      used.add(`${a.type}:${a.id}`).add(`${b.type}:${b.id}`);
+    }
+    const nodes = [...used]
+      .map((k) => seen.get(k)!)
+      .sort((x, y) => x.type.localeCompare(y.type) || x.title.localeCompare(y.title));
+    return { nodes, edges };
   }
 
   async add(scope: Scope, type: ItemType, id: string, input: unknown): Promise<RelationView[]> {
