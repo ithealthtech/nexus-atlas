@@ -2,7 +2,7 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.7.0] - 2026-09-30
 
 ### Added
 
@@ -13,10 +13,17 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 - **Emergency access:** the owner names trusted administrators, each with a waiting period. A trusted administrator can request access to every restricted password; the owner is emailed at once and can deny it during the wait or approve it sooner. Access lasts 24 hours, every step is in the security log, and each password used is marked "Emergency access" in its access history. (#35)
 - **SIEM streaming:** send the security log and the password access log to a SIEM as they happen, by HTTPS webhook (JSON, optionally HMAC-signed) or syslog (RFC 5424 over TLS, TCP, or UDP). Failed sends are retried from where they stopped. (#35)
 - **Browser extension for Edge and Chrome:** suggests the logins saved for the site you're on and fills them, with a quick search to copy a password, username, or one-time code for any login you can use. It signs in through Atlas: you approve the browser in Atlas after checking a code, and the extension gets a session tied to a key that never leaves the browser. It stores no passwords and asks Atlas each time. Fills and copies are recorded like reveals, and clients that require a reason ask for one. Signed-in browsers are listed on your account page, end after 7 days unused or 30 days in total, and are signed out with everything else when your password changes or an administrator signs you out. Build it with `npm run build:extension`. (#28)
+- **Asset statistics:** a card on the dashboard and each client's overview with servers, workstations, switches, network devices, printers, and phones, and a chart of operating systems that marks the ones out of support. Choosing a tile or slice lists the devices, and administrators choose how each layout counts under Settings → Asset statistics. (#106)
+- **Tickets from the ConnectWise platform:** a Tickets card with tickets opened and closed per day and a tile per status, plus a Ticket details table on each client's overview. Tickets are read from the ConnectWise platform API with the existing connection and company links; turn on Tickets under *What to sync*. (#107)
+- **Domain and SSL trackers:** domains are re-checked with their registry and certificates are read from each site on a schedule, and the dates are saved on the asset so Expirations and its alerts pick them up. A Domain and SSL expiry card shows what is expired or expiring, and each client has Domain Tracker and SSL Tracker tabs with Check now. (#108)
+- **Automated password rotation:** Administration → Password rotation changes local administrator and Active Directory service account passwords on a schedule through ConnectWise RMM. The vault changes only after the device confirms the new password; failures keep the old one and alert administrators. (#109)
+- **Customizable dashboard:** star clients, documents, and assets for a Favorites card, and show, hide, and reorder dashboard cards. Client quick notes sit at the top of every client page with history, compare, and restore; client tabs show counts and can be hidden; and the overview shows primary contact, phone, hours, and maintenance window. (#111)
+- **Secure notes, files, and Send:** the vault holds secure notes as well as logins, encrypted files can be attached to any entry, and Send shares text or a file once through a link whose key never reaches the server. (#114)
 
 ### Fixed
 
 - **Passwords:** changing only some details of a password (for example a bulk rotation change, or restricting it) no longer clears its website address. (#28)
+- **Browser extension:** it now follows the vault policies: restricted logins stay hidden from administrators when restricted passwords are for listed people only, and read-only accounts can't fill passwords or open files on entries when reveals are blocked. (#110, #112, #114)
 
 ## [1.6.0] - 2026-09-29
 
