@@ -350,6 +350,12 @@ export class SettingsService {
       : null;
   }
 
+  /** The company links and sync options, without the secret, for reading synced data. */
+  async cwRmmLinks(orgId: string): Promise<Pick<StoredCwRmm, 'map' | 'options' | 'lastSyncAt'> | null> {
+    const saved = (await this.load(orgId)).cwRmm;
+    return saved ? { map: saved.map ?? {}, options: saved.options, lastSyncAt: saved.lastSyncAt } : null;
+  }
+
   async cwRmmView(orgId: string): Promise<CwRmmView | null> {
     const saved = (await this.load(orgId)).cwRmm;
     return saved

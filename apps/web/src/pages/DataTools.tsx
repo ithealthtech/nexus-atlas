@@ -43,6 +43,7 @@ const KIND_LABELS: Record<string, string> = {
   tenants: 'Tenants',
   licenses: 'Licenses',
   domains: 'Domains',
+  tickets: 'Tickets',
 };
 
 export function JobSummary({ job }: { job: ImportJobView }) {
@@ -609,7 +610,7 @@ export function DataTools() {
       <PageHeader
         eyebrow="Administration"
         title="Import & export"
-        description="Sync devices from ConnectWise RMM and tenants from Microsoft 365, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
+        description="Sync devices and tickets from ConnectWise and tenants from Microsoft 365, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
       />
       <div className="grid max-w-4xl gap-6">
         <CwRmmSync />
