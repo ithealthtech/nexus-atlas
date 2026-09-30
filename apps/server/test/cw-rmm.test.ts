@@ -252,6 +252,7 @@ describe('ConnectWise RMM sync', () => {
       devices: false,
       contacts: true,
       tickets: true,
+      inventory: true,
       atlasLinks: false,
       ticketNotes: false,
       layoutId: null,

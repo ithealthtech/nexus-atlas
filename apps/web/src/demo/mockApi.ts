@@ -1703,6 +1703,9 @@ on('GET', '/clients/:id/security', () => ({ linked: false }));
 on('GET', '/assets/:id/security', () => ({ linked: false }));
 on('GET', '/tickets', (_m, _b, q) => ticketReport(q.get('client'), Number(q.get('days')) || 30));
 on('GET', '/tickets/list', (_m, _b, q) => ticketList(q.get('client'), q.get('status'), Number(q.get('days')) || 30));
+// The demo has no RMM software or sign-ins, so those cards stay hidden.
+on('GET', '/assets/:id/inventory', () => null);
+on('GET', '/clients/:id/software', () => []);
 const demoNotes = new Map<string, { id: string; text: string; createdAt: string; createdBy: string }[]>();
 on('GET', '/tickets/:id/notes', (m) => ({ notes: demoNotes.get(m[1]!) ?? [], canAdd: true }));
 on('POST', '/tickets/:id/notes', (m, b) => {
@@ -1879,6 +1882,7 @@ let cwRmm: {
     devices: boolean;
     contacts: boolean;
     tickets: boolean;
+    inventory: boolean;
     atlasLinks: boolean;
     ticketNotes: boolean;
     layoutId: string | null;
@@ -1917,6 +1921,7 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
       devices: true,
       contacts: true,
       tickets: true,
+      inventory: true,
       atlasLinks: false,
       ticketNotes: false,
       layoutId: null,
@@ -1932,6 +1937,7 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
     devices: b.devices !== false,
     contacts: b.contacts !== false,
     tickets: b.tickets !== false,
+    inventory: b.inventory !== false,
     atlasLinks: b.atlasLinks === true,
     ticketNotes: b.ticketNotes === true,
     layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,

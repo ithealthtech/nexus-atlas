@@ -29,6 +29,7 @@ import {
 import { FieldInput, FieldValue } from '@/components/fields';
 import { ItemIcon } from '@/components/ItemIcon';
 import { AttachmentsPanel, ItemActivity, RelatedPanel, RevisionsPanel } from '@/components/panels';
+import { DeviceInventoryCards } from '@/components/Inventory';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useAsset, useAssets, useClient, useClients, useLayouts } from '@/lib/queries';
@@ -546,6 +547,7 @@ export function AssetDetail() {
               {asset.notes || <span className="text-muted">No notes.</span>}
             </p>
           </Card>
+          <DeviceInventoryCards assetId={asset.id} />
           <ItemActivity id={asset.id} />
         </div>
         <div className="space-y-6">

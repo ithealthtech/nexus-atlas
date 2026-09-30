@@ -306,6 +306,11 @@ export function CwRmmSync() {
                     ['contacts', 'Contacts', 'Each company’s contacts, matched to ones already there by email.'],
                     ['devices', 'Devices', 'As assets: updating same-named ones, or in the layout chosen below.'],
                     ['tickets', 'Tickets', 'Read-only, for the ticket dashboard. Needs the tickets read permission.'],
+                    [
+                      'inventory',
+                      'Software and sign-ins',
+                      'Each device’s installed software and who signs in, and which host each virtual machine runs on.',
+                    ],
                   ] as const
                 ).map(([key, label, help]) => (
                   <Checkbox
