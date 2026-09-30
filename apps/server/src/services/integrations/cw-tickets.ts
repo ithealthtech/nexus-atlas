@@ -1,4 +1,4 @@
-import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { HttpError } from '../../errors.js';
 import type { ImportRun } from '../importers/common.js';
@@ -18,8 +18,6 @@ const MAX_PAGES = 200;
 
 // The ConnectWise platform's service ticketing API.
 const TICKETS = '/api/platform/v2/service/ticketing/tickets';
-const STATUSES = '/api/platform/v1/service/ticketing/statuses';
-const COMPANIES = '/api/platform/v1/company/companies';
 
 /** The web app for each API region. Only North America's is known, so other regions get no ticket links. */
 const CW_WEB: Partial<Record<CwRmmRegion, string>> = { na: 'https://control.itsupport247.net' };
@@ -60,10 +58,10 @@ const numeric = (s: string) => /^\d{1,18}$/.test(s);
 
 /**
  * A browser link to a platform ticket, as the web app's own ticket links read (keyed by the plain ticket ID the
- * portal shows, like 5535, and the company number). Dotted numbers ("133023.1533") are not portal IDs: no link.
+ * portal shows, like 5535, and the platform company ID). Dotted numbers ("133023.1533") are not portal IDs: no link.
  */
 export function ticketLink(web: string | undefined, number: string, companyNumber: string) {
-  const company = numeric(companyNumber) || /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(companyNumber);
+  const company = /^[\w-]{1,64}$/.test(companyNumber);
   if (!web || !numeric(number) || !company) return null;
   return `${web}/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=${number}&companyId=${companyNumber}&projectIssue=false&tabId=unified-ticket-detail-screen??`;
 }
@@ -123,29 +121,14 @@ export function mapTicket(
 }
 
 /**
- * Reads a company's tickets from the ConnectWise platform's service ticketing API: open tickets, then those in a
- * closed status, newest first.
+ * Reads a company's tickets from the ConnectWise platform's v2 service ticketing API, newest first. Only v2 is
+ * used: the v1 company and status lookups belong to the legacy PSA.
  */
 export class CwTicketReader {
   /** What the last ticket list looked like (field names only), for a job note. */
   lastList = '';
-  /** Something worth a job note once per sync, such as closed tickets that couldn't be listed. */
+  /** Something worth a job note once per sync. */
   note = '';
-  /** Companies with tickets that got no ConnectWise link because ConnectWise gives no company number to link by. */
-  readonly unlinked = new Set<string>();
-  /** Automation tickets (dotted numbers) with no CW-System note naming their portal ID yet. */
-  noPortalId = 0;
-  /** Whether ConnectWise refused to show ticket notes, so no automation ticket could get its portal ID. */
-  notesDenied = false;
-  /** Companies whose closed tickets couldn't be listed: only their open tickets were read. */
-  readonly openOnly = new Set<string>();
-  private statuses: Promise<Set<string>> | null = null;
-  private companyNumbers: Promise<Map<string, string>> | null = null;
-  /** The product whose external IDs are the portal's company numbers, and each company's external IDs. */
-  private portalProduct = '';
-  private readonly externalIds = new Map<string, { id: string; product: string }[]>();
-  /** For a company ConnectWise gave no IDs, which fields its records had, for the job note. */
-  private readonly shapes = new Map<string, string>();
   private readonly web: string | undefined;
 
   constructor(
@@ -155,123 +138,13 @@ export class CwTicketReader {
     this.web = CW_WEB[region];
   }
 
-  /** The IDs of statuses in ConnectWise's "Closed" category. */
-  private closedStatuses() {
-    this.statuses ??= this.client.get(STATUSES).then(
-      (body) =>
-        new Set(
-          listOf(body)
-            .filter((s) => /^closed$/i.test(text(s, 'category')) || pick(s, 'closedFlag', 'closedStatus') === true)
-            .map((s) => text(s, 'id'))
-            .filter(Boolean),
-        ),
-      (error) => {
-        // Without the list, closed tickets are told apart by their status names.
-        if (error instanceof HttpError && error.status === 404 && error.code !== ACCESS_DENIED) return new Set<string>();
-        throw error;
-      },
-    );
-    return this.statuses;
-  }
-
-  /** Each company's number for ticket links: the one numeric external ID, as the web app's links use. */
-  private numbers() {
-    this.companyNumbers ??= this.web
-      ? this.client.get(COMPANIES).then(
-          (body) => {
-            const companies = listOf(body).map(companyIds);
-            // A company with numeric IDs from several products: take the one from the product most companies'
-            // single numeric ID comes from, which is the portal's company number.
-            const products = new Map<string, number>();
-            for (const c of companies) {
-              const numbers = c.ids.filter((e) => numeric(e.id));
-              if (new Set(numbers.map((e) => e.id)).size === 1 && numbers[0]!.product)
-                products.set(numbers[0]!.product, (products.get(numbers[0]!.product) ?? 0) + 1);
-            }
-            this.portalProduct = [...products].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
-            for (const c of companies) this.externalIds.set(c.id, c.ids);
-            return new Map(
-              companies.flatMap((c) => {
-                const number = companyNumber(c, this.portalProduct);
-                return number ? [[c.id, number] as const] : [];
-              }),
-            );
-          },
-          () => new Map<string, string>(),
-        )
-      : Promise.resolve(new Map<string, string>());
-    return this.companyNumbers;
-  }
-
-  /**
-   * A company's number when the company list gives none: from its own record, else from its sites, whose records
-   * carry their company's IDs too. What came back is kept for the job note.
-   */
-  private async numberOf(companyId: string) {
-    const listed = (await this.numbers()).get(companyId);
-    if (listed || !this.web) return listed ?? '';
-    const read = async (path: string) => {
-      try {
-        return await this.client.get(path);
-      } catch (error) {
-        if (error instanceof HttpError) return null;
-        throw error;
-      }
-    };
-    const path = `${COMPANIES}/${encodeURIComponent(companyId)}`;
-    const record = await read(path);
-    const own = record && typeof record === 'object' && !Array.isArray(record) ? companyIds(record as Json) : null;
-    // The company's own record wins; its sites are asked only when it gives no number.
-    const fromRecord = own ? companyNumber(own, this.portalProduct) : '';
-    if (fromRecord) {
-      this.externalIds.set(companyId, own!.ids);
-      return fromRecord;
-    }
-    const sites = listOf(await read(`${path}/sites`));
-    const fromSites = sites.flatMap((site) => {
-      const parent = site.company && typeof site.company === 'object' ? companyIds(site.company as Json).ids : [];
-      return parent;
-    });
-    const ids = [...(own?.ids ?? []), ...fromSites];
-    if (ids.length) this.externalIds.set(companyId, ids);
-    else
-      this.shapes.set(
-        companyId,
-        `company fields ${record ? shapeOf(record) : 'not readable'}; ${sites.length} site${sites.length === 1 ? '' : 's'}${sites[0] ? ` with fields ${shapeOf(sites[0])}` : ''}`.slice(0, 600),
-      );
-    return companyNumber({ id: companyId, own: own?.own ?? '', ids }, this.portalProduct);
-  }
-
-  /** For a company ConnectWise gave no IDs, which fields its records had. */
-  fieldsSeen(companyId: string) {
-    return this.shapes.get(companyId) ?? '';
-  }
-
-  /** What ConnectWise gave a company to link by, for the job note: its external IDs and their products. */
-  idsSeen(companyId: string) {
-    const ids = this.externalIds.get(companyId) ?? [];
-    return ids.length
-      ? ids
-          .slice(0, 4)
-          .map((e) => `${clean(e.id, 40)}${e.product ? ` (product ${clean(e.product, 40)})` : ''}`)
-          .join(', ')
-      : 'none';
-  }
-
   /** Every open ticket, and those closed in the last 90 days. */
   async tickets(companyId: string, now = Date.now()): Promise<CwTicket[]> {
-    const closedIds = await this.closedStatuses();
-    // Without a numeric company number, the company's platform ID, as the RMM device links use.
-    const companyNumber = (await this.numberOf(companyId)) || companyId;
-    const link = (number: string) => ticketLink(this.web, number, companyNumber);
-    const map = (records: Json[]) =>
-      records.map((r) => mapTicket(r, now, closedIds, link)).filter((t): t is CwTicket => !!t);
-    const company = `companyIds=${encodeURIComponent(companyId)}`;
-    const closed = [...closedIds].join(',');
-
-    let open: CwTicket[];
+    // Linked by the company's platform ID, as the RMM device links are.
+    const link = (number: string) => ticketLink(this.web, number, companyId);
+    let records: Json[];
     try {
-      open = map(await this.pages(closed ? `${company}&statusIds=${encodeURIComponent(`[notIn],${closed}`)}` : company));
+      records = await this.pages(`companyIds=${encodeURIComponent(companyId)}`);
     } catch (error) {
       if (!(error instanceof HttpError) || error.status !== 400 || error.code === ACCESS_DENIED) throw error;
       throw new HttpError(
@@ -282,57 +155,13 @@ export class CwTicketReader {
         ),
       );
     }
-    // Without the closed statuses, the list above already held every ticket.
-    let recent: CwTicket[] = [];
-    if (closed) {
-      // Every page: the list is by creation date, and a ticket opened long ago may have closed last week.
-      try {
-        // The spec's "in" filter is the bare list; only "not in" takes a prefix.
-        recent = map(await this.pages(`${company}&statusIds=${encodeURIComponent(closed)}`));
-      } catch (error) {
-        if (!(error instanceof HttpError) || error.status !== 400 || error.code === ACCESS_DENIED) throw error;
-        this.openOnly.add(companyId);
-        this.note ||= `Closed tickets couldn't be listed, so the closed counts are missing: ${error.message.slice(0, 150)}`;
-      }
-    }
     const since = now - KEEP_CLOSED_DAYS * DAY;
     const seen = new Set<string>();
-    const list = [...open, ...recent]
+    return records
+      .map((r) => mapTicket(r, now, new Set(), link))
+      .filter((t): t is CwTicket => !!t)
       .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
-    await this.portalIds(list, link);
-    if (list.some((t) => !t.url && numeric(t.number))) this.unlinked.add(companyId);
-    else this.noPortalId += list.filter((t) => !t.url && !numeric(t.number)).length;
-    return list;
-  }
-
-  /**
-   * A ticket the platform opened itself (a dotted number, "133023.1670") is copied into the portal under another
-   * ID, which only a CW-System note names ("Connectwise ticket id 5283 is created to match ASIO ticket id ...").
-   * Shows and links that ID. A ticket whose notes can't be read keeps its dotted number and no link.
-   */
-  private async portalIds(list: CwTicket[], link: (number: string) => string | null) {
-    if (this.notesDenied) return;
-    const dotted = list.filter((t) => !numeric(t.number)).slice(0, MAX_PORTAL_LOOKUPS);
-    for (const t of dotted) {
-      let notes: Json[];
-      try {
-        notes = listOf(await this.client.get(notesPath(t.id)));
-      } catch (error) {
-        // A key that can't read notes can't read any: stop asking, and keep the tickets as listed.
-        if (error instanceof HttpError && error.code === ACCESS_DENIED) {
-          this.notesDenied = true;
-          return;
-        }
-        if (error instanceof HttpError) continue;
-        throw error;
-      }
-      const id = notes.map((n) => portalIdIn(text(n, 'detail', 'text', 'note'), t.number)).find(Boolean);
-      if (!id) continue;
-      t.number = id;
-      // The portal's link, so the number and the link name the same ticket.
-      t.url = link(id) ?? t.url;
-    }
   }
 
   /** Every page of a ticket list, newest first. */
@@ -358,42 +187,6 @@ export class CwTicketReader {
     }
     return out;
   }
-}
-
-/** Dotted tickets per company whose notes are read for the portal's ID, each sync. */
-const MAX_PORTAL_LOOKUPS = 200;
-
-/**
- * The portal ticket ID a CW-System note names for this very ticket: "Connectwise ticket id 5283 is created to match
- * ASIO ticket id 133023.1670". A note naming another ticket's number gives nothing.
- */
-export function portalIdIn(note: string, asioNumber: string): string | null {
-  const m =
-    /\bconnect\s*wise\s+ticket\s+id\s*#?\s*(\d{1,18})\s+is\s+created\s+to\s+match\s+asio\s+ticket\s+id\s*#?\s*([\d.]+?)\.?(?:\s|$)/i.exec(
-      note,
-    );
-  return m && m[2] === asioNumber ? (m[1] ?? null) : null;
-}
-
-/** A company record's own number and external IDs. */
-function companyIds(c: Json) {
-  return {
-    id: text(c, 'id'),
-    own: text(c, 'number', 'companyNumber'),
-    ids: (Array.isArray(c.externalIds) ? (c.externalIds as Json[]) : [])
-      .map((e) => ({ id: text(e, 'externalId'), product: text(e, 'productId') }))
-      .filter((e) => e.id),
-  };
-}
-
-/** The portal's company number: its own, its one numeric external ID, or the one from the portal's product. */
-function companyNumber(c: ReturnType<typeof companyIds>, portalProduct: string) {
-  if (numeric(c.own)) return c.own;
-  const numbers = c.ids.filter((e) => numeric(e.id));
-  const unique = [...new Set(numbers.map((e) => e.id))];
-  if (unique.length === 1) return unique[0]!;
-  const fromPortal = [...new Set(numbers.filter((e) => portalProduct && e.product === portalProduct).map((e) => e.id))];
-  return fromPortal.length === 1 ? fromPortal[0]! : '';
 }
 
 const notesPath = (ticketId: string) =>
@@ -543,39 +336,6 @@ export async function runTicketSync(
     read.push(companyId);
   }
   if (reader.note) run.note(reader.note);
-  if (reader.unlinked.size) {
-    const byCompany = new Map(linked);
-    const ids = [...reader.unlinked].map((c) => byCompany.get(c) ?? c);
-    const names = new Map(
-      (
-        await db
-          .select({ id: schema.clients.id, name: schema.clients.name })
-          .from(schema.clients)
-          .where(inArray(schema.clients.id, ids))
-      ).map((r) => [r.id, r.name]),
-    );
-    const shown = [...reader.unlinked]
-      .slice(0, 5)
-      .map((c) => `${names.get(byCompany.get(c) ?? c) ?? c} (IDs from ConnectWise: ${reader.idsSeen(c)})`);
-    run.note(
-      `Tickets for ${shown.join('; ')}${ids.length > 5 ? ` and ${ids.length - 5} more` : ''} have no ConnectWise ` +
-        "link: ConnectWise gives these companies no single numeric company ID (an external ID) to link by, or the " +
-        'account is outside North America.',
-    );
-    const first = [...reader.unlinked].find((c) => reader.fieldsSeen(c));
-    if (first)
-      run.note(
-        `What ConnectWise returned for ${names.get(byCompany.get(first) ?? first) ?? first}: ${reader.fieldsSeen(first)}`,
-      );
-  }
-  if (reader.notesDenied)
-    run.note(
-      "Automation tickets keep their dotted numbers and have no link: ConnectWise refused to show ticket notes, where the portal's ticket ID is. Check the key's ticket permissions in API Access.",
-    );
-  else if (reader.noPortalId)
-    run.note(
-      `${reader.noPortalId} automation ticket${reader.noPortalId === 1 ? ' has' : 's have'} no link yet: ConnectWise hasn't added the CW-System note naming ${reader.noPortalId === 1 ? 'its' : 'their'} portal ticket ID.`,
-    );
   if (linked.length && !seen.length && reader.lastList) run.note(`No tickets listed (${reader.lastList}).`);
 
   // Tickets the companies that were read no longer return: deleted, or closed more than 90 days ago.
@@ -588,10 +348,6 @@ export async function runTicketSync(
           eq(t.source, TICKET_SOURCE),
           inArray(t.companyId, read),
           ...(seen.length ? [notInArray(t.externalId, seen)] : []),
-          // Where only open tickets were read, the closed ones already synced stay.
-          ...(reader.openOnly.size
-            ? [or(eq(t.closed, false), notInArray(t.companyId, [...reader.openOnly]))]
-            : []),
         ),
       );
   // Companies unlinked (or set to not sync) since: their tickets go.

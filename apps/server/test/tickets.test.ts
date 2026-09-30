@@ -163,11 +163,11 @@ describe('ticket values', () => {
       url: 'https://control.itsupport247.net/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=5535&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
     });
     expect(ticketLink('https://control.itsupport247.net', '133023.1533', '19304')).toBeNull();
-    // Without a company number, the platform company ID.
+    // Linked by the platform company ID.
     expect(ticketLink('https://control.itsupport247.net', '5535', '72f2b461-1e35-4df0-be5c-d55f10b6052f')).toContain(
       'ticketId=5535&companyId=72f2b461-1e35-4df0-be5c-d55f10b6052f',
     );
-    expect(ticketLink('https://control.itsupport247.net', '5535', 'not-an-id')).toBeNull();
+    expect(ticketLink('https://control.itsupport247.net', '5535', 'not an id')).toBeNull();
     // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),
@@ -294,81 +294,6 @@ describe('ticket sync and dashboard', () => {
     await t.close();
   });
 
-  it("links a company's tickets by the number its sites carry when its own records have none", async () => {
-    await connect(tickets);
-    platform.companies.set('c2', { id: 'c2', externalIds: [] });
-    platform.sites.set('c2', [{ id: 's-1', company: { id: 'c2', externalIds: [{ externalId: '19301' }] } }]);
-    expect((await link()).status).toBe(200);
-    await sync();
-    const list = (await owner.call('GET', `/api/tickets/list?client=${northline}`)).data;
-    expect(list[0].url).toContain('ticketId=201&companyId=19301');
-  });
-
-  it("links a company's tickets by the number on its own record when the company list has none", async () => {
-    await connect(tickets);
-    platform.companies.set('c2', { id: 'c2', externalIds: [{ externalId: '19300', productId: 'psa' }] });
-    expect((await link()).status).toBe(200);
-    const job = await sync();
-    expect(job.messages.join(' ')).not.toContain('Northline Architecture');
-    const list = (await owner.call('GET', `/api/tickets/list?client=${northline}`)).data;
-    expect(list[0].url).toContain('ticketId=201&companyId=19300');
-  });
-
-  it('shows and links the portal ID a CW-System note gives a dotted platform ticket', async () => {
-    tickets.get('c1')!.push(
-      {
-        id: 't-a1',
-        number: '133023.1670',
-        summary: 'Network attack',
-        status: { id: 's-new', name: 'New' },
-        createdAt: ago(2),
-      },
-      {
-        id: 't-a2',
-        number: '133023.1671',
-        summary: 'No note yet',
-        status: { id: 's-new', name: 'New' },
-        createdAt: ago(3),
-      },
-      {
-        id: 't-a3',
-        number: '133023.1672',
-        summary: 'Mismatched note',
-        status: { id: 's-new', name: 'New' },
-        createdAt: ago(4),
-      },
-    );
-    await connect(tickets);
-    platform.notes.set('t-a1', [
-      {
-        id: 'n-1',
-        detail: 'Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670',
-        createdBy: 'CW-System',
-      },
-    ]);
-    // A note naming another ticket's number (pasted in, say) is not this ticket's portal ID.
-    platform.notes.set('t-a3', [
-      { id: 'n-2', detail: 'Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670.' },
-    ]);
-    expect((await link()).status).toBe(200);
-    const job = await sync();
-    expect(job.status).toBe('done');
-    // The two without a portal ID are named as such, not blamed on the company's number.
-    expect(job.messages.join(' ')).toContain('2 automation tickets have no link yet');
-    // Northline's number is only on its own record; with none there, the note shows what ConnectWise gave.
-    expect(job.messages.join(' ')).toContain('Northline Architecture (IDs from ConnectWise: none)');
-    expect(job.messages.join(' ')).toContain('What ConnectWise returned for Northline Architecture: company fields');
-    expect(job.messages.join(' ')).not.toContain('Harbor Dental Group have no ConnectWise link');
-    const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
-    const shown = (s: string) => list.find((k: { summary: string }) => k.summary === s);
-    expect(shown('Network attack')).toMatchObject({
-      number: '5283',
-      url: expect.stringContaining('ticketId=5283&companyId=19304'),
-    });
-    expect(shown('Mismatched note')).toMatchObject({ number: '133023.1672', url: null });
-    expect(shown('No note yet')).toMatchObject({ number: '133023.1671', url: null });
-  });
-
   it('syncs tickets read-only, with counts, a daily chart, and a list oldest-updated first', async () => {
     await connect(tickets);
     const before = (await owner.call('GET', `/api/tickets?client=${harbor}`)).data;
@@ -401,16 +326,14 @@ describe('ticket sync and dashboard', () => {
     const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
     expect(list.map((k: { number: string }) => k.number)).toEqual(['103', '102', '101']);
     expect(list[0]).toMatchObject({ status: 'Waiting for parts', url: 'https://na.myconnectwise.net/ticket/103' });
-    // Without a link of its own, a ticket links to the platform's web app by ticket and company number.
+    // Without a link of its own, a ticket links to the platform's web app by ticket number and platform company ID.
     expect(list[1].url).toBe(
-      'https://control.itsupport247.net/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=102&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
+      'https://control.itsupport247.net/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=102&companyId=c1&projectIssue=false&tabId=unified-ticket-detail-screen??',
     );
-    // Open tickets and recently closed ones are asked for separately, by status.
+    // Only the v2 ticket list is asked: no legacy v1 company, status or note lookups.
     const lists = platform.calls.filter((c) => c.includes('/v2/service/ticketing/tickets?companyIds=c1'));
-    expect(lists.map((c) => new URL(c.split(' ')[1], 'https://x').searchParams.get('statusIds'))).toEqual([
-      '[notIn],s-done',
-      's-done',
-    ]);
+    expect(lists).toHaveLength(1);
+    expect(platform.calls.filter((c) => c.includes('/ticketing/') && c.includes('/v1/'))).toEqual([]);
     const closed = (await owner.call('GET', `/api/tickets/list?client=${harbor}&status=Closed`)).data;
     expect(closed.map((k: { number: string }) => k.number)).toEqual(['104']);
 
@@ -427,20 +350,6 @@ describe('ticket sync and dashboard', () => {
       linked: false,
       open: 0,
     });
-  });
-
-  it('keeps closed tickets already synced when ConnectWise refuses to list closed ones', async () => {
-    const opts = { closedFails: false };
-    await connect(tickets, opts);
-    await link();
-    await sync();
-    expect((await owner.call('GET', `/api/tickets/list?client=${harbor}&status=Closed`)).data).toHaveLength(1);
-    opts.closedFails = true;
-    const job = await sync();
-    expect(job.status).toBe('done');
-    expect(job.messages.join(' ')).toMatch(/Closed tickets couldn't be listed/);
-    expect((await owner.call('GET', `/api/tickets/list?client=${harbor}&status=Closed`)).data).toHaveLength(1);
-    expect((await owner.call('GET', `/api/tickets?client=${harbor}`)).data.open).toBe(3);
   });
 
   it('shows only clients the viewer can read, and hides others as not found', async () => {
