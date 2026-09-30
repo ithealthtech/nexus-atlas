@@ -29,6 +29,7 @@ import {
 import { FieldInput, FieldValue } from '@/components/fields';
 import { ItemIcon } from '@/components/ItemIcon';
 import { AttachmentsPanel, ItemActivity, RelatedPanel, RevisionsPanel } from '@/components/panels';
+import { DeviceInventoryCards } from '@/components/Inventory';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useAsset, useAssets, useClient, useClients, useLayouts } from '@/lib/queries';
@@ -36,6 +37,7 @@ import { relativeTime } from '@/lib/format';
 import { AppLink } from '@/components/AppLink';
 import { cn } from '@/lib/cn';
 import { FavoriteStar } from '@/components/Favorites';
+import { RmmInsightPanel } from '@/components/RmmInsight';
 import { DeviceSecurityCard } from '@/components/CwSecurity';
 
 const statusTone = { active: 'success', inactive: 'warning', retired: 'neutral' } as const;
@@ -545,9 +547,11 @@ export function AssetDetail() {
               {asset.notes || <span className="text-muted">No notes.</span>}
             </p>
           </Card>
+          <DeviceInventoryCards assetId={asset.id} />
           <ItemActivity id={asset.id} />
         </div>
         <div className="space-y-6">
+          {!asset.archived && <RmmInsightPanel assetId={asset.id} />}
           <RelatedPanel type="asset" id={asset.id} clientId={asset.clientId} canEdit={canEdit} />
           <AttachmentsPanel type="asset" id={asset.id} canEdit={canEdit} />
           <RevisionsPanel

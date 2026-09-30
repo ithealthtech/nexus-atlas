@@ -1077,6 +1077,8 @@ on('POST', '/assets/:id/warranty-check', (m) => {
   const a = find(assets, m[1]!, 'Asset');
   return { asset: assetView(a), vendor: null, expires: null, message: 'The demo does not look warranties up.' };
 });
+// The demo has no RMM, so no device shows live RMM data.
+on('GET', '/assets/:id/rmm-insight', () => ({ insight: null }));
 on('POST', '/assets/:id/archive', (m, b) => {
   const a = find(assets, m[1]!, 'Asset');
   a.archived = !!b.archived;
@@ -1701,6 +1703,24 @@ on('GET', '/clients/:id/security', () => ({ linked: false }));
 on('GET', '/assets/:id/security', () => ({ linked: false }));
 on('GET', '/tickets', (_m, _b, q) => ticketReport(q.get('client'), Number(q.get('days')) || 30));
 on('GET', '/tickets/list', (_m, _b, q) => ticketList(q.get('client'), q.get('status'), Number(q.get('days')) || 30));
+// The demo has no RMM software or sign-ins, so those cards stay hidden.
+on('GET', '/assets/:id/inventory', () => null);
+on('GET', '/clients/:id/software', () => []);
+const demoNotes = new Map<string, { id: string; text: string; createdAt: string; createdBy: string }[]>();
+on('GET', '/tickets/:id/notes', (m) => ({ notes: demoNotes.get(m[1]!) ?? [], canAdd: true }));
+on('POST', '/tickets/:id/notes', (m, b) => {
+  const notes = [
+    {
+      id: uuid(),
+      text: `${String(b.text)}\n\n(Added from Nexus Atlas by Demo User)`,
+      createdAt: new Date().toISOString(),
+      createdBy: 'API',
+    },
+    ...(demoNotes.get(m[1]!) ?? []),
+  ];
+  demoNotes.set(m[1]!, notes);
+  return { notes, canAdd: true };
+});
 on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
 on('GET', '/warranty/assets', (_m, _b, q) =>
   warrantyAssets(q.get('client'))
@@ -1858,7 +1878,16 @@ let cwRmm: {
   hasSecret: true;
   autoSync: boolean;
   lastSyncAt: string | null;
-  options: { locations: boolean; devices: boolean; tickets: boolean; layoutId: string | null };
+  options: {
+    locations: boolean;
+    devices: boolean;
+    contacts: boolean;
+    tickets: boolean;
+    inventory: boolean;
+    atlasLinks: boolean;
+    ticketNotes: boolean;
+    layoutId: string | null;
+  };
 } | null = null;
 const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
 const cwCompanies = () => [
@@ -1888,7 +1917,16 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     hasSecret: true,
     autoSync: b.autoSync !== false,
     lastSyncAt: cwRmm?.lastSyncAt ?? null,
-    options: cwRmm?.options ?? { locations: true, devices: true, tickets: true, layoutId: null },
+    options: cwRmm?.options ?? {
+      locations: true,
+      devices: true,
+      contacts: true,
+      tickets: true,
+      inventory: true,
+      atlasLinks: false,
+      ticketNotes: false,
+      layoutId: null,
+    },
   };
   return { ...cwRmm, companies: cwCompanies().length };
 });
@@ -1898,7 +1936,11 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
   cwRmm.options = {
     locations: b.locations !== false,
     devices: b.devices !== false,
+    contacts: b.contacts !== false,
     tickets: b.tickets !== false,
+    inventory: b.inventory !== false,
+    atlasLinks: b.atlasLinks === true,
+    ticketNotes: b.ticketNotes === true,
     layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,
   };
   return cwRmm;

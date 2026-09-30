@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, like, or } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type AssetView, type CwRmmCompany, type CwRmmRegion, type LayoutField, type RmmDeviceKind, type RmmProtection, MAX_LAYOUT_FIELDS } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
@@ -7,7 +7,7 @@ import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
 import { endpointLayout } from '../endpoint-layout.js';
 import { LayoutService } from '../layouts.js';
-import { locations } from '../people.js';
+import { contacts as contactService, locations } from '../people.js';
 import { Scope } from '../scope.js';
 import type { SettingsService, StoredCwRmm } from '../settings.js';
 import { ImportRun } from '../importers/common.js';
@@ -25,6 +25,15 @@ const SCOPES = 'platform.companies.read platform.sites.read platform.devices.rea
 export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.automation.create`;
 /** Tickets get their own token, so a key without ticket access still syncs devices. */
 export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
+/** Adding ticket notes (the scope names CallBridge uses against the same API). Asked for only when notes are on. */
+export const TICKET_NOTE_SCOPES = `${TICKET_SCOPES} platform.tickets.create`;
+/** Writing the "Atlas link" custom fields on devices. Asked for only when that option is on. */
+export const LINK_SCOPES = `${SCOPES} platform.devices.write`;
+/**
+ * Writing them on companies. The spec names no scope for company custom fields; this follows its devices.write
+ * naming, on a token of its own so a key refused it still writes device links.
+ */
+export const COMPANY_LINK_SCOPES = `${SCOPES} platform.companies.write`;
 const RETRY_MS = 2000;
 /** The code on errors that mean the key can't sign in or lacks a permission: no other request shape will help. */
 export const ACCESS_DENIED = 'cw_access_denied';
@@ -33,6 +42,7 @@ const ATTEMPT_CHARS = 100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Json = Record<string, unknown>;
+type Method = 'GET' | 'POST' | 'PUT';
 
 type DeviceQuery = { kind: 'v2'; resourceType: string; limit: number } | { kind: 'v1'; limit: number };
 // The platform API spec takes company, site, or endpoint as the resource type, up to 500 devices a page. The first
@@ -61,7 +71,7 @@ export const text = (o: Json, ...keys: string[]) => {
   return typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
 };
 /** The list inside a response, whatever it's called. */
-const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices', 'tickets'];
+const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'contacts', 'endpoints', 'devices', 'tickets'];
 export const listOf = (body: unknown, depth = 0): Json[] => {
   if (Array.isArray(body)) return body as Json[];
   if (!body || typeof body !== 'object' || depth > 3) return [];
@@ -563,6 +573,58 @@ export interface RmmSite {
   postalCode: string;
   country: string;
 }
+export interface RmmContact {
+  id: string;
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+  mobile: string;
+  /** The company's primary contact. */
+  primary: boolean;
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** A phone number record as one string: country code, number, and extension when given. */
+const phoneText = (p: Json | undefined) => {
+  if (!p || typeof p !== 'object') return '';
+  const number = text(p, 'nationalNumber', 'number', 'phoneNumber', 'value');
+  if (!number) return '';
+  const code = text(p, 'countryCode');
+  const ext = text(p, 'extension');
+  return `${code && !number.startsWith('+') ? `+${code.replace(/^\+/, '')} ` : ''}${number}${ext ? ` x${ext}` : ''}`;
+};
+
+/**
+ * A ConnectWise contact (a company's primaryContact, or a contact record) in Atlas's terms; null when it has no ID
+ * or name, or is inactive. Contact records list emails and phone numbers; the company's primary contact gives one
+ * of each.
+ */
+export function mapContact(c: Json, primary = false): RmmContact | null {
+  const id = text(c, 'id', 'contactId');
+  const name = [text(c, 'firstName'), text(c, 'lastName')].filter(Boolean).join(' ') || text(c, 'name', 'fullName');
+  if (!id || !name || c.activeFlag === false) return null;
+  const list = (key: string) => (Array.isArray(c[key]) ? (c[key] as Json[]).filter((v) => v && typeof v === 'object') : []);
+  const first = (items: Json[]) => items.find((v) => v.primaryFlag === true) ?? items[0];
+  const email = text(c, 'primaryEmail.emailAddress', 'email', 'emailAddress') || text(first(list('emails')) ?? {}, 'emailAddress');
+  const phones = list('phoneNumbers');
+  const isMobile = (p: Json) => /mobile|cell/i.test(`${text(p, 'designation', 'type.name', 'description')}`);
+  const mobile = phoneText(phones.find(isMobile));
+  const phone =
+    phoneText(pick(c, 'primaryPhoneNumber') as Json | undefined) ||
+    phoneText(first(phones.filter((p) => !isMobile(p)))) ||
+    text(c, 'phone', 'phoneNumber');
+  return {
+    id,
+    name: name.slice(0, 120),
+    title: text(c, 'title', 'jobTitle').slice(0, 120),
+    email: EMAIL.test(email) && email.length <= 254 ? email.toLowerCase() : '',
+    phone: phone.slice(0, 40),
+    mobile: mobile.slice(0, 40),
+    primary,
+  };
+}
+
 export interface RmmDevice {
   id: string;
   companyId: string;
@@ -586,6 +648,97 @@ export interface RmmDevice {
   warrantyExpires: string;
   /** Everything else ConnectWise sent about the device, as [label, value]. */
   extra: [string, string][];
+  /** Installed applications; undefined when they weren't read (switched off, or ConnectWise wouldn't say). */
+  software?: RmmApp[];
+  /** Accounts that sign in, most recent first; undefined when they weren't read. */
+  signIns?: RmmSignIn[];
+}
+export interface RmmApp {
+  name: string;
+  version: string;
+  publisher: string;
+  installedAt: string | null;
+}
+export interface RmmSignIn {
+  username: string;
+  domain: string;
+  lastLogonAt: string | null;
+}
+/** A device related to another in the RMM: `role` is this device's side, e.g. Host or Guest. */
+export interface RmmRelation {
+  endpointId: string;
+  role: string;
+  relatedRole: string;
+}
+
+// Windows' own accounts, never a person.
+const BUILT_IN_ACCOUNTS = /^(administrator|guest|defaultaccount|wdagutilityaccount|defaultuser\d*|system|local service|network service|dwm-\d+|umfd-\d+)$/i;
+// ConnectWise caps how much comes back; a device with more than this many apps keeps the first ones.
+const MAX_APPS = 1000;
+const MAX_SIGN_INS = 50;
+
+/** A date ConnectWise gives as ISO text or a Unix time (seconds or milliseconds), as ISO; null when there is none. */
+export function isoOf(value: unknown): string | null {
+  if (value === null || value === undefined || value === '' || value === 0) return null;
+  const n = typeof value === 'number' ? value : /^\d+$/.test(String(value)) ? Number(value) : NaN;
+  const date = Number.isFinite(n) ? new Date(n < 1e12 ? n * 1000 : n) : new Date(String(value));
+  // Windows reports "never" as a year-1601 or year-0001 date.
+  return Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1990 ? null : date.toISOString();
+}
+
+/** A device's applications from the applications API, one per name and version. */
+export function appsOf(records: Json[]): RmmApp[] {
+  const out = new Map<string, RmmApp>();
+  for (const a of records) {
+    const name = text(a, 'name', 'displayName', 'applicationName').slice(0, 300);
+    if (!name) continue;
+    const version = text(a, 'version', 'displayVersion').slice(0, 100);
+    const key = `${name.toLowerCase()}|${version}`;
+    if (out.has(key)) continue;
+    out.set(key, {
+      name,
+      version,
+      publisher: text(a, 'publisher', 'vendor').slice(0, 200),
+      installedAt: isoOf(pick(a, 'installedDate', 'installDate')),
+    });
+    if (out.size >= MAX_APPS) break;
+  }
+  return [...out.values()].sort((x, y) => x.name.localeCompare(y.name));
+}
+
+/**
+ * The accounts that sign in to a device: local and domain accounts from the users API (enabled ones that have
+ * signed in), plus whoever the system state API says signed in last or is signed in now. Most recent first.
+ */
+export function signInsOf(users: Json[], state: Json | undefined): RmmSignIn[] {
+  const out = new Map<string, RmmSignIn>();
+  const add = (raw: string, domain: string, when: string | null) => {
+    // System state gives DOMAIN\user or user@domain; the users API gives the two apart.
+    const [, d1, u1] = /^(?:([^\\]+)\\)?(.+)$/.exec(raw.trim()) ?? [];
+    const [, u2, d2] = /^([^@]+)(?:@(.+))?$/.exec(u1 ?? '') ?? [];
+    const username = (u2 ?? '').trim().slice(0, 200);
+    if (!username || BUILT_IN_ACCOUNTS.test(username)) return;
+    const key = username.toLowerCase();
+    const seen = out.get(key);
+    if (seen && (seen.lastLogonAt ?? '') >= (when ?? '')) return;
+    out.set(key, { username, domain: (domain || d1 || d2 || seen?.domain || '').slice(0, 200), lastLogonAt: when });
+  };
+  for (const u of users) {
+    if (pick(u, 'userDisabled') === true) continue;
+    const when = isoOf(pick(u, 'lastLogonTimestamp', 'lastLogon', 'lastLogonTime'));
+    if (when) add(text(u, 'username', 'userName', 'name'), text(u, 'domainName', 'domain'), when);
+  }
+  if (state) {
+    const last = pick(state, 'lastLoggedOnUser');
+    if (last && typeof last === 'object')
+      add(text(last as Json, 'username', 'userName'), '', isoOf(pick(last as Json, 'logonTime')));
+    const now = pick(state, 'loggedOnUsers');
+    for (const u of Array.isArray(now) ? (now as Json[]) : [])
+      add(text(u, 'username', 'userName'), '', isoOf(pick(u, 'logonTime')));
+  }
+  return [...out.values()]
+    .sort((x, y) => (y.lastLogonAt ?? '').localeCompare(x.lastLogonAt ?? ''))
+    .slice(0, MAX_SIGN_INS);
 }
 
 /** Talks to the ConnectWise Asio platform API with an OAuth client-credentials token. */
@@ -695,18 +848,27 @@ export class CwRmmClient {
     return this.call('GET', path);
   }
 
+  /** A write to the platform API. Only the opt-in write-back options use these. */
+  post(path: string, body: unknown): Promise<unknown> {
+    return this.call('POST', path, body);
+  }
+
+  put(path: string, body: unknown): Promise<unknown> {
+    return this.call('PUT', path, body);
+  }
+
   /** One page of another part of the platform API (patching, backup, security), with the next page's cursor. */
   page(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ body: unknown; nextCursor: number | null }> {
     return this.request(method, path, body);
   }
 
-  private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+  private async call(method: Method, path: string, body?: unknown): Promise<unknown> {
     return (await this.request(method, path, body)).body;
   }
 
   /** A call's body, with the next page's cursor when ConnectWise gives one in its Link header. */
   private async request(
-    method: 'GET' | 'POST',
+    method: Method,
     path: string,
     body?: unknown,
   ): Promise<{ body: unknown; nextCursor: number | null }> {
@@ -735,7 +897,17 @@ export class CwRmmClient {
         res.status === 400 || res.status === 404 ? res.status : 502,
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
-    return { body: await res.json(), nextCursor: nextCursorOf(res.headers.get('link')) };
+    let parsed: unknown;
+    if (method === 'GET') parsed = await res.json();
+    else {
+      // A write can answer with no body (204), or one that isn't JSON; either way it worked.
+      try {
+        parsed = JSON.parse(await res.text());
+      } catch {
+        parsed = null;
+      }
+    }
+    return { body: parsed, nextCursor: nextCursorOf(res.headers.get('link')) };
   }
 
   /**
@@ -790,8 +962,32 @@ export class CwRmmClient {
       .filter((s) => s.id);
   }
 
+  /**
+   * The company's contacts: its primary contact (from the company record, as the spec gives it), plus any others
+   * the contact list returns for this company. The spec documents only creating contacts, so the list is a bonus:
+   * when ConnectWise refuses it, the primary contact is still synced.
+   */
+  async contacts(companyId: string): Promise<RmmContact[]> {
+    const company = (await this.call('GET', `/api/platform/v1/company/companies/${encodeURIComponent(companyId)}`)) as Json;
+    const primary = mapContact((pick(company ?? {}, 'primaryContact', 'data.primaryContact') ?? {}) as Json, true);
+    const out = new Map<string, RmmContact>(primary ? [[primary.id, primary]] : []);
+    let listed: Json[] = [];
+    try {
+      listed = listOf(await this.call('GET', `/api/platform/v1/contact/contacts?companyId=${encodeURIComponent(companyId)}`));
+    } catch (error) {
+      if (!(error instanceof HttpError)) throw error;
+    }
+    for (const c of listed) {
+      // Only contacts that say they belong to this company: a list that ignored the filter mustn't mix clients.
+      if (text(c, 'company.id', 'companyId', 'company.companyId') !== companyId) continue;
+      const mapped = mapContact(c, primary?.id === text(c, 'id', 'contactId'));
+      if (mapped) out.set(mapped.id, mapped);
+    }
+    return [...out.values()];
+  }
+
   /** Every device for the company, page by page, using the first request shape the tenant accepts. */
-  async devices(companyId: string, siteIds: string[] = []): Promise<RmmDevice[]> {
+  async devices(companyId: string, siteIds: string[] = [], opts: { inventory?: boolean } = {}): Promise<RmmDevice[]> {
     const shapes = this.deviceQuery ? [this.deviceQuery] : DEVICE_QUERIES;
     const tried: string[] = [];
     for (const shape of shapes) {
@@ -806,7 +1002,17 @@ export class CwRmmClient {
           this.endpointStates(companyId, 'heartbeat'),
           this.endpointStates(companyId, 'systemstate'),
         ]);
-        return devices.map((d) => withState(d, beats.get(d.id), states.get(d.id)));
+        const synced = devices.map((d) => withState(d, beats.get(d.id), states.get(d.id)));
+        if (!opts.inventory) return synced;
+        // One request at a time, like the rest: ConnectWise rate-limits bursts.
+        const apps = await this.perEndpoint(companyId, 'applications', 'applications');
+        const users = await this.perEndpoint(companyId, 'users', 'users');
+        return synced.map((d) => ({
+          ...d,
+          ...(apps ? { software: appsOf(apps.get(d.id) ?? []) } : {}),
+          // With neither API answering, who signs in is unknown rather than nobody.
+          ...(users || states.size ? { signIns: signInsOf(users?.get(d.id) ?? [], states.get(d.id)) } : {}),
+        }));
       } catch (error) {
         // Only a rejected request is worth trying another shape for.
         if (!(error instanceof HttpError && error.status === 400)) throw error;
@@ -821,6 +1027,55 @@ export class CwRmmClient {
       400,
       `ConnectWise RMM wouldn't list devices. Check the API key has the Devices read permission. Tried ${tried.join('; ')}`,
     );
+  }
+
+  /**
+   * A bulk per-endpoint list (installed applications, or user accounts) for the company, by endpoint ID, following
+   * the Link header page by page. Null when ConnectWise won't say, so what an earlier sync saved is kept.
+   */
+  private async perEndpoint(
+    companyId: string,
+    api: 'applications' | 'users',
+    listKey: string,
+  ): Promise<Map<string, Json[]> | null> {
+    const out = new Map<string, Json[]>();
+    try {
+      for (let cursor: number | null = 0, pages = 0; cursor !== null && pages < 200; pages++) {
+        const { body, nextCursor } = await this.request(
+          'POST',
+          `/api/platform/v2/device/endpoints/${api}?limit=500&cursor=${cursor}`,
+          { resourceType: 'company', resources: [companyId] },
+        );
+        for (const e of listOf(body)) {
+          const id = text(e, 'endpointID', 'endpointId', 'EndpointID');
+          const list = pick(e, listKey);
+          if (id && Array.isArray(list)) out.set(id, [...(out.get(id) ?? []), ...(list as Json[])]);
+        }
+        cursor = nextCursor !== null && nextCursor > cursor ? nextCursor : null;
+      }
+    } catch (error) {
+      // No permission, not supported, or "not found": unknown, so what an earlier sync saved stays. (A company with
+      // no devices has nothing to save either way.)
+      if (error instanceof HttpError) return null;
+      throw error;
+    }
+    return out;
+  }
+
+  /** Devices related to this one (a VM's host, a host's VMs); empty when ConnectWise has none or won't say. */
+  async relations(companyId: string, siteId: string, endpointId: string): Promise<RmmRelation[]> {
+    const body = await this.call(
+      'GET',
+      `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(siteId)}/endpoints/${encodeURIComponent(endpointId)}/relations`,
+    );
+    const related = pick((body ?? {}) as Json, 'relations');
+    return (Array.isArray(related) ? (related as Json[]) : [])
+      .map((r) => ({
+        endpointId: text(r, 'endpointID', 'endpointId'),
+        role: text(r, 'relationshipType.source'),
+        relatedRole: text(r, 'relationshipType.target'),
+      }))
+      .filter((r) => r.endpointId && r.endpointId !== endpointId);
   }
 
   /** Each of the company's endpoints' record from a bulk state API, by endpoint ID; empty when ConnectWise won't say. */
@@ -1285,8 +1540,87 @@ export function deviceKind(d: Pick<RmmDevice, 'type' | 'os'>): RmmDeviceKind {
   return 'other';
 }
 
+type ContactRow = { id: string; name: string; email: string };
+
+/**
+ * The client's contact a device account belongs to: by email ("jane.doe" for jane.doe@harbor.com), by name
+ * ("janedoe" or "jdoe" for Jane Doe). Null unless exactly one contact matches, so a guess never links the wrong person.
+ */
+export function contactFor(username: string, contacts: ContactRow[]): string | null {
+  const u = norm(username);
+  if (u.length < 3) return null;
+  const ids = new Set<string>();
+  for (const c of contacts) {
+    const words = c.name.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const forms = [
+      norm(c.email.split('@')[0] ?? ''),
+      norm(c.name),
+      words.length > 1 ? norm(`${words[0]![0]}${words.at(-1)}`) : '',
+    ];
+    if (forms.includes(u)) ids.add(c.id);
+  }
+  return ids.size === 1 ? [...ids][0]! : null;
+}
+
+// Links the sync makes end their note with this, so it can tell them from links people made and remove its own when
+// ConnectWise stops reporting them.
+const SYNCED = ' (ConnectWise RMM)';
+const SIGN_IN_LINK = `Signs in as %${SYNCED}`;
+const VM_LINK = `% hosts virtual machine %${SYNCED}`;
+
+/** Removes the sync's own links (notes matching `pattern`) from an asset to items of `type` not in `keep`. */
+async function dropSyncedLinks(
+  db: Database,
+  orgId: string,
+  assetId: string,
+  type: 'asset' | 'contact',
+  pattern: string,
+  keep: Set<string>,
+) {
+  const r = schema.relations;
+  const rows = await db
+    .select({ id: r.id, aId: r.aId, bId: r.bId })
+    .from(r)
+    .where(
+      and(
+        eq(r.orgId, orgId),
+        like(r.note, pattern),
+        or(
+          and(eq(r.aType, 'asset'), eq(r.aId, assetId), eq(r.bType, type)),
+          and(eq(r.bType, 'asset'), eq(r.bId, assetId), eq(r.aType, type)),
+        ),
+      ),
+    );
+  const stale = rows.filter((row) => !keep.has(row.aId === assetId ? row.bId : row.aId)).map((row) => row.id);
+  if (stale.length) await db.delete(r).where(inArray(r.id, stale));
+}
+
+/** Links two items (undirected, stored once in a stable order), unless they already are; whether a link was made. */
+async function linkItems(
+  db: Database,
+  orgId: string,
+  x: { type: string; id: string },
+  y: { type: string; id: string },
+  note: string,
+) {
+  const [a, b] = `${x.type}:${x.id}` < `${y.type}:${y.id}` ? [x, y] : [y, x];
+  const made = await db
+    .insert(schema.relations)
+    .values({ orgId, aType: a.type, aId: a.id, bType: b.type, bId: b.id, note: note.slice(0, 200) })
+    .onConflictDoNothing()
+    .returning({ id: schema.relations.id });
+  return made.length > 0;
+}
+
 /** Records a device's health for the RMM health charts, against the asset it was synced into. */
-async function saveStatus(db: Database, orgId: string, clientId: string, assetId: string, d: RmmDevice) {
+async function saveStatus(
+  db: Database,
+  orgId: string,
+  clientId: string,
+  assetId: string,
+  d: RmmDevice,
+  contacts: ContactRow[] = [],
+) {
   const values = {
     clientId,
     assetId,
@@ -1295,6 +1629,11 @@ async function saveStatus(db: Database, orgId: string, clientId: string, assetId
     lastSeenAt: d.lastSeenAt ? new Date(d.lastSeenAt) : null,
     protection: d.protection,
     protectionProduct: d.protectionProduct,
+    // Software and sign-ins ConnectWise didn't give this time keep what an earlier sync saved.
+    ...(d.software ? { software: d.software } : {}),
+    ...(d.signIns ? { signIns: d.signIns.map((u) => ({ ...u, contactId: contactFor(u.username, contacts) })) } : {}),
+    // Only a read that brought software or sign-ins makes them current.
+    ...(d.software || d.signIns ? { inventoryAt: new Date() } : {}),
     updatedAt: new Date(),
   };
   await db
@@ -1396,7 +1735,51 @@ export async function deviceLayout(db: Database, orgId: string, chosen: string |
 }
 
 /**
- * Syncs linked companies: sites become locations, devices become assets in the device layout (see deviceLayout).
+ * A company's contacts into its Atlas client. A contact already there with the same email (or, without one, the
+ * same name) is linked and updated rather than copied. Notes, and which contact is primary, are left as Atlas has
+ * them once a contact exists.
+ */
+async function syncContacts(scope: Scope, client: CwRmmClient, run: ImportRun, companyId: string, clientId: string) {
+  let found: RmmContact[];
+  try {
+    found = await client.contacts(companyId);
+  } catch (error) {
+    run.note(`Company ${companyId}: contacts ${error instanceof HttpError ? error.message.replace(/^ConnectWise RMM /, '') : 'could not be read.'}`);
+    return;
+  }
+  const existing = await contactService.list(scope, clientId);
+  const hasPrimary = existing.some((c) => c.primary);
+  for (const c of found) {
+    const body = { name: c.name, title: c.title, email: c.email, phone: c.phone, mobile: c.mobile };
+    // A value ConnectWise leaves blank doesn't wipe one typed into Atlas.
+    const filled = Object.fromEntries(Object.entries(body).filter(([, v]) => v));
+    await run.upsert(
+      'contacts',
+      c.id,
+      c.name,
+      async () => {
+        const same = existing.find((e) =>
+          c.email ? e.email.toLowerCase() === c.email : e.name.trim().toLowerCase() === c.name.toLowerCase(),
+        );
+        if (same) {
+          await contactService.update(scope, same.id, filled);
+          return same.id;
+        }
+        const created = await contactService.create(scope, clientId, {
+          ...body,
+          primary: c.primary && !hasPrimary,
+          notes: 'Synced from ConnectWise.',
+        });
+        existing.push(created);
+        return created.id;
+      },
+      async (id) => void (await contactService.update(scope, id, filled)),
+    );
+  }
+}
+
+/**
+ * Syncs linked companies: sites become locations, contacts become contacts, devices become assets in the device layout (see deviceLayout).
  * A device the RMM no longer reports is archived, but only when its company's device list was fetched in full.
  */
 export async function runCwRmmSync(
@@ -1422,10 +1805,12 @@ export async function runCwRmmSync(
 
   const linked = Object.entries(map).flatMap(([companyId, m]) => (m.action === 'link' ? [[companyId, m.clientId] as const] : []));
   if (!linked.length) run.note('No ConnectWise RMM companies are linked to Atlas clients yet.');
-  if (!options.locations || !options.devices)
-    run.note(
-      `Not synced this time, as chosen: ${[!options.locations && 'sites (locations)', !options.devices && 'devices'].filter(Boolean).join(' and ')}.`,
-    );
+  const skipped = [
+    !options.locations && 'sites (locations)',
+    !options.contacts && 'contacts',
+    !options.devices && 'devices',
+  ].filter(Boolean);
+  if (skipped.length) run.note(`Not synced this time, as chosen: ${skipped.join(', ')}.`);
   const seen = new Set<string>();
   const readInFull = new Set<string>();
   // A client linked to several companies is read in full only if every one of them was.
@@ -1435,6 +1820,10 @@ export async function runCwRmmSync(
   let matched = 0;
   let folded = 0;
   let warranties = 0;
+  let signInLinks = 0;
+  let vmLinks = 0;
+  // Cleared when ConnectWise refuses the relations API, so it isn't asked again for every device.
+  let relationsApi = options.inventory;
   for (const [companyId, clientId] of linked) {
     let sites: RmmSite[];
     let devices: RmmDevice[];
@@ -1445,6 +1834,7 @@ export async function runCwRmmSync(
         ? await client.devices(
             companyId,
             sites.map((s) => s.id),
+            { inventory: options.inventory },
           )
         : [];
     } catch (error) {
@@ -1476,6 +1866,7 @@ export async function runCwRmmSync(
         async (existing) => void (await locations.update(scope, existing, body)),
       );
     }
+    if (options.contacts) await syncContacts(scope, client, run, companyId, clientId);
     // Assets already in this client (from Hudu, a CSV, or typed in) that a device may be, by name or hostname:
     // the existing asset is updated instead of a copy being made.
     const existing = await sameNameCandidates(db, actor.orgId, clientId);
@@ -1486,6 +1877,14 @@ export async function runCwRmmSync(
         .filter((a) => a.id !== except && a.layoutId !== layout.configurationId && !claimed.has(a.id))
         // The asset whose layout takes the most of the device's fields, then the oldest.
         .sort((a, b) => b.fit - a.fit || a.createdAt.getTime() - b.createdAt.getTime())[0];
+    const contacts = options.inventory
+      ? await db
+          .select({ id: schema.contacts.id, name: schema.contacts.name, email: schema.contacts.email })
+          .from(schema.contacts)
+          .where(and(eq(schema.contacts.orgId, actor.orgId), eq(schema.contacts.clientId, clientId)))
+      : [];
+    // Each device's asset, for linking virtual machines to their hosts once the company's devices are all saved.
+    const assetOf = new Map<string, string>();
     for (const d of devices) {
       seen.add(d.id);
       // A warranty date the RMM doesn't report is asked of the device's vendor, by serial number. It only fills a
@@ -1639,12 +2038,62 @@ export async function runCwRmmSync(
       );
       // The asset the device now lives in (a copy folded into an existing asset has moved).
       const assetId = synced && (await run.ref('assets', d.id));
-      if (assetId) await saveStatus(db, actor.orgId, clientId, assetId, d);
+      if (!assetId) continue;
+      assetOf.set(d.id, assetId);
+      await saveStatus(db, actor.orgId, clientId, assetId, d, contacts);
+      // "Jane's laptop": the device is linked to the contact of each account that signs in to it, and no longer to
+      // one whose account has stopped signing in.
+      if (!d.signIns) continue;
+      const signedIn = new Set<string>();
+      for (const u of d.signIns) {
+        const contactId = contactFor(u.username, contacts);
+        if (!contactId) continue;
+        signedIn.add(contactId);
+        const note = `Signs in as ${u.username}${SYNCED}`;
+        if (await linkItems(db, actor.orgId, { type: 'asset', id: assetId }, { type: 'contact', id: contactId }, note))
+          signInLinks++;
+      }
+      await dropSyncedLinks(db, actor.orgId, assetId, 'contact', SIGN_IN_LINK, signedIn);
+    }
+    // Virtual machines and their hosts, as ConnectWise relates them. Workstations host nothing, so they're skipped.
+    const names = new Map(devices.map((d) => [d.id, d.name]));
+    for (const d of relationsApi ? devices : []) {
+      const assetId = assetOf.get(d.id);
+      if (!assetId || !d.siteId || deviceKind(d) === 'workstation') continue;
+      let related: RmmRelation[];
+      try {
+        related = await client.relations(companyId, d.siteId, d.id);
+      } catch (error) {
+        if (!(error instanceof HttpError)) throw error;
+        relationsApi = error.status === 404;
+        if (relationsApi) continue;
+        run.note(`Virtual machine hosts not linked: ${error.message}`);
+        break;
+      }
+      const current = new Set<string>();
+      for (const r of related) {
+        const other = assetOf.get(r.endpointId);
+        if (!other) continue;
+        const guest = /guest|virtual|\bvm\b/i;
+        const isHost = /host/i.test(r.role) || guest.test(r.relatedRole);
+        const isGuest = guest.test(r.role) || /host/i.test(r.relatedRole);
+        if (isHost === isGuest) continue;
+        const [host, vm] = isHost ? [d.name, names.get(r.endpointId)] : [names.get(r.endpointId), d.name];
+        current.add(other);
+        const note = `${host} hosts virtual machine ${vm}${SYNCED}`;
+        if (await linkItems(db, actor.orgId, { type: 'asset', id: assetId }, { type: 'asset', id: other }, note))
+          vmLinks++;
+      }
+      // A VM that moved to another host keeps no link to the old one.
+      await dropSyncedLinks(db, actor.orgId, assetId, 'asset', VM_LINK, current);
     }
     // Only a company whose devices were read counts toward archiving devices the RMM dropped.
     if (options.devices) readInFull.add(clientId);
   }
 
+  if (signInLinks)
+    run.note(`${signInLinks} new link${signInLinks === 1 ? '' : 's'} between devices and the contacts who sign in to them.`);
+  if (vmLinks) run.note(`${vmLinks} new link${vmLinks === 1 ? '' : 's'} between virtual machines and their hosts.`);
   if (warranties)
     run.note(`Warranty end dates looked up from the vendor for ${warranties} device${warranties === 1 ? '' : 's'}.`);
   if (moved)

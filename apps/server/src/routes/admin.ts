@@ -20,6 +20,7 @@ import { Notifier } from '../services/notifier.js';
 import { RmmHealthService } from '../services/rmm-health.js';
 import { TicketService } from '../services/tickets.js';
 import { WarrantyService } from '../services/warranty.js';
+import { DeviceInventoryService } from '../services/device-inventory.js';
 import { AssetStatsService } from '../services/asset-stats.js';
 import { Scope, isUuid } from '../services/scope.js';
 import type { SettingsService, SmtpConfig } from '../services/settings.js';
@@ -27,7 +28,7 @@ import type { VaultService } from '../services/vault.js';
 
 type Params = { id: string };
 
-/** Groups, email and notification settings, expirations, RMM health, tickets, asset warranty, asset statistics, and the audit log. Returns the background notifier. */
+/** Groups, email and notification settings, expirations, RMM health, tickets, device inventory, asset warranty, asset statistics, and the audit log. Returns the background notifier. */
 export function registerAdminRoutes(
   app: FastifyInstance,
   deps: {
@@ -52,6 +53,7 @@ export function registerAdminRoutes(
   const rmmHealth = new RmmHealthService(settings);
   const tickets = new TicketService(settings);
   const warranty = new WarrantyService(settings);
+  const inventory = new DeviceInventoryService();
   const assetStats = new AssetStatsService(settings);
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const admin = (req: FastifyRequest) => {
@@ -210,6 +212,16 @@ export function registerAdminRoutes(
     if (status !== undefined && (typeof status !== 'string' || status.length > 100))
       throw new HttpError(400, 'Choose which tickets to list.');
     return tickets.list(await ticketScope(req), { clientId: req.query.client, status, days: req.query.days });
+  });
+
+  // ---- device inventory (software and sign-ins, from the RMM) ----
+  app.get<{ Params: { id: string } }>('/api/assets/:id/inventory', authed, async (req) => {
+    if (!isUuid(req.params.id)) throw new HttpError(404, 'Item not found.');
+    return inventory.forAsset(new Scope(db, actorOf(req)), req.params.id);
+  });
+  app.get<{ Params: { id: string } }>('/api/clients/:id/software', authed, async (req) => {
+    if (!isUuid(req.params.id)) throw new HttpError(404, 'Client not found.');
+    return inventory.forClient(new Scope(db, actorOf(req)), req.params.id);
   });
 
   // ---- asset warranty ----

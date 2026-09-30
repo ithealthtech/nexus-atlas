@@ -44,6 +44,7 @@ const KIND_LABELS: Record<string, string> = {
   licenses: 'Licenses',
   domains: 'Domains',
   tickets: 'Tickets',
+  atlasLinks: 'Atlas links in ConnectWise',
 };
 
 export function JobSummary({ job }: { job: ImportJobView }) {
