@@ -388,7 +388,7 @@ try {
 
   await page.goto(`${BASE}/clients/${demo.harbor}`);
 
-  // Opened from the client's list: the server keeps /assets/ for the web app's files, so a direct load 404s.
+  // Opened from the client's list, the way a technician gets there.
   await page.goto(`${BASE}/clients/${demo.harbor}/assets`);
   await page
     .getByRole('link', { name: /HDG-FW-01/ })
