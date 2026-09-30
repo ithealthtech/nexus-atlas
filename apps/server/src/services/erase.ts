@@ -57,6 +57,7 @@ export async function eraseDocumentation(db: Database, orgId: string, storage: F
     await tx.delete(schema.revisions).where(eq(schema.revisions.orgId, orgId));
     await tx.delete(schema.externalRefs).where(eq(schema.externalRefs.orgId, orgId));
     await tx.delete(schema.importJobs).where(eq(schema.importJobs.orgId, orgId));
+    await tx.delete(schema.requestLog).where(eq(schema.requestLog.orgId, orgId));
     // Built-in layouts stay (as templates); ones made by imports or by hand go.
     const layouts = await n(
       tx

@@ -37,6 +37,7 @@ import { Theme } from '@/pages/Theme';
 import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
+import { RequestLog } from '@/pages/RequestLog';
 import { VaultPolicies } from '@/pages/VaultPolicies';
 import { Account } from '@/pages/Account';
 import { NativeAuthorize } from '@/pages/NativeAuthorize';
@@ -246,6 +247,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/rotation', component: adminOnly(PasswordRotation) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/request-log', component: adminOnly(RequestLog) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),

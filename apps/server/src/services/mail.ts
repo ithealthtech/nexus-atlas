@@ -43,7 +43,8 @@ export const smtpTransport: MailTransport = async (smtp, message) => {
   }
 };
 
-const graph = new GraphMailer();
+// Looks up fetch on each call, so the request log's wrapper (installed after this module loads) sees Graph mail.
+const graph = new GraphMailer((input, init) => fetch(input, init));
 
 /** The application permissions the Microsoft 365 app registration holds (see GraphMailer.permissions). */
 export const graphPermissions = (config: SmtpConfig) => graph.permissions(config);

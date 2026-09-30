@@ -37,6 +37,8 @@ import {
   type SmtpSecurity,
   type SmtpSettingsView,
   siemSettingsSchema,
+  requestLogSettingsSchema,
+  type RequestLogSettings,
   vaultPolicySchema,
   type SiemMethod,
   type SyslogTransport,
@@ -86,6 +88,7 @@ interface StoredSettings {
   m365?: StoredM365;
   vaultPolicy?: VaultPolicy;
   siem?: StoredSiem;
+  requestLog?: RequestLogSettings;
 }
 /** SIEM streaming as stored: the webhook signing secret is sealed with the master key. */
 export interface StoredSiem {
@@ -353,6 +356,16 @@ export class SettingsService {
   async saveTrackers(orgId: string, input: unknown): Promise<TrackerSettings> {
     const body = trackerSettingsSchema.parse(input);
     await this.put(orgId, 'trackers', body);
+    return body;
+  }
+
+  async requestLog(orgId: string): Promise<RequestLogSettings> {
+    return requestLogSettingsSchema.parse((await this.load(orgId)).requestLog ?? {});
+  }
+
+  async saveRequestLog(orgId: string, input: unknown): Promise<RequestLogSettings> {
+    const body = requestLogSettingsSchema.parse(input);
+    await this.put(orgId, 'requestLog', body);
     return body;
   }
 
