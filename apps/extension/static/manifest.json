@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "MSP Atlas",
   "short_name": "Atlas",
-  "version": "1.7.11",
+  "version": "1.7.12",
   "description": "Fill logins from your MSP Atlas vault. Nothing is stored in the browser: Atlas is asked each time.",
   "minimum_chrome_version": "116",
   "icons": {
