@@ -1,4 +1,5 @@
-import type { Database } from '@atlas/db';
+import { and, eq } from 'drizzle-orm';
+import { schema, type Database } from '@atlas/db';
 import {
   guessPasswordCategory,
   huduImportOptionsSchema,
@@ -449,6 +450,9 @@ export function loginAddress(p: Pick<HuduPassword, 'login_url' | 'url'>, huduBas
   return url;
 }
 
+/** Client names compared without case, spacing or punctuation ("Harbor Dental, LLC" = "harbor dental llc"). */
+const clientKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
 export async function previewHudu(client: HuduClient): Promise<HuduPreview> {
   const [companies, layouts, assets, articles, passwords] = await Promise.all([
     client.companies(),
@@ -508,6 +512,28 @@ export async function runHuduImport(
 
   // Companies. With clients switched off, the rest still goes to clients an earlier import made.
   const companyToClient = new Map<number, string>();
+  // Atlas clients no Hudu company is linked to yet, by name: a company with the same name is matched to one of
+  // these instead of creating a second client (clients added by hand, from CW RMM, or before the links existed).
+  const linked = new Set(
+    (
+      await db
+        .select({ id: schema.externalRefs.entityId })
+        .from(schema.externalRefs)
+        .where(
+          and(
+            eq(schema.externalRefs.orgId, actor.orgId),
+            eq(schema.externalRefs.source, run.source),
+            eq(schema.externalRefs.kind, 'clients'),
+          ),
+        )
+    ).map((r) => r.id),
+  );
+  const unlinkedByName = new Map<string, string>();
+  for (const c of await db
+    .select({ id: schema.clients.id, name: schema.clients.name })
+    .from(schema.clients)
+    .where(eq(schema.clients.orgId, actor.orgId)))
+    if (!linked.has(c.id) && !unlinkedByName.has(clientKey(c.name))) unlinkedByName.set(clientKey(c.name), c.id);
   for (const c of (await client.companies()).filter((x) => !x.archived && companyChosen(x.id))) {
     if (!options.clients) {
       const earlier = await run.ref('clients', c.id);
@@ -527,7 +553,13 @@ export async function runHuduImport(
       'clients',
       c.id,
       c.name,
-      async () => (await clients.create(actor, body)).id,
+      async () => {
+        const match = clientKey(body.name) && unlinkedByName.get(clientKey(body.name));
+        if (!match) return (await clients.create(actor, body)).id;
+        unlinkedByName.delete(clientKey(body.name));
+        await clients.update(actor, match, body);
+        return match;
+      },
       async (existing) => void (await clients.update(actor, existing, body)),
     );
     if (!id) continue;
