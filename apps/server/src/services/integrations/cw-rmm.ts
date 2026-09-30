@@ -34,12 +34,12 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 type Json = Record<string, unknown>;
 
 type DeviceQuery = { kind: 'v2'; resourceType: string; limit: number } | { kind: 'v1'; limit: number };
-// ConnectWise doesn't publish which of these a tenant accepts; the first that works is kept for the run.
+// The platform API spec takes company, site, or endpoint as the resource type, up to 500 devices a page. The first
+// shape that works is kept for the run; the others are older fallbacks, tried only if the spec's are refused.
 const DEVICE_QUERIES: DeviceQuery[] = [
-  // A real tenant rejected the plural forms (clients, companies, sites) by name.
+  { kind: 'v2', resourceType: 'company', limit: 500 },
+  { kind: 'v2', resourceType: 'site', limit: 500 },
   { kind: 'v2', resourceType: 'client', limit: 100 },
-  { kind: 'v2', resourceType: 'company', limit: 100 },
-  { kind: 'v2', resourceType: 'site', limit: 100 },
   // Every device the key can see, kept to this company by each device's own company ID.
   { kind: 'v2', resourceType: 'partner', limit: 100 },
   { kind: 'v1', limit: 100 },
@@ -445,6 +445,38 @@ function extraValues(record: Json, prefix = '', depth = 0, skip = new Set<string
   return out.slice(0, 150);
 }
 
+/** The cursor of the rel="next" URL in a Link header, or null when there's no next page. */
+export function nextCursorOf(link: string | null): number | null {
+  for (const part of (link ?? '').split(',')) {
+    const m = /<([^>]+)>\s*;[^,]*rel="?next"?/i.exec(part);
+    if (!m) continue;
+    const cursor = Number(new URL(m[1]!, 'https://x.invalid').searchParams.get('cursor'));
+    if (Number.isFinite(cursor)) return cursor;
+  }
+  return null;
+}
+
+/**
+ * The device list groups devices by company and site ({ platform: [{ companyID, siteID, endpoints: [...] }] }); each
+ * device is given its group's IDs, so its details are fetched from the right site the first time.
+ */
+function withGroupIds(body: unknown): unknown {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+  for (const groups of Object.values(body as Json)) {
+    for (const g of Array.isArray(groups) ? (groups as Json[]) : []) {
+      if (!g || typeof g !== 'object' || !Array.isArray(g.endpoints)) continue;
+      const siteID = text(g, 'siteID', 'siteId');
+      const companyID = text(g, 'companyID', 'companyId');
+      for (const e of g.endpoints as Json[]) {
+        if (!e || typeof e !== 'object') continue;
+        if (siteID && !text(e, ...SITE_ID_KEYS)) e.siteID = siteID;
+        if (companyID && !text(e, 'companyID', 'companyId')) e.companyID = companyID;
+      }
+    }
+  }
+  return body;
+}
+
 /**
  * Every device record in a device-list response. ConnectWise groups them by category ({ platform: [...],
  * network: [...] }), and a record can itself hold the devices (for example a site with an endpoints list), so
@@ -639,6 +671,15 @@ export class CwRmmClient {
   }
 
   private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+    return (await this.request(method, path, body)).body;
+  }
+
+  /** A call's body, with the next page's cursor when ConnectWise gives one in its Link header. */
+  private async request(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+  ): Promise<{ body: unknown; nextCursor: number | null }> {
     const token = await this.bearer();
     const res = await this.send(() =>
       this.fetcher(`${this.base}${path}`, {
@@ -664,7 +705,7 @@ export class CwRmmClient {
         res.status === 400 || res.status === 404 ? res.status : 502,
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
-    return res.json();
+    return { body: await res.json(), nextCursor: nextCursorOf(res.headers.get('link')) };
   }
 
   /**
@@ -833,18 +874,19 @@ export class CwRmmClient {
     for (let cursor = 0, pages = 0; pages < 500; pages++) {
       const query = `limit=${shape.limit}&cursor=${cursor}`;
       let body: unknown;
+      let linked: number | null;
       try {
-        body =
+        ({ body, nextCursor: linked } =
           shape.kind === 'v2'
-            ? await this.call('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
+            ? await this.request('POST', `/api/platform/v2/device/categories/all/endpoints?${query}`, {
                 resourceType: shape.resourceType,
                 resources:
                   shape.resourceType === 'site' ? siteIds : shape.resourceType === 'partner' ? [] : [companyId],
               })
-            : await this.call(
+            : await this.request(
                 'GET',
                 `/api/platform/v1/device/endpoints?${query}&clientId=${encodeURIComponent(companyId)}`,
-              );
+              ));
       } catch (error) {
         // ConnectWise answers "resource not found" (404) for a company with no devices, or past the last page. A
         // request it can't read gets 400, so a 404 still means the request itself was accepted.
@@ -854,7 +896,7 @@ export class CwRmmClient {
         }
         throw error;
       }
-      const page = recordsOf(body);
+      const page = recordsOf(withGroupIds(body));
       seen += page.length;
       for (const d of page) {
         const id = text(d, ...DEVICE_ID_KEYS);
@@ -871,8 +913,10 @@ export class CwRmmClient {
       }
       if (!pages)
         this.lastDeviceList = `${via}: response fields ${shapeOf(body)}; ${page.length} records on the first page`;
-      const next = Number(pick((body ?? {}) as Json, 'nextCursor', 'pageInfo.nextCursor', 'next'));
-      if (page.length < shape.limit) break;
+      // The spec gives the next page in the Link header; without one, a short page is the last.
+      const next = linked ?? Number(pick((body ?? {}) as Json, 'nextCursor', 'pageInfo.nextCursor', 'next'));
+      if (linked === null && page.length < shape.limit) break;
+      if (!page.length) break;
       cursor = Number.isFinite(next) && next > cursor ? next : cursor + page.length;
     }
     if (seen && !out.length)

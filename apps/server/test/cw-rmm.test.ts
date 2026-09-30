@@ -140,10 +140,9 @@ describe('ConnectWise RMM sync', () => {
     expect(job.status).toBe('done');
     expect(job.counts.assets.created).toBe(206);
     expect(job.counts.locations.created).toBe(1);
-    // Paged past the first 200 devices, and never asked about the skipped company.
-    // One rejected shape (client), then three pages of 100 for Harbor and one for Northline, with a single sign-in
-    // for devices (tickets sign in once more, with their own scope).
-    expect(asio.state.calls.filter((c) => c.includes('/categories/all/endpoints')).length).toBe(5);
+    // By company, as the spec says, 500 to a page: one page each for Harbor and Northline, and never a call for the
+    // skipped company. A single sign-in for devices (tickets sign in once more, with their own scope).
+    expect(asio.state.calls.filter((c) => c.includes('/categories/all/endpoints')).length).toBe(2);
     expect(asio.state.tokens).toBe(2);
 
     const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
@@ -524,7 +523,7 @@ describe('ConnectWise RMM client', () => {
     // One lock, one retry: two token requests in total, however many callers.
     expect(tokens).toBe(2);
     await expect(client.devices('a')).rejects.toThrow(
-      /Tried v2 by client: resources must not be empty; v2 by company: resources must not be empty; v2 by partner: resources must not be empty; v1 list: resources must not be empty/,
+      /Tried v2 by company: resources must not be empty; v2 by client: resources must not be empty; v2 by partner: resources must not be empty; v1 list: resources must not be empty/,
     );
   });
 });
@@ -876,5 +875,44 @@ describe('ConnectWise RMM loosely named fields', () => {
     // No check-in time given, but the heartbeat says it's up now.
     expect(two).toMatchObject({ manufacturer: 'Lenovo', protection: 'not_running', online: true });
     expect(Date.parse(two!.lastSeenAt!)).toBeGreaterThanOrEqual(now - 1000);
+  });
+});
+
+describe('ConnectWise RMM device list paging and sites', () => {
+  it('follows the Link header to the next page and looks each device up in its own site', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const calls: string[] = [];
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      calls.push(`${url.pathname}?${url.searchParams.get('cursor') ?? ''}`);
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      if (url.pathname === '/api/platform/v2/device/categories/all/endpoints') {
+        const cursor = url.searchParams.get('cursor');
+        if (cursor === '0')
+          return Response.json(
+            { platform: [{ companyID: 'c1', siteID: 's2', endpoints: [{ endpointID: 'e1', deviceName: 'A' }] }] },
+            { headers: { Link: `<${url.origin}${url.pathname}?limit=500&cursor=7>; rel="next"` } },
+          );
+        if (cursor === '7')
+          return Response.json({
+            platform: [{ companyID: 'c1', siteID: 's3', endpoints: [{ endpointID: 'e2', deviceName: 'B' }] }],
+          });
+        return Response.json({ message: 'unexpected cursor' }, { status: 400 });
+      }
+      const m = /\/sites\/(s\d)\/endpoints\/(e\d)$/.exec(url.pathname);
+      if (m) return Response.json({ endpointID: m[2], siteID: m[1], platform: { deviceName: m[2] } });
+      return Response.json({ successfulRecords: [] });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const devices = await client.devices('c1', ['s1', 's2', 's3']);
+    expect(devices.map((d) => [d.id, d.siteId])).toEqual([
+      ['e1', 's2'],
+      ['e2', 's3'],
+    ]);
+    // Straight to each device's own site; no probing the others.
+    expect(calls.filter((c) => c.includes('/sites/'))).toEqual([
+      '/api/platform/v2/device/companies/c1/sites/s2/endpoints/e1?',
+      '/api/platform/v2/device/companies/c1/sites/s3/endpoints/e2?',
+    ]);
   });
 });
