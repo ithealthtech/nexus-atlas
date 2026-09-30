@@ -213,7 +213,7 @@ describe('ConnectWise RMM sync', () => {
       location: 'Main office',
     });
     const computers = (await owner.call('GET', '/api/layouts')).data.find(
-      (l: { name: string }) => l.name === 'Computer Assets',
+      (l: { name: string }) => l.name === 'Endpoints',
     );
     expect(computers.fields.map((f: { label: string }) => f.label)).toContain('Location');
 

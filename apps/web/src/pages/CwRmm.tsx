@@ -372,7 +372,7 @@ export function CwRmmSync() {
               </fieldset>
               <Field
                 label="Save devices in"
-                help="Automatic uses a layout named Devices or Device assets when there is one, otherwise Configurations. Devices an earlier sync put in Configurations move on the next sync."
+                help="Automatic uses the Endpoints layout (one named Endpoints, Devices or Computer Assets is renamed to Endpoints) when there is one, otherwise Configurations. Devices an earlier sync put in Configurations move on the next sync."
               >
                 {(p) => (
                   <Select
