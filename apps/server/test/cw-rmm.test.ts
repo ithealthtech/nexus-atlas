@@ -250,6 +250,7 @@ describe('ConnectWise RMM sync', () => {
     expect(saved.data.options).toEqual({
       locations: true,
       devices: false,
+      contacts: true,
       tickets: true,
       atlasLinks: false,
       ticketNotes: false,

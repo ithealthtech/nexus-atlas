@@ -84,6 +84,8 @@ export const cwRmmSyncOptionsSchema = z.object({
   locations: z.boolean().default(true),
   /** Devices, as assets. */
   devices: z.boolean().default(true),
+  /** Each company's contacts, as the client's contacts. */
+  contacts: z.boolean().default(true),
   /** Tickets, read-only, for the ticket dashboard. */
   tickets: z.boolean().default(true),
   /**
@@ -103,6 +105,21 @@ export const cwRmmSyncOptionsSchema = z.object({
   layoutId: z.string().uuid().nullable().default(null),
 });
 export type CwRmmSyncOptions = z.infer<typeof cwRmmSyncOptionsSchema>;
+/** What ConnectWise RMM says about one synced device right now: resource use, device groups, and policy. */
+export interface RmmDeviceInsight {
+  /** Logical disks, with free and total bytes. */
+  disks: { name: string; freeBytes: number; totalBytes: number }[];
+  /** Physical memory: the latest sample and the day's peak use, as percentages. */
+  memory: { totalBytes: number; percent: number; peakPercent: number; samples: number[] } | null;
+  /** CPU utilization: the latest sample and the day's peak, as percentages. */
+  cpu: { percent: number; peakPercent: number; samples: number[] } | null;
+  /** RMM device group names; null when they couldn't be read (for example, no Device Groups read permission). */
+  groups: string[] | null;
+  /** The policies that decide the device's effective settings, with where each applies and how many settings it wins. */
+  policies: { name: string; level: string; settings: number }[] | null;
+  /** What couldn't be read, in plain words. */
+  notes: string[];
+}
 /** A ConnectWise RMM company and what Atlas does with it. */
 export interface CwRmmCompany {
   id: string;

@@ -1077,6 +1077,8 @@ on('POST', '/assets/:id/warranty-check', (m) => {
   const a = find(assets, m[1]!, 'Asset');
   return { asset: assetView(a), vendor: null, expires: null, message: 'The demo does not look warranties up.' };
 });
+// The demo has no RMM, so no device shows live RMM data.
+on('GET', '/assets/:id/rmm-insight', () => ({ insight: null }));
 on('POST', '/assets/:id/archive', (m, b) => {
   const a = find(assets, m[1]!, 'Asset');
   a.archived = !!b.archived;
@@ -1875,6 +1877,7 @@ let cwRmm: {
   options: {
     locations: boolean;
     devices: boolean;
+    contacts: boolean;
     tickets: boolean;
     atlasLinks: boolean;
     ticketNotes: boolean;
@@ -1912,6 +1915,7 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     options: cwRmm?.options ?? {
       locations: true,
       devices: true,
+      contacts: true,
       tickets: true,
       atlasLinks: false,
       ticketNotes: false,
@@ -1926,6 +1930,7 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
   cwRmm.options = {
     locations: b.locations !== false,
     devices: b.devices !== false,
+    contacts: b.contacts !== false,
     tickets: b.tickets !== false,
     atlasLinks: b.atlasLinks === true,
     ticketNotes: b.ticketNotes === true,
