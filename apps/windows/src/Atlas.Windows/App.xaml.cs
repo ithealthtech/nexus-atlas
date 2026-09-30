@@ -151,8 +151,9 @@ public partial class App : Application
         tray = new TaskbarIcon
         {
             ToolTipText = "Atlas for Windows",
-            // A file path works installed (MSIX) and unpackaged (the preview zip) alike; ms-appx needs a package.
-            IconSource = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico"))),
+            // Loaded straight from the file next to the exe, which works installed (MSIX) and unpackaged (the preview
+            // zip) alike; BitmapImage can't load a file: URI, and ms-appx: needs a package.
+            Icon = new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico")),
             ContextMenuMode = ContextMenuMode.SecondWindow,
             ContextFlyout = menu,
             LeftClickCommand = new RelayCommand(ShowSearch),
