@@ -149,3 +149,46 @@ export interface PasswordHealthReport {
 }
 export const passwordHealthSettingsSchema = z.object({ breachChecks: z.boolean().default(true) });
 export type PasswordHealthSettings = z.infer<typeof passwordHealthSettingsSchema>;
+
+// ---------- request log (verbose logging) ----------
+export const requestLogSettingsSchema = z.object({
+  /** Record every outbound integration call and every request to Atlas's own API. Off by default. */
+  enabled: z.boolean().default(false),
+  /** Record requests to Atlas's own API as well as outbound calls. */
+  incoming: z.boolean().default(true),
+  /** Entries older than this are deleted. */
+  retentionDays: z.number().int().min(1).max(90).default(7),
+});
+export type RequestLogSettings = z.infer<typeof requestLogSettingsSchema>;
+export const REQUEST_LOG_DIRECTIONS = ['outbound', 'inbound'] as const;
+export type RequestLogDirection = (typeof REQUEST_LOG_DIRECTIONS)[number];
+export const REQUEST_LOG_OUTCOMES = ['ok', 'error'] as const;
+export interface RequestLogEntry {
+  id: number;
+  at: string;
+  direction: RequestLogDirection;
+  /** The integration (ConnectWise, Hudu, Microsoft, …) for outbound calls; "Atlas" for incoming requests. */
+  service: string;
+  method: string;
+  url: string;
+  /** 0 when the request failed before any response (a network error or timeout). */
+  status: number;
+  durationMs: number;
+  /** Who made an incoming request, or the network error of an outbound one. */
+  actor: string;
+  error: string;
+}
+export interface RequestLogDetail extends RequestLogEntry {
+  requestHeaders: Record<string, string>;
+  requestBody: string;
+  responseHeaders: Record<string, string>;
+  responseBody: string;
+}
+export interface RequestLogPage {
+  settings: RequestLogSettings;
+  entries: RequestLogEntry[];
+  /** Services seen in the log, for the filter. */
+  services: string[];
+  /** Passed back as `before` for the next (older) page; null on the last page. */
+  nextBefore: number | null;
+}

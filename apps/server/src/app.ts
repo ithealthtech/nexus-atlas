@@ -65,6 +65,8 @@ import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
+import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl } from './services/request-log.js';
+import { registerRequestLogRoutes } from './routes/request-log.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -189,6 +191,19 @@ export async function buildApp({
   const identity = new IdentityService(db, keys, { requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA });
   const clients = new ClientService(db);
   const settings = new SettingsService(db, keys);
+  // Verbose request logging sees every outbound call: the global fetch (which services default to) and any
+  // replacement passed in. Wrapping happens before any service is built, so each one picks up the wrapped fetch.
+  const requestLog = new RequestLogService(db, settings);
+  await requestLog.load();
+  if (config.NODE_ENV !== 'test') globalThis.fetch = requestLog.wrap(globalThis.fetch);
+  const logged = (f?: typeof fetch) => f && requestLog.wrap(f);
+  huduFetch = logged(huduFetch);
+  cwRmmFetch = logged(cwRmmFetch);
+  warrantyFetch = logged(warrantyFetch);
+  m365Fetch = logged(m365Fetch);
+  breachFetch = logged(breachFetch);
+  entraFetch = logged(entraFetch);
+  updateFetch = logged(updateFetch);
   const mail = new MailService(settings, mailTransport);
   const account = new AccountSecurity(db, identity, mail, { publicOrigin: config.publicOrigin, rpName: 'MSP Atlas' });
   const audit = new AuditService(db, keys, settings);
@@ -243,6 +258,34 @@ export async function buildApp({
       );
     if (config.secureCookies) reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+  });
+
+  // ---- verbose request log: Atlas's own API ----
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (requestLog.recordingIncoming && typeof payload === 'string') (req as { logBody?: string }).logBody = payload;
+    return payload;
+  });
+  app.addHook('onResponse', async (req, reply) => {
+    if (!requestLog.recordingIncoming) return;
+    const path = req.url.split('?')[0]!;
+    // The log page's own requests would drown out everything else.
+    if (!path.startsWith('/api/') || path.startsWith('/api/request-log')) return;
+    const hidden = isPrivatePath(path) ? '[not recorded: this path can carry passwords or sign-in details]' : null;
+    const sent = req.body === undefined || req.body === null ? '' : JSON.stringify(req.body);
+    const received = (req as { logBody?: string }).logBody ?? '';
+    requestLog.record({
+      direction: 'inbound',
+      service: 'Atlas',
+      method: req.method,
+      url: redactUrl(req.originalUrl),
+      status: reply.statusCode,
+      durationMs: reply.elapsedTime,
+      actor: req.session?.actor.name ?? '',
+      requestHeaders: redactHeaders(req.headers),
+      requestBody: sent && (hidden ?? redactBody(sent, 'application/json')),
+      responseHeaders: redactHeaders(reply.getHeaders()),
+      responseBody: received && (hidden ?? redactBody(received, String(reply.getHeader('content-type') ?? ''))),
+    });
   });
 
   app.setErrorHandler((error: Error & { statusCode?: number; validation?: unknown }, req, reply) => {
@@ -746,6 +789,7 @@ export async function buildApp({
       app.log.error({ err }, 'Domain and SSL tracker'),
     );
     trackerSchedule.start();
+    requestLog.start();
     app.addHook('onClose', async () => {
       trackerSchedule.stop();
       notifier.stop();
@@ -755,6 +799,7 @@ export async function buildApp({
       cwRmm.stop();
       m365.stop();
       rotations.stop();
+      await requestLog.stop();
     });
   }
 
@@ -793,6 +838,7 @@ export async function buildApp({
   registerDataRoutes(app, { db, authed, recent, settings, keys, vault, storage: files, huduFetch });
   registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch, warranty, publicUrl: config.PUBLIC_URL });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
+  registerRequestLogRoutes(app, { db, authed, recent, requestLog });
   registerM365Routes(app, { db, authed, recent, settings, publicOrigin: config.publicOrigin, fetcher: m365Fetch });
 
   app.all('/api/*', async () => {

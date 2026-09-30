@@ -24,6 +24,8 @@ export const SKIPPED_TABLES = new Set([
   'backup_runs',
   // One-time Sends: the files aren't backed up, and a restored Send shouldn't open again.
   'sends',
+  // Verbose request logging is for troubleshooting, not a record worth restoring.
+  'request_log',
 ]);
 const BATCH = 500;
 const FILE_NAME = /^atlas-\d{8}-\d{6}(-\d+)?\.atlasbak$/;

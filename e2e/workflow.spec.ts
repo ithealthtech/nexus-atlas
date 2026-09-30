@@ -969,6 +969,7 @@ test.describe.serial('accessibility sweep', () => {
       '/admin/data',
       '/admin/rotation',
       '/admin/status',
+      '/admin/request-log',
       '/admin/updates',
       '/admin/settings',
     ];

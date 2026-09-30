@@ -1267,3 +1267,30 @@ export const emergencyRequests = pgTable(
   },
   (t) => [index('emergency_requests_org').on(t.orgId, t.requestedAt), index('emergency_requests_user').on(t.userId)],
 );
+
+// ---------------------------------------------------------------- verbose request log
+// Outbound integration calls and requests to Atlas's own API, recorded while verbose logging is on. Secrets are
+// redacted before a row is written; rows past the retention period are deleted.
+export const requestLog = pgTable(
+  'request_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id, { onDelete: 'cascade' }),
+    direction: text('direction').notNull(),
+    service: text('service').notNull(),
+    method: text('method').notNull(),
+    url: text('url').notNull(),
+    status: integer('status').notNull(),
+    durationMs: integer('duration_ms').notNull(),
+    actor: text('actor').notNull().default(''),
+    error: text('error').notNull().default(''),
+    requestHeaders: jsonb('request_headers').notNull().default({}),
+    requestBody: text('request_body').notNull().default(''),
+    responseHeaders: jsonb('response_headers').notNull().default({}),
+    responseBody: text('response_body').notNull().default(''),
+    createdAt: created(),
+  },
+  (t) => [index('request_log_org').on(t.orgId, t.id)],
+);
