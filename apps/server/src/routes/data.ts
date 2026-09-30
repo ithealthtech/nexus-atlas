@@ -87,7 +87,7 @@ export function registerDataRoutes(
     const run = await ImportRun.start(db, actor, 'hudu');
     await event(req, 'Hudu import started', '');
     // Runs in the background; the page polls the job for progress.
-    void runHuduImport(db, actor, client, run, vault, options)
+    void runHuduImport(db, actor, client, run, vault, options, settings)
       .then(() => run.flush('done'))
       .catch(async (error) => {
         run.note(error instanceof HttpError ? error.message : 'The import stopped unexpectedly.');

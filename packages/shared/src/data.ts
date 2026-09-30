@@ -555,6 +555,8 @@ export const huduImportOptionsSchema = z.object({
   assets: z.boolean().default(true),
   documents: z.boolean().default(true),
   passwords: z.boolean().default(true),
+  /** Hudu's websites, as Domains assets the domain and SSL trackers check. */
+  domains: z.boolean().default(true),
   companyIds: z.array(z.number().int()).max(5000).nullable().default(null),
   layoutIds: z.array(z.number().int()).max(1000).nullable().default(null),
 });

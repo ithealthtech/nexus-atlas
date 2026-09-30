@@ -96,7 +96,10 @@ function fakeHudu(options: { key?: string } = {}) {
     const key = url.pathname.replace('/api/v1/', '');
     const page = Number(url.searchParams.get('page') ?? 1);
     const items = (data[key] ?? []).slice((page - 1) * 25, page * 25);
-    return new Response(JSON.stringify({ [key]: items }), { headers: { 'content-type': 'application/json' } });
+    // Hudu lists websites as a bare array.
+    return new Response(JSON.stringify(key === 'websites' ? items : { [key]: items }), {
+      headers: { 'content-type': 'application/json' },
+    });
   }) as typeof fetch;
   return { fetcher, calls, data };
 }
@@ -540,6 +543,39 @@ describe('Hudu import', () => {
 
     const person = await get('Dana Reyes');
     expect(person.fields).toEqual({ title: 'Office Manager', email: 'dana@harbordental.test', phone: '919-555-0142' });
+  });
+
+  it('imports websites as Domains, matches ones already there, and turns on domain and SSL checks', async () => {
+    hudu.data.websites = [
+      { id: 71, name: 'https://www.harbordental.test/', company_id: 1, notes: '<p>Main site</p>' },
+      { id: 72, name: 'harbor-portal.test', company_id: 1 },
+      { id: 73, name: 'old-site.test', company_id: 1, archived: true },
+    ];
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    const domains = (await owner.call('GET', '/api/layouts')).data.find((l: { key: string }) => l.key === 'domain');
+    const existing = (
+      await owner.call('POST', `/api/clients/${harbor}/assets`, { layoutId: domains.id, name: 'harbordental.test' })
+    ).data.id;
+    await owner.call('PUT', '/api/settings/trackers', { enabled: true, createCertificates: false });
+
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(job.status, JSON.stringify(job)).toBe('done');
+    expect(job.counts.domains).toMatchObject({ created: 1, skipped: 1, failed: 0 });
+
+    const names = ((await owner.call('GET', `/api/assets?client=${harbor}`)).data as { id: string; name: string }[])
+      .filter((a) => a.name.endsWith('.test'))
+      .map((a) => a.name)
+      .sort();
+    expect(names).toEqual(['harbor-portal.test', 'harbordental.test']);
+    expect((await owner.call('GET', '/api/settings/trackers')).data).toMatchObject({
+      enabled: true,
+      createCertificates: true,
+    });
+    // Nothing new on a second run.
+    const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(again.counts.domains).toMatchObject({ created: 0, skipped: 2 });
+    expect(existing).toBeTruthy();
   });
 
   it("puts Hudu's Computer Assets into the Devices layout, renamed Endpoints, and matches assets already there", async () => {

@@ -25,6 +25,7 @@ import { LayoutService } from '../layouts.js';
 import { locations } from '../people.js';
 import { RelationService } from '../relations.js';
 import { Scope } from '../scope.js';
+import type { SettingsService } from '../settings.js';
 import type { VaultService } from '../vault.js';
 import { ImportRun } from './common.js';
 import { htmlToRichText, htmlToText } from './html.js';
@@ -99,6 +100,17 @@ type HuduPassword = {
   archived?: boolean;
 };
 
+// A website Hudu monitors: its domain (with registration and SSL checks in Hudu).
+type HuduWebsite = {
+  id: number;
+  // The website's address, such as "https://example.com".
+  name: string;
+  company_id?: number | null;
+  notes?: string | null;
+  archived?: boolean;
+  discarded_at?: string | null;
+};
+
 const PAGE_SIZE = 25;
 const MAX_PAGES = 4000;
 
@@ -125,8 +137,9 @@ export class HuduClient {
     if (response.status === 401 || response.status === 403)
       throw new HttpError(400, 'Hudu rejected the API key. Check it has access to the data you want to import.');
     if (!response.ok) throw new HttpError(502, `Hudu answered ${response.status} for ${path}.`);
-    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    const items = body?.[key];
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | unknown[] | null;
+    // Some lists (websites) are a bare array rather than an object keyed by the list's name.
+    const items = Array.isArray(body) ? body : body?.[key];
     if (!Array.isArray(items)) throw new HttpError(502, `Hudu's ${path} response wasn't in the expected format.`);
     return items as T[];
   }
@@ -146,6 +159,7 @@ export class HuduClient {
   assets = () => this.all<HuduAsset>('assets', 'assets');
   articles = () => this.all<HuduArticle>('articles', 'articles');
   passwords = () => this.all<HuduPassword>('asset_passwords', 'asset_passwords');
+  websites = () => this.all<HuduWebsite>('websites', 'websites');
 }
 
 // Hudu field types → Atlas field types. Choice lists become text so any existing value imports cleanly.
@@ -463,6 +477,19 @@ export function loginAddress(p: Pick<HuduPassword, 'login_url' | 'url'>, huduBas
   return url;
 }
 
+/** The domain of a website address ("https://www.example.com/x" → "example.com"), or null. */
+export function domainOf(address: string): string | null {
+  const raw = address.trim();
+  if (!raw) return null;
+  try {
+    const host = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`).hostname.toLowerCase();
+    const domain = host.replace(/^www\./, '').replace(/\.$/, '');
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain) ? domain : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Client names compared without case, spacing or punctuation ("Harbor Dental, LLC" = "harbor dental llc"). */
 const clientKey = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
@@ -503,6 +530,7 @@ export async function runHuduImport(
   run: ImportRun,
   vault: VaultService,
   options: HuduImportOptions = huduImportOptionsSchema.parse({}),
+  settings?: SettingsService,
 ) {
   const scope = new Scope(db, actor);
   const clients = new ClientService(db);
@@ -518,6 +546,7 @@ export async function runHuduImport(
     !options.assets && 'assets',
     !options.documents && 'documents',
     !options.passwords && 'passwords',
+    !options.domains && 'domains',
   ].filter(Boolean);
   if (skipped.length) run.note(`Not imported this time, as chosen: ${skipped.join(', ')}.`);
   if (options.companyIds)
@@ -697,7 +726,12 @@ export async function runHuduImport(
   );
   const unlinkedAssets = new Set<string>();
   const assetKeys = new Map<string, string>();
-  if (huduAssets.length)
+  const websites = options.domains
+    ? (await client.websites()).filter(
+        (w) => !w.archived && !w.discarded_at && !!w.company_id && companyChosen(w.company_id),
+      )
+    : [];
+  if (huduAssets.length || websites.length)
     for (const x of await db
       .select({
         id: schema.assets.id,
@@ -769,6 +803,43 @@ export async function runHuduImport(
       },
     );
     if (assetId) assetToAtlas.set(a.id, assetId);
+  }
+
+  // Websites → Domains assets, which the domain tracker checks for expiry and adds SSL certificates for.
+  const domainLayout = websites.length
+    ? (await layouts.list(actor)).find((l) => l.key === 'domain' && !l.archived)
+    : undefined;
+  if (websites.length && !domainLayout) run.note('Domains were not imported: the Domains layout is archived.');
+  for (const w of domainLayout ? websites : []) {
+    const clientId = companyToClient.get(w.company_id!);
+    const host = domainOf(w.name);
+    if (!clientId || !host) {
+      run.count('domains', 'skipped');
+      run.note(`domain "${w.name}": ${clientId ? 'not a web address' : "its company wasn't imported"}.`);
+      continue;
+    }
+    // A Domains asset already there for the same domain is this one.
+    const match = await sameNamedAsset(clientId, domainLayout!.id, host);
+    if (match && !(await run.ref('domains', w.id))) {
+      unlinkedAssets.delete(match);
+      await run.remember('domains', w.id, match);
+    }
+    const notes = htmlToText(w.notes ?? '').slice(0, 5000);
+    await run.upsert(
+      'domains',
+      w.id,
+      host,
+      async () =>
+        (await assets.create(scope, clientId, { layoutId: domainLayout!.id, name: host, fields: {}, notes })).id,
+    );
+  }
+  // The tracker checks domains and their SSL certificates on its schedule; both are switched on for them.
+  if (domainLayout && websites.length && settings) {
+    const trackers = await settings.trackers(actor.orgId);
+    if (!trackers.enabled || !trackers.createCertificates) {
+      await settings.saveTrackers(actor.orgId, { ...trackers, enabled: true, createCertificates: true });
+      run.note('Turned on automatic domain and SSL certificate checks for the imported domains.');
+    }
   }
 
   // Articles (company ones only for the chosen companies; knowledge-base ones whenever documents are chosen)
