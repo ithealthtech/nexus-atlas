@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Fixed
 
-- **ConnectWise RMM devices are saved as device assets, not Configurations.** The sync saves new devices in a layout named Devices or Device assets when there is one (or the layout chosen under *Save devices in*), updates same-named assets already in it instead of adding copies, and moves devices an earlier sync put in Configurations there, keeping what was entered on them. Configurations is still used when there is no device layout.
+- **ConnectWise RMM devices are saved as device assets, not Configurations.** The sync saves new devices in a layout named Devices or Device assets when there is one (or the layout chosen under *Save devices in*), updates same-named assets already in it instead of adding copies, and moves devices an earlier sync put in Configurations (or in a layout chosen before) there, keeping what was entered on them. Restoring a version from before the move puts the asset back in its old layout. Only assets the sync made are archived when their device goes away. Configurations is still used when there is no device layout.
 
 ## [1.7.0] - 2026-09-30
 

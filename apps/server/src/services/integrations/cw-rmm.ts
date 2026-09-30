@@ -983,6 +983,49 @@ async function claimedByRmm(db: Database, orgId: string) {
   return new Set(rows.map((r) => r.id));
 }
 
+// Marks the assets the sync made outside Configurations, so they are told apart from ones it matched.
+const OWNED = 'owned-assets';
+
+/** Asset IDs the sync made (outside Configurations). */
+async function ownedByRmm(db: Database, orgId: string) {
+  const rows = await db
+    .select({ id: schema.externalRefs.entityId })
+    .from(schema.externalRefs)
+    .where(
+      and(
+        eq(schema.externalRefs.orgId, orgId),
+        eq(schema.externalRefs.source, 'cw-rmm'),
+        eq(schema.externalRefs.kind, OWNED),
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
+}
+
+async function markOwned(db: Database, orgId: string, owned: Set<string>, assetId: string) {
+  if (owned.has(assetId)) return;
+  await db
+    .insert(schema.externalRefs)
+    .values({ orgId, source: 'cw-rmm', kind: OWNED, externalId: assetId, entityId: assetId })
+    .onConflictDoNothing();
+  owned.add(assetId);
+}
+
+/**
+ * A value entered on an asset, in the form a field of another layout takes, or undefined when it can't hold it.
+ * Text goes through valueFor; numbers, checkboxes, and lists carry over into a field of the same type.
+ */
+export function keptValue(from: LayoutField | undefined, to: LayoutField, value: unknown): unknown {
+  if (typeof value === 'string') return valueFor(to, value);
+  if (!from || from.type !== to.type) return undefined;
+  if (to.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  if (to.type === 'checkbox') return typeof value === 'boolean' ? value : undefined;
+  if (to.type === 'multiselect')
+    return Array.isArray(value) && value.every((v) => typeof v === 'string' && to.options.includes(v))
+      ? value
+      : undefined;
+  return undefined;
+}
+
 /** Maps the RMM's device type onto the Configurations layout's Type options. */
 export function deviceType(d: Pick<RmmDevice, 'type' | 'os'>): string {
   const t = `${d.type} ${d.os}`.toLowerCase();
@@ -1139,11 +1182,10 @@ export async function runCwRmmSync(
   // The client is shared between syncs; each sync notes the field names it saw.
   client.lastDeviceFields = '';
   const layout = await deviceLayout(db, actor.orgId, options.layoutId);
-  // Devices an earlier sync saved in Configurations move to the device layout when that is another one.
-  const moveFrom = layout.configurationId !== layout.id ? layout.configurationId : null;
-  // Assets in the sync's own layout are never matched as ones already there: Configurations when devices go there
-  // (only the sync puts them there), and otherwise the device layout, whose assets a device may well be.
-  const ownLayout = moveFrom ?? layout.id;
+  // Assets the sync made, which it keeps in the device layout and archives when their device goes. Those in
+  // Configurations are all its own (it never matches devices to assets there); elsewhere they are marked.
+  const owned = await ownedByRmm(db, actor.orgId);
+  const isOwned = (a: { id: string; layoutId: string }) => a.layoutId === layout.configurationId || owned.has(a.id);
   let moved = 0;
 
   const linked = Object.entries(map).flatMap(([companyId, m]) => (m.action === 'link' ? [[companyId, m.clientId] as const] : []));
@@ -1208,7 +1250,7 @@ export async function runCwRmmSync(
       [d.name, d.hostname]
         .filter(Boolean)
         .flatMap((n) => existing.byName.get(n.toLowerCase()) ?? [])
-        .filter((a) => a.id !== except && a.layoutId !== ownLayout && !claimed.has(a.id))
+        .filter((a) => a.id !== except && a.layoutId !== layout.configurationId && !claimed.has(a.id))
         // The asset whose layout takes the most of the device's fields, then the oldest.
         .sort((a, b) => b.fit - a.fit || a.createdAt.getTime() - b.createdAt.getTime())[0];
     for (const d of devices) {
@@ -1273,12 +1315,12 @@ export async function runCwRmmSync(
         const from = existing.layoutFields.get(current.layoutId) ?? [];
         const to = await ensureDeviceFields(layoutService, actor, layout.id, existing.layoutFields, fields);
         // Values Atlas users entered go into the same-keyed or same-labelled field, where it can hold them.
-        const kept: Record<string, string> = {};
+        const kept: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(current.fields)) {
           const label = from.find((f) => f.key === key)?.label.trim().toLowerCase();
           const field =
             to.find((f) => f.key === key) ?? (label ? to.find((f) => f.label.trim().toLowerCase() === label) : undefined);
-          const fitted = field && typeof value === 'string' ? valueFor(field, value) : undefined;
+          const fitted = field ? keptValue(from.find((f) => f.key === key), field, value) : undefined;
           if (field && fitted !== undefined) kept[field.key] = fitted;
         }
         return assets.moveToLayout(
@@ -1299,18 +1341,18 @@ export async function runCwRmmSync(
             matched++;
             return other.id;
           }
-          return (
-            await assets.create(scope, clientId, {
-              layoutId: layout.id,
-              name,
-              fields: { ...(await extras(layout.id)), ...(await deviceFields()) },
-              notes: 'Synced from ConnectWise RMM.',
-            })
-          ).id;
+          const created = await assets.create(scope, clientId, {
+            layoutId: layout.id,
+            name,
+            fields: { ...(await extras(layout.id)), ...(await deviceFields()) },
+            notes: 'Synced from ConnectWise RMM.',
+          });
+          await markOwned(db, actor.orgId, owned, created.id);
+          return created.id;
         },
         async (existingId) => {
           let current = await assets.get(scope, existingId);
-          const misplaced = moveFrom !== null && current.layoutId === moveFrom;
+          const misplaced = current.layoutId !== layout.id && isOwned(current);
           if (current.layoutId !== layout.id && !misplaced) return updateOther(existingId);
           // A copy an earlier sync made beside an asset that was already there: move the link to that asset and
           // archive the copy (it can be restored).
@@ -1322,9 +1364,10 @@ export async function runCwRmmSync(
             folded++;
             return;
           }
-          // A device an earlier sync saved in Configurations moves to the device layout.
+          // A device an earlier sync saved in another layout (Configurations, or one chosen before) moves.
           if (misplaced) {
             current = await moveToDeviceLayout(current);
+            await markOwned(db, actor.orgId, owned, current.id);
             moved++;
           }
           // Fields Atlas users added stay; the RMM's own values are refreshed.
@@ -1352,7 +1395,7 @@ export async function runCwRmmSync(
   }
 
   if (moved)
-    run.note(`${moved} device${moved === 1 ? '' : 's'} moved out of Configurations into the device layout.`);
+    run.note(`${moved} device${moved === 1 ? '' : 's'} moved into the device layout from where earlier syncs put them.`);
   if (matched)
     run.note(`${matched} device${matched === 1 ? '' : 's'} matched an asset already in Atlas by name, and updated it.`);
   if (folded)
@@ -1387,7 +1430,12 @@ export async function runCwRmmSync(
           ),
         );
     const refs = await db
-      .select({ externalId: schema.externalRefs.externalId, id: schema.assets.id, archived: schema.assets.archived })
+      .select({
+        externalId: schema.externalRefs.externalId,
+        id: schema.assets.id,
+        layoutId: schema.assets.layoutId,
+        archived: schema.assets.archived,
+      })
       .from(schema.externalRefs)
       .innerJoin(schema.assets, eq(schema.assets.id, schema.externalRefs.entityId))
       .where(
@@ -1396,13 +1444,12 @@ export async function runCwRmmSync(
           eq(schema.externalRefs.source, 'cw-rmm'),
           eq(schema.externalRefs.kind, 'assets'),
           inArray(schema.assets.clientId, complete),
-          // Only the sync's own assets, in the device layout: an existing asset it matched and updated is never archived.
-          eq(schema.assets.layoutId, layout.id),
         ),
       );
     let archived = 0;
+    // Only the sync's own assets: an existing asset it matched and updated is never archived.
     for (const r of refs)
-      if (!seen.has(r.externalId) && !r.archived) {
+      if (!seen.has(r.externalId) && !r.archived && isOwned(r)) {
         await assets.setArchived(scope, r.id, true);
         archived++;
       }

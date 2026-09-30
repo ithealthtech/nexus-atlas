@@ -10,7 +10,15 @@ import { detectManufacturer } from './manufacturer.js';
 import { getRevision, listRevisions, snapshot } from './revisions.js';
 import { isUuid, type Scope } from './scope.js';
 
-type Snapshot = { name: string; status: AssetView['status']; fields: Record<string, unknown>; notes: string };
+type Snapshot = {
+  name: string;
+  status: AssetView['status'];
+  fields: Record<string, unknown>;
+  notes: string;
+  /** Set on a version that moved the asset to another layout: the layout it moved to, and the one it left. */
+  layoutId?: string;
+  fromLayoutId?: string;
+};
 const editor = alias(schema.users, 'editor');
 
 // Domains-layout fields a lookup can fill, with the field type each needs.
@@ -236,7 +244,14 @@ export class AssetService {
   async moveToLayout(
     scope: Scope,
     id: string,
-    input: { layoutId: string; fields: Record<string, unknown>; version: number },
+    input: {
+      layoutId: string;
+      fields: Record<string, unknown>;
+      version: number;
+      name?: string;
+      status?: AssetView['status'];
+      notes?: string;
+    },
     action = 'Moved',
   ): Promise<AssetView> {
     const current = await this.get(scope, id);
@@ -249,18 +264,24 @@ export class AssetService {
       );
     const layout = await this.layouts.get(scope.actor, input.layoutId);
     if (layout.archived) throw new HttpError(400, 'That asset layout is archived.');
+    const name = input.name ?? current.name;
     const next: Snapshot = {
-      name: current.name,
-      status: current.status,
-      fields: await this.detect(layout, current.name, validateFields(layout.fields as LayoutField[], input.fields)),
-      notes: current.notes,
+      name,
+      status: input.status ?? current.status,
+      fields: await this.detect(layout, name, validateFields(layout.fields as LayoutField[], input.fields)),
+      notes: input.notes ?? current.notes,
+      layoutId: layout.id,
+      fromLayoutId: current.layoutId,
     };
     await scope.db.transaction(async (tx) => {
       const updated = await tx
         .update(schema.assets)
         .set({
-          layoutId: layout.id,
+          name: next.name,
+          status: next.status,
           fields: next.fields,
+          notes: next.notes,
+          layoutId: layout.id,
           version: current.version + 1,
           updatedBy: scope.actor.id,
           updatedAt: new Date(),
@@ -371,7 +392,43 @@ export class AssetService {
 
   async restore(scope: Scope, id: string, version: number, expectedVersion: number): Promise<AssetView> {
     const old = await this.revision(scope, id, version);
+    const action = `Restored version ${version} of`;
+    // A version from before a move to another layout goes back to the layout it was in, if that is still in use.
+    const layoutId = await this.layoutAt(scope, id, version);
+    const current = await this.get(scope, id);
+    if (layoutId && layoutId !== current.layoutId) {
+      const layout = await this.layouts.get(scope.actor, layoutId).catch(() => null);
+      if (layout && !layout.archived)
+        return this.moveToLayout(
+          scope,
+          id,
+          {
+            layoutId,
+            fields: old.fields,
+            version: expectedVersion,
+            name: old.name,
+            status: old.status,
+            notes: old.notes,
+          },
+          action,
+        );
+    }
     // Restoring appends a new version; history is never rewritten. Fields removed from the layout since then are dropped.
-    return this.update(scope, id, { ...old, version: expectedVersion }, `Restored version ${version} of`);
+    const { name, status, fields, notes } = old;
+    return this.update(scope, id, { name, status, fields, notes, version: expectedVersion }, action);
+  }
+
+  /** The layout an asset was in at a version, from the versions that moved it; null when it never moved. */
+  private async layoutAt(scope: Scope, id: string, version: number): Promise<string | null> {
+    const moves = (
+      await scope.db
+        .select({ version: schema.revisions.version, snapshot: schema.revisions.snapshot })
+        .from(schema.revisions)
+        .where(and(eq(schema.revisions.entityType, 'asset'), eq(schema.revisions.entityId, id)))
+        .orderBy(asc(schema.revisions.version))
+    ).filter((r) => (r.snapshot as Snapshot).layoutId);
+    const before = moves.filter((r) => r.version <= version).at(-1);
+    if (before) return (before.snapshot as Snapshot).layoutId!;
+    return (moves[0]?.snapshot as Snapshot | undefined)?.fromLayoutId ?? null;
   }
 }
