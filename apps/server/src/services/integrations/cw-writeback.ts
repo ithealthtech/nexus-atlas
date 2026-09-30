@@ -6,16 +6,14 @@ import type { ImportRun } from '../importers/common.js';
 import type { StoredCwRmm } from '../settings.js';
 import { ACCESS_DENIED, listOf, text, type CwRmmClient } from './cw-rmm.js';
 
-type Json = Record<string, unknown>;
 type Entity = 'endpoint' | 'client';
 
-/** The ConnectWise custom field Atlas writes its links into, on devices and on companies. */
+/** The ConnectWise device custom field Atlas writes its links into. */
 export const LINK_FIELD = 'Atlas link';
-/** External refs of this source record which link was last written for each device and company. */
+/** External refs of this source record which link was last written for each device. */
 export const LINK_SOURCE = 'cw-link';
-const DEFINITIONS = '/api/platform/v1/custom-field/definitions';
-// The spec names entity types both ways: "endpoint"/"client" on definitions, "device"/"company" in its query.
-const ENTITY_NAMES: Record<Entity, RegExp> = { endpoint: /^(endpoint|device)$/i, client: /^(client|company)$/i };
+/** The code of the error when ConnectWise has no "Atlas link" device field yet. */
+const NO_FIELD = 'NO_LINK_FIELD';
 const MAX_NOTES = 5;
 
 /** The Atlas page for a device's asset or a company's client. */
@@ -23,56 +21,44 @@ export function atlasUrl(publicUrl: string, entity: Entity, atlasId: string) {
   return `${publicUrl.replace(/\/+$/, '')}/${entity === 'endpoint' ? 'assets' : 'clients'}/${atlasId}`;
 }
 
+const fieldsPath = (endpointId: string) =>
+  `/api/platform/v2/device/endpoints/${encodeURIComponent(endpointId)}/custom-fields`;
+
 /**
- * Writes Atlas links into the "Atlas link" custom field, making the field once when ConnectWise has none. Devices
- * and companies may use separate clients, as their write permissions differ.
+ * Writes Atlas links into the devices' "Atlas link" custom field, through the v2 platform API only. v2 can't make a
+ * field, so the field is found by name among a device's custom fields; companies have no v2 custom field API.
  */
 export class CwLinkWriter {
-  private readonly fields = new Map<Entity, Promise<string>>();
-  private readonly clients: Record<Entity, CwRmmClient>;
+  private field: Promise<string> | null = null;
 
-  constructor(devices: CwRmmClient, companies: CwRmmClient = devices) {
-    this.clients = { endpoint: devices, client: companies };
-  }
+  constructor(private readonly client: CwRmmClient) {}
 
-  /** The ID of the "Atlas link" field for devices or companies. */
-  field(entity: Entity): Promise<string> {
-    let id = this.fields.get(entity);
-    if (!id) {
-      id = this.findOrCreate(entity);
+  /** The ID of the "Atlas link" device field, read from a device's custom fields (defaults included). */
+  private fieldId(endpointId: string): Promise<string> {
+    if (!this.field) {
+      this.field = this.find(endpointId);
       // A failure is tried again next time rather than remembered.
-      id.catch(() => this.fields.delete(entity));
-      this.fields.set(entity, id);
+      this.field.catch(() => (this.field = null));
     }
+    return this.field;
+  }
+
+  private async find(endpointId: string) {
+    const values = listOf(await this.client.get(`${fieldsPath(endpointId)}?withDefaults=true`));
+    const found = values.find((v) => text(v, 'name').toLowerCase() === LINK_FIELD.toLowerCase());
+    const id = found ? text(found, 'attributeId', 'attributeID') : '';
+    if (!id)
+      throw new HttpError(
+        404,
+        `ConnectWise has no device custom field named "${LINK_FIELD}". Add a text custom field with that name for devices in ConnectWise; Atlas fills it on the next sync.`,
+        NO_FIELD,
+      );
     return id;
   }
 
-  private async findOrCreate(entity: Entity) {
-    const client = this.clients[entity];
-    const existing = listOf(await client.get(DEFINITIONS)).find(
-      (d) => ENTITY_NAMES[entity].test(text(d, 'entityType')) && text(d, 'name').toLowerCase() === LINK_FIELD.toLowerCase(),
-    );
-    if (existing && text(existing, 'id')) return text(existing, 'id');
-    const created = await client.post(DEFINITIONS, {
-      entityType: entity,
-      name: LINK_FIELD,
-      description: 'Opens this in Nexus Atlas, for its documentation and passwords.',
-      attributeType: 'string',
-      isEditable: false,
-      helpText: 'Written by Nexus Atlas on each sync.',
-    });
-    const id = text((created ?? {}) as Json, 'id');
-    if (!id) throw new HttpError(502, `ConnectWise didn't return the new "${LINK_FIELD}" custom field.`);
-    return id;
-  }
-
-  async write(entity: Entity, id: string, url: string) {
-    const attributeId = await this.field(entity);
-    const path =
-      entity === 'endpoint'
-        ? `/api/platform/v2/device/endpoints/${encodeURIComponent(id)}/custom-fields`
-        : `/api/platform/v1/company/companies/${encodeURIComponent(id)}/custom-fields`;
-    await this.clients[entity].put(path, [{ entityId: id, attributeId, value: url }]);
+  async write(endpointId: string, url: string) {
+    const attributeId = await this.fieldId(endpointId);
+    await this.client.put(fieldsPath(endpointId), [{ entityId: endpointId, attributeId, value: url }]);
   }
 }
 
@@ -88,8 +74,8 @@ export async function clearLinkRefs(db: Database, orgId: string) {
 }
 
 /**
- * Writes the Atlas address of each linked company's client, and of each synced device's asset, into ConnectWise.
- * Only links that are new or changed since the last write are sent.
+ * Writes the Atlas address of each synced device's asset into ConnectWise. Only links that are new or changed since
+ * the last write are sent.
  */
 export async function runLinkWriteBack(
   db: Database,
@@ -120,7 +106,7 @@ export async function runLinkWriteBack(
         ),
       ),
     );
-  const kinds = { client: kindFor('client', publicUrl), endpoint: kindFor('endpoint', publicUrl) };
+  const kinds = { endpoint: kindFor('endpoint', publicUrl) };
   // Links written under an earlier address are stale.
   await db
     .delete(r)
@@ -133,36 +119,26 @@ export async function runLinkWriteBack(
         .where(and(eq(r.orgId, orgId), eq(r.source, LINK_SOURCE)))
     ).map((w) => [`${w.kind}|${w.externalId}`, w.entityId]),
   );
-  const targets: [Entity, string, string][] = [
-    ...linked.map(([companyId, clientId]) => ['client', companyId, clientId] as [Entity, string, string]),
-    ...devices.map((d) => ['endpoint', d.externalId, d.assetId] as [Entity, string, string]),
-  ];
+  const kind = kinds.endpoint;
   let notes = 0;
-  // Device and company fields may need different permissions, so a refusal stops only that kind.
-  const denied = new Set<Entity>();
-  for (const [entity, id, atlasId] of targets) {
-    const kind = kinds[entity];
-    if (denied.has(entity)) {
-      run.count('atlasLinks', 'failed');
-      continue;
-    }
+  for (const d of devices) {
+    const [id, atlasId] = [d.externalId, d.assetId];
     if (written.get(`${kind}|${id}`) === atlasId) {
       run.count('atlasLinks', 'skipped');
       continue;
     }
     try {
-      await writer.write(entity, id, atlasUrl(publicUrl, entity, atlasId));
+      await writer.write(id, atlasUrl(publicUrl, 'endpoint', atlasId));
     } catch (error) {
-      run.count('atlasLinks', 'failed');
-      const what = entity === 'endpoint' ? 'device' : 'company';
       const why = error instanceof HttpError ? error.message : 'could not be written.';
-      // The key can't write these fields at all: every other write of them would fail the same way.
-      if (error instanceof HttpError && error.code === ACCESS_DENIED) {
-        denied.add(entity);
-        run.note(`Atlas links not written to ConnectWise ${what}s: ${why}`);
-        continue;
+      // No field, or a key that can't write fields: every other device would fail the same way.
+      if (error instanceof HttpError && (error.code === ACCESS_DENIED || error.code === NO_FIELD)) {
+        run.count('atlasLinks', 'failed');
+        run.note(`Atlas links not written to ConnectWise devices: ${why}`);
+        return;
       }
-      if (notes++ < MAX_NOTES) run.note(`Atlas link for ${what} ${id}: ${why}`);
+      run.count('atlasLinks', 'failed');
+      if (notes++ < MAX_NOTES) run.note(`Atlas link for device ${id}: ${why}`);
       continue;
     }
     run.count('atlasLinks', written.has(`${kind}|${id}`) ? 'updated' : 'created');

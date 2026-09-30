@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { mapNote, mapTicket, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
+import { mapNote, mapTicket, portalIdIn, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
+import { CwLinkWriter } from '../src/services/integrations/cw-writeback.js';
+import type { CwRmmClient } from '../src/services/integrations/cw-rmm.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const CLIENT_ID = 'asio-client-id-123';
@@ -168,6 +170,15 @@ describe('ticket values', () => {
       'ticketId=5535&companyId=72f2b461-1e35-4df0-be5c-d55f10b6052f',
     );
     expect(ticketLink('https://control.itsupport247.net', '5535', 'not an id')).toBeNull();
+    // ConnectWise's long alert ID is never shown as the ticket number, or linked.
+    expect(mapTicket({ id: 'u-9', number: '133023.1670', nocTicketId: '202609080102782' })?.number).toBe('133023.1670');
+    expect(ticketLink('https://control.itsupport247.net', '202609080102782', 'c1')).toBeNull();
+    expect(portalIdIn('Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670', '133023.1670')).toBe(
+      '5283',
+    );
+    expect(
+      portalIdIn('Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670', '133023.1671'),
+    ).toBeNull();
     // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),
@@ -460,7 +471,7 @@ describe('ticket sync and dashboard', () => {
     expect(platform.notes.get('t-101')).toHaveLength(3);
   });
 
-  it('writes Atlas links into ConnectWise custom fields only when switched on, and only when changed', async () => {
+  it('writes Atlas links only when switched on, never through the legacy v1 custom field API', async () => {
     await connect(tickets);
     await link();
     await sync();
@@ -468,23 +479,32 @@ describe('ticket sync and dashboard', () => {
 
     await allOptions({ atlasLinks: true });
     const job = await sync();
-    expect(job.counts.atlasLinks).toMatchObject({ created: 2, failed: 0 });
-    // The field is made once, for companies.
-    expect(platform.definitions).toEqual([
-      expect.objectContaining({ entityType: 'client', name: 'Atlas link', attributeType: 'string' }),
-    ]);
-    expect(platform.fields.get('/api/platform/v1/company/companies/c1/custom-fields')).toEqual([
-      { entityId: 'c1', attributeId: 'def-1', value: expect.stringMatching(new RegExp(`/clients/${harbor}$`)) },
-    ]);
+    expect(job.status).toBe('done');
+    // Companies have no v2 custom field API, so only devices are written, and nothing touches v1.
+    expect(platform.calls.filter((c) => c.includes('/v1/') && c.includes('custom-field'))).toEqual([]);
+    expect(platform.calls.filter((c) => c.startsWith('PUT'))).toEqual([]);
+  });
+});
 
-    // Unchanged links aren't written again.
-    const before = platform.calls.length;
-    expect((await sync()).counts.atlasLinks).toMatchObject({ created: 0, skipped: 2 });
-    expect(platform.calls.slice(before).filter((c) => c.startsWith('PUT'))).toEqual([]);
-
-    // Switched off and on again, they're all written again.
-    await allOptions({ atlasLinks: false });
-    await allOptions({ atlasLinks: true });
-    expect((await sync()).counts.atlasLinks).toMatchObject({ created: 2 });
+describe('Atlas link writer', () => {
+  it('finds the "Atlas link" device field through v2 and writes to it, never calling v1', async () => {
+    const calls: string[] = [];
+    const fields = [{ attributeId: 'attr-1', name: 'Atlas link', value: null }];
+    const client = {
+      get: async (path: string) => (calls.push(`GET ${path}`), fields),
+      put: async (path: string, body: unknown) => (calls.push(`PUT ${path} ${JSON.stringify(body)}`), []),
+    } as unknown as CwRmmClient;
+    const writer = new CwLinkWriter(client);
+    await writer.write('e-1', 'https://atlas.test/assets/a1');
+    await writer.write('e-2', 'https://atlas.test/assets/a2');
+    expect(calls).toEqual([
+      'GET /api/platform/v2/device/endpoints/e-1/custom-fields?withDefaults=true',
+      'PUT /api/platform/v2/device/endpoints/e-1/custom-fields [{"entityId":"e-1","attributeId":"attr-1","value":"https://atlas.test/assets/a1"}]',
+      'PUT /api/platform/v2/device/endpoints/e-2/custom-fields [{"entityId":"e-2","attributeId":"attr-1","value":"https://atlas.test/assets/a2"}]',
+    ]);
+    fields.length = 0;
+    await expect(new CwLinkWriter(client).write('e-3', 'x')).rejects.toThrow(
+      /no device custom field named "Atlas link"/,
+    );
   });
 });

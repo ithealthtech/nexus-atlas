@@ -342,7 +342,7 @@ export function CwRmmSync() {
                       [
                         'atlasLinks',
                         'Atlas links',
-                        'Writes each device’s and company’s Atlas address into an “Atlas link” custom field on every sync. Needs the devices write permission.',
+                        'Writes each device’s Atlas address into its “Atlas link” custom field on every sync. Add that device custom field in ConnectWise first. Needs the devices write permission.',
                       ],
                       [
                         'ticketNotes',
