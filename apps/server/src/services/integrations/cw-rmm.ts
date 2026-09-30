@@ -635,7 +635,10 @@ export class CwRmmClient {
       try {
         const listed = await this.devicePages(companyId, siteIds, shape);
         this.deviceQuery = shape;
-        return this.withDetails(companyId, siteIds, listed);
+        const devices = await this.withDetails(companyId, siteIds, listed);
+        // Neither the list nor the details say whether the agent is online; the heartbeat API does.
+        const online = await this.heartbeats(companyId);
+        return devices.map((d) => (online.has(d.id) ? { ...d, online: online.get(d.id)! } : d));
       } catch (error) {
         // Only a rejected request is worth trying another shape for.
         if (!(error instanceof HttpError && error.status === 400)) throw error;
@@ -650,6 +653,32 @@ export class CwRmmClient {
       400,
       `ConnectWise RMM wouldn't list devices. Check the API key has the Devices read permission. Tried ${tried.join('; ')}`,
     );
+  }
+
+  /** Whether each of the company's agents is online, by endpoint ID; empty when ConnectWise won't say. */
+  private async heartbeats(companyId: string): Promise<Map<string, boolean>> {
+    const online = new Map<string, boolean>();
+    let body: unknown;
+    try {
+      body = await this.call(
+        'GET',
+        `/api/platform/v2/device/endpoints/heartbeat?resourceType=companies&resources=${encodeURIComponent(companyId)}`,
+      );
+    } catch (error) {
+      // Online status is extra: without it the devices still sync, as unknown.
+      if (error instanceof HttpError) return online;
+      throw error;
+    }
+    const records = pick((body ?? {}) as Json, 'successfulRecords');
+    for (const record of Array.isArray(records) ? (records as Json[]) : []) {
+      const endpoints = pick(record, 'endpoints');
+      for (const e of Array.isArray(endpoints) ? (endpoints as Json[]) : []) {
+        const id = text(e, 'EndpointID', 'endpointID', 'endpointId');
+        const up = onlineState(pick(e, 'Availability', 'availability'));
+        if (id && up !== null) online.set(id, up);
+      }
+    }
+    return online;
   }
 
   /**

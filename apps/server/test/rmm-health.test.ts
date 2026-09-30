@@ -13,8 +13,8 @@ const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 type Device = Record<string, unknown>;
 
 /** A fake Asio API with two companies whose devices report agent and protection status. */
-/** `failing` companies answer every request with a server error. */
-function fakeAsio(devices: Map<string, Device[]>, failing = new Set<string>()) {
+/** `failing` companies answer every request with a server error; `heartbeat` is the heartbeat API's availability. */
+function fakeAsio(devices: Map<string, Device[]>, failing = new Set<string>(), heartbeat = new Map<string, boolean>()) {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   return (async (input: string | URL, init?: RequestInit) => {
@@ -34,6 +34,18 @@ function fakeAsio(devices: Map<string, Device[]>, failing = new Set<string>()) {
       if (!all.length) return json({ message: 'resource not found' }, 404);
       const cursor = Number(url.searchParams.get('cursor'));
       return json({ endpoints: all.slice(cursor, cursor + Number(url.searchParams.get('limit'))) });
+    }
+    if (url.pathname === '/api/platform/v2/device/endpoints/heartbeat' && heartbeat.size) {
+      const company = url.searchParams.get('resources')!;
+      const ids = new Set((devices.get(company) ?? []).map((d) => d.endpointId as string));
+      const endpoints = [...heartbeat].filter(([id]) => ids.has(id));
+      return json({
+        status: 'success',
+        successfulRecords: [
+          { companyID: company, endpoints: endpoints.map(([id, up]) => ({ EndpointID: id, Availability: up })) },
+        ],
+        failedRecords: [],
+      });
     }
     return json({}, 404);
   }) as typeof fetch;
@@ -108,6 +120,7 @@ describe('RMM health report', () => {
   let owner: Browser;
   let devices: Map<string, Device[]>;
   let failing: Set<string>;
+  let heartbeat: Map<string, boolean>;
   let harbor: string;
   let northline: string;
 
@@ -159,7 +172,8 @@ describe('RMM health report', () => {
       ],
     ]);
     failing = new Set();
-    t = await startApp({}, { cwRmmFetch: fakeAsio(devices, failing) });
+    heartbeat = new Map();
+    t = await startApp({}, { cwRmmFetch: fakeAsio(devices, failing, heartbeat) });
     owner = (await setupOwner(t.app)).b;
     harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
     northline = (await owner.call('POST', '/api/clients', { name: 'Northline Architecture' })).data.id;
@@ -176,6 +190,13 @@ describe('RMM health report', () => {
   });
 
   const sync = async () => waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+
+  it('takes online status from the heartbeat API when ConnectWise gives it', async () => {
+    heartbeat.set('h3', true).set('h4', true);
+    expect((await sync()).status).toBe('done');
+    const report = (await owner.call('GET', '/api/rmm-health')).data;
+    expect(report.totals).toMatchObject({ total: 5, online: 4, offline: 1, onlineUnknown: 0 });
+  });
 
   it('is empty before a sync', async () => {
     const report = (await owner.call('GET', '/api/rmm-health')).data;

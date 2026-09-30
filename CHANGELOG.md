@@ -7,6 +7,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Fixed
 
 - **ConnectWise tickets now sync.** The ticket dashboard asked for tickets at addresses the ConnectWise platform doesn't have, so every sync reported "No tickets listed". It now reads the platform's service ticketing API (`/api/platform/v2/service/ticketing/tickets`), tells closed tickets apart by the status's Closed category, and links each ticket to its page in the ConnectWise web app (North America; the company needs its numeric company ID mapped). (#98)
+- **ConnectWise RMM devices show whether they're online.** Device records don't carry it, so every device counted as online unknown. The sync now reads each company's agent availability from the platform heartbeat API (`/api/platform/v2/device/endpoints/heartbeat`).
 
 ## [1.7.1] - 2026-09-30
 
