@@ -637,7 +637,7 @@ export async function runHuduImport(
       ? { name: ENDPOINTS, description: ENDPOINTS_DESCRIPTION, fields: mapped.fields }
       : { name: `${l.name}`.slice(0, 80), icon: 'box', description: 'Imported from Hudu', fields: mapped.fields };
     if (endpoints) {
-      const target = await endpointLayout(db, actor.orgId);
+      const target = await endpointLayout(db, actor.orgId, actor);
       if (target && target !== (await run.ref('layouts', l.id))) await run.remember('layouts', l.id, target);
     }
     const id = await run.upsert(

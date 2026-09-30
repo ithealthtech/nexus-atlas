@@ -578,6 +578,47 @@ describe('Hudu import', () => {
     expect(existing).toBeTruthy();
   });
 
+  it('folds a Computer Assets layout an earlier import made into Endpoints, merging same-named assets', async () => {
+    hudu.data.asset_layouts!.push({
+      id: 8,
+      name: 'Computer Assets',
+      fields: [{ id: 81, label: 'Operating System', field_type: 'Text', position: 1 }],
+    });
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    const layout = async (name: string, fields: { key: string; label: string; type: string }[]) =>
+      (await owner.call('POST', '/api/layouts', { name, icon: 'server', fields })).data.id as string;
+    const asset = async (layoutId: string, name: string, fields: Record<string, unknown>) =>
+      (await owner.call('POST', `/api/clients/${harbor}/assets`, { layoutId, name, fields })).data.id as string;
+    // Both layouts are already there, with the same machine in each: what v1.7.7 left behind.
+    const devices = await layout('Devices', [{ key: 'rmm_agent', label: 'RMM agent', type: 'text' }]);
+    const computers = await layout('Computer Assets', [
+      { key: 'operating_system', label: 'Operating System', type: 'text' },
+      { key: 'assigned_user', label: 'Assigned User', type: 'text' },
+    ]);
+    const kept = await asset(devices, 'HDG-WS-014', { rmm_agent: 'online' });
+    const copy = await asset(computers, 'HDG-WS-014', { operating_system: 'Windows 11 Pro' });
+    const only = await asset(computers, 'HDG-LT-020', { assigned_user: 'Dana Reyes' });
+
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(job.status, JSON.stringify(job)).toBe('done');
+
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; name: string; archived: boolean }[];
+    expect(layouts.filter((l) => !l.archived && ['Endpoints', 'Devices', 'Computer Assets'].includes(l.name))).toEqual([
+      expect.objectContaining({ id: devices, name: 'Endpoints' }),
+    ]);
+    const live = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as { id: string; name: string }[];
+    const endpoints = live.filter((a) => a.name.startsWith('HDG-WS') || a.name.startsWith('HDG-LT'));
+    expect(endpoints.map((a) => a.id).sort()).toEqual([kept, only].sort());
+    expect((await owner.call('GET', `/api/assets/${kept}`)).data.fields).toMatchObject({
+      rmm_agent: 'online',
+      operating_system: 'Windows 11 Pro',
+    });
+    const moved = (await owner.call('GET', `/api/assets/${only}`)).data;
+    expect(moved).toMatchObject({ layoutId: devices, fields: { assigned_user: 'Dana Reyes' } });
+    expect((await owner.call('GET', `/api/assets/${copy}`)).data).toMatchObject({ archived: true, layoutId: devices });
+  });
+
   it("puts Hudu's Computer Assets into the Devices layout, renamed Endpoints, and matches assets already there", async () => {
     hudu.data.asset_layouts!.push({
       id: 8,
