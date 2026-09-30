@@ -183,6 +183,13 @@
       "when": 1790731489151,
       "tag": "0025_native_app_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790732850394,
+      "tag": "0026_vault_files_notes_sends",
+      "breakpoints": true
     }
   ]
 }

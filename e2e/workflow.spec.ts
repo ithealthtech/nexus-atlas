@@ -369,6 +369,68 @@ test.describe.serial('first run to restricted client access', () => {
     await page.screenshot({ path: 'test-results/screens/password.png', fullPage: true });
   });
 
+  test('owner keeps a secure note with an encrypted file, and sends text once', async ({ page, browser }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await nav(page, 'Clients');
+    await page
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .first()
+      .click();
+    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
+    await page.getByRole('button', { name: 'Add password' }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Secure note' }).click();
+    await expect(dialog.getByLabel('Username', { exact: true })).toHaveCount(0);
+    await dialog.getByLabel('Name', { exact: true }).fill('Alarm panel');
+    await dialog.getByLabel('Note (encrypted)').fill('Master code 4471\nCall Brinks first.');
+    await dialog.getByRole('button', { name: 'Save to vault' }).click();
+    await expect(page.getByRole('heading', { name: /Alarm panel/ })).toBeVisible();
+    await expect(page.getByText('Secure note', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Show note' }).click();
+    await expect(page.getByText(/Master code 4471/)).toBeVisible();
+
+    await page.getByLabel('Choose files to add to this entry').setInputFiles({
+      name: 'panel-install.lic',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('ALARM-LICENSE-2231'),
+    });
+    await expect(page.getByText('panel-install.lic', { exact: true })).toBeVisible();
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download panel-install.lic' }).click();
+    const file = await downloading;
+    expect(file.suggestedFilename()).toBe('panel-install.lic');
+    expect(readFileSync(await file.path()).toString()).toBe('ALARM-LICENSE-2231');
+    await expect(page.getByText('Downloaded file “panel-install.lic”').first()).toBeVisible();
+    await accessible(page);
+
+    await nav(page, 'Send');
+    await page.getByRole('button', { name: 'New Send' }).first().click();
+    const send = page.getByRole('dialog');
+    await send.getByLabel('Name').fill('Wi-Fi for the auditor');
+    await send.getByLabel('Text').fill('Guest network: HDG-Guest / sunny-harbor-42');
+    await accessible(page);
+    await send.getByRole('button', { name: 'Create link' }).click();
+    const link = await send.getByLabel('Send link').inputValue();
+    expect(link).toMatch(/\/send\/[\w-]{32}#[\w-]{43}$/);
+    await send.getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByText('Wi-Fi for the auditor')).toBeVisible();
+    const outsider = await browser.newContext({ reducedMotion: 'reduce' });
+    const recipient = await outsider.newPage();
+    await recipient.goto(link);
+    await expect(recipient.getByRole('heading', { name: 'Someone sent you something' })).toBeVisible();
+    expect(recipient.url()).not.toContain('#');
+    await recipient.getByRole('button', { name: 'Open' }).click();
+    await expect(recipient.getByText('Guest network: HDG-Guest / sunny-harbor-42')).toBeVisible();
+    await expect(recipient.getByText(/used up/)).toBeVisible();
+    await accessible(recipient);
+    const again = await outsider.newPage();
+    await again.goto(link);
+    await again.getByRole('button', { name: 'Open' }).click();
+    await expect(again.getByRole('alert')).toContainText('already been used');
+    await outsider.close();
+  });
+
   test('owner signs the browser extension in through Atlas, and it fills the firewall login', async ({ page }) => {
     watch(page);
     // The extension's side, from its service worker: a device key and signed requests to Atlas.
@@ -897,6 +959,7 @@ test.describe.serial('accessibility sweep', () => {
       '/documents',
       '/passwords',
       '/expirations',
+      '/sends',
       '/account',
       '/admin/users',
       '/admin/groups',

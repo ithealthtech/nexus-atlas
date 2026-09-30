@@ -28,7 +28,7 @@ export function eraseStatus(
 /**
  * Deletes an organization's documentation: clients and everything under them (contacts, locations, assets,
  * passwords and their history, client documents), the knowledge base, folders, links, custom asset layouts,
- * attachments (and their files), activity, and import records. People, groups, settings, integrations'
+ * attachments (and their files), Sends (and their files), activity, and import records. People, groups, settings, integrations'
  * connections, backups, and the security log are kept, so the owner can sign in and import again.
  */
 export async function eraseDocumentation(db: Database, orgId: string, storage: FileStorage) {
@@ -36,6 +36,10 @@ export async function eraseDocumentation(db: Database, orgId: string, storage: F
     .select({ key: schema.attachments.storageKey })
     .from(schema.attachments)
     .where(eq(schema.attachments.orgId, orgId));
+  const sent = await db
+    .select({ key: schema.sends.storageKey })
+    .from(schema.sends)
+    .where(eq(schema.sends.orgId, orgId));
   const counts = await db.transaction(async (tx) => {
     const n = async (rows: Promise<unknown[]>) => (await rows).length;
     const clients = await n(
@@ -48,6 +52,7 @@ export async function eraseDocumentation(db: Database, orgId: string, storage: F
     await tx.delete(schema.folders).where(eq(schema.folders.orgId, orgId));
     await tx.delete(schema.relations).where(eq(schema.relations.orgId, orgId));
     await tx.delete(schema.attachments).where(eq(schema.attachments.orgId, orgId));
+    await tx.delete(schema.sends).where(eq(schema.sends.orgId, orgId));
     await tx.delete(schema.activity).where(eq(schema.activity.orgId, orgId));
     await tx.delete(schema.revisions).where(eq(schema.revisions.orgId, orgId));
     await tx.delete(schema.externalRefs).where(eq(schema.externalRefs.orgId, orgId));
@@ -63,6 +68,7 @@ export async function eraseDocumentation(db: Database, orgId: string, storage: F
   });
   // Files last: if the database part failed, nothing is gone.
   for (const f of files) await storage.remove(f.key).catch(() => undefined);
+  for (const s of sent) if (s.key) await storage.remove(s.key).catch(() => undefined);
   return counts;
 }
 

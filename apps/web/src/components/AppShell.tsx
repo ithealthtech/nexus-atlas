@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
   ArrowDownUp,
+  Send,
   ShieldCheck,
   CopyCheck,
   ArrowUpCircle,
@@ -177,6 +178,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         {actor.isStaff && (
           <NavLink to="/password-health" icon={ShieldCheck} label="Password health" onNavigate={onNavigate} />
         )}
+        {actor.isStaff && <NavLink to="/sends" icon={Send} label="Send" onNavigate={onNavigate} />}
         {actor.isStaff && <NavLink to="/checklists" icon={ListChecks} label="Checklists" onNavigate={onNavigate} />}
         <NavLink to="/expirations" icon={CalendarClock} label="Expirations" onNavigate={onNavigate} />
         {actor.isAdmin && (

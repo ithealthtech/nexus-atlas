@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { zipSync, strToU8 } from 'fflate';
@@ -89,7 +90,11 @@ export async function exportClient(
     const [a, b] = [await endpoint(r.aType, r.aId), await endpoint(r.bType, r.bId)];
     if (a && b) relations.push({ a, b, note: r.note });
   }
-  const files = await db.select().from(schema.attachments).where(eq(schema.attachments.clientId, clientId));
+  // Files on passwords are encrypted; they're exported (decrypted, each audited) only with the passwords.
+  const files = (await db.select().from(schema.attachments).where(eq(schema.attachments.clientId, clientId))).filter(
+    (f) => f.entityType !== 'password',
+  );
+  const vaultFiles = options.passwords ? await options.vault.exportAttachments(scope, clientId, options.ip) : [];
 
   const entries: Record<string, Uint8Array> = {};
   const exportedAt = new Date().toISOString();
@@ -115,15 +120,26 @@ export async function exportClient(
         : {}),
     })),
     relations,
-    attachments: files.map((f) => ({
-      id: f.id,
-      item: { type: f.entityType, id: f.entityId },
-      filename: f.filename,
-      contentType: f.contentType,
-      size: f.size,
-      sha256: f.sha256,
-      path: `attachments/${f.id}-${safeName(f.filename)}`,
-    })),
+    attachments: [
+      ...files.map((f) => ({
+        id: f.id,
+        item: { type: f.entityType, id: f.entityId },
+        filename: f.filename,
+        contentType: f.contentType,
+        size: f.size,
+        sha256: f.sha256,
+        path: `attachments/${f.id}-${safeName(f.filename)}`,
+      })),
+      ...vaultFiles.map(({ row: f, data }) => ({
+        id: f.id,
+        item: { type: f.entityType, id: f.entityId },
+        filename: f.filename,
+        contentType: f.contentType,
+        size: data.length,
+        sha256: createHash('sha256').update(data).digest('hex'),
+        path: `attachments/${f.id}-${safeName(f.filename)}`,
+      })),
+    ],
   };
   entries['client.json'] = strToU8(JSON.stringify(data, null, 2));
   for (const d of fullDocs)
@@ -140,6 +156,8 @@ export async function exportClient(
       /* A missing file is listed in client.json but left out of the zip. */
     }
   }
+  for (const { row: f, data } of vaultFiles)
+    entries[`attachments/${f.id}-${safeName(f.filename)}`] = new Uint8Array(data);
   entries['README.txt'] = strToU8(
     `MSP Atlas export of ${client.name}\nExported ${exportedAt} by ${actor.name}.\n\n` +
       (options.passwords

@@ -1,5 +1,5 @@
 // Sample data for the clickable demo. Everything here is fictional.
-import type { AccessLevel, DocumentStatus, LayoutField, RichText } from '@atlas/shared';
+import type { AccessLevel, DocumentStatus, LayoutField, PasswordKind, RichText } from '@atlas/shared';
 import { BUILT_IN_LAYOUTS, withDefaults } from '../../../server/src/services/layout-defaults';
 
 export const uuid = (): string => crypto.randomUUID();
@@ -302,7 +302,7 @@ export function seed() {
     },
   ].map((x) => ({
     id: uuid(),
-    kind: 'login' as 'login' | 'bitlocker',
+    kind: 'login' as PasswordKind,
     username: '',
     url: '',
     notes: '',

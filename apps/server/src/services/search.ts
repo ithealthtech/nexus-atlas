@@ -73,7 +73,7 @@ export async function search(
     .map(([id]) => id);
   const allRestricted = vaultIds.length > 0 && (await scope.restrictedAccess()) !== 'listed';
   if (vaultIds.length)
-    parts.push(sql`select 'password', p.id, p.name, case when p.kind = 'bitlocker' then 'BitLocker key' else 'Password' end, p.client_id, c.name, nullif(p.username, ''),
+    parts.push(sql`select 'password', p.id, p.name, case p.kind when 'bitlocker' then 'BitLocker key' when 'note' then 'Secure note' else 'Password' end, p.client_id, c.name, nullif(p.username, ''),
         similarity(p.name, ${q}) * 2 + 0.2
       from passwords p join clients c on c.id = p.client_id
       where p.org_id = ${scope.actor.orgId} and not p.archived and p.client_id in ${vaultIds}

@@ -10,7 +10,7 @@ import { isUuid, type Scope } from './scope.js';
 import { TooLargeError, sniffImage, type FileStorage } from './storage.js';
 
 const uploader = alias(schema.users, 'uploader');
-const cleanName = (name: string) =>
+export const cleanName = (name: string) =>
   name
     .normalize('NFKC')
     // Control characters and path separators never belong in a stored filename.
@@ -27,6 +27,8 @@ export class AttachmentService {
   ) {}
 
   async list(scope: Scope, type: ItemType, id: string): Promise<AttachmentView[]> {
+    // Files on passwords are encrypted and go through the vault, which checks and records each use.
+    if (type === 'password') throw new HttpError(400, 'Files on passwords are listed on the password’s page.');
     await requireItem(scope, type, id, 'read');
     const rows = await scope.db
       .select({ f: schema.attachments, by: uploader.name })
@@ -53,8 +55,8 @@ export class AttachmentService {
 
   async upload(scope: Scope, type: ItemType, id: string, file: MultipartFile | undefined): Promise<AttachmentView[]> {
     if (!file) throw new HttpError(400, 'Choose a file to upload.');
-    // Files aren't encrypted at rest, so they can't be attached to vault items.
-    if (type === 'password') throw new HttpError(400, 'Files can’t be attached to passwords.');
+    // Documentation files aren't encrypted at rest; files on passwords go through the vault, which encrypts them.
+    if (type === 'password') throw new HttpError(400, 'Add files to a password from the password’s page.');
     const item = await requireItem(scope, type, id, 'edit');
     let stored;
     try {
@@ -107,7 +109,8 @@ export class AttachmentService {
           .from(schema.attachments)
           .where(and(eq(schema.attachments.id, attachmentId), eq(schema.attachments.orgId, scope.actor.orgId)))
       : [];
-    if (!row) throw new HttpError(404, 'File not found.');
+    // A password's files are only opened, and removed, through the vault.
+    if (!row || row.entityType === 'password') throw new HttpError(404, 'File not found.');
     // Access follows the item the file belongs to.
     const item = await requireItem(scope, row.entityType as ItemType, row.entityId, level);
     return { row, item };

@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { ROLE_INFO, type ItemRef, type ItemType } from '@atlas/shared';
+import { PASSWORD_KIND_LABELS, ROLE_INFO, type ItemRef, type ItemType, type PasswordKind } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { isUuid, type Scope } from './scope.js';
 
@@ -24,7 +24,7 @@ export async function loadItem(
           type,
           id,
           title: r.p.name,
-          subtitle: r.p.kind === 'bitlocker' ? 'BitLocker key' : 'Password',
+          subtitle: PASSWORD_KIND_LABELS[r.p.kind as PasswordKind],
           clientId: r.p.clientId,
           clientName: r.clientName,
           archived: r.p.archived,
@@ -171,7 +171,7 @@ export async function visibleItems(scope: Scope, refs: { type: string; id: strin
         type: 'password',
         id: r.p.id,
         title: r.p.name,
-        subtitle: r.p.kind === 'bitlocker' ? 'BitLocker key' : 'Password',
+        subtitle: PASSWORD_KIND_LABELS[r.p.kind as PasswordKind],
         clientId: r.p.clientId,
         clientName: r.clientName,
         archived: r.p.archived,

@@ -24,6 +24,21 @@ export interface FileStorage {
 
 export class TooLargeError extends Error {}
 
+/** Reads a whole stream into memory, refusing (and discarding the rest of) anything over `maxBytes`. */
+export async function readLimited(stream: Readable, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of stream) {
+    size += (chunk as Buffer).length;
+    if (size > maxBytes) {
+      stream.destroy();
+      throw new TooLargeError();
+    }
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 export class LocalStorage implements FileStorage {
   private readonly root: string;
   constructor(root: string) {

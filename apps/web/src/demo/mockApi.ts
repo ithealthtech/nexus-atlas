@@ -11,6 +11,8 @@ import {
   passwordStrength,
   resolveWorkspace,
   type PasswordCategory,
+  type PasswordKind,
+  type SendView,
   type AccessLevel,
   type ActivityView,
   type ApiKeyView,
@@ -1264,7 +1266,7 @@ on('POST', '/clients/:id/passwords', (m, b) => {
   const p = {
     id: uuid(),
     clientId: m[1]!,
-    kind: (b.kind as 'login') ?? 'login',
+    kind: (b.kind as PasswordKind) ?? 'login',
     category: (b.category as PasswordCategory | null) ?? null,
     folderId: (b.folderId as string | null) ?? null,
     name: String(b.name ?? '').trim(),
@@ -1478,6 +1480,34 @@ on('POST', '/passwords/:id/shares', (m, b) => {
 on('DELETE', '/passwords/:id/shares/:sid', (m) => {
   const s = find(shares, m[2]!);
   s.revoked = true;
+  return { ok: true };
+});
+// Files on entries can't be uploaded in the demo; the list is simply empty.
+on('GET', '/passwords/:id/attachments', () => []);
+const sends: SendView[] = [];
+on('GET', '/sends', () => sends);
+on('POST', '/sends', (_m, b) => {
+  if (!String(b.name ?? '').trim()) throw new MockError(400, 'Give it a name you’ll recognize.');
+  const s: SendView = {
+    id: uuid(),
+    kind: 'text',
+    name: String(b.name).trim(),
+    size: String(b.ciphertext ?? '').length,
+    maxViews: Number(b.maxViews ?? 1),
+    views: 0,
+    expiresAt: new Date(Date.now() + Number(b.expiresHours ?? 24) * 3_600_000).toISOString(),
+    revoked: false,
+    active: true,
+    createdByName: db.owner.name,
+    createdAt: now(),
+  };
+  sends.unshift(s);
+  return { id: s.id, token: uuid().replace(/-/g, ''), expiresAt: s.expiresAt };
+});
+on('DELETE', '/sends/:id', (m) => {
+  const s = find(sends, m[1]!, 'Send');
+  s.revoked = true;
+  s.active = false;
   return { ok: true };
 });
 on('POST', '/shares/:token/open', (m) => {

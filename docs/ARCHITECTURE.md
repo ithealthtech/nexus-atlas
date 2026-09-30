@@ -45,7 +45,9 @@
   - The key goes in the link's `#fragment`, which browsers never send to the server. The server stores a hash of the link token.
   - Opening a link is one atomic `UPDATE … WHERE views < max_views AND expires_at > now()`, so a one-view link opens once even under concurrent requests.
   - The recipient page removes the key from the address bar before doing anything else.
-- **Files and the vault:** attachments aren't encrypted at rest, so they can't be attached to vault entries.
+- **Secure notes:** a vault entry of kind `note` keeps its text where a login keeps its password (sealed as `pw|<id>|secret`), with no username, address, or one-time code. Notes are never scored for strength, reuse, or breaches.
+- **Files on vault entries:** each file gets its own AES-256-GCM key. The file is sealed with it (`pwa|<entry>|<file>|file`) and stored like any attachment; the key is sealed with the organization's vault key (`pwa|<entry>|<file>|key`) in `attachments.sealed_key`. Files are held in memory while being encrypted or decrypted, so they're capped at 25 MB (or `ATLAS_MAX_UPLOAD_MB`, if lower). A download goes through the vault like a reveal (access, restriction list, required reason) and is recorded in `vault_audit`; the documentation file routes refuse them. A client export includes them, decrypted, only with the passwords.
+- **Send:** one-time text and files for someone without an account, in the same model as share links: encrypted in the browser, key in the `#fragment`, a hashed token, and an atomic view count. A file's name is encrypted too. The content (the `sends.ciphertext` column and the stored file) is deleted on the last view, on revoke, and hourly for expired Sends. Creating, revoking, and opening a Send are security events. Sends are left out of backups.
 
 ## Authorization
 

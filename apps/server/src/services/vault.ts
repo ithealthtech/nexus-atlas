@@ -1,8 +1,13 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
+import type { MultipartFile } from '@fastify/multipart';
 import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { schema, type Database } from '@atlas/db';
 import {
+  MAX_NOTE_LENGTH,
+  MAX_SECRET_LENGTH,
+  PASSWORD_KIND_LABELS,
   READ_ONLY_ROLES,
   ROLE_INFO,
   createPasswordSchema,
@@ -16,6 +21,7 @@ import {
   bulkPasswordSchema,
   deviceFillSchema,
   type BulkPasswordResult,
+  type PasswordAttachmentView,
   type DeviceLoginView,
   type PasswordCategory,
   type PasswordFolderView,
@@ -28,10 +34,13 @@ import {
 } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import type { VaultKeys } from '../crypto/vault-keys.js';
+import { newFileKey, openBytes, sealBytes } from '../crypto/files.js';
 import { totp } from '../identity/totp.js';
 import { recordActivity } from './activity.js';
+import { cleanName } from './attachments.js';
 import { isUuid, type Scope } from './scope.js';
 import { allowedRestricted } from './items.js';
+import { TooLargeError, readLimited, type FileStorage } from './storage.js';
 import { matchLogin, siteOf } from './login-match.js';
 
 type Row = typeof schema.passwords.$inferSelect;
@@ -39,6 +48,11 @@ const editor = alias(schema.users, 'pw_editor');
 const aad = (id: string, field: 'secret' | 'notes' | 'totp' | `custom:${string}`) => `pw|${id}|${field}`;
 type StoredField = { id: string; label: string; secret: boolean; value: string };
 const historyAad = (id: string) => `pwh|${id}`;
+// A file's own key is sealed with the vault key; the file is sealed with its key. Both name the entry and the file.
+const fileAad = (passwordId: string, attachmentId: string, part: 'key' | 'file') =>
+  `pwa|${passwordId}|${attachmentId}|${part}`;
+const MAX_FILES_PER_ENTRY = 20;
+const uploader = alias(schema.users, 'pw_uploader');
 const notFound = () => new HttpError(404, 'Password not found.');
 const conflict = () =>
   new HttpError(409, 'Someone else changed this password entry. Reload before saving.', 'conflict');
@@ -56,6 +70,8 @@ const USED_ACTIONS = [
   'Viewed one-time code',
   'Copied one-time code',
   'Viewed notes',
+  'Viewed note',
+  'Copied note',
 ] as const;
 const FILLED = 'Filled password on';
 const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -63,7 +79,11 @@ type Personal = { favorites: Set<string>; lastUsed: Map<string, string> };
 type Rules = { reasons: boolean; canReveal: boolean };
 
 export class VaultService {
-  constructor(private readonly keys: VaultKeys) {}
+  constructor(
+    private readonly keys: VaultKeys,
+    // Where encrypted files on entries are kept; files are unavailable without it.
+    private readonly files?: { storage: FileStorage; maxBytes: number },
+  ) {}
 
   // ---------- access ----------
   private isAdmin(scope: Scope) {
@@ -125,7 +145,7 @@ export class VaultService {
         clientId: row.p.clientId,
         clientName: row.clientName,
         title: row.p.name,
-        subtitle: row.p.kind === 'bitlocker' ? 'BitLocker key' : 'Password',
+        subtitle: PASSWORD_KIND_LABELS[row.p.kind as PasswordKind],
         archived: row.p.archived,
       };
     } catch {
@@ -551,6 +571,8 @@ export class VaultService {
     const id = randomUUID();
     const org = scope.actor.orgId;
     const secret = body.kind === 'bitlocker' ? body.secret.trim() : body.secret;
+    // A secure note is only its text (kept where a login keeps its password): no username, address, or code.
+    const note = body.kind === 'note';
     const values = {
       id,
       orgId: org,
@@ -559,13 +581,13 @@ export class VaultService {
       category: body.kind === 'login' ? body.category : null,
       folderId: body.folderId,
       name: body.name,
-      username: body.username,
-      url: body.url,
+      username: note ? '' : body.username,
+      url: note ? '' : body.url,
       secret: await this.keys.seal(org, secret, aad(id, 'secret')),
-      notes: body.notes ? await this.keys.seal(org, body.notes, aad(id, 'notes')) : null,
-      totp: body.totp ? await this.keys.seal(org, body.totp, aad(id, 'totp')) : null,
-      fingerprint: await this.keys.fingerprint(org, secret),
-      strength: body.kind === 'bitlocker' ? 4 : passwordStrength(secret),
+      notes: body.notes && !note ? await this.keys.seal(org, body.notes, aad(id, 'notes')) : null,
+      totp: body.totp && !note ? await this.keys.seal(org, body.totp, aad(id, 'totp')) : null,
+      fingerprint: await this.fingerprint(org, id, body.kind, secret),
+      strength: body.kind === 'login' ? passwordStrength(secret) : 4,
       rotationDays: body.rotationDays,
       expiresOn: body.expiresOn,
       restricted: body.restricted,
@@ -611,11 +633,17 @@ export class VaultService {
     const secret = body.secret !== undefined ? (p.kind === 'bitlocker' ? body.secret.trim() : body.secret) : undefined;
     if (secret !== undefined && p.kind === 'bitlocker' && !/^\d{6}(-\d{6}){7}$/.test(secret))
       throw new HttpError(400, 'A BitLocker recovery key is 8 groups of 6 digits, separated by dashes.');
+    const note = p.kind === 'note';
+    const limit = note ? MAX_NOTE_LENGTH : MAX_SECRET_LENGTH;
+    if (secret !== undefined && secret.length > limit) {
+      const message = `${note ? 'A note' : 'A password'} can be up to ${limit} characters.`;
+      throw new HttpError(400, message, undefined, { secret: message });
+    }
     const changedSecret = secret !== undefined && secret !== (await this.keys.open(org, p.secret, aad(id, 'secret')));
     const set: Partial<typeof schema.passwords.$inferInsert> = {
       name: body.name,
-      username: body.username,
-      url: body.url,
+      username: note ? undefined : body.username,
+      url: note ? undefined : body.url,
       rotationDays: body.rotationDays,
       expiresOn: body.expiresOn,
       restricted: body.restricted,
@@ -626,15 +654,16 @@ export class VaultService {
       updatedBy: scope.actor.id,
       updatedAt: new Date(),
     };
-    if (body.notes !== undefined)
+    if (body.notes !== undefined && !note)
       set.notes = body.notes ? await this.keys.seal(org, body.notes, aad(id, 'notes')) : null;
     if (body.customFields !== undefined)
       set.customFields = await this.customFields(org, id, body.customFields, p.customFields);
-    if (body.totp !== undefined) set.totp = body.totp ? await this.keys.seal(org, body.totp, aad(id, 'totp')) : null;
+    if (body.totp !== undefined && !note)
+      set.totp = body.totp ? await this.keys.seal(org, body.totp, aad(id, 'totp')) : null;
     if (changedSecret) {
       set.secret = await this.keys.seal(org, secret!, aad(id, 'secret'));
-      set.fingerprint = await this.keys.fingerprint(org, secret!);
-      set.strength = p.kind === 'bitlocker' ? 4 : passwordStrength(secret!);
+      set.fingerprint = await this.fingerprint(org, id, p.kind as PasswordKind, secret!);
+      set.strength = p.kind === 'login' ? passwordStrength(secret!) : 4;
       // A new password hasn't been checked against known breaches yet.
       set.breachCount = null;
       set.breachCheckedAt = null;
@@ -670,12 +699,12 @@ export class VaultService {
         passwordName: body.name ?? p.name,
         actorId: scope.actor.id,
         actorName: scope.actor.name,
-        action: changedSecret ? 'Changed password' : 'Edited details',
+        action: changedSecret ? (note ? 'Changed note' : 'Changed password') : 'Edited details',
         ip,
       });
       await recordActivity(tx, scope.actor, {
         clientId: p.clientId,
-        action: changedSecret ? 'Changed the password for' : 'Updated',
+        action: changedSecret && !note ? 'Changed the password for' : 'Updated',
         entityType: 'password',
         entityId: id,
         title: body.name ?? p.name,
@@ -732,6 +761,11 @@ export class VaultService {
       }
     }
     return result;
+  }
+
+  /** Keyed hash for spotting reuse. A secure note is never "reused", so it gets a value unique to the entry. */
+  private async fingerprint(org: string, id: string, kind: PasswordKind, secret: string) {
+    return kind === 'note' ? `note:${id}` : this.keys.fingerprint(org, secret);
   }
 
   // ---------- reveal ----------
@@ -794,11 +828,15 @@ export class VaultService {
           );
     const action = custom
       ? `${body.copy ? 'Copied' : 'Viewed'} custom field “${custom.label}”`
-      : body.copy && body.field === 'secret'
-        ? 'Copied password'
-        : body.copy && body.field === 'totp'
-          ? 'Copied one-time code'
-          : REVEAL_ACTIONS[body.field];
+      : p.kind === 'note' && body.field === 'secret'
+        ? body.copy
+          ? 'Copied note'
+          : 'Viewed note'
+        : body.copy && body.field === 'secret'
+          ? 'Copied password'
+          : body.copy && body.field === 'totp'
+            ? 'Copied one-time code'
+            : REVEAL_ACTIONS[body.field];
     await this.audit(scope, p, action, body.reason, ip);
     if (body.field === 'totp') return { value: totp(value), expiresIn: 30 - (Math.floor(Date.now() / 1000) % 30) };
     return { value };
@@ -997,6 +1035,207 @@ export class VaultService {
     });
     await this.audit(scope, p, 'Changed who may use it', `${userIds.length} people, ${groupIds.length} groups`, ip);
     return { userIds, groupIds };
+  }
+
+  // ---------- files ----------
+  private fileStore() {
+    if (!this.files) throw new HttpError(503, 'File storage isn’t available.');
+    return this.files;
+  }
+
+  async attachments(scope: Scope, id: string): Promise<PasswordAttachmentView[]> {
+    await this.load(scope, id);
+    const f = schema.attachments;
+    const rows = await scope.db
+      .select({ f, by: uploader.name })
+      .from(f)
+      .leftJoin(uploader, eq(uploader.id, f.uploadedBy))
+      .where(and(eq(f.orgId, scope.actor.orgId), eq(f.entityType, 'password'), eq(f.entityId, id)))
+      .orderBy(desc(f.createdAt));
+    return rows.map(({ f, by }) => ({
+      id: f.id,
+      filename: f.filename,
+      size: f.size,
+      uploadedByName: by,
+      createdAt: f.createdAt.toISOString(),
+    }));
+  }
+
+  /** Encrypts a file (license, certificate, SSH key) with a key of its own and keeps it with the entry. */
+  async attach(scope: Scope, id: string, file: MultipartFile | undefined, ip: string) {
+    const { storage, maxBytes } = this.fileStore();
+    if (!file) throw new HttpError(400, 'Choose a file to upload.');
+    const { p } = await this.load(scope, id);
+    if (p.archived) throw new HttpError(400, 'Restore this entry before adding files.');
+    const [existing] = await scope.db
+      .select({ n: count() })
+      .from(schema.attachments)
+      .where(and(eq(schema.attachments.entityType, 'password'), eq(schema.attachments.entityId, id)));
+    if (Number(existing?.n ?? 0) >= MAX_FILES_PER_ENTRY)
+      throw new HttpError(400, `An entry can have up to ${MAX_FILES_PER_ENTRY} files.`);
+    const tooLarge = () =>
+      new HttpError(413, `Files in the vault can be up to ${Math.round(maxBytes / 1024 / 1024)} MB.`);
+    let data: Buffer;
+    try {
+      data = await readLimited(file.file, maxBytes);
+    } catch (error) {
+      if (error instanceof TooLargeError) throw tooLarge();
+      throw error;
+    }
+    // The multipart parser stops reading at its own limit without an error; never keep a cut-off file.
+    if (file.file.truncated) throw tooLarge();
+    if (!data.length) throw new HttpError(400, 'That file is empty.');
+    const org = scope.actor.orgId;
+    const attachmentId = randomUUID();
+    const key = newFileKey();
+    const sealed = sealBytes(key, data, fileAad(id, attachmentId, 'file'));
+    const sealedKey = await this.keys.seal(org, key.toString('base64url'), fileAad(id, attachmentId, 'key'));
+    const stored = await storage.put(org, Readable.from([sealed]), sealed.length);
+    const filename = cleanName(file.filename);
+    try {
+      await scope.db.transaction(async (tx) => {
+        await tx.insert(schema.attachments).values({
+          id: attachmentId,
+          orgId: org,
+          clientId: p.clientId,
+          entityType: 'password',
+          entityId: id,
+          filename,
+          // Always a download: nothing from the vault is shown inline.
+          contentType: 'application/octet-stream',
+          size: data.length,
+          // Of the stored (encrypted) file: a hash of the contents would tell whether a known file is in the vault.
+          sha256: stored.sha256,
+          storageKey: stored.key,
+          sealedKey,
+          uploadedBy: scope.actor.id,
+        });
+        await tx.insert(schema.vaultAudit).values({
+          orgId: org,
+          clientId: p.clientId,
+          passwordId: id,
+          passwordName: p.name,
+          actorId: scope.actor.id,
+          actorName: scope.actor.name,
+          action: `Attached file “${filename}”`,
+          ip: ip.slice(0, 64),
+        });
+        await recordActivity(tx, scope.actor, {
+          clientId: p.clientId,
+          action: 'Attached a file to',
+          entityType: 'password',
+          entityId: id,
+          title: `${p.name} · ${filename}`,
+        });
+      });
+    } catch (error) {
+      await storage.remove(stored.key);
+      throw error;
+    }
+    return this.attachments(scope, id);
+  }
+
+  private async attachmentRow(scope: Scope, passwordId: string, attachmentId: string) {
+    const [row] = isUuid(attachmentId)
+      ? await scope.db
+          .select()
+          .from(schema.attachments)
+          .where(
+            and(
+              eq(schema.attachments.id, attachmentId),
+              eq(schema.attachments.orgId, scope.actor.orgId),
+              eq(schema.attachments.entityType, 'password'),
+              eq(schema.attachments.entityId, passwordId),
+            ),
+          )
+      : [];
+    if (!row) throw new HttpError(404, 'File not found.');
+    return row;
+  }
+
+  /** The decrypted file. Throws if the stored file or its key was changed or moved to another entry. */
+  private async decryptFile(org: string, row: typeof schema.attachments.$inferSelect) {
+    const { storage } = this.fileStore();
+    if (!row.sealedKey) throw new Error(`File ${row.id} on a password entry is not encrypted.`);
+    const key = Buffer.from(
+      await this.keys.open(org, row.sealedKey, fileAad(row.entityId, row.id, 'key')),
+      'base64url',
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of await storage.get(row.storageKey)) chunks.push(chunk as Buffer);
+    return openBytes(key, Buffer.concat(chunks), fileAad(row.entityId, row.id, 'file'));
+  }
+
+  /** Downloads a file: checked and recorded like a reveal, including the client's reason rule. */
+  async downloadAttachment(
+    scope: Scope,
+    id: string,
+    attachmentId: string,
+    input: unknown,
+    ip: string,
+  ): Promise<{ filename: string; data: Buffer }> {
+    const { p, requireReason } = await this.load(scope, id);
+    await this.requireReveal(scope);
+    const { reason } = revealSchema.pick({ reason: true }).parse(input ?? {});
+    if (requireReason && !reason)
+      throw new HttpError(400, 'This client requires a reason before opening files.', 'reason_required');
+    const row = await this.attachmentRow(scope, id, attachmentId);
+    const data = await this.decryptFile(scope.actor.orgId, row);
+    await this.audit(scope, p, `Downloaded file “${row.filename}”`, reason, ip);
+    return { filename: row.filename, data };
+  }
+
+  async removeAttachment(scope: Scope, id: string, attachmentId: string, ip: string) {
+    const { storage } = this.fileStore();
+    const { p } = await this.load(scope, id);
+    const row = await this.attachmentRow(scope, id, attachmentId);
+    await scope.db.transaction(async (tx) => {
+      await tx.delete(schema.attachments).where(eq(schema.attachments.id, row.id));
+      await tx.insert(schema.vaultAudit).values({
+        orgId: scope.actor.orgId,
+        clientId: p.clientId,
+        passwordId: id,
+        passwordName: p.name,
+        actorId: scope.actor.id,
+        actorName: scope.actor.name,
+        action: `Removed file “${row.filename}”`,
+        ip: ip.slice(0, 64),
+      });
+      await recordActivity(tx, scope.actor, {
+        clientId: p.clientId,
+        action: 'Removed a file from',
+        entityType: 'password',
+        entityId: id,
+        title: `${p.name} · ${row.filename}`,
+      });
+    });
+    await storage.remove(row.storageKey);
+  }
+
+  /** Decrypted files on a client's entries, for an administrator's export with passwords. Each file is audited. */
+  async exportAttachments(scope: Scope, clientId: string, ip: string) {
+    if (!this.isAdmin(scope)) throw new HttpError(403, 'Only administrators can export decrypted passwords.');
+    const rows = await scope.db
+      .select({ f: schema.attachments, name: schema.passwords.name })
+      .from(schema.attachments)
+      .innerJoin(schema.passwords, eq(schema.passwords.id, schema.attachments.entityId))
+      .where(
+        and(
+          eq(schema.attachments.orgId, scope.actor.orgId),
+          eq(schema.attachments.clientId, clientId),
+          eq(schema.attachments.entityType, 'password'),
+        ),
+      );
+    const out: { row: typeof schema.attachments.$inferSelect; data: Buffer }[] = [];
+    for (const { f, name } of rows) {
+      try {
+        out.push({ row: f, data: await this.decryptFile(scope.actor.orgId, f) });
+      } catch {
+        continue; // A missing or damaged file is left out, as in the rest of the export.
+      }
+      await this.audit(scope, { id: f.entityId, clientId, name }, `Exported file “${f.filename}” (decrypted)`, '', ip);
+    }
+    return out;
   }
 
   // ---------- export ----------

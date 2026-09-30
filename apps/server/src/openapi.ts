@@ -91,6 +91,16 @@ const PATHS: Record<string, Partial<Record<'get' | 'post' | 'patch' | 'delete', 
   '/passwords/{id}/reveal': {
     post: { summary: 'Reveal a secret (audited)', scope: 'passwords', body: revealSchema },
   },
+  '/passwords/{id}/attachments': {
+    get: { summary: 'List the files on a password entry (names and sizes only)', scope: 'passwords' },
+  },
+  '/passwords/{id}/attachments/{attachmentId}/download': {
+    post: {
+      summary: 'Download a file from a password entry (decrypted, audited)',
+      scope: 'passwords',
+      body: revealSchema.pick({ reason: true }),
+    },
+  },
 };
 
 /** OpenAPI 3.1 description of the REST API, served at /api/v1/openapi.json. */

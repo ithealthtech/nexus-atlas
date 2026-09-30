@@ -618,10 +618,12 @@ export async function buildApp({
   });
   registerTrackerRoutes(app, { db, authed, recent, settings, trackers });
 
-  const vault = registerVaultRoutes(app, {
+  const { vault, sends } = registerVaultRoutes(app, {
     db,
     authed,
     keys: new VaultKeys(db, keys),
+    storage: files,
+    maxUploadBytes,
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
@@ -719,6 +721,7 @@ export async function buildApp({
     notifier.start();
     siem.start();
     backups.start();
+    sends.start();
     const cwRmm = new CwRmmScheduler(db, settings, (err) => app.log.error({ err }, 'ConnectWise RMM sync'), cwRmmFetch);
     cwRmm.start();
     const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
@@ -734,6 +737,7 @@ export async function buildApp({
       notifier.stop();
       siem.stop();
       backups.stop();
+      sends.stop();
       cwRmm.stop();
       m365.stop();
       rotations.stop();
