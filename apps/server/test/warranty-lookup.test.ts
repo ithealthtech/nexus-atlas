@@ -1,6 +1,12 @@
-import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanSerial, latestEndDate, warrantyVendor } from '../src/services/warranty-lookup.js';
+import {
+  cleanSerial,
+  dellExpiry,
+  hpProductNumber,
+  latestEndDate,
+  textDate,
+  warrantyVendor,
+} from '../src/services/warranty-lookup.js';
 import { setupOwner, startApp, type Browser, type TestApp } from './helpers.js';
 
 describe('warranty lookup values', () => {
@@ -43,6 +49,22 @@ describe('warranty lookup values', () => {
     );
     expect(latestEndDate([{ serviceTag: 'ABC1234', invalid: true, entitlements: [] }])).toBe('');
   });
+
+  it('reads dates from the vendor pages', () => {
+    expect(textDate('31 Mar 2027 and more')).toBe('2027-03-31');
+    expect(textDate('March 31, 2027')).toBe('2027-03-31');
+    expect(textDate('03/31/2027')).toBe('2027-03-31');
+    expect(textDate('soon')).toBe('');
+    expect(
+      dellExpiry(
+        '<div>Warranty</div><p>Expired 01 Jan 2024</p><span>Expires</span> <b>31 May 2029</b><i>Expiration: May 31, 2028</i>',
+      ),
+    ).toBe('2029-05-31');
+    expect(dellExpiry('<html>No warranty found</html>')).toBe('');
+    expect(hpProductNumber({ data: { verifyResponse: { data: { productNumber: '4K1A3UT#ABA' } } } })).toBe(
+      '4K1A3UT#ABA',
+    );
+  });
 });
 
 describe('warranty lookup', () => {
@@ -57,21 +79,23 @@ describe('warranty lookup', () => {
     calls.push(`${init?.method ?? 'GET'} ${url.host}${url.pathname}`);
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-    if (url.pathname.endsWith('/oauth/v2/token')) {
-      const auth = new Headers(init?.headers).get('authorization') ?? '';
-      if (auth !== `Basic ${Buffer.from('dell-id:dell-secret').toString('base64')}`) return json({}, 401);
-      return json({ access_token: 'dell-token', expires_in: 3600 });
+    if (url.host === 'www.dell.com') {
+      if (url.pathname.includes('/ABC1234/'))
+        return new Response('<h2>Warranty</h2><div>Expires</div><div>31 May 2029</div>', { status: 200 });
+      return new Response('<p>Service tag not found</p>', { status: 200 });
     }
-    if (url.pathname.endsWith('/asset-entitlements')) {
-      const tag = url.searchParams.get('servicetags');
-      return json([
-        tag === 'ABC1234'
-          ? {
-              serviceTag: tag,
-              entitlements: [{ endDate: '2027-05-31T04:59:59Z' }, { endDate: '2029-05-31T04:59:59Z' }],
-            }
-          : { serviceTag: tag, invalid: true, entitlements: [] },
-      ]);
+    if (url.host === 'pcsupport.lenovo.com') {
+      const serial = JSON.parse(String(init?.body)).serialNumber;
+      return json({
+        code: 0,
+        data: serial === 'PF2ABCDE' ? { baseWarranties: [{ startDate: '2024-02-01', endDate: '2027-02-01' }] } : {},
+      });
+    }
+    if (url.pathname.includes('searchresult')) return json({ data: { productNumber: '4K1A3UT#ABA' } });
+    if (url.pathname.includes('warranty/specs')) {
+      const body = JSON.parse(String(init?.body));
+      if (body.productNumber !== '4K1A3UT#ABA') return json({}, 400);
+      return json({ data: { warrantyEndDate: '2026-11-30' } });
     }
     return json({}, 500);
   }) as typeof fetch;
@@ -94,82 +118,42 @@ describe('warranty lookup', () => {
     await t.close();
   });
 
-  it('keeps vendor secrets encrypted and out of the settings view', async () => {
-    const saved = await owner.call('PUT', '/api/settings/warranty', {
-      soonDays: 60,
-      dellClientId: 'dell-id',
-      dellClientSecret: 'dell-secret',
-    });
-    expect(saved.data).toEqual({
-      soonDays: 60,
-      autoLookup: true,
-      dellClientId: 'dell-id',
-      hasDellSecret: true,
-      hasLenovoKey: false,
-      hpApiKey: '',
-      hasHpSecret: false,
-    });
-    // Saving without the secret keeps it; an empty string clears it.
-    expect((await owner.call('PUT', '/api/settings/warranty', { soonDays: 90 })).data).toMatchObject({
-      dellClientId: 'dell-id',
-      hasDellSecret: true,
-    });
-    const stored = JSON.stringify(await t.handle.db.execute(sql`select settings::text as s from orgs`));
-    expect(stored).toContain('dellSecretSealed');
-    expect(stored).not.toContain('dell-secret');
-    expect(
-      (await owner.call('PUT', '/api/settings/warranty', { soonDays: 90, dellClientSecret: '' })).data,
-    ).toMatchObject({ hasDellSecret: false });
-  });
-
-  it('fills the warranty date when a device is added, and checks it on demand', async () => {
-    // No credentials yet: nothing is asked, and the manual check says what's missing.
-    const before = await asset('HDG-WS-01', { manufacturer: 'Dell Inc.', serial_number: 'ABC1234' });
-    expect(before.fields.warranty_expires ?? '').toBe('');
-    expect(calls).toEqual([]);
-    const missing = await owner.call('POST', `/api/assets/${before.id}/warranty-check`);
-    expect(missing.status).toBe(400);
-    expect(missing.data.error ?? missing.data.message).toMatch(/Dell API credentials/);
-
-    await owner.call('PUT', '/api/settings/warranty', {
-      soonDays: 90,
-      dellClientId: 'dell-id',
-      dellClientSecret: 'dell-secret',
-    });
-    const checked = await owner.call('POST', `/api/assets/${before.id}/warranty-check`);
-    expect(checked.status, JSON.stringify(checked.data)).toBe(200);
-    expect(checked.data).toMatchObject({ vendor: 'Dell', expires: '2029-05-31' });
-    expect(checked.data.asset.fields.warranty_expires).toBe('2029-05-31');
-
-    // A new device gets its date as it's saved; the manufacturer comes from the model.
-    const added = await asset('HDG-WS-02', { model: 'OptiPlex 7090', serial_number: 'abc1234' });
-    expect(added.fields.warranty_expires).toBe('2029-05-31');
+  it('fills the warranty date when a device is added, with no API keys', async () => {
+    expect((await owner.call('GET', '/api/settings/warranty')).data).toEqual({ soonDays: 90, autoLookup: true });
+    const dell = await asset('HDG-WS-01', { manufacturer: 'Dell Inc.', serial_number: 'ABC1234' });
+    expect(dell.fields.warranty_expires).toBe('2029-05-31');
+    // The manufacturer comes from the model when it's blank.
+    const lenovo = await asset('HDG-WS-02', { model: 'ThinkPad T14 Gen 4', serial_number: 'pf2abcde' });
+    expect(lenovo.fields.warranty_expires).toBe('2027-02-01');
+    const hp = await asset('HDG-WS-03', { manufacturer: 'HP', serial_number: '5CG1234XYZ' });
+    expect(hp.fields.warranty_expires).toBe('2026-11-30');
     // A date someone entered is left alone.
-    const typed = await asset('HDG-WS-03', {
+    const typed = await asset('HDG-WS-04', {
       manufacturer: 'Dell',
       serial_number: 'ABC1234',
       warranty_expires: '2030-01-01',
     });
     expect(typed.fields.warranty_expires).toBe('2030-01-01');
+  });
 
-    // Unknown to Dell, and a vendor that isn't covered.
-    const unknown = await asset('HDG-WS-04', { manufacturer: 'Dell', serial_number: 'ZZZ9999' });
+  it('checks a warranty on demand', async () => {
+    await owner.call('PUT', '/api/settings/warranty', { soonDays: 90, autoLookup: false });
+    const before = await asset('HDG-WS-01', { manufacturer: 'Dell Inc.', serial_number: 'ABC1234' });
+    expect(before.fields.warranty_expires ?? '').toBe('');
+    expect(calls).toEqual([]);
+
+    const checked = await owner.call('POST', `/api/assets/${before.id}/warranty-check`);
+    expect(checked.status, JSON.stringify(checked.data)).toBe(200);
+    expect(checked.data).toMatchObject({ vendor: 'Dell', expires: '2029-05-31' });
+    expect(checked.data.asset.fields.warranty_expires).toBe('2029-05-31');
+
+    const unknown = await asset('HDG-WS-05', { manufacturer: 'Dell', serial_number: 'ZZZ9999' });
     expect((await owner.call('POST', `/api/assets/${unknown.id}/warranty-check`)).data.message).toMatch(
       /no warranty on record/,
     );
     const apple = await asset('HDG-MAC-01', { manufacturer: 'Apple', serial_number: 'C02XYZ123' });
     expect((await owner.call('POST', `/api/assets/${apple.id}/warranty-check`)).status).toBe(400);
-  });
-
-  it('can be turned off for new devices', async () => {
-    await owner.call('PUT', '/api/settings/warranty', {
-      soonDays: 90,
-      autoLookup: false,
-      dellClientId: 'dell-id',
-      dellClientSecret: 'dell-secret',
-    });
-    const added = await asset('HDG-WS-05', { manufacturer: 'Dell', serial_number: 'ABC1234' });
-    expect(added.fields.warranty_expires ?? '').toBe('');
-    expect(calls).toEqual([]);
+    const blank = await asset('HDG-WS-06', { manufacturer: 'Dell' });
+    expect((await owner.call('POST', `/api/assets/${blank.id}/warranty-check`)).status).toBe(400);
   });
 });

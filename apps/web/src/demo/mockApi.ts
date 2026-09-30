@@ -308,15 +308,7 @@ function ticketList(client: string | null, status: string | null, days: number):
 }
 
 // ---------- asset warranty (sample dates on the RMM sample's devices) ----------
-let warrantySettings: WarrantySettings = {
-  soonDays: 90,
-  autoLookup: true,
-  dellClientId: '',
-  hasDellSecret: false,
-  hasLenovoKey: false,
-  hpApiKey: '',
-  hasHpSecret: false,
-};
+let warrantySettings: WarrantySettings = { soonDays: 90, autoLookup: true };
 const WARRANTY_SAMPLE: WarrantyAsset[] = RMM_SAMPLE.map((d, i) => {
   const n = (i * 11) % 23;
   const daysLeft = n < 5 ? null : n < 8 ? -30 * n : n < 11 ? 12 * n - 60 : 60 * n;

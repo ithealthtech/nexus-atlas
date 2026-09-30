@@ -107,22 +107,9 @@ export interface StoredSiem {
 export interface SiemConfig extends Omit<StoredSiem, 'secretSealed'> {
   secret: string;
 }
-/** Warranty settings as stored: vendor API secrets are sealed with the master key. */
 export interface StoredWarranty {
   soonDays: number;
   autoLookup?: boolean;
-  dellClientId?: string;
-  dellSecretSealed?: string | null;
-  lenovoKeySealed?: string | null;
-  hpApiKey?: string;
-  hpSecretSealed?: string | null;
-}
-/** Vendor API credentials ready to call with (secrets decrypted); '' where not set. */
-export interface WarrantyLookupConfig {
-  autoLookup: boolean;
-  dell: { clientId: string; clientSecret: string };
-  lenovo: { clientId: string };
-  hp: { apiKey: string; apiSecret: string };
 }
 export interface StoredEntra {
   tenantId: string;
@@ -185,7 +172,6 @@ const m365Aad = (orgId: string) => `org|${orgId}|m365`;
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
 const siemAad = (orgId: string) => `org|${orgId}|siem`;
 const graphAad = (orgId: string) => `org|${orgId}|graph`;
-const warrantyAad = (orgId: string, vendor: string) => `org|${orgId}|warranty|${vendor}`;
 const DEFAULT_SMTP: StoredSmtp = {
   enabled: false,
   // Settings saved before Graph support were SMTP.
@@ -257,13 +243,6 @@ export class SettingsService {
         await this.put(id, 'm365', { ...stored.m365, secretSealed: reseal(stored.m365.secretSealed, m365Aad(id))! });
       if (stored.cwRmm)
         await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
-      if (stored.warranty)
-        await this.put(id, 'warranty', {
-          ...stored.warranty,
-          dellSecretSealed: reseal(stored.warranty.dellSecretSealed, warrantyAad(id, 'dell')),
-          lenovoKeySealed: reseal(stored.warranty.lenovoKeySealed, warrantyAad(id, 'lenovo')),
-          hpSecretSealed: reseal(stored.warranty.hpSecretSealed, warrantyAad(id, 'hp')),
-        });
       if (stored.siem?.secretSealed)
         await this.put(id, 'siem', { ...stored.siem, secretSealed: reseal(stored.siem.secretSealed, siemAad(id)) });
     }
@@ -342,45 +321,15 @@ export class SettingsService {
     return {
       soonDays: warrantySettingsSchema.parse({ soonDays: stored?.soonDays }).soonDays,
       autoLookup: stored?.autoLookup ?? true,
-      dellClientId: stored?.dellClientId ?? '',
-      hasDellSecret: !!stored?.dellSecretSealed,
-      hasLenovoKey: !!stored?.lenovoKeySealed,
-      hpApiKey: stored?.hpApiKey ?? '',
-      hasHpSecret: !!stored?.hpSecretSealed,
     };
   }
 
-  /** The vendor API credentials, decrypted, for looking warranties up. */
-  async warrantyLookup(orgId: string): Promise<WarrantyLookupConfig> {
-    const s = (await this.load(orgId)).warranty;
-    const unseal = (value: string | null | undefined, vendor: string) =>
-      value ? open(this.keys, value, warrantyAad(orgId, vendor)) : '';
-    return {
-      autoLookup: s?.autoLookup ?? true,
-      dell: { clientId: s?.dellClientId ?? '', clientSecret: unseal(s?.dellSecretSealed, 'dell') },
-      lenovo: { clientId: unseal(s?.lenovoKeySealed, 'lenovo') },
-      hp: { apiKey: s?.hpApiKey ?? '', apiSecret: unseal(s?.hpSecretSealed, 'hp') },
-    };
-  }
-
-  /** Saves the warranty settings. A credential left out (or null) keeps the saved one; an empty string clears it. */
   async saveWarranty(orgId: string, input: unknown): Promise<WarrantySettings> {
     const body = warrantySettingsSchema.parse(input);
     const current = (await this.load(orgId)).warranty;
-    const sealed = (value: string | null | undefined, kept: string | null | undefined, vendor: string) =>
-      value === undefined || value === null
-        ? (kept ?? null)
-        : value
-          ? seal(this.keys, value, warrantyAad(orgId, vendor))
-          : null;
     await this.put(orgId, 'warranty', {
       soonDays: body.soonDays,
       autoLookup: body.autoLookup ?? current?.autoLookup ?? true,
-      dellClientId: body.dellClientId ?? current?.dellClientId ?? '',
-      dellSecretSealed: sealed(body.dellClientSecret, current?.dellSecretSealed, 'dell'),
-      lenovoKeySealed: sealed(body.lenovoClientId, current?.lenovoKeySealed, 'lenovo'),
-      hpApiKey: body.hpApiKey ?? current?.hpApiKey ?? '',
-      hpSecretSealed: sealed(body.hpApiSecret, current?.hpSecretSealed, 'hp'),
     });
     return this.warranty(orgId);
   }

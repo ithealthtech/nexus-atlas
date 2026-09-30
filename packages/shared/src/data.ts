@@ -239,25 +239,12 @@ export const warrantySettingsSchema = z.object({
   soonDays: z.number().int().min(1).max(365).default(90),
   /** Look warranties up by serial number when a device is added or synced. Omitted keeps what is saved. */
   autoLookup: z.boolean().optional(),
-  // Vendor API credentials. Omitted or null keeps what is saved; an empty string clears it.
-  dellClientId: z.string().trim().max(200).nullable().optional(),
-  dellClientSecret: z.string().trim().max(500).nullable().optional(),
-  lenovoClientId: z.string().trim().max(500).nullable().optional(),
-  hpApiKey: z.string().trim().max(200).nullable().optional(),
-  hpApiSecret: z.string().trim().max(500).nullable().optional(),
 });
-export type WarrantySettingsInput = z.input<typeof warrantySettingsSchema>;
-/** Warranty settings as shown: secrets are only reported as set or not. */
 export interface WarrantySettings {
   soonDays: number;
   autoLookup: boolean;
-  dellClientId: string;
-  hasDellSecret: boolean;
-  hasLenovoKey: boolean;
-  hpApiKey: string;
-  hasHpSecret: boolean;
 }
-/** The vendors whose warranty APIs Atlas can ask by serial number. */
+/** The vendors whose public warranty lookups Atlas can ask by serial number. */
 export const WARRANTY_VENDORS = ['Dell', 'Lenovo', 'HP'] as const;
 export type WarrantyVendor = (typeof WARRANTY_VENDORS)[number];
 /** What a manual warranty check found. */

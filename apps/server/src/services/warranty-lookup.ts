@@ -4,7 +4,7 @@ import { AssetService, manufacturerField } from './assets.js';
 import type { LayoutService } from './layouts.js';
 import { detectManufacturer, normalizeManufacturer } from './manufacturer.js';
 import type { Scope } from './scope.js';
-import type { SettingsService, WarrantyLookupConfig } from './settings.js';
+import type { SettingsService } from './settings.js';
 import { warrantyFields } from './warranty.js';
 
 const HOUR = 3_600_000;
@@ -65,59 +65,105 @@ export interface WarrantyFound {
   expires: string;
 }
 
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+// The public support sites answer browsers; a plain client is often turned away.
+const BROWSER = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0',
+  Accept: 'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
+/** YYYY-MM-DD from "2027-03-31", "31 Mar 2027", "March 31, 2027", or "03/31/2027"; '' otherwise. */
+export function textDate(text: string): string {
+  const iso = day(text);
+  if (iso) return iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const ok = (y: number, m: number, d: number) =>
+    y >= 1990 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31 ? `${y}-${pad(m)}-${pad(d)}` : '';
+  let m = /^(\d{1,2})\s+([a-z]{3})[a-z]*\.?,?\s+(\d{4})/i.exec(text);
+  if (m) return ok(Number(m[3]), MONTHS.indexOf(m[2]!.toLowerCase()) + 1, Number(m[1]));
+  m = /^([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/i.exec(text);
+  if (m) return ok(Number(m[3]), MONTHS.indexOf(m[1]!.toLowerCase()) + 1, Number(m[2]));
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(text);
+  if (m) return ok(Number(m[3]), Number(m[1]), Number(m[2]));
+  return '';
+}
+
+/** The warranty expiry on Dell's public warranty page: the latest date shown next to "Expires" or "Expiration". */
+export function dellExpiry(html: string): string {
+  const text = html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;|&#160;/g, ' ')
+    .replace(/\s+/g, ' ');
+  let latest = '';
+  for (const m of text.matchAll(/expir(?:es|ation|y)(?: date)?\s*(?:on)?\s*:?\s*/gi)) {
+    const d = textDate(text.slice(m.index + m[0].length, m.index + m[0].length + 40));
+    if (d > latest) latest = d;
+  }
+  return latest;
+}
+
+/** HP's product number (like "4K1A3UT#ABA") from its public serial number search, or ''. */
+export function hpProductNumber(body: unknown): string {
+  let found = '';
+  const walk = (v: unknown, depth: number) => {
+    if (found || depth > 8 || !v || typeof v !== 'object') return;
+    if (Array.isArray(v)) return v.forEach((x) => walk(x, depth + 1));
+    for (const [key, value] of Object.entries(v)) {
+      if (/^(productNumber|pn|productNo)$/i.test(key) && typeof value === 'string' && value.trim()) {
+        found = value.trim();
+        return;
+      }
+      walk(value, depth + 1);
+    }
+  };
+  walk(body, 0);
+  return found;
+}
+
 /**
- * Looks device warranties up by serial number from the vendors' own APIs: Dell TechDirect, Lenovo's support API,
- * and HP's Product Warranty API. Each needs the organization's API credentials, set under Settings. Answers are
- * remembered for a while so hourly syncs don't ask again about the same devices.
+ * Looks device warranties up by serial number the way each vendor's own public warranty check does, so no API
+ * keys are needed: Lenovo's and HP's support-site lookups, and Dell's warranty page. These aren't documented
+ * APIs and can change; a vendor that stops answering is skipped for a while, and the date can still be typed in.
+ * Answers are remembered so hourly syncs don't ask again about the same devices.
  */
 export class WarrantyLookup {
   private readonly cache = new Map<string, { found: WarrantyFound | null; until: number }>();
-  private readonly tokens = new Map<string, { token: string; until: number }>();
-  /** Vendors that just failed, per organization, which automatic lookups leave alone until the time given. */
-  private readonly down = new Map<string, number>();
+  /** Vendors that just failed, which automatic lookups leave alone until the time given. */
+  private readonly down = new Map<WarrantyVendor, number>();
 
   constructor(
     private readonly settings: SettingsService,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  /** Which vendors have credentials set. */
-  static ready(config: WarrantyLookupConfig): Record<WarrantyVendor, boolean> {
-    return {
-      Dell: !!(config.dell.clientId && config.dell.clientSecret),
-      Lenovo: !!config.lenovo.clientId,
-      HP: !!(config.hp.apiKey && config.hp.apiSecret),
-    };
-  }
-
   /**
-   * The warranty end date for a device, or null when its vendor isn't supported or has no credentials set.
-   * `auto` lookups (on create and sync) are skipped when the organization turned automatic lookups off, and
-   * never throw; a manual one throws with a message the user can act on.
+   * The warranty end date for a device, or null when its vendor isn't supported. `auto` lookups (on save and
+   * sync) are skipped when the organization turned automatic lookups off, and never throw; a manual one throws
+   * with a message the user can act on.
    */
   async find(orgId: string, manufacturer: string, serial: string, auto = true): Promise<WarrantyFound | null> {
     const vendor = warrantyVendor(manufacturer);
     const sn = cleanSerial(serial);
     if (!vendor || !sn) return null;
-    const config = await this.settings.warrantyLookup(orgId);
-    if ((auto && !config.autoLookup) || !WarrantyLookup.ready(config)[vendor]) return null;
-    const key = `${orgId}|${vendor}|${sn}`;
+    if (auto && !(await this.settings.warranty(orgId)).autoLookup) return null;
+    const key = `${vendor}|${sn}`;
     const cached = this.cache.get(key);
     if (auto && cached && cached.until > Date.now()) return cached.found;
-    if (auto && (this.down.get(`${orgId}|${vendor}`) ?? 0) > Date.now()) return null;
+    if (auto && (this.down.get(vendor) ?? 0) > Date.now()) return null;
     try {
-      const expires = await this.ask(vendor, sn, config);
+      const expires = await this.ask(vendor, sn);
       const found = { vendor, expires };
-      this.down.delete(`${orgId}|${vendor}`);
+      this.down.delete(vendor);
       this.remember(key, found, expires ? 30 * DAY : DAY);
       return found;
     } catch (error) {
-      // A vendor refusing (bad key, rate limit, outage) isn't asked again about this device for an hour.
+      // A vendor refusing (rate limit, outage, a changed site) isn't asked again about this device for an hour,
+      // and automatic lookups from it pause, so a sync doesn't wait on it device by device.
       this.remember(key, null, HOUR);
-      // One failure pauses automatic lookups from that vendor, so a sync doesn't wait on it device by device.
-      this.down.set(`${orgId}|${vendor}`, Date.now() + 15 * 60_000);
+      this.down.set(vendor, Date.now() + 15 * 60_000);
       if (auto) return null;
-      throw error instanceof HttpError ? error : new HttpError(502, `${vendor} could not be reached.`);
+      throw error instanceof HttpError ? error : new HttpError(502, `${vendor}'s warranty check could not be reached.`);
     }
   }
 
@@ -126,67 +172,65 @@ export class WarrantyLookup {
     this.cache.set(key, { found, until: Date.now() + ttl });
   }
 
-  private async ask(vendor: WarrantyVendor, serial: string, config: WarrantyLookupConfig): Promise<string> {
-    if (vendor === 'Dell') {
-      const token = await this.token(
-        `dell|${config.dell.clientId}`,
-        'https://apigtwb2c.us.dell.com/auth/oauth/v2/token',
-        config.dell.clientId,
-        config.dell.clientSecret,
-        'Dell',
-      );
-      const url = new URL('https://apigtwb2c.us.dell.com/PROD/sbil/eapi/v5/asset-entitlements');
-      url.searchParams.set('servicetags', serial);
-      return latestEndDate(await this.json('Dell', url, { headers: { Authorization: `Bearer ${token}` } }));
-    }
+  private async ask(vendor: WarrantyVendor, serial: string): Promise<string> {
     if (vendor === 'Lenovo') {
-      const url = new URL('https://supportapi.lenovo.com/v2.5/warranty');
-      url.searchParams.set('Serial', serial);
-      return latestEndDate(await this.json('Lenovo', url, { headers: { ClientID: config.lenovo.clientId } }));
-    }
-    const token = await this.token(
-      `hp|${config.hp.apiKey}`,
-      'https://warranty.api.hp.com/oauth/v1/token',
-      config.hp.apiKey,
-      config.hp.apiSecret,
-      'HP',
-    );
-    return latestEndDate(
-      await this.json('HP', new URL('https://warranty.api.hp.com/productwarranty/v2/queries'), {
+      const res = await this.call(vendor, 'https://pcsupport.lenovo.com/us/en/api/v4/upsell/redport/getIbaseInfo', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify([{ sn: serial }]),
-      }),
+        headers: { ...BROWSER, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serialNumber: serial, country: 'us', language: 'en' }),
+      });
+      return latestEndDate(await res.json());
+    }
+    if (vendor === 'HP') {
+      const search = new URL('https://support.hp.com/wcc-services/searchresult/us-en');
+      for (const [k, v] of Object.entries({
+        q: serial,
+        context: 'pdp',
+        authState: 'anonymous',
+        template: 'WarrantyLanding',
+      }))
+        search.searchParams.set(k, v);
+      const product = hpProductNumber(
+        await (
+          await this.call(vendor, search, {
+            headers: { ...BROWSER, Referer: 'https://support.hp.com/us-en/check-warranty' },
+          })
+        ).json(),
+      );
+      const res = await this.call(
+        vendor,
+        'https://support.hp.com/wcc-services/profile/devices/warranty/specs?authState=anonymous&template=checkWarranty',
+        {
+          method: 'POST',
+          headers: {
+            ...BROWSER,
+            'Content-Type': 'application/json',
+            Referer: 'https://support.hp.com/us-en/warrantyresult',
+          },
+          body: JSON.stringify({
+            productNumber: product,
+            serialNumber: serial,
+            countryCode: 'US',
+            languageCode: 'en',
+            authState: 'anonymous',
+          }),
+        },
+      );
+      return latestEndDate(await res.json());
+    }
+    const res = await this.call(
+      vendor,
+      `https://www.dell.com/support/home/en-us/product-support/servicetag/${encodeURIComponent(serial)}/warranty`,
+      { headers: { ...BROWSER, Accept: 'text/html,application/xhtml+xml' } },
     );
+    return dellExpiry(await res.text());
   }
 
-  /** An OAuth client-credentials token, reused until shortly before it expires. */
-  private async token(key: string, url: string, id: string, secret: string, vendor: WarrantyVendor) {
-    const cached = this.tokens.get(key);
-    if (cached && cached.until > Date.now()) return cached.token;
-    const body = await this.json(vendor, new URL(url), {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret }).toString(),
-    });
-    const token = (body as { access_token?: unknown }).access_token;
-    if (typeof token !== 'string' || !token) throw new HttpError(502, `${vendor} did not accept the API credentials.`);
-    const ttl = Number((body as { expires_in?: unknown }).expires_in) || 3600;
-    this.tokens.set(key, { token, until: Date.now() + Math.max(60, ttl - 60) * 1000 });
-    return token;
-  }
-
-  private async json(vendor: WarrantyVendor, url: URL, init: RequestInit): Promise<unknown> {
+  private async call(vendor: WarrantyVendor, url: URL | string, init: RequestInit): Promise<Response> {
     const res = await this.fetcher(url, { ...init, signal: AbortSignal.timeout(TIMEOUT) });
-    if (res.status === 401 || res.status === 403)
-      throw new HttpError(502, `${vendor} refused the API credentials. Check them under Settings, Asset warranty.`);
-    if (res.status === 429) throw new HttpError(502, `${vendor} is limiting requests. Try again later.`);
-    if (res.status === 404) return {};
-    if (!res.ok) throw new HttpError(502, `${vendor} answered with an error (${res.status}).`);
-    return res.json();
+    if (res.status === 429) throw new HttpError(502, `${vendor} is limiting warranty checks. Try again later.`);
+    if (!res.ok) throw new HttpError(502, `${vendor}'s warranty check answered with an error (${res.status}).`);
+    return res;
   }
 
   /** The asset's serial number, manufacturer, and warranty date fields, or null when its layout lacks one. */
