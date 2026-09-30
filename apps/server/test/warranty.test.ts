@@ -132,9 +132,11 @@ describe('asset warranty report', () => {
   });
 
   it("uses the organization's soon window, which only an administrator changes", async () => {
-    expect((await owner.call('GET', '/api/settings/warranty')).data).toEqual({ soonDays: 90 });
+    expect((await owner.call('GET', '/api/settings/warranty')).data).toMatchObject({ soonDays: 90 });
     expect((await owner.call('PUT', '/api/settings/warranty', { soonDays: 0 })).status).toBe(400);
-    expect((await owner.call('PUT', '/api/settings/warranty', { soonDays: 365 })).data).toEqual({ soonDays: 365 });
+    expect((await owner.call('PUT', '/api/settings/warranty', { soonDays: 365 })).data).toMatchObject({
+      soonDays: 365,
+    });
     const report = (await owner.call('GET', '/api/warranty')).data;
     expect(report.soonDays).toBe(365);
     expect(report.totals).toMatchObject({ soon: 2, active: 1 });

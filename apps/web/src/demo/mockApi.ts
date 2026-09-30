@@ -308,7 +308,15 @@ function ticketList(client: string | null, status: string | null, days: number):
 }
 
 // ---------- asset warranty (sample dates on the RMM sample's devices) ----------
-let warrantySettings: WarrantySettings = { soonDays: 90 };
+let warrantySettings: WarrantySettings = {
+  soonDays: 90,
+  autoLookup: true,
+  dellClientId: '',
+  hasDellSecret: false,
+  hasLenovoKey: false,
+  hpApiKey: '',
+  hasHpSecret: false,
+};
 const WARRANTY_SAMPLE: WarrantyAsset[] = RMM_SAMPLE.map((d, i) => {
   const n = (i * 11) % 23;
   const daysLeft = n < 5 ? null : n < 8 ? -30 * n : n < 11 ? 12 * n - 60 : 60 * n;
@@ -1073,6 +1081,10 @@ on('PATCH', '/assets/:id', (m, b) => {
   record('Updated', 'asset', a.id, a.name, a.clientId);
   return assetView(a);
 });
+on('POST', '/assets/:id/warranty-check', (m) => {
+  const a = find(assets, m[1]!, 'Asset');
+  return { asset: assetView(a), vendor: null, expires: null, message: 'The demo does not look warranties up.' };
+});
 on('POST', '/assets/:id/archive', (m, b) => {
   const a = find(assets, m[1]!, 'Asset');
   a.archived = !!b.archived;
@@ -1732,7 +1744,10 @@ on('POST', '/trackers/check', () => {
 });
 on('GET', '/settings/trackers', () => trackerSettings);
 on('PUT', '/settings/trackers', (_m, b) => (trackerSettings = b as TrackerSettings));
-on('PUT', '/settings/warranty', (_m, b) => (warrantySettings = b as WarrantySettings));
+on('PUT', '/settings/warranty', (_m, b) => {
+  const body = b as { soonDays: number; autoLookup: boolean };
+  return (warrantySettings = { ...warrantySettings, soonDays: body.soonDays, autoLookup: body.autoLookup });
+});
 on('GET', '/rmm-health/trend', (_m, _b, q) => rmmTrend(q.get('client')));
 on('GET', '/settings/rmm-health', () => rmmSettings);
 on('PUT', '/settings/rmm-health', (_m, b) => (rmmSettings = b as RmmHealthSettings));

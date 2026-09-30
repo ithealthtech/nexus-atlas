@@ -38,6 +38,7 @@ import { VaultKeys } from './crypto/vault-keys.js';
 import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
 import { MailService, defaultTransport, type MailTransport } from './services/mail.js';
 import { SettingsService } from './services/settings.js';
+import { WarrantyLookup } from './services/warranty-lookup.js';
 import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
@@ -85,6 +86,8 @@ export interface AppOptions {
   entraFetch?: typeof fetch;
   /** Replaces fetch for breach checks (tests use a fake Have I Been Pwned). */
   breachFetch?: typeof fetch;
+  /** Replaces fetch for vendor warranty lookups. Tests without it look nothing up. */
+  warrantyFetch?: typeof fetch;
   /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
   cwRmmFetch?: typeof fetch;
   /** Replaces fetch for the Microsoft 365 sync (tests use a fake Microsoft Graph). */
@@ -149,6 +152,7 @@ export async function buildApp({
   mailTransport = defaultTransport,
   huduFetch,
   cwRmmFetch,
+  warrantyFetch,
   m365Fetch,
   breachFetch,
   entraFetch,
@@ -604,6 +608,8 @@ export async function buildApp({
   );
 
   const domains = domainLookup ?? (config.NODE_ENV === 'test' ? undefined : new DomainLookup());
+  const warranty =
+    warrantyFetch || config.NODE_ENV !== 'test' ? new WarrantyLookup(settings, warrantyFetch ?? fetch) : undefined;
   const files = storage ?? new LocalStorage(join(resolve(config.ATLAS_DATA_DIR), 'attachments'));
   registerDocumentationRoutes(app, {
     db,
@@ -611,6 +617,7 @@ export async function buildApp({
     storage: files,
     maxUploadBytes,
     domains,
+    warranty,
   });
   const trackers = new TrackerService(db, settings, {
     domains,
@@ -722,7 +729,13 @@ export async function buildApp({
     siem.start();
     backups.start();
     sends.start();
-    const cwRmm = new CwRmmScheduler(db, settings, (err) => app.log.error({ err }, 'ConnectWise RMM sync'), cwRmmFetch);
+    const cwRmm = new CwRmmScheduler(
+      db,
+      settings,
+      (err) => app.log.error({ err }, 'ConnectWise RMM sync'),
+      cwRmmFetch,
+      warranty,
+    );
     cwRmm.start();
     const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
     m365.start();
@@ -777,7 +790,7 @@ export async function buildApp({
     return saved;
   });
   registerDataRoutes(app, { db, authed, recent, settings, keys, vault, storage: files, huduFetch });
-  registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch });
+  registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch, warranty });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
   registerM365Routes(app, { db, authed, recent, settings, publicOrigin: config.publicOrigin, fetcher: m365Fetch });
 

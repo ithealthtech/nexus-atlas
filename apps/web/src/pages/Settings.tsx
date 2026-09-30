@@ -573,6 +573,14 @@ function RmmHealthSettingsCard({ current }: { current: RmmHealthSettings }) {
 function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
   const toast = useToast();
   const [soonDays, setSoonDays] = useState(String(current.soonDays));
+  const [autoLookup, setAutoLookup] = useState(current.autoLookup);
+  const [keys, setKeys] = useState({
+    dellClientId: current.dellClientId,
+    dellClientSecret: '',
+    lenovoClientId: '',
+    hpApiKey: current.hpApiKey,
+    hpApiSecret: '',
+  });
   const [error, setError] = useState<string | null>(null);
   const save = useSave(
     (body: object) => api<WarrantySettings>('/settings/warranty', { method: 'PUT', body }),
@@ -582,15 +590,41 @@ function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
     e.preventDefault();
     setError(null);
     try {
-      await save.mutateAsync({ soonDays: Number(soonDays) });
+      // Secrets left empty keep what is saved.
+      await save.mutateAsync({
+        soonDays: Number(soonDays),
+        autoLookup,
+        dellClientId: keys.dellClientId,
+        hpApiKey: keys.hpApiKey,
+        dellClientSecret: keys.dellClientSecret || null,
+        lenovoClientId: keys.lenovoClientId || null,
+        hpApiSecret: keys.hpApiSecret || null,
+      });
       toast('Warranty settings saved.');
     } catch (err) {
       setError((err as Error).message);
     }
   };
+  const text = (key: keyof typeof keys, label: string, help: string, secret?: boolean) => (
+    <Field label={label} help={help}>
+      {(p) => (
+        <Input
+          {...p}
+          type={secret ? 'password' : 'text'}
+          value={keys[key]}
+          onChange={(e) => setKeys((k) => ({ ...k, [key]: e.target.value }))}
+          autoComplete={secret ? 'new-password' : 'off'}
+        />
+      )}
+    </Field>
+  );
+  const kept = (has: boolean) => (has ? 'Saved and encrypted. Leave empty to keep it.' : 'Stored encrypted.');
   return (
     <Card>
-      <CardHeader title="Asset warranty" description="When a warranty counts as expiring soon on the warranty chart." />
+      <CardHeader
+        title="Asset warranty"
+        description="When a warranty counts as expiring soon, and the vendor API keys used to look warranties up by serial number."
+      />
       <form onSubmit={submit} className="space-y-5 p-5" noValidate>
         <Field label="Expiring soon within (days)" help="Between 1 and 365.">
           {(p) => (
@@ -606,6 +640,24 @@ function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
             />
           )}
         </Field>
+        <Checkbox
+          checked={autoLookup}
+          onChange={(e) => setAutoLookup(e.target.checked)}
+          label="Look up warranties automatically"
+          description="When a Dell, Lenovo, or HP device is saved or synced from the RMM with a serial number and no warranty date, ask the vendor for it. Check warranty on an asset works either way."
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          {text('dellClientId', 'Dell client ID', 'From a Dell TechDirect warranty API key.')}
+          {text('dellClientSecret', 'Dell client secret', kept(current.hasDellSecret), true)}
+          {text('hpApiKey', 'HP API key', 'From the HP Developers Portal (Product Warranty API).')}
+          {text('hpApiSecret', 'HP API secret', kept(current.hasHpSecret), true)}
+          {text(
+            'lenovoClientId',
+            'Lenovo client ID',
+            `From Lenovo's warranty API access. ${kept(current.hasLenovoKey)}`,
+            true,
+          )}
+        </div>
         <FormError message={error} />
         <div className="flex justify-end">
           <Button type="submit" loading={save.isPending}>

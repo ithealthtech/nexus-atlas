@@ -17,6 +17,7 @@ import {
 import { clearTickets, CwTicketReader, runTicketSync } from '../services/integrations/cw-tickets.js';
 import { RmmHealthService } from '../services/rmm-health.js';
 import type { SettingsService } from '../services/settings.js';
+import type { WarrantyLookup } from '../services/warranty-lookup.js';
 
 const HOUR = 3_600_000;
 
@@ -27,13 +28,14 @@ async function startSync(
   actor: Actor,
   fetcher: typeof fetch | undefined,
   log: (error: unknown) => void,
+  warranty?: WarrantyLookup,
 ) {
   const saved = await settings.cwRmm(actor.orgId);
   if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
   const client = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher);
   const run = await ImportRun.start(db, actor, 'cw-rmm');
   const options = cwRmmSyncOptionsSchema.parse(saved.options ?? {});
-  const done = runCwRmmSync(db, actor, client, run, saved.map, options)
+  const done = runCwRmmSync(db, actor, client, run, saved.map, options, warranty)
     .then(async (complete) => {
       // Today's point on the RMM health trend lines, for the clients whose devices were read.
       await new RmmHealthService(settings).snapshot(db, actor.orgId, complete).catch((error) => log(error));
@@ -62,6 +64,7 @@ export function registerIntegrationRoutes(
     recent: (req: FastifyRequest) => void;
     settings: SettingsService;
     cwRmmFetch?: typeof fetch;
+    warranty?: WarrantyLookup;
   },
 ) {
   const { db, authed, recent, settings } = deps;
@@ -130,8 +133,13 @@ export function registerIntegrationRoutes(
   });
   app.post('/api/integrations/cw-rmm/sync', authed, async (req, reply) => {
     const actor = admin(req);
-    const { id } = await startSync(db, settings, actor, deps.cwRmmFetch, (err) =>
-      req.log.error({ err }, 'ConnectWise RMM sync failed'),
+    const { id } = await startSync(
+      db,
+      settings,
+      actor,
+      deps.cwRmmFetch,
+      (err) => req.log.error({ err }, 'ConnectWise RMM sync failed'),
+      deps.warranty,
     );
     await event(req, 'ConnectWise RMM sync started');
     return reply.status(202).send({ id });
@@ -147,6 +155,7 @@ export class CwRmmScheduler {
     private readonly settings: SettingsService,
     private readonly log: (error: unknown) => void,
     private readonly fetcher?: typeof fetch,
+    private readonly warranty?: WarrantyLookup,
   ) {}
 
   start(intervalMs = 10 * 60_000) {
@@ -174,7 +183,9 @@ export class CwRmmScheduler {
         continue;
       }
       try {
-        started.push((await startSync(this.db, this.settings, actorFor(user), this.fetcher, this.log)).done);
+        started.push(
+          (await startSync(this.db, this.settings, actorFor(user), this.fetcher, this.log, this.warranty)).done,
+        );
       } catch (error) {
         // Another import is running; try again next tick.
         if (!(error instanceof HttpError && error.status === 409)) this.log(error);

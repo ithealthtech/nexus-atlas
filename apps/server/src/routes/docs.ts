@@ -8,6 +8,7 @@ import { AssetService } from '../services/assets.js';
 import { AttachmentService } from '../services/attachments.js';
 import { ChecklistService } from '../services/checklists.js';
 import type { DomainLookup } from '../services/domain-lookup.js';
+import type { WarrantyLookup } from '../services/warranty-lookup.js';
 import { DocumentService } from '../services/documents.js';
 import { LayoutService, ensureDefaultLayouts } from '../services/layouts.js';
 import { contacts, locations } from '../services/people.js';
@@ -33,12 +34,14 @@ export function registerDocumentationRoutes(
     storage: FileStorage;
     maxUploadBytes: number;
     domains?: DomainLookup;
+    warranty?: WarrantyLookup;
   },
 ) {
   const { db, authed } = deps;
   const layouts = new LayoutService(db);
-  // Saves from the app fill blank Domains fields from the domain itself; imports don't look anything up.
-  const assets = new AssetService(layouts, deps.domains);
+  // Saves from the app fill blank Domains fields from the domain itself, and blank warranty dates from the device's
+  // vendor; imports don't look anything up.
+  const assets = new AssetService(layouts, deps.domains, deps.warranty);
   const documents = new DocumentService();
   const relations = new RelationService();
   const checklists = new ChecklistService();
@@ -86,6 +89,10 @@ export function registerDocumentationRoutes(
   app.patch<{ Params: Params }>('/api/assets/:id', authed, async (req) =>
     assets.update(scopeOf(req), req.params.id, req.body),
   );
+  app.post<{ Params: Params }>('/api/assets/:id/warranty-check', authed, async (req) => {
+    if (!deps.warranty) throw new HttpError(400, 'Warranty lookup is not available on this server.');
+    return deps.warranty.check(scopeOf(req), layouts, req.params.id);
+  });
   app.post<{ Params: Params }>('/api/assets/:id/archive', authed, async (req) =>
     assets.setArchived(scopeOf(req), req.params.id, archiveSchema.parse(req.body).archived),
   );

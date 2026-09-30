@@ -10,7 +10,8 @@ import { locations } from '../people.js';
 import { Scope } from '../scope.js';
 import type { SettingsService, StoredCwRmm } from '../settings.js';
 import { ImportRun } from '../importers/common.js';
-import { normalizeManufacturer } from '../manufacturer.js';
+import { detectManufacturer, normalizeManufacturer } from '../manufacturer.js';
+import type { WarrantyLookup } from '../warranty-lookup.js';
 import { readableLabel } from '../importers/hudu.js';
 
 export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
@@ -1204,6 +1205,7 @@ export async function runCwRmmSync(
   run: ImportRun,
   map: StoredCwRmm['map'],
   options: CwRmmSyncOptions = cwRmmSyncOptionsSchema.parse({}),
+  warranty?: WarrantyLookup,
 ) {
   const scope = new Scope(db, actor);
   const layoutService = new LayoutService(db);
@@ -1231,6 +1233,7 @@ export async function runCwRmmSync(
   const claimed = await claimedByRmm(db, actor.orgId);
   let matched = 0;
   let folded = 0;
+  let warranties = 0;
   for (const [companyId, clientId] of linked) {
     let sites: RmmSite[];
     let devices: RmmDevice[];
@@ -1284,6 +1287,15 @@ export async function runCwRmmSync(
         .sort((a, b) => b.fit - a.fit || a.createdAt.getTime() - b.createdAt.getTime())[0];
     for (const d of devices) {
       seen.add(d.id);
+      // A warranty date the RMM doesn't report is asked of the device's vendor, by serial number.
+      if (!d.warrantyExpires && warranty) {
+        const maker = d.manufacturer || detectManufacturer({ model: d.model, name: d.name, hostname: d.hostname });
+        const found = await warranty.find(actor.orgId, maker, d.serial);
+        if (found?.expires) {
+          d.warrantyExpires = found.expires;
+          warranties++;
+        }
+      }
       const fields = {
         type: deviceType(d),
         hostname: d.hostname.slice(0, 500),
@@ -1423,6 +1435,8 @@ export async function runCwRmmSync(
     if (options.devices) readInFull.add(clientId);
   }
 
+  if (warranties)
+    run.note(`Warranty end dates looked up from the vendor for ${warranties} device${warranties === 1 ? '' : 's'}.`);
   if (moved)
     run.note(`${moved} device${moved === 1 ? '' : 's'} moved into the device layout from where earlier syncs put them.`);
   if (matched)
