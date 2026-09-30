@@ -1,0 +1,2 @@
+ALTER TABLE "rmm_device_status" ADD COLUMN "software" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "rmm_device_status" ADD COLUMN "sign_ins" jsonb DEFAULT '[]'::jsonb NOT NULL;

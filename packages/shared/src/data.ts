@@ -86,6 +86,8 @@ export const cwRmmSyncOptionsSchema = z.object({
   devices: z.boolean().default(true),
   /** Tickets, read-only, for the ticket dashboard. */
   tickets: z.boolean().default(true),
+  /** Each device's installed software, who signs in to it, and which host a virtual machine runs on. */
+  inventory: z.boolean().default(true),
   /**
    * The asset layout new devices are saved in. Null picks one: a layout named for devices ("Devices", "Device
    * assets") when there is one, otherwise Configurations.
@@ -161,6 +163,48 @@ export interface TicketView {
 // ---------- RMM health ----------
 export type RmmDeviceKind = 'server' | 'workstation' | 'other';
 export type RmmProtection = 'running' | 'not_running' | 'missing';
+
+/**
+ * Why installed software needs a look: past its vendor's end of support, a paid product with no license record in
+ * the client, or installed on more devices than its license records have seats.
+ */
+export type SoftwareFlag = 'end_of_life' | 'unlicensed' | 'over_seats';
+/** One application installed on a device, as the RMM reports it. */
+export interface DeviceSoftware {
+  name: string;
+  version: string;
+  publisher: string;
+  /** ISO date, or null when not reported. */
+  installedAt: string | null;
+  flag: SoftwareFlag | null;
+  /** What the flag means for this application, in a sentence ('' when not flagged). */
+  flagReason: string;
+}
+/** An account that signs in to a device, most recent first. */
+export interface DeviceSignIn {
+  username: string;
+  domain: string;
+  /** ISO, or null when not reported. */
+  lastLogonAt: string | null;
+  /** The Atlas contact this account belongs to, when one matches. */
+  contactId: string | null;
+  contactName: string | null;
+}
+/** What the RMM knows about one device beyond its fields: software and sign-ins. */
+export interface DeviceInventory {
+  software: DeviceSoftware[];
+  signIns: DeviceSignIn[];
+  updatedAt: string;
+}
+/** One application across a client's devices. */
+export interface ClientSoftware {
+  name: string;
+  publisher: string;
+  versions: string[];
+  devices: number;
+  flag: SoftwareFlag | null;
+  flagReason: string;
+}
 /** Days since last check-in after which an agent counts as stale, and as very stale. */
 export const RMM_STALE_DAYS = { stale: 7, veryStale: 30 } as const;
 /** How long since check-in before an agent counts as stale, and very stale. Set per organization. */

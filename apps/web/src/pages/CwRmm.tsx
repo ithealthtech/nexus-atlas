@@ -299,12 +299,17 @@ export function CwRmmSync() {
             {job.data && <JobSummary job={job.data} />}
             <fieldset className="space-y-2">
               <legend className="text-sm font-semibold">What to sync</legend>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {(
                   [
                     ['locations', 'Sites', 'Each linked company’s sites, as locations.'],
                     ['devices', 'Devices', 'As assets: updating same-named ones, or in the layout chosen below.'],
                     ['tickets', 'Tickets', 'Read-only, for the ticket dashboard. Needs the tickets read permission.'],
+                    [
+                      'inventory',
+                      'Software and sign-ins',
+                      'Each device’s installed software and who signs in, and which host each virtual machine runs on.',
+                    ],
                   ] as const
                 ).map(([key, label, help]) => (
                   <Checkbox
