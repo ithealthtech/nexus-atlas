@@ -1,4 +1,4 @@
-import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { HttpError } from '../../errors.js';
 import type { ImportRun } from '../importers/common.js';
@@ -15,8 +15,6 @@ const DAY = 86_400_000;
 export const KEEP_CLOSED_DAYS = 90;
 const PAGE = 100;
 const MAX_PAGES = 200;
-/** Closed tickets are read newest first until a page holds only tickets opened before this. */
-const CLOSED_LOOKBACK_DAYS = 365;
 
 // The ConnectWise platform's service ticketing API.
 const TICKETS = '/api/platform/v2/service/ticketing/tickets';
@@ -121,6 +119,8 @@ export class CwTicketReader {
   lastList = '';
   /** Something worth a job note once per sync, such as closed tickets that couldn't be listed. */
   note = '';
+  /** Companies whose closed tickets couldn't be listed: only their open tickets were read. */
+  readonly openOnly = new Set<string>();
   private statuses: Promise<Set<string>> | null = null;
   private companyNumbers: Promise<Map<string, string>> | null = null;
   private readonly web: string | undefined;
@@ -197,15 +197,12 @@ export class CwTicketReader {
     // Without the closed statuses, the list above already held every ticket.
     let recent: CwTicket[] = [];
     if (closed) {
-      const oldest = now - CLOSED_LOOKBACK_DAYS * DAY;
+      // Every page: the list is by creation date, and a ticket opened long ago may have closed last week.
       try {
-        recent = map(
-          await this.pages(`${company}&statusIds=${encodeURIComponent(`[in],${closed}`)}`, (page) =>
-            page.every((r) => (ticketTime(pick(r, 'createdAt', 'createdOn', 'dateEntered'), now)?.getTime() ?? 0) < oldest),
-          ),
-        );
+        recent = map(await this.pages(`${company}&statusIds=${encodeURIComponent(`[in],${closed}`)}`));
       } catch (error) {
         if (!(error instanceof HttpError) || error.status !== 400 || error.code === ACCESS_DENIED) throw error;
+        this.openOnly.add(companyId);
         this.note ||= `Closed tickets couldn't be listed, so the closed counts are missing: ${error.message.slice(0, 150)}`;
       }
     }
@@ -216,8 +213,8 @@ export class CwTicketReader {
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
   }
 
-  /** Every page of a ticket list, newest first, stopping early when `enough` says so. */
-  private async pages(filter: string, enough?: (page: Json[]) => boolean): Promise<Json[]> {
+  /** Every page of a ticket list, newest first. */
+  private async pages(filter: string): Promise<Json[]> {
     const out: Json[] = [];
     for (let page = 1; page <= MAX_PAGES; page++) {
       let body: unknown;
@@ -236,7 +233,6 @@ export class CwTicketReader {
       if (page === 1) this.lastList = `ticket list: response fields ${shapeOf(body)}; ${records.length} on the first page`;
       const total = Number(pick((body ?? {}) as Json, 'totalCount', 'total', 'count'));
       if (!records.length || (Number.isFinite(total) ? out.length >= total : records.length < PAGE)) break;
-      if (enough?.(records)) break;
     }
     return out;
   }
@@ -353,6 +349,10 @@ export async function runTicketSync(
           eq(t.source, TICKET_SOURCE),
           inArray(t.companyId, read),
           ...(seen.length ? [notInArray(t.externalId, seen)] : []),
+          // Where only open tickets were read, the closed ones already synced stay.
+          ...(reader.openOnly.size
+            ? [or(eq(t.closed, false), notInArray(t.companyId, [...reader.openOnly]))]
+            : []),
         ),
       );
   // Companies unlinked (or set to not sync) since: their tickets go.

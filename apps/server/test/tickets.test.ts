@@ -22,7 +22,7 @@ const STATUSES = [
  * A fake ConnectWise platform API with two companies and its service ticketing API, which answers only to a token
  * that asked for the tickets scope.
  */
-function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: boolean } = {}) {
+function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: boolean; closedFails?: boolean } = {}) {
   const calls: string[] = [];
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -48,6 +48,7 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     if (url.pathname === '/api/platform/v1/service/ticketing/statuses') return json(STATUSES);
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets') {
       const [op, ...ids] = (url.searchParams.get('statusIds') ?? '').split(',');
+      if (op === '[in]' && opts.closedFails) return json({ message: 'invalid filter' }, 400);
       const all = (tickets.get(url.searchParams.get('companyIds') ?? '') ?? []).filter((k) => {
         const status = (k.status as { id: string }).id;
         return op === '[notIn]' ? !ids.includes(status) : op === '[in]' ? ids.includes(status) : true;
@@ -114,7 +115,10 @@ describe('ticket sync and dashboard', () => {
   let harbor: string;
   let northline: string;
 
-  const connect = async (fetcherTickets: Map<string, Ticket[]>, opts?: { ticketScope?: boolean }) => {
+  const connect = async (
+    fetcherTickets: Map<string, Ticket[]>,
+    opts?: { ticketScope?: boolean; closedFails?: boolean },
+  ) => {
     platform = fakePlatform(fetcherTickets, opts);
     t = await startApp({}, { cwRmmFetch: platform.fetcher });
     owner = (await setupOwner(t.app)).b;
@@ -259,6 +263,20 @@ describe('ticket sync and dashboard', () => {
       linked: false,
       open: 0,
     });
+  });
+
+  it('keeps closed tickets already synced when ConnectWise refuses to list closed ones', async () => {
+    const opts = { closedFails: false };
+    await connect(tickets, opts);
+    await link();
+    await sync();
+    expect((await owner.call('GET', `/api/tickets/list?client=${harbor}&status=Closed`)).data).toHaveLength(1);
+    opts.closedFails = true;
+    const job = await sync();
+    expect(job.status).toBe('done');
+    expect(job.messages.join(' ')).toMatch(/Closed tickets couldn't be listed/);
+    expect((await owner.call('GET', `/api/tickets/list?client=${harbor}&status=Closed`)).data).toHaveLength(1);
+    expect((await owner.call('GET', `/api/tickets?client=${harbor}`)).data.open).toBe(3);
   });
 
   it('shows only clients the viewer can read, and hides others as not found', async () => {
