@@ -30,6 +30,7 @@ import {
   X,
   type LucideIcon,
   ListChecks,
+  RotateCw,
 } from 'lucide-react';
 import { ClientPicker } from '@/components/ClientPicker';
 import { CommandPalette } from '@/components/CommandPalette';
@@ -187,6 +188,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
             <NavLink to="/admin/layouts" icon={LayoutTemplate} label="Asset layouts" onNavigate={onNavigate} />
             <NavLink to="/admin/security" icon={ScrollText} label="Security log" onNavigate={onNavigate} />
             <NavLink to="/admin/data" icon={ArrowDownUp} label="Import & export" onNavigate={onNavigate} />
+            <NavLink to="/admin/rotation" icon={RotateCw} label="Password rotation" onNavigate={onNavigate} />
             <NavLink to="/admin/duplicates" icon={CopyCheck} label="Duplicates" onNavigate={onNavigate} />
             <NavLink to="/admin/status" icon={Gauge} label="System status" onNavigate={onNavigate} />
             <NavLink to="/admin/updates" icon={ArrowUpCircle} label="Updates" onNavigate={onNavigate} />

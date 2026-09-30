@@ -24,6 +24,7 @@ import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientOverview } from '@/pages/client/ClientOverview';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
+import { DomainTracker, SslTracker } from '@/components/Trackers';
 import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
@@ -41,6 +42,7 @@ import { NotFound } from '@/pages/NotFound';
 import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
+import { PasswordRotation } from '@/pages/PasswordRotation';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
 import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
@@ -193,6 +195,8 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/trackers/domains', component: DomainTracker }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/trackers/ssl', component: SslTracker }),
 ];
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
@@ -235,6 +239,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/rotation', component: adminOnly(PasswordRotation) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),

@@ -1121,7 +1121,129 @@ export class VaultService {
     if (!updated.length) throw new HttpError(404, 'Share link not found.');
     await this.audit(scope, p, 'Revoked a share link', '', ip);
   }
+
+  // ---------- automatic rotation ----------
+  // A rotation's new password arrives from the device before the device sets it. It is sealed to the run until the
+  // device confirms, then moved into the password here, so every vault write and its history stay in this service.
+
+  /** Seals the password a device reported for a rotation run, bound to that run. */
+  async sealCandidate(orgId: string, runId: string, value: string) {
+    return this.keys.seal(orgId, value, rotationAad(runId));
+  }
+
+  /**
+   * Makes a confirmed rotation the password: the old one goes to history, and the change is audited as the
+   * rotation. `also` runs in the same transaction (the run's own bookkeeping).
+   */
+  async commitRotation(
+    db: Database,
+    orgId: string,
+    run: { id: string; passwordId: string; candidate: string; label: string },
+    also: (tx: Parameters<Parameters<Database['transaction']>[0]>[0]) => Promise<void>,
+  ) {
+    const secret = await this.keys.open(orgId, run.candidate, rotationAad(run.id));
+    const sealed = await this.keys.seal(orgId, secret, aad(run.passwordId, 'secret'));
+    const fingerprint = await this.keys.fingerprint(orgId, secret);
+    const historyId = randomUUID();
+    await db.transaction(async (tx) => {
+      // Locked and read here, so history keeps the password actually replaced, even one a technician saved moments ago.
+      const [p] = await tx
+        .select()
+        .from(schema.passwords)
+        .where(and(eq(schema.passwords.id, run.passwordId), eq(schema.passwords.orgId, orgId)))
+        .for('update');
+      if (!p) throw notFound();
+      const previous = await this.keys.seal(
+        orgId,
+        await this.keys.open(orgId, p.secret, aad(p.id, 'secret')),
+        historyAad(historyId),
+      );
+      // Applied even if someone edited the entry meanwhile: the device now has this password, so the vault must too.
+      await tx
+        .update(schema.passwords)
+        .set({
+          secret: sealed,
+          fingerprint,
+          strength: passwordStrength(secret),
+          breachCount: null,
+          breachCheckedAt: null,
+          changedAt: new Date(),
+          version: sql`${schema.passwords.version} + 1`,
+          updatedBy: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.passwords.id, p.id));
+      await tx.insert(schema.passwordHistory).values({
+        id: historyId,
+        passwordId: p.id,
+        secret: previous,
+        changedBy: null,
+        changedByName: ROTATION_ACTOR,
+      });
+      await tx.insert(schema.vaultAudit).values({
+        orgId,
+        clientId: p.clientId,
+        passwordId: p.id,
+        passwordName: p.name,
+        actorName: ROTATION_ACTOR,
+        action: 'Changed password (automatic rotation)',
+        reason: run.label.slice(0, 300),
+      });
+      await tx.insert(schema.activity).values({
+        orgId,
+        clientId: p.clientId,
+        actorName: ROTATION_ACTOR,
+        action: 'Rotated the password for',
+        entityType: 'password',
+        entityId: p.id,
+        title: p.name.slice(0, 200),
+      });
+      await also(tx);
+    });
+  }
+
+  /**
+   * Keeps a password a device reported but never confirmed setting, as a previous password of the entry, so a
+   * technician can reveal it (audited, like any history) if the device did change the account.
+   */
+  async keepUnconfirmedCandidate(
+    db: Database,
+    orgId: string,
+    run: { id: string; passwordId: string; candidate: string },
+  ) {
+    const [p] = await db
+      .select({ id: schema.passwords.id, clientId: schema.passwords.clientId, name: schema.passwords.name })
+      .from(schema.passwords)
+      .where(and(eq(schema.passwords.id, run.passwordId), eq(schema.passwords.orgId, orgId)));
+    if (!p) return;
+    const historyId = randomUUID();
+    const sealed = await this.keys.seal(
+      orgId,
+      await this.keys.open(orgId, run.candidate, rotationAad(run.id)),
+      historyAad(historyId),
+    );
+    await db.transaction(async (tx) => {
+      await tx.insert(schema.passwordHistory).values({
+        id: historyId,
+        passwordId: p.id,
+        secret: sealed,
+        changedBy: null,
+        changedByName: `${ROTATION_ACTOR} (unconfirmed, not applied)`,
+      });
+      await tx.insert(schema.vaultAudit).values({
+        orgId,
+        clientId: p.clientId,
+        passwordId: p.id,
+        passwordName: p.name,
+        actorName: ROTATION_ACTOR,
+        action: 'Kept an unconfirmed rotation password in history',
+      });
+    });
+  }
 }
+
+export const ROTATION_ACTOR = 'Automatic rotation';
+const rotationAad = (runId: string) => `rot|${runId}|candidate`;
 
 /**
  * Opens a share link without signing in. Each successful open uses one view; the update is atomic,

@@ -768,6 +768,7 @@ test.describe.serial('accessibility sweep', () => {
       '/admin/layouts',
       '/admin/security',
       '/admin/data',
+      '/admin/rotation',
       '/admin/status',
       '/admin/updates',
       '/admin/settings',

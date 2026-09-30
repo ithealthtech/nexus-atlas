@@ -8,7 +8,10 @@ import { Badge, Card, CardHeader, EmptyState, PageHeader, Skeleton, Stat } from 
 import { AppLink } from '@/components/AppLink';
 import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard } from '@/components/RmmHealth';
+import { TrackerCard } from '@/components/Trackers';
+import { TicketsCard } from '@/components/Tickets';
 import { WarrantyCard } from '@/components/Warranty';
+import { AssetStatsCard } from '@/components/AssetStats';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
 import { useActivity, useAssets, useClients, useDocuments, useExpirations, useUsers } from '@/lib/queries';
@@ -112,8 +115,11 @@ export function Dashboard() {
           icon={Clock}
         />
       </div>
-      <div className="mb-7">
+      <div className="mb-7 space-y-6">
         <RmmHealthCard />
+        <TrackerCard />
+        <TicketsCard />
+        <AssetStatsCard />
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">

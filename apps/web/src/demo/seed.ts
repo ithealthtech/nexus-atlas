@@ -128,6 +128,23 @@ export function seed() {
       expires: daysFromNow(14),
       auto_renew: false,
     }),
+    asset(northline.id, 'domain', 'northlinearch.demo', {
+      registrar: 'Namecheap',
+      dns_host: 'Cloudflare',
+      expires: daysFromNow(214),
+      auto_renew: true,
+    }),
+    asset(northline.id, 'ssl_certificate', 'northlinearch.demo', {
+      common_name: 'northlinearch.demo',
+      issuer: "Let's Encrypt",
+      expires: daysFromNow(61),
+    }),
+    asset(cedar.id, 'domain', 'cedarridgecu.demo', {
+      registrar: 'MarkMonitor',
+      expires: daysFromNow(402),
+      auto_renew: true,
+    }),
+    asset(cedar.id, 'domain', 'crcu-promo.demo', {}),
     asset(northline.id, 'configuration', 'NLA-NAS-01', {
       type: 'Storage',
       manufacturer: 'Synology',
