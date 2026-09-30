@@ -213,7 +213,7 @@ describe('ConnectWise RMM sync', () => {
       location: 'Main office',
     });
     const computers = (await owner.call('GET', '/api/layouts')).data.find(
-      (l: { name: string }) => l.name === 'Computer Assets',
+      (l: { name: string }) => l.name === 'Endpoints',
     );
     expect(computers.fields.map((f: { label: string }) => f.label)).toContain('Location');
 
@@ -247,7 +247,16 @@ describe('ConnectWise RMM sync', () => {
     expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
 
     const saved = await owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: true, devices: false });
-    expect(saved.data.options).toEqual({ locations: true, devices: false, tickets: true, layoutId: null });
+    expect(saved.data.options).toEqual({
+      locations: true,
+      devices: false,
+      contacts: true,
+      tickets: true,
+      inventory: true,
+      atlasLinks: false,
+      ticketNotes: false,
+      layoutId: null,
+    });
     const sitesOnly = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
     expect(sitesOnly.counts.assets).toBeUndefined();
     expect(sitesOnly.counts.locations.updated).toBe(1);

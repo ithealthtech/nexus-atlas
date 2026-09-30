@@ -735,6 +735,7 @@ export async function buildApp({
       (err) => app.log.error({ err }, 'ConnectWise RMM sync'),
       cwRmmFetch,
       warranty,
+      config.PUBLIC_URL,
     );
     cwRmm.start();
     const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
@@ -790,7 +791,7 @@ export async function buildApp({
     return saved;
   });
   registerDataRoutes(app, { db, authed, recent, settings, keys, vault, storage: files, huduFetch });
-  registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch, warranty });
+  registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch, warranty, publicUrl: config.PUBLIC_URL });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
   registerM365Routes(app, { db, authed, recent, settings, publicOrigin: config.publicOrigin, fetcher: m365Fetch });
 

@@ -299,12 +299,18 @@ export function CwRmmSync() {
             {job.data && <JobSummary job={job.data} />}
             <fieldset className="space-y-2">
               <legend className="text-sm font-semibold">What to sync</legend>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {(
                   [
                     ['locations', 'Sites', 'Each linked company’s sites, as locations.'],
+                    ['contacts', 'Contacts', 'Each company’s contacts, matched to ones already there by email.'],
                     ['devices', 'Devices', 'As assets: updating same-named ones, or in the layout chosen below.'],
                     ['tickets', 'Tickets', 'Read-only, for the ticket dashboard. Needs the tickets read permission.'],
+                    [
+                      'inventory',
+                      'Software and sign-ins',
+                      'Each device’s installed software and who signs in, and which host each virtual machine runs on.',
+                    ],
                   ] as const
                 ).map(([key, label, help]) => (
                   <Checkbox
@@ -325,9 +331,48 @@ export function CwRmmSync() {
                   />
                 ))}
               </div>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-semibold">Write back to ConnectWise</legend>
+                <p className="text-xs text-muted">
+                  These change data in your ConnectWise tenant, so they are off until you turn them on.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      [
+                        'atlasLinks',
+                        'Atlas links',
+                        'Writes each device’s and company’s Atlas address into an “Atlas link” custom field on every sync. Needs the devices write permission.',
+                      ],
+                      [
+                        'ticketNotes',
+                        'Ticket notes',
+                        'Lets techs add internal notes to tickets from Atlas, and notes a password reveal on the ticket whose number is in the reason (never the password). Needs the tickets create permission.',
+                      ],
+                    ] as const
+                  ).map(([key, label, help]) => (
+                    <Checkbox
+                      key={key}
+                      label={label}
+                      description={help}
+                      checked={data.options[key]}
+                      disabled={busy === 'options'}
+                      onChange={(e) =>
+                        act('options', async () => {
+                          await api('/integrations/cw-rmm/options', {
+                            method: 'PUT',
+                            body: { ...data.options, [key]: e.target.checked },
+                          });
+                          await connection.refetch();
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              </fieldset>
               <Field
                 label="Save devices in"
-                help="Automatic uses a layout named Devices or Device assets when there is one, otherwise Configurations. Devices an earlier sync put in Configurations move on the next sync."
+                help="Automatic uses the Endpoints layout (one named Endpoints, Devices or Computer Assets is renamed to Endpoints) when there is one, otherwise Configurations. Devices an earlier sync put in Configurations move on the next sync."
               >
                 {(p) => (
                   <Select

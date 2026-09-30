@@ -84,15 +84,44 @@ export const cwRmmSyncOptionsSchema = z.object({
   locations: z.boolean().default(true),
   /** Devices, as assets. */
   devices: z.boolean().default(true),
+  /** Each company's contacts, as the client's contacts. */
+  contacts: z.boolean().default(true),
   /** Tickets, read-only, for the ticket dashboard. */
   tickets: z.boolean().default(true),
+  /** Each device's installed software, who signs in to it, and which host a virtual machine runs on. */
+  inventory: z.boolean().default(true),
   /**
-   * The asset layout new devices are saved in. Null picks one: a layout named for devices ("Devices", "Device
-   * assets") when there is one, otherwise Configurations.
+   * Writes each synced device's and linked company's Atlas address into an "Atlas link" custom field in
+   * ConnectWise, so techs can jump from the RMM to the docs. Changes the ConnectWise tenant, so off by default.
+   */
+  atlasLinks: z.boolean().default(false),
+  /**
+   * Lets Atlas add notes to ConnectWise tickets: from the ticket list, and when a password is revealed with a
+   * ticket number in the reason. Changes the ConnectWise tenant, so off by default.
+   */
+  ticketNotes: z.boolean().default(false),
+  /**
+   * The asset layout new devices are saved in. Null picks the Endpoints layout (one named "Endpoints", "Devices"
+   * or "Computer Assets", renamed to Endpoints) when there is one, otherwise Configurations.
    */
   layoutId: z.string().uuid().nullable().default(null),
 });
 export type CwRmmSyncOptions = z.infer<typeof cwRmmSyncOptionsSchema>;
+/** What ConnectWise RMM says about one synced device right now: resource use, device groups, and policy. */
+export interface RmmDeviceInsight {
+  /** Logical disks, with free and total bytes. */
+  disks: { name: string; freeBytes: number; totalBytes: number }[];
+  /** Physical memory: the latest sample and the day's peak use, as percentages. */
+  memory: { totalBytes: number; percent: number; peakPercent: number; samples: number[] } | null;
+  /** CPU utilization: the latest sample and the day's peak, as percentages. */
+  cpu: { percent: number; peakPercent: number; samples: number[] } | null;
+  /** RMM device group names; null when they couldn't be read (for example, no Device Groups read permission). */
+  groups: string[] | null;
+  /** The policies that decide the device's effective settings, with where each applies and how many settings it wins. */
+  policies: { name: string; level: string; settings: number }[] | null;
+  /** What couldn't be read, in plain words. */
+  notes: string[];
+}
 /** A ConnectWise RMM company and what Atlas does with it. */
 export interface CwRmmCompany {
   id: string;
@@ -157,6 +186,19 @@ export interface TicketView {
   /** The ticket in ConnectWise, when it gave a link. */
   url: string | null;
 }
+/** A note on a ConnectWise ticket. */
+export interface TicketNoteView {
+  id: string;
+  text: string;
+  createdAt: string | null;
+  createdBy: string;
+}
+export interface TicketNotes {
+  notes: TicketNoteView[];
+  /** Whether notes can be added from Atlas (the ConnectWise option is on and the user can edit the client). */
+  canAdd: boolean;
+}
+export const ticketNoteSchema = z.object({ text: z.string().trim().min(1).max(4000) });
 
 // ---------- security and compliance (ConnectWise platform, read live) ----------
 /**
@@ -278,6 +320,49 @@ export interface DeviceSecurity {
 // ---------- RMM health ----------
 export type RmmDeviceKind = 'server' | 'workstation' | 'other';
 export type RmmProtection = 'running' | 'not_running' | 'missing';
+
+/**
+ * Why installed software needs a look: past its vendor's end of support, a paid product with no license record in
+ * the client, or installed on more devices than its license records have seats.
+ */
+export type SoftwareFlag = 'end_of_life' | 'unlicensed' | 'over_seats';
+/** One application installed on a device, as the RMM reports it. */
+export interface DeviceSoftware {
+  name: string;
+  version: string;
+  publisher: string;
+  /** ISO date, or null when not reported. */
+  installedAt: string | null;
+  flag: SoftwareFlag | null;
+  /** What the flag means for this application, in a sentence ('' when not flagged). */
+  flagReason: string;
+}
+/** An account that signs in to a device, most recent first. */
+export interface DeviceSignIn {
+  username: string;
+  domain: string;
+  /** ISO, or null when not reported. */
+  lastLogonAt: string | null;
+  /** The Atlas contact this account belongs to, when one matches. */
+  contactId: string | null;
+  contactName: string | null;
+}
+/** What the RMM knows about one device beyond its fields: software and sign-ins, each null when never reported. */
+export interface DeviceInventory {
+  software: DeviceSoftware[] | null;
+  signIns: DeviceSignIn[] | null;
+  /** When they were last read from the RMM. */
+  updatedAt: string;
+}
+/** One application across a client's devices. */
+export interface ClientSoftware {
+  name: string;
+  publisher: string;
+  versions: string[];
+  devices: number;
+  flag: SoftwareFlag | null;
+  flagReason: string;
+}
 /** Days since last check-in after which an agent counts as stale, and as very stale. */
 export const RMM_STALE_DAYS = { stale: 7, veryStale: 30 } as const;
 /** How long since check-in before an agent counts as stale, and very stale. Set per organization. */
@@ -555,6 +640,8 @@ export const huduImportOptionsSchema = z.object({
   assets: z.boolean().default(true),
   documents: z.boolean().default(true),
   passwords: z.boolean().default(true),
+  /** Hudu's websites, as Domains assets the domain and SSL trackers check. */
+  domains: z.boolean().default(true),
   companyIds: z.array(z.number().int()).max(5000).nullable().default(null),
   layoutIds: z.array(z.number().int()).max(1000).nullable().default(null),
 });
