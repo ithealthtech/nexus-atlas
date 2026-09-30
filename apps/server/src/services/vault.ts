@@ -1175,6 +1175,7 @@ export class VaultService {
     ip: string,
   ): Promise<{ filename: string; data: Buffer }> {
     const { p, requireReason } = await this.load(scope, id);
+    await this.requireReveal(scope);
     const { reason } = revealSchema.pick({ reason: true }).parse(input ?? {});
     if (requireReason && !reason)
       throw new HttpError(400, 'This client requires a reason before opening files.', 'reason_required');
