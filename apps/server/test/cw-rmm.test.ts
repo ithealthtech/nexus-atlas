@@ -247,7 +247,13 @@ describe('ConnectWise RMM sync', () => {
     expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
 
     const saved = await owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: true, devices: false });
-    expect(saved.data.options).toEqual({ locations: true, devices: false, tickets: true, layoutId: null });
+    expect(saved.data.options).toEqual({
+      locations: true,
+      devices: false,
+      contacts: true,
+      tickets: true,
+      layoutId: null,
+    });
     const sitesOnly = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
     expect(sitesOnly.counts.assets).toBeUndefined();
     expect(sitesOnly.counts.locations.updated).toBe(1);

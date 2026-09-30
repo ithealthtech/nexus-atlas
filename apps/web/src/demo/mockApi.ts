@@ -1077,6 +1077,8 @@ on('POST', '/assets/:id/warranty-check', (m) => {
   const a = find(assets, m[1]!, 'Asset');
   return { asset: assetView(a), vendor: null, expires: null, message: 'The demo does not look warranties up.' };
 });
+// The demo has no RMM, so no device shows live RMM data.
+on('GET', '/assets/:id/rmm-insight', () => ({ insight: null }));
 on('POST', '/assets/:id/archive', (m, b) => {
   const a = find(assets, m[1]!, 'Asset');
   a.archived = !!b.archived;
@@ -1857,7 +1859,7 @@ let cwRmm: {
   hasSecret: true;
   autoSync: boolean;
   lastSyncAt: string | null;
-  options: { locations: boolean; devices: boolean; tickets: boolean; layoutId: string | null };
+  options: { locations: boolean; devices: boolean; contacts: boolean; tickets: boolean; layoutId: string | null };
 } | null = null;
 const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
 const cwCompanies = () => [
@@ -1887,7 +1889,7 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     hasSecret: true,
     autoSync: b.autoSync !== false,
     lastSyncAt: cwRmm?.lastSyncAt ?? null,
-    options: cwRmm?.options ?? { locations: true, devices: true, tickets: true, layoutId: null },
+    options: cwRmm?.options ?? { locations: true, devices: true, contacts: true, tickets: true, layoutId: null },
   };
   return { ...cwRmm, companies: cwCompanies().length };
 });
@@ -1897,6 +1899,7 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
   cwRmm.options = {
     locations: b.locations !== false,
     devices: b.devices !== false,
+    contacts: b.contacts !== false,
     tickets: b.tickets !== false,
     layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,
   };

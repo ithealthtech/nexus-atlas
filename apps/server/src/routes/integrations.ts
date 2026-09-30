@@ -14,6 +14,7 @@ import {
   saveMapping,
   TICKET_SCOPES,
 } from '../services/integrations/cw-rmm.js';
+import { CwDeviceInsight } from '../services/integrations/cw-device-insight.js';
 import { CwSecurityService } from '../services/integrations/cw-security.js';
 import { clearTickets, CwTicketReader, runTicketSync } from '../services/integrations/cw-tickets.js';
 import { isUuid, Scope } from '../services/scope.js';
@@ -89,7 +90,14 @@ export function registerIntegrationRoutes(
     return { saved, client: CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, deps.cwRmmFetch) };
   };
 
+  const insight = new CwDeviceInsight(settings, deps.cwRmmFetch);
+
   app.get('/api/integrations/cw-rmm', authed, async (req) => settings.cwRmmView(admin(req).orgId));
+  // Anyone who can read the asset: its disk, memory and CPU use, device groups, and effective policy, read live.
+  app.get<{ Params: { id: string } }>('/api/assets/:id/rmm-insight', authed, async (req) =>
+    // Fastify won't send a bare null as JSON, so "not an RMM device" is { insight: null }.
+    ({ insight: await insight.forAsset(new Scope(db, req.session!.actor), req.params.id) }),
+  );
   app.put('/api/integrations/cw-rmm', authed, async (req) => {
     const actor = admin(req);
     recent(req);
