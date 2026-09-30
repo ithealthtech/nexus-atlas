@@ -101,16 +101,6 @@ export const cwRmmSyncOptionsSchema = z.object({
    */
   ticketNotes: z.boolean().default(false),
   /**
-   * Writes each synced device's and linked company's Atlas address into an "Atlas link" custom field in
-   * ConnectWise, so techs can jump from the RMM to the docs. Changes the ConnectWise tenant, so off by default.
-   */
-  atlasLinks: z.boolean().default(false),
-  /**
-   * Lets Atlas add notes to ConnectWise tickets: from the ticket list, and when a password is revealed with a
-   * ticket number in the reason. Changes the ConnectWise tenant, so off by default.
-   */
-  ticketNotes: z.boolean().default(false),
-  /**
    * The asset layout new devices are saved in. Null picks one: a layout named for devices ("Devices", "Device
    * assets") when there is one, otherwise Configurations.
    */
