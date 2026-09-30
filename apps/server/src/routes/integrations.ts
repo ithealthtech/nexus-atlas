@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { cwRmmConnectionSchema, cwRmmSyncOptionsSchema, type Actor } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
@@ -15,8 +15,9 @@ import {
   TICKET_SCOPES,
 } from '../services/integrations/cw-rmm.js';
 import { CwDeviceInsight } from '../services/integrations/cw-device-insight.js';
-import { Scope } from '../services/scope.js';
+import { CwSecurityService } from '../services/integrations/cw-security.js';
 import { clearTickets, CwTicketReader, runTicketSync } from '../services/integrations/cw-tickets.js';
+import { isUuid, Scope } from '../services/scope.js';
 import { RmmHealthService } from '../services/rmm-health.js';
 import type { SettingsService } from '../services/settings.js';
 import type { WarrantyLookup } from '../services/warranty-lookup.js';
@@ -139,6 +140,26 @@ export function registerIntegrationRoutes(
     // Tickets switched off leave the dashboard at once, rather than staying frozen at the last sync.
     if (!options.tickets) await clearTickets(db, actor.orgId);
     return settings.cwRmmView(actor.orgId);
+  });
+  // ---- security and compliance (patching, backup, vulnerabilities, MDR), read live for anyone who can see the client ----
+  const security = new CwSecurityService(db, settings, deps.cwRmmFetch);
+  app.get<{ Params: { id: string } }>('/api/clients/:id/security', authed, async (req) => {
+    const actor = req.session!.actor;
+    if (!isUuid(req.params.id)) throw new HttpError(404, 'Client not found.');
+    await new Scope(db, actor).require(req.params.id, 'read', 'Client');
+    return security.forClient(actor.orgId, req.params.id);
+  });
+  app.get<{ Params: { id: string } }>('/api/assets/:id/security', authed, async (req) => {
+    const actor = req.session!.actor;
+    const [asset] = isUuid(req.params.id)
+      ? await db
+          .select({ clientId: schema.assets.clientId })
+          .from(schema.assets)
+          .where(and(eq(schema.assets.id, req.params.id), eq(schema.assets.orgId, actor.orgId)))
+      : [];
+    if (!asset) throw new HttpError(404, 'Asset not found.');
+    await new Scope(db, actor).require(asset.clientId, 'read', 'Asset');
+    return security.forDevice(actor.orgId, asset.clientId, req.params.id);
   });
   app.post('/api/integrations/cw-rmm/sync', authed, async (req, reply) => {
     const actor = admin(req);

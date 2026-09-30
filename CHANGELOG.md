@@ -2,6 +2,14 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.6] - 2026-09-30
+
+### Fixed
+
+- **ConnectWise RMM devices get their manufacturer and endpoint protection.** Device details now ask ConnectWise for the hardware and antivirus sections, which it leaves out unless they are named, so Manufacturer and protection status fill in on the next sync. (#127)
+- **Closed ConnectWise tickets are listed again.** The closed-ticket filter now uses the format ConnectWise expects, so closed counts are no longer missing. (#127)
+- **Password rotation starts its script through ConnectWise's task scheduling call**, as the platform API defines it. (#127)
+
 ## [1.7.5] - 2026-09-30
 
 ### Fixed

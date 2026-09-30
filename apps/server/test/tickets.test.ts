@@ -47,11 +47,17 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
       return json({ message: 'missing scope' }, 403);
     if (url.pathname === '/api/platform/v1/service/ticketing/statuses') return json(STATUSES);
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets') {
-      const [op, ...ids] = (url.searchParams.get('statusIds') ?? '').split(',');
-      if (op === '[in]' && opts.closedFails) return json({ message: 'invalid filter' }, 400);
+      // As the spec defines it: "id1,id2" is in, "[notIn],id1,id2" is not in; anything else in brackets is refused,
+      // as a real tenant did with "[in]".
+      const given = url.searchParams.get('statusIds');
+      const list = (given ?? '').split(',');
+      const notIn = list[0] === '[notIn]';
+      const ids = notIn ? list.slice(1) : list;
+      if (ids.some((id) => id.startsWith('['))) return json({ message: "Invalid datatype for 'statusIds'" }, 400);
+      if (given && !notIn && opts.closedFails) return json({ message: 'invalid filter' }, 400);
       const all = (tickets.get(url.searchParams.get('companyIds') ?? '') ?? []).filter((k) => {
         const status = (k.status as { id: string }).id;
-        return op === '[notIn]' ? !ids.includes(status) : op === '[in]' ? ids.includes(status) : true;
+        return given === null ? true : notIn ? !ids.includes(status) : ids.includes(status);
       });
       const size = Number(url.searchParams.get('pageSize'));
       const from = (Number(url.searchParams.get('pageNum')) - 1) * size;
@@ -245,7 +251,7 @@ describe('ticket sync and dashboard', () => {
     const lists = platform.calls.filter((c) => c.includes('/v2/service/ticketing/tickets?companyIds=c1'));
     expect(lists.map((c) => new URL(c.split(' ')[1], 'https://x').searchParams.get('statusIds'))).toEqual([
       '[notIn],s-done',
-      '[in],s-done',
+      's-done',
     ]);
     const closed = (await owner.call('GET', `/api/tickets/list?client=${harbor}&status=Closed`)).data;
     expect(closed.map((k: { number: string }) => k.number)).toEqual(['104']);

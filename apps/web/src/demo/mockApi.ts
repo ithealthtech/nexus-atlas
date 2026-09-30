@@ -1698,6 +1698,9 @@ on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
 on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+// ConnectWise security and compliance is read live, so the demo has none: the cards stay hidden.
+on('GET', '/clients/:id/security', () => ({ linked: false }));
+on('GET', '/assets/:id/security', () => ({ linked: false }));
 on('GET', '/tickets', (_m, _b, q) => ticketReport(q.get('client'), Number(q.get('days')) || 30));
 on('GET', '/tickets/list', (_m, _b, q) => ticketList(q.get('client'), q.get('status'), Number(q.get('days')) || 30));
 on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
