@@ -123,7 +123,11 @@ describe('warranty lookup', () => {
     const dell = await asset('HDG-WS-01', { manufacturer: 'Dell Inc.', serial_number: 'ABC1234' });
     expect(dell.fields.warranty_expires).toBe('2029-05-31');
     // The manufacturer comes from the model when it's blank.
-    const lenovo = await asset('HDG-WS-02', { model: 'ThinkPad T14 Gen 4', serial_number: 'pf2abcde' });
+    const lenovo = await asset('HDG-WS-02', {
+      manufacturer: 'To Be Filled By O.E.M.',
+      model: 'ThinkPad T14 Gen 4',
+      serial_number: 'pf2abcde',
+    });
     expect(lenovo.fields.warranty_expires).toBe('2027-02-01');
     const hp = await asset('HDG-WS-03', { manufacturer: 'HP', serial_number: '5CG1234XYZ' });
     expect(hp.fields.warranty_expires).toBe('2026-11-30');

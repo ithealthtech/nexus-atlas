@@ -246,8 +246,9 @@ export class WarrantyLookup {
   /** The device's manufacturer as entered, or as its model and name suggest. */
   static manufacturerOf(fields: Record<string, unknown>, keys: { manufacturer?: string }, name: string) {
     const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    // Firmware placeholders ("To Be Filled By O.E.M.") count as blank, so the model decides.
     return (
-      (keys.manufacturer && str(fields[keys.manufacturer])) ||
+      (keys.manufacturer && normalizeManufacturer(str(fields[keys.manufacturer]))) ||
       detectManufacturer({ model: str(fields.model), name, hostname: str(fields.hostname) })
     );
   }
