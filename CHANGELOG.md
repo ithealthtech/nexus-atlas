@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Every ConnectWise company's tickets get links.** A company ConnectWise gives no company number is linked by its platform company ID, the same ID the RMM device sync uses.
+
 ## [1.7.14] - 2026-09-30
 
 ### Fixed

@@ -163,6 +163,11 @@ describe('ticket values', () => {
       url: 'https://control.itsupport247.net/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=5535&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
     });
     expect(ticketLink('https://control.itsupport247.net', '133023.1533', '19304')).toBeNull();
+    // Without a company number, the platform company ID.
+    expect(ticketLink('https://control.itsupport247.net', '5535', '72f2b461-1e35-4df0-be5c-d55f10b6052f')).toContain(
+      'ticketId=5535&companyId=72f2b461-1e35-4df0-be5c-d55f10b6052f',
+    );
+    expect(ticketLink('https://control.itsupport247.net', '5535', 'not-an-id')).toBeNull();
     // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),

@@ -63,7 +63,8 @@ const numeric = (s: string) => /^\d{1,18}$/.test(s);
  * portal shows, like 5535, and the company number). Dotted numbers ("133023.1533") are not portal IDs: no link.
  */
 export function ticketLink(web: string | undefined, number: string, companyNumber: string) {
-  if (!web || !numeric(number) || !numeric(companyNumber)) return null;
+  const company = numeric(companyNumber) || /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(companyNumber);
+  if (!web || !numeric(number) || !company) return null;
   return `${web}/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=${number}&companyId=${companyNumber}&projectIssue=false&tabId=unified-ticket-detail-screen??`;
 }
 
@@ -254,7 +255,8 @@ export class CwTicketReader {
   /** Every open ticket, and those closed in the last 90 days. */
   async tickets(companyId: string, now = Date.now()): Promise<CwTicket[]> {
     const closedIds = await this.closedStatuses();
-    const companyNumber = await this.numberOf(companyId);
+    // Without a numeric company number, the company's platform ID, as the RMM device links use.
+    const companyNumber = (await this.numberOf(companyId)) || companyId;
     const link = (number: string) => ticketLink(this.web, number, companyNumber);
     const map = (records: Json[]) =>
       records.map((r) => mapTicket(r, now, closedIds, link)).filter((t): t is CwTicket => !!t);
@@ -293,7 +295,7 @@ export class CwTicketReader {
       .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
     await this.portalIds(list, link);
-    if (!companyNumber && list.some((t) => !t.url)) this.unlinked.add(companyId);
+    if (list.some((t) => !t.url && numeric(t.number))) this.unlinked.add(companyId);
     else this.noPortalId += list.filter((t) => !t.url && !numeric(t.number)).length;
     return list;
   }
