@@ -694,6 +694,11 @@ export class CwRmmClient {
     return this.call('GET', path);
   }
 
+  /** One page of another part of the platform API (patching, backup, security), with the next page's cursor. */
+  page(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ body: unknown; nextCursor: number | null }> {
+    return this.request(method, path, body);
+  }
+
   private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
     return (await this.request(method, path, body)).body;
   }
