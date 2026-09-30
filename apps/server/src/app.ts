@@ -586,14 +586,6 @@ export async function buildApp({
     limiter: failureLimiter(20, 15 * 60_000),
   });
 
-  await registerDeviceRoutes(app, {
-    db,
-    authed,
-    devices: new DeviceService(db, identity),
-    vault,
-    limiter: failureLimiter(20, 15 * 60_000),
-  });
-
   const health = new PasswordHealthService(db, vault, settings, breachFetch);
   const notifier = registerAdminRoutes(app, {
     health,
