@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Automation tickets show their ConnectWise portal ID.** Tickets the platform opened itself carry a dotted number (such as 133023.1670) the portal can't find. Atlas now reads the CW-System note that names the portal's copy ("Connectwise ticket id 5283 is created to match ...") and shows and links that ID instead.
+
 ## [1.7.10] - 2026-09-30
 
 ### Fixed

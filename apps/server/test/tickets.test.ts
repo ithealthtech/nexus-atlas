@@ -283,6 +283,54 @@ describe('ticket sync and dashboard', () => {
     await t.close();
   });
 
+  it('shows and links the portal ID a CW-System note gives a dotted platform ticket', async () => {
+    tickets.get('c1')!.push(
+      {
+        id: 't-a1',
+        number: '133023.1670',
+        summary: 'Network attack',
+        status: { id: 's-new', name: 'New' },
+        createdAt: ago(2),
+      },
+      {
+        id: 't-a2',
+        number: '133023.1671',
+        summary: 'No note yet',
+        status: { id: 's-new', name: 'New' },
+        createdAt: ago(3),
+      },
+      {
+        id: 't-a3',
+        number: '133023.1672',
+        summary: 'Mismatched note',
+        status: { id: 's-new', name: 'New' },
+        createdAt: ago(4),
+      },
+    );
+    await connect(tickets);
+    platform.notes.set('t-a1', [
+      {
+        id: 'n-1',
+        detail: 'Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670',
+        createdBy: 'CW-System',
+      },
+    ]);
+    // A note naming another ticket's number (pasted in, say) is not this ticket's portal ID.
+    platform.notes.set('t-a3', [
+      { id: 'n-2', detail: 'Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670.' },
+    ]);
+    expect((await link()).status).toBe(200);
+    expect((await sync()).status).toBe('done');
+    const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
+    const shown = (s: string) => list.find((k: { summary: string }) => k.summary === s);
+    expect(shown('Network attack')).toMatchObject({
+      number: '5283',
+      url: expect.stringContaining('ticketId=5283&companyId=19304'),
+    });
+    expect(shown('Mismatched note')).toMatchObject({ number: '133023.1672', url: null });
+    expect(shown('No note yet')).toMatchObject({ number: '133023.1671', url: null });
+  });
+
   it('syncs tickets read-only, with counts, a daily chart, and a list oldest-updated first', async () => {
     await connect(tickets);
     const before = (await owner.call('GET', `/api/tickets?client=${harbor}`)).data;
