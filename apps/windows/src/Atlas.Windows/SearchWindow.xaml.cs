@@ -33,7 +33,7 @@ public sealed partial class SearchWindow : Window
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
 
         AppWindow.Resize(new global::Windows.Graphics.SizeInt32(760, 520));
-        AppWindow.SetIcon("Assets/Tray.ico");
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico"));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsMaximizable = false;

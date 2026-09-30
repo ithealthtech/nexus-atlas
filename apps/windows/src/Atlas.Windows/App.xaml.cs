@@ -151,7 +151,8 @@ public partial class App : Application
         tray = new TaskbarIcon
         {
             ToolTipText = "Atlas for Windows",
-            IconSource = new BitmapImage(new Uri("ms-appx:///Assets/Tray.ico")),
+            // A file path works installed (MSIX) and unpackaged (the preview zip) alike; ms-appx needs a package.
+            IconSource = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico"))),
             ContextMenuMode = ContextMenuMode.SecondWindow,
             ContextFlyout = menu,
             LeftClickCommand = new RelayCommand(ShowSearch),
