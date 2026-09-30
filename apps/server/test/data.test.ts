@@ -38,6 +38,7 @@ function fakeHudu(options: { key?: string } = {}) {
           { label: 'Admin URL', field_type: 'Website', position: 4 },
           { label: 'Admin password', field_type: 'Password', position: 5 },
           { label: 'Contact email', field_type: 'Email', position: 6 },
+          { label: 'Old field', field_type: 'Text', position: 7, is_destroyed: true },
         ],
       },
     ],
@@ -255,7 +256,9 @@ describe('Hudu import', () => {
 
     const preview = await owner.call('POST', '/api/import/hudu/preview', {});
     expect(preview.data).toMatchObject({ companies: 26, assetLayouts: 1, assets: 1, articles: 2, passwords: 2 });
-    expect(hudu.calls).toContain('/api/v1/companies?page=2');
+    expect(hudu.calls).toContain('/api/v1/companies?page=2&page_size=25');
+    // asset_layouts takes no page_size.
+    expect(hudu.calls).toContain('/api/v1/asset_layouts?page=1');
 
     // A client already in Atlas under the same name is linked to its Hudu company, not duplicated.
     const existing = (await owner.call('POST', '/api/clients', { name: 'harbor dental group' })).data.id;
@@ -282,6 +285,8 @@ describe('Hudu import', () => {
 
     const layout = (await owner.call('GET', '/api/layouts')).data.find((l: { name: string }) => l.name === 'Firewalls');
     expect(layout.fields.map((f: { label: string }) => f.label)).not.toContain('Admin password');
+    // A field deleted in Hudu isn't brought back.
+    expect(layout.fields.map((f: { label: string }) => f.label)).not.toContain('Old field');
     const [asset] = (await owner.call('GET', `/api/assets?client=${harbor.id}`)).data;
     expect(asset.fields).toMatchObject({
       ip_address: '10.20.0.1',
