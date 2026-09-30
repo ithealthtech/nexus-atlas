@@ -500,7 +500,7 @@ describe('Hudu import', () => {
     expect(job.status, JSON.stringify(job)).toBe('done');
     expect(job.counts.assets).toMatchObject({ created: 3, failed: 0 });
     // Values the layout had no field for get one, instead of going into the notes.
-    expect(job.messages.join('\n')).toMatch(/Computer Assets: added \d+ fields for data the layout had no place for/);
+    expect(job.messages.join('\n')).toMatch(/Endpoints: added \d+ fields for data the layout had no place for/);
 
     const all = (await owner.call('GET', '/api/assets')).data as { id: string; name: string }[];
     const get = async (name: string) =>
@@ -527,7 +527,7 @@ describe('Hudu import', () => {
     expect(pc.notes).toBe('');
     expect(JSON.stringify(pc)).not.toContain('never-import-this');
     const computers = (await owner.call('GET', '/api/layouts')).data.find(
-      (l: { name: string }) => l.name === 'Computer Assets',
+      (l: { name: string }) => l.name === 'Endpoints',
     );
     expect(computers.fields.map((f: { label: string }) => f.label)).toEqual(
       expect.arrayContaining(['Manufacturer', 'Serial number', 'Rack unit', 'CPU model', 'Disks']),
@@ -535,11 +535,69 @@ describe('Hudu import', () => {
 
     // A second run finds the fields already there: nothing more is added and nothing moves.
     const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
-    expect(again.messages.join('\n')).not.toContain('Computer Assets: added');
+    expect(again.messages.join('\n')).not.toContain('Endpoints: added');
     expect((await get('HDG-WS-014')).fields).toMatchObject({ rack_unit: 'U12', manufacturer: 'Dell' });
 
     const person = await get('Dana Reyes');
     expect(person.fields).toEqual({ title: 'Office Manager', email: 'dana@harbordental.test', phone: '919-555-0142' });
+  });
+
+  it("puts Hudu's Computer Assets into the Devices layout, renamed Endpoints, and matches assets already there", async () => {
+    hudu.data.asset_layouts!.push({
+      id: 8,
+      name: 'Computer Assets',
+      fields: [
+        { id: 81, label: 'Operating System', field_type: 'Text', position: 1 },
+        { id: 82, label: 'Host name', field_type: 'Text', position: 2 },
+      ],
+    });
+    hudu.data.assets!.push({
+      id: 601,
+      company_id: 1,
+      asset_layout_id: 8,
+      name: 'HDG-WS-014',
+      fields: [
+        { label: 'Operating System', value: 'Windows 11 Pro' },
+        { label: 'Host name', value: 'hdg-ws-014' },
+      ],
+    });
+    // What a ConnectWise RMM sync left: the client, a Devices layout, and the same machine.
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    const devices = (
+      await owner.call('POST', '/api/layouts', {
+        name: 'Devices',
+        icon: 'server',
+        fields: [
+          { key: 'host', label: 'Host name', type: 'text' },
+          { key: 'rmm_agent', label: 'RMM agent', type: 'text' },
+        ],
+      })
+    ).data.id;
+    const pc = (
+      await owner.call('POST', `/api/clients/${harbor}/assets`, {
+        layoutId: devices,
+        name: 'HDG-WS-014',
+        fields: { rmm_agent: 'online' },
+      })
+    ).data.id;
+
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(job.status, JSON.stringify(job)).toBe('done');
+
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; name: string; icon: string }[];
+    expect(layouts.map((l) => l.name)).not.toContain('Computer Assets');
+    expect(layouts.find((l) => l.id === devices)).toMatchObject({ name: 'Endpoints', icon: 'server' });
+    const copies = ((await owner.call('GET', `/api/assets?client=${harbor}`)).data as { name: string }[]).filter(
+      (a) => a.name === 'HDG-WS-014',
+    );
+    expect(copies).toHaveLength(1);
+    // Hudu's values join what the RMM sync saved, in the layout's own fields where the labels match.
+    expect((await owner.call('GET', `/api/assets/${pc}`)).data.fields).toMatchObject({
+      rmm_agent: 'online',
+      host: 'hdg-ws-014',
+      operating_system: 'Windows 11 Pro',
+    });
   });
 });
 

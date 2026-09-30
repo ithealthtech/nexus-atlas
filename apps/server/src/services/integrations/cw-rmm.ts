@@ -5,6 +5,7 @@ import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
+import { endpointLayout } from '../endpoint-layout.js';
 import { LayoutService } from '../layouts.js';
 import { locations } from '../people.js';
 import { Scope } from '../scope.js';
@@ -1362,12 +1363,9 @@ export async function saveMapping(
   await settings.patchCwRmm(actor.orgId, { map });
 }
 
-// A layout named for devices, which the sync saves devices in when no layout was chosen.
-const DEVICE_LAYOUT = /^(managed |rmm )?devices?( assets?)?$/;
-
 /**
- * The layout devices are saved in: the one chosen in the sync options, else a layout named for devices
- * ("Devices", "Device assets"), else Configurations. `configurationId` is the Configurations layout, whose synced
+ * The layout devices are saved in: the one chosen in the sync options, else the Endpoints layout (one named
+ * "Endpoints", "Devices" or "Computer Assets", renamed to Endpoints; see endpointLayout), else Configurations. `configurationId` is the Configurations layout, whose synced
  * devices move to the chosen layout.
  */
 export async function deviceLayout(db: Database, orgId: string, chosen: string | null) {
@@ -1390,10 +1388,8 @@ export async function deviceLayout(db: Database, orgId: string, chosen: string |
       );
     return { id: picked.id, configurationId: configuration?.id ?? null };
   }
-  const named = layouts
-    .filter((l) => !l.archived && l.key !== 'configuration')
-    .find((l) => DEVICE_LAYOUT.test(l.name.trim().toLowerCase()) || DEVICE_LAYOUT.test(l.key));
-  if (named) return { id: named.id, configurationId: configuration?.id ?? null };
+  const named = await endpointLayout(db, orgId);
+  if (named) return { id: named, configurationId: configuration?.id ?? null };
   if (!configuration || configuration.archived)
     throw new HttpError(400, 'The Configurations asset layout is missing or archived. Restore it to sync devices.');
   return { id: configuration.id, configurationId: configuration.id };

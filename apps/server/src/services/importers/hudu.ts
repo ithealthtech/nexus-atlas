@@ -14,6 +14,13 @@ import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
 import { DocumentService } from '../documents.js';
+import {
+  ENDPOINTS,
+  ENDPOINTS_DESCRIPTION,
+  ENDPOINTS_ICON,
+  endpointLayout,
+  isEndpointName,
+} from '../endpoint-layout.js';
 import { LayoutService } from '../layouts.js';
 import { locations } from '../people.js';
 import { RelationService } from '../relations.js';
@@ -594,20 +601,38 @@ export async function runHuduImport(
   const layoutMap = new Map<number, MappedLayout & { id: string; name: string }>();
   for (const l of options.assets ? (await client.layouts()).filter((x) => layoutChosen(x.id)) : []) {
     const mapped = mapLayout(l);
-    const body = {
-      name: `${l.name}`.slice(0, 80),
-      icon: 'box',
-      description: 'Imported from Hudu',
-      fields: mapped.fields,
-    };
+    // Hudu's computer layout ("Computer Assets") goes into Atlas's Endpoints layout, the one ConnectWise RMM
+    // devices go into, instead of a second layout for the same machines.
+    const endpoints = isEndpointName(l.name);
+    const body = endpoints
+      ? { name: ENDPOINTS, description: ENDPOINTS_DESCRIPTION, fields: mapped.fields }
+      : { name: `${l.name}`.slice(0, 80), icon: 'box', description: 'Imported from Hudu', fields: mapped.fields };
+    if (endpoints) {
+      const target = await endpointLayout(db, actor.orgId);
+      if (target && target !== (await run.ref('layouts', l.id))) await run.remember('layouts', l.id, target);
+    }
     const id = await run.upsert(
       'layouts',
       l.id,
       l.name,
-      async () => (await layouts.create(actor, body)).id,
+      async () => (await layouts.create(actor, endpoints ? { ...body, icon: ENDPOINTS_ICON } : body)).id,
       async (existing) => {
         // Fields added since (by an earlier import for data Hudu's layout lacked, or by hand) are kept.
         const current = (await layouts.get(actor, existing)).fields as LayoutField[];
+        // The Endpoints layout's own fields (those ConnectWise RMM fills) keep their place ahead of Hudu's.
+        if (endpoints) {
+          const own = new Set(current.map((f) => f.key));
+          const labels = new Set(current.map((f) => norm(f.label)));
+          const extra = mapped.fields.filter((f) => !own.has(f.key) && !labels.has(norm(f.label)));
+          // Hudu fields the layout already has under the same label fill that field.
+          const byLabel = new Map(current.map((f) => [norm(f.label), f]));
+          for (const [label, f] of mapped.byLabel) mapped.byLabel.set(label, byLabel.get(label) ?? f);
+          for (const [label, f] of byLabel) mapped.byLabel.set(label, f);
+          for (const [id, f] of mapped.byId) mapped.byId.set(id, byLabel.get(norm(f.label)) ?? f);
+          mapped.fields = [...current, ...extra].slice(0, MAX_LAYOUT_FIELDS);
+          await layouts.update(actor, existing, { ...body, fields: mapped.fields });
+          return;
+        }
         const keys = new Set(mapped.fields.map((f) => f.key));
         for (const f of current)
           if (!keys.has(f.key) && mapped.fields.length < MAX_LAYOUT_FIELDS) {
@@ -617,7 +642,7 @@ export async function runHuduImport(
         await layouts.update(actor, existing, { ...body, fields: mapped.fields });
       },
     );
-    if (id) layoutMap.set(l.id, { ...mapped, id, name: l.name });
+    if (id) layoutMap.set(l.id, { ...mapped, id, name: endpoints ? ENDPOINTS : l.name });
   }
   // Every value an asset carries gets a field: first a pass over all assets collects what no field of their
   // layout takes (integration data such as RAM or department, extra Hudu fields), and those fields are added
@@ -655,6 +680,50 @@ export async function runHuduImport(
 
   // Assets
   const assetToAtlas = new Map<number, string>();
+  // Atlas assets no Hudu asset is linked to yet, each matched at most once.
+  const linkedAssets = new Set(
+    (
+      await db
+        .select({ id: schema.externalRefs.entityId })
+        .from(schema.externalRefs)
+        .where(
+          and(
+            eq(schema.externalRefs.orgId, actor.orgId),
+            eq(schema.externalRefs.source, run.source),
+            eq(schema.externalRefs.kind, 'assets'),
+          ),
+        )
+    ).map((r) => r.id),
+  );
+  const unlinkedAssets = new Set<string>();
+  const assetKeys = new Map<string, string>();
+  if (huduAssets.length)
+    for (const x of await db
+      .select({
+        id: schema.assets.id,
+        clientId: schema.assets.clientId,
+        layoutId: schema.assets.layoutId,
+        name: schema.assets.name,
+      })
+      .from(schema.assets)
+      .where(and(eq(schema.assets.orgId, actor.orgId), eq(schema.assets.archived, false)))) {
+      const key = `${x.clientId}|${x.layoutId}|${x.name.trim().toLowerCase()}`;
+      if (!linkedAssets.has(x.id) && !assetKeys.has(key)) {
+        assetKeys.set(key, x.id);
+        unlinkedAssets.add(x.id);
+      }
+    }
+  const sameNamedAsset = async (clientId: string, layoutId: string, name: string) => {
+    const id = assetKeys.get(`${clientId}|${layoutId}|${name.trim().toLowerCase()}`);
+    return id && unlinkedAssets.has(id) ? id : null;
+  };
+  const inLayout = async (assetId: string, layoutId: string) => {
+    const [row] = await db
+      .select({ layoutId: schema.assets.layoutId })
+      .from(schema.assets)
+      .where(eq(schema.assets.id, assetId));
+    return row?.layoutId === layoutId;
+  };
   for (const a of huduAssets) {
     const clientId = companyToClient.get(a.company_id);
     const layout = layoutMap.get(a.asset_layout_id);
@@ -665,6 +734,16 @@ export async function runHuduImport(
     }
     const { fields, labels, notes } = assetDetails(a, layout);
     const name = a.name.slice(0, 200) || `Asset ${a.id}`;
+    // A same-named asset already in this client's layout (a device ConnectWise RMM synced, say) is this one,
+    // also when an earlier import put it in another layout.
+    const match = await sameNamedAsset(clientId, layout.id, name);
+    if (match) {
+      const earlier = await run.ref('assets', a.id);
+      if (earlier !== match && !(earlier && (await inLayout(earlier, layout.id)))) {
+        unlinkedAssets.delete(match);
+        await run.remember('assets', a.id, match);
+      }
+    }
     const assetId = await run.upsert(
       'assets',
       a.id,
@@ -677,8 +756,15 @@ export async function runHuduImport(
         ).id,
       async (existing) => {
         const current = await assets.get(scope, existing);
+        // Values Hudu doesn't have (a field ConnectWise RMM fills, say) are kept.
+        const kept = (current.fields ?? {}) as Record<string, unknown>;
         await saveTolerant(fields, notes, labels, (f, n) =>
-          assets.update(scope, existing, { name, fields: f, notes: n, version: current.version }, 'Updated by import'),
+          assets.update(
+            scope,
+            existing,
+            { name, fields: { ...kept, ...f }, notes: n, version: current.version },
+            'Updated by import',
+          ),
         );
       },
     );
