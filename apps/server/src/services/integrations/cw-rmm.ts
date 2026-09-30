@@ -24,6 +24,10 @@ const SCOPES = 'platform.companies.read platform.sites.read platform.devices.rea
 export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.automation.create`;
 /** Tickets get their own token, so a key without ticket access still syncs devices. */
 export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
+/** Adding ticket notes (the scope names CallBridge uses against the same API). Asked for only when notes are on. */
+export const TICKET_NOTE_SCOPES = `${TICKET_SCOPES} platform.tickets.create`;
+/** Writing the "Atlas link" custom fields. Asked for only when that option is on. */
+export const LINK_SCOPES = `${SCOPES} platform.devices.write`;
 const RETRY_MS = 2000;
 /** The code on errors that mean the key can't sign in or lacks a permission: no other request shape will help. */
 export const ACCESS_DENIED = 'cw_access_denied';
@@ -32,6 +36,7 @@ const ATTEMPT_CHARS = 100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Json = Record<string, unknown>;
+type Method = 'GET' | 'POST' | 'PUT';
 
 type DeviceQuery = { kind: 'v2'; resourceType: string; limit: number } | { kind: 'v1'; limit: number };
 // The platform API spec takes company, site, or endpoint as the resource type, up to 500 devices a page. The first
@@ -670,13 +675,22 @@ export class CwRmmClient {
     return this.call('GET', path);
   }
 
-  private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+  /** A write to the platform API. Only the opt-in write-back options use these. */
+  post(path: string, body: unknown): Promise<unknown> {
+    return this.call('POST', path, body);
+  }
+
+  put(path: string, body: unknown): Promise<unknown> {
+    return this.call('PUT', path, body);
+  }
+
+  private async call(method: Method, path: string, body?: unknown): Promise<unknown> {
     return (await this.request(method, path, body)).body;
   }
 
   /** A call's body, with the next page's cursor when ConnectWise gives one in its Link header. */
   private async request(
-    method: 'GET' | 'POST',
+    method: Method,
     path: string,
     body?: unknown,
   ): Promise<{ body: unknown; nextCursor: number | null }> {
@@ -705,7 +719,17 @@ export class CwRmmClient {
         res.status === 400 || res.status === 404 ? res.status : 502,
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
-    return { body: await res.json(), nextCursor: nextCursorOf(res.headers.get('link')) };
+    let parsed: unknown;
+    if (method === 'GET') parsed = await res.json();
+    else {
+      // A write can answer with no body (204), or one that isn't JSON; either way it worked.
+      try {
+        parsed = JSON.parse(await res.text());
+      } catch {
+        parsed = null;
+      }
+    }
+    return { body: parsed, nextCursor: nextCursorOf(res.headers.get('link')) };
   }
 
   /**
