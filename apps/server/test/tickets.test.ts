@@ -133,12 +133,13 @@ describe('ticket values', () => {
     });
     expect(mapTicket({ id: 1, status: 'Scheduled', closedFlag: false, closedDate: '2026-09-01' })!.closed).toBe(false);
     expect(mapTicket({ summary: 'no id' })).toBeNull();
-    // Where the ticket sits and came from, and a link for the platform's dotted ticket numbers.
+    // Where the ticket sits and came from, and the portal's plain ticket ID over a dotted number.
     expect(
       mapTicket(
         {
           id: 'u-2',
           number: '133023.1533',
+          nocTicketId: '5535',
           summary: 'Network attack found on computer: PC12',
           serviceBoard: { id: 'b', name: 'NOC Alerts' },
           source: { id: 's', name: 'Monitoring' },
@@ -149,12 +150,13 @@ describe('ticket values', () => {
         (n) => ticketLink('https://control.itsupport247.net', n, '19304'),
       ),
     ).toMatchObject({
+      number: '5535',
       board: 'NOC Alerts',
       origin: 'Monitoring',
       kind: 'Incident',
-      url: 'https://control.itsupport247.net/#??asio_route=/service-tickets/bms-ticket-overview?ticketId=133023.1533&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
+      url: 'https://control.itsupport247.net/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=5535&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
     });
-    expect(ticketLink('https://control.itsupport247.net', '1.2.3', '19304')).toBeNull();
+    expect(ticketLink('https://control.itsupport247.net', '133023.1533', '19304')).toBeNull();
     // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),
@@ -315,7 +317,7 @@ describe('ticket sync and dashboard', () => {
     expect(list[0]).toMatchObject({ status: 'Waiting for parts', url: 'https://na.myconnectwise.net/ticket/103' });
     // Without a link of its own, a ticket links to the platform's web app by ticket and company number.
     expect(list[1].url).toBe(
-      'https://control.itsupport247.net/#??asio_route=/service-tickets/bms-ticket-overview?ticketId=102&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
+      'https://control.itsupport247.net/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=102&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
     );
     // Open tickets and recently closed ones are asked for separately, by status.
     const lists = platform.calls.filter((c) => c.includes('/v2/service/ticketing/tickets?companyIds=c1'));

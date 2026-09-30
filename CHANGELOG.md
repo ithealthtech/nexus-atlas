@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Fixed
 
-- **ConnectWise tickets show where they came from and open in ConnectWise.** Each ticket lists its service board, source, and type under the summary, so tickets the platform opened from alerts can be told apart from help desk tickets. The ticket number and summary open the ticket in the ConnectWise web app, including the platform's dotted ticket numbers (such as 133023.1533). When a company's tickets can't be linked, the sync log says why.
+- **ConnectWise ticket numbers and links match the portal.** Tickets show the plain ticket ID the ConnectWise portal uses (such as 5535) instead of the platform's dotted number, and the ticket link opens through the portal's service tickets page, as the portal's own links do.
 
 ## [1.7.8] - 2026-09-30
 
