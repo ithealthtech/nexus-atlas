@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { mapNote, mapTicket, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
+import { mapNote, mapTicket, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const CLIENT_ID = 'asio-client-id-123';
@@ -133,6 +133,28 @@ describe('ticket values', () => {
     });
     expect(mapTicket({ id: 1, status: 'Scheduled', closedFlag: false, closedDate: '2026-09-01' })!.closed).toBe(false);
     expect(mapTicket({ summary: 'no id' })).toBeNull();
+    // Where the ticket sits and came from, and a link for the platform's dotted ticket numbers.
+    expect(
+      mapTicket(
+        {
+          id: 'u-2',
+          number: '133023.1533',
+          summary: 'Network attack found on computer: PC12',
+          serviceBoard: { id: 'b', name: 'NOC Alerts' },
+          source: { id: 's', name: 'Monitoring' },
+          type: { id: 't', name: 'Incident' },
+        },
+        Date.now(),
+        new Set(),
+        (n) => ticketLink('https://control.itsupport247.net', n, '19304'),
+      ),
+    ).toMatchObject({
+      board: 'NOC Alerts',
+      origin: 'Monitoring',
+      kind: 'Incident',
+      url: 'https://control.itsupport247.net/#??asio_route=/service-tickets/bms-ticket-overview?ticketId=133023.1533&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
+    });
+    expect(ticketLink('https://control.itsupport247.net', '1.2.3', '19304')).toBeNull();
     // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),

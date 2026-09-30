@@ -35,6 +35,9 @@ export interface CwTicket {
   closedAt: Date | null;
   updatedAt: Date | null;
   url: string | null;
+  board: string;
+  origin: string;
+  kind: string;
 }
 
 /** A time from an ISO string or a Unix time in seconds or milliseconds; null when missing or implausible. */
@@ -54,10 +57,12 @@ const clean = (s: string, max: number) => s.replace(/[\u0000-\u0008\u000b-\u001f
 
 const CLOSED_STATUS = /^(closed|completed?|resolved|cancell?ed)\b/i;
 const numeric = (s: string) => /^\d{1,18}$/.test(s);
+/** A ticket number as the web app's route takes it: digits, or two runs of digits with a dot ("133023.1533"). */
+const ticketNumber = (s: string) => /^\d{1,18}(\.\d{1,18})?$/.test(s);
 
 /** A browser link to a platform ticket, from the route the web app uses (keyed by ticket and company number). */
 export function ticketLink(web: string | undefined, number: string, companyNumber: string) {
-  if (!web || !numeric(number) || !numeric(companyNumber)) return null;
+  if (!web || !ticketNumber(number) || !numeric(companyNumber)) return null;
   return `${web}/#??asio_route=/service-tickets/bms-ticket-overview?ticketId=${number}&companyId=${companyNumber}&projectIssue=false&tabId=unified-ticket-detail-screen??`;
 }
 
@@ -107,6 +112,9 @@ export function mapTicket(
     closedAt: closed ? (closedAt ?? updatedAt) : null,
     updatedAt,
     url: url && url.length <= 1000 ? url : null,
+    board: clean(text(t, 'serviceBoard.name', 'board.name', 'boardName'), 200),
+    origin: clean(text(t, 'source.name', 'sourceName'), 200),
+    kind: clean(text(t, 'type.name', 'typeName'), 200),
   };
 }
 
@@ -119,6 +127,8 @@ export class CwTicketReader {
   lastList = '';
   /** Something worth a job note once per sync, such as closed tickets that couldn't be listed. */
   note = '';
+  /** Companies with tickets that got no ConnectWise link, for a job note saying why. */
+  readonly unlinked = new Set<string>();
   /** Companies whose closed tickets couldn't be listed: only their open tickets were read. */
   readonly openOnly = new Set<string>();
   private statuses: Promise<Set<string>> | null = null;
@@ -209,9 +219,11 @@ export class CwTicketReader {
     }
     const since = now - KEEP_CLOSED_DAYS * DAY;
     const seen = new Set<string>();
-    return [...open, ...recent]
+    const list = [...open, ...recent]
       .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
+    if (list.some((t) => !t.url)) this.unlinked.add(companyId);
+    return list;
   }
 
   /** Every page of a ticket list, newest first. */
@@ -345,6 +357,9 @@ export async function runTicketSync(
           closedAt: k.closedAt,
           remoteUpdatedAt: k.updatedAt,
           url: k.url,
+          board: k.board,
+          origin: k.origin,
+          kind: k.kind,
           syncedAt: new Date(now),
         }));
         await db
@@ -364,6 +379,9 @@ export async function runTicketSync(
               closedAt: sql`excluded.closed_at`,
               remoteUpdatedAt: sql`excluded.remote_updated_at`,
               url: sql`excluded.url`,
+              board: sql`excluded.board`,
+              origin: sql`excluded.origin`,
+              kind: sql`excluded.kind`,
               syncedAt: sql`excluded.synced_at`,
             },
           });
@@ -380,6 +398,12 @@ export async function runTicketSync(
     read.push(companyId);
   }
   if (reader.note) run.note(reader.note);
+  if (reader.unlinked.size)
+    run.note(
+      `Tickets for ${[...reader.unlinked].slice(0, 5).join(', ')}${reader.unlinked.size > 5 ? ` and ${reader.unlinked.size - 5} more` : ''} ` +
+        "have no ConnectWise link: a link needs the company's numeric company ID (one external ID in ConnectWise) " +
+        'and a North America account.',
+    );
   if (linked.length && !seen.length && reader.lastList) run.note(`No tickets listed (${reader.lastList}).`);
 
   // Tickets the companies that were read no longer return: deleted, or closed more than 90 days ago.

@@ -287,7 +287,22 @@ function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClien
                 <td className="py-2 pr-3 whitespace-nowrap">
                   <TicketNumber t={t} />
                 </td>
-                <td className="max-w-80 py-2 pr-3 break-words text-text">{t.summary || '(no summary)'}</td>
+                <td className="max-w-80 py-2 pr-3 break-words text-text">
+                  {t.url ? (
+                    <a href={t.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {t.summary || '(no summary)'}
+                    </a>
+                  ) : (
+                    t.summary || '(no summary)'
+                  )}
+                  {(t.board || t.origin || t.kind) && (
+                    <span className="block text-xs text-text-2">
+                      {[t.board && `Board: ${t.board}`, t.origin && `Source: ${t.origin}`, t.kind && `Type: ${t.kind}`]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  )}
+                </td>
                 {showClient && (
                   <td className="py-2 pr-3 text-text-2">
                     <AppLink to={`/clients/${t.clientId}`} className="hover:underline">

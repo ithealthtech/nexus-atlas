@@ -119,6 +119,9 @@ export class TicketService {
         closedAt: t.closedAt,
         updatedAt: t.remoteUpdatedAt,
         url: t.url,
+        board: t.board,
+        origin: t.origin,
+        kind: t.kind,
       })
       .from(t)
       .innerJoin(schema.clients, eq(schema.clients.id, t.clientId))

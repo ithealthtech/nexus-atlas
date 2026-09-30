@@ -185,6 +185,10 @@ export interface TicketView {
   updatedAt: string | null;
   /** The ticket in ConnectWise, when it gave a link. */
   url: string | null;
+  /** The ticket's service board, source (such as an alert), and type in ConnectWise; empty when not given. */
+  board: string;
+  origin: string;
+  kind: string;
 }
 /** A note on a ConnectWise ticket. */
 export interface TicketNoteView {
