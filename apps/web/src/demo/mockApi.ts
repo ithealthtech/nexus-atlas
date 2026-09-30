@@ -263,6 +263,9 @@ const TICKET_SAMPLE: TicketView[] = db.clients.slice(0, 3).flatMap((c, ci) =>
       closedAt: closedDays === null ? null : ago(closedDays * 24 * 60),
       updatedAt: ago((closedDays ?? Math.min(openedDays, n % 9)) * 24 * 60 + n * 11),
       url: null,
+      board: n % 4 ? 'Help Desk' : 'Alerts',
+      origin: n % 4 ? 'Email' : 'Monitoring',
+      kind: n % 4 ? 'Service Request' : 'Incident',
     };
   }),
 );

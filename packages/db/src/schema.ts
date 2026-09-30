@@ -1078,6 +1078,10 @@ export const tickets = pgTable(
     closedAt: timestamp('closed_at', { withTimezone: true }),
     remoteUpdatedAt: timestamp('remote_updated_at', { withTimezone: true }),
     url: text('url'),
+    /** Where the ticket sits and came from in ConnectWise: its service board, source, and type names. */
+    board: text('board').notNull().default(''),
+    origin: text('origin').notNull().default(''),
+    kind: text('kind').notNull().default(''),
     syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.source, t.externalId] }), index('tickets_client').on(t.orgId, t.clientId)],
