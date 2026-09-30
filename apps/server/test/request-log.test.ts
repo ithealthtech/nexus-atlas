@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { redactBody, redactHeaders, redactUrl, serviceOf } from '../src/services/request-log.js';
+import { isPrivatePath, redactBody, redactHeaders, redactUrl, serviceOf } from '../src/services/request-log.js';
 import { setupOwner, startApp, type Browser, type TestApp } from './helpers.js';
 
 describe('request log redaction', () => {
@@ -40,6 +40,10 @@ describe('request log redaction', () => {
     );
     expect(serviceOf('https://openapi.service.itsupport247.net/v1/token')).toBe('ConnectWise');
     expect(serviceOf('https://graph.microsoft.com/v1.0/users')).toBe('Microsoft');
+    expect(isPrivatePath('/api/clients/abc/passwords')).toBe(true);
+    expect(isPrivatePath('/api/passwords/abc/reveal')).toBe(true);
+    expect(isPrivatePath('/api/rotation/agent/result')).toBe(true);
+    expect(isPrivatePath('/api/clients/abc')).toBe(false);
   });
 });
 

@@ -34,27 +34,30 @@ const BEARER = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/g;
 const JWT = /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g;
 
 // Incoming requests whose bodies carry vault secrets or sign-in material: only the method, path, and status are kept.
-const PRIVATE_PATHS = [
-  '/api/passwords',
-  '/api/vault',
-  '/api/sends',
-  '/api/shares',
-  '/api/session',
-  '/api/passkey',
-  '/api/setup',
-  '/api/password-reset',
-  '/api/account',
-  '/api/native',
-  '/api/device',
-  '/api/rotation/agent',
-  '/api/api-keys',
-  '/api/emergency-access',
-  '/api/users',
-  '/api/import',
-  '/api/export',
-  '/api/attachments',
-  '/api/org/erase',
-];
+// Matched by path segment, so client-scoped routes (/api/clients/:id/passwords) count too.
+const PRIVATE_SEGMENTS = new Set([
+  'passwords',
+  'password-folders',
+  'vault',
+  'sends',
+  'shares',
+  'session',
+  'passkey',
+  'passkeys',
+  'setup',
+  'password-reset',
+  'account',
+  'native',
+  'device',
+  'api-keys',
+  'emergency-access',
+  'users',
+  'import',
+  'export',
+  'attachments',
+  'erase',
+  'agent',
+]);
 
 export const isSecretName = (name: string) => SECRET_NAME.test(name);
 
@@ -147,7 +150,10 @@ export function serviceOf(url: string): string {
 }
 
 export const isPrivatePath = (path: string) =>
-  PRIVATE_PATHS.some((p) => path === p || path.startsWith(`${p}/`) || path.startsWith(`${p}?`));
+  path
+    .split('?')[0]!
+    .split('/')
+    .some((segment) => PRIVATE_SEGMENTS.has(segment));
 
 const isText = (contentType: string | null) =>
   !contentType || /json|text|xml|x-www-form-urlencoded|javascript|problem/i.test(contentType);
