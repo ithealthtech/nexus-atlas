@@ -143,6 +143,8 @@ export class CwTicketReader {
   /** The product whose external IDs are the portal's company numbers, and each company's external IDs. */
   private portalProduct = '';
   private readonly externalIds = new Map<string, { id: string; product: string }[]>();
+  /** For a company ConnectWise gave no IDs, which fields its records had, for the job note. */
+  private readonly shapes = new Map<string, string>();
   private readonly web: string | undefined;
 
   constructor(
@@ -200,18 +202,42 @@ export class CwTicketReader {
     return this.companyNumbers;
   }
 
-  /** A company's number from its own record, for a company the list gave none: the record may carry more IDs. */
+  /**
+   * A company's number when the company list gives none: from its own record, else from its sites, whose records
+   * carry their company's IDs too. What came back is kept for the job note.
+   */
   private async numberOf(companyId: string) {
     const listed = (await this.numbers()).get(companyId);
     if (listed || !this.web) return listed ?? '';
-    try {
-      const c = companyIds((await this.client.get(`${COMPANIES}/${encodeURIComponent(companyId)}`)) as Json);
-      if (c.ids.length) this.externalIds.set(companyId, c.ids);
-      return companyNumber(c, this.portalProduct);
-    } catch (error) {
-      if (error instanceof HttpError) return '';
-      throw error;
-    }
+    const read = async (path: string) => {
+      try {
+        return await this.client.get(path);
+      } catch (error) {
+        if (error instanceof HttpError) return null;
+        throw error;
+      }
+    };
+    const path = `${COMPANIES}/${encodeURIComponent(companyId)}`;
+    const record = await read(path);
+    const own = record && typeof record === 'object' && !Array.isArray(record) ? companyIds(record as Json) : null;
+    const sites = listOf(await read(`${path}/sites`));
+    const fromSites = sites.flatMap((site) => {
+      const parent = site.company && typeof site.company === 'object' ? companyIds(site.company as Json).ids : [];
+      return parent;
+    });
+    const ids = [...(own?.ids ?? []), ...fromSites];
+    if (ids.length) this.externalIds.set(companyId, ids);
+    else
+      this.shapes.set(
+        companyId,
+        `company fields ${record ? shapeOf(record) : 'not readable'}; ${sites.length} site${sites.length === 1 ? '' : 's'}${sites[0] ? ` with fields ${shapeOf(sites[0])}` : ''}`.slice(0, 600),
+      );
+    return companyNumber({ id: companyId, own: own?.own ?? '', ids }, this.portalProduct);
+  }
+
+  /** For a company ConnectWise gave no IDs, which fields its records had. */
+  fieldsSeen(companyId: string) {
+    return this.shapes.get(companyId) ?? '';
   }
 
   /** What ConnectWise gave a company to link by, for the job note: its external IDs and their products. */
@@ -528,6 +554,11 @@ export async function runTicketSync(
         "link: ConnectWise gives these companies no single numeric company ID (an external ID) to link by, or the " +
         'account is outside North America.',
     );
+    const first = [...reader.unlinked].find((c) => reader.fieldsSeen(c));
+    if (first)
+      run.note(
+        `What ConnectWise returned for ${names.get(byCompany.get(first) ?? first) ?? first}: ${reader.fieldsSeen(first)}`,
+      );
   }
   if (reader.notesDenied)
     run.note(

@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Ticket links for companies whose records carry no IDs.** A company ConnectWise lists without IDs is linked by the company IDs its sites carry, and when those are missing too the sync log shows which fields ConnectWise did return.
+
 ## [1.7.13] - 2026-09-30
 
 ### Fixed
