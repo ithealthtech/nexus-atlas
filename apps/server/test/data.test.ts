@@ -264,7 +264,7 @@ describe('Hudu import', () => {
     expect(start.status).toBe(202);
     const job = await waitForJob(owner, start.data.id);
     expect(job.status, JSON.stringify(job)).toBe('done');
-    expect(job.counts.clients).toMatchObject({ created: 26, failed: 0 });
+    expect(job.counts.clients).toMatchObject({ created: 25, updated: 1, failed: 0 });
     expect(job.counts.assets).toMatchObject({ created: 1, failed: 0 });
     expect(job.counts.documents, JSON.stringify(job.messages)).toMatchObject({ created: 2 });
     expect(job.counts.passwords).toMatchObject({ created: 1, skipped: 1 });

@@ -451,7 +451,7 @@ export function loginAddress(p: Pick<HuduPassword, 'login_url' | 'url'>, huduBas
 }
 
 /** Client names compared without case, spacing or punctuation ("Harbor Dental, LLC" = "harbor dental llc"). */
-const clientKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+const clientKey = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
 export async function previewHudu(client: HuduClient): Promise<HuduPreview> {
   const [companies, layouts, assets, articles, passwords] = await Promise.all([
@@ -549,17 +549,16 @@ export async function runHuduImport(
       .join('\n')
       .slice(0, 5000);
     const body = { name: c.name.slice(0, 200), type: (c.company_type || 'Customer').slice(0, 80), notes };
+    const match = clientKey(body.name) && unlinkedByName.get(clientKey(body.name));
+    if (match && !(await run.ref('clients', c.id))) {
+      unlinkedByName.delete(clientKey(body.name));
+      await run.remember('clients', c.id, match);
+    }
     const id = await run.upsert(
       'clients',
       c.id,
       c.name,
-      async () => {
-        const match = clientKey(body.name) && unlinkedByName.get(clientKey(body.name));
-        if (!match) return (await clients.create(actor, body)).id;
-        unlinkedByName.delete(clientKey(body.name));
-        await clients.update(actor, match, body);
-        return match;
-      },
+      async () => (await clients.create(actor, body)).id,
       async (existing) => void (await clients.update(actor, existing, body)),
     );
     if (!id) continue;
