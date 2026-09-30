@@ -140,10 +140,9 @@ describe('ConnectWise RMM sync', () => {
     expect(job.status).toBe('done');
     expect(job.counts.assets.created).toBe(206);
     expect(job.counts.locations.created).toBe(1);
-    // Paged past the first 200 devices, and never asked about the skipped company.
-    // One rejected shape (client), then three pages of 100 for Harbor and one for Northline, with a single sign-in
-    // for devices (tickets sign in once more, with their own scope).
-    expect(asio.state.calls.filter((c) => c.includes('/categories/all/endpoints')).length).toBe(5);
+    // By company, as the spec says, 500 to a page: one page each for Harbor and Northline, and never a call for the
+    // skipped company. A single sign-in for devices (tickets sign in once more, with their own scope).
+    expect(asio.state.calls.filter((c) => c.includes('/categories/all/endpoints')).length).toBe(2);
     expect(asio.state.tokens).toBe(2);
 
     const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
@@ -524,7 +523,7 @@ describe('ConnectWise RMM client', () => {
     // One lock, one retry: two token requests in total, however many callers.
     expect(tokens).toBe(2);
     await expect(client.devices('a')).rejects.toThrow(
-      /Tried v2 by client: resources must not be empty; v2 by company: resources must not be empty; v2 by partner: resources must not be empty; v1 list: resources must not be empty/,
+      /Tried v2 by company: resources must not be empty; v2 by client: resources must not be empty; v2 by partner: resources must not be empty; v1 list: resources must not be empty/,
     );
   });
 });
@@ -739,5 +738,181 @@ describe('ConnectWise RMM sync with warranty lookup', () => {
     expect(edited.status, JSON.stringify(edited.data)).toBe(200);
     await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
     expect((await list()).find((a) => a.name === 'HDG-WS-01')!.fields.warranty_expires).toBe('2031-01-01');
+  });
+});
+
+describe('ConnectWise RMM fields as the platform API spec gives them', () => {
+  it('takes the maker from baseboard, protection from antiViruses and services, and check-in from the heartbeat', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const detail = (id: string, extra: Record<string, unknown>) => ({
+      companyID: 'c1',
+      siteID: 's1',
+      endpointID: id,
+      platform: {
+        deviceName: `WS-${id}`,
+        bios: { manufacturer: 'American Megatrends Inc.' },
+        baseboard: { manufacturer: 'Dell Inc.', product: '0XYZ' },
+        system: { model: 'OptiPlex 7090', serialNumber: `SN-${id}` },
+        ...extra,
+      },
+    });
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      const m = /\/sites\/s1\/endpoints\/(e\d)$/.exec(url.pathname);
+      if (m?.[1] === 'e1') return Response.json(detail('e1', { antiViruses: [{ name: 'Windows Defender' }] }));
+      if (m?.[1] === 'e2')
+        return Response.json(
+          detail('e2', {
+            antiViruses: [],
+            services: [
+              { serviceName: 'SentinelAgent', displayName: 'SentinelOne', antivirus: true, serviceStatus: 'Stopped' },
+            ],
+          }),
+        );
+      if (m?.[1] === 'e3') return Response.json(detail('e3', { antiViruses: [] }));
+      if (url.pathname.endsWith('/endpoints/heartbeat'))
+        return Response.json({
+          status: 'success',
+          successfulRecords: [
+            {
+              companyID: 'c1',
+              siteID: 's1',
+              endpoints: [
+                { EndpointID: 'e1', DcDateTimeUTC: '2026-09-29T08:30:00Z', Availability: false },
+                { EndpointID: 'e2', DcDateTimeUTC: '2026-09-30T05:00:00Z', Availability: true },
+              ],
+            },
+          ],
+          failedRecords: [],
+        });
+      if (url.pathname.endsWith('/endpoints/systemstate')) return Response.json({ successfulRecords: [] });
+      return Response.json({
+        platform: ['e1', 'e2', 'e3'].map((id) => ({ endpointID: id, siteID: 's1', deviceName: `WS-${id}` })),
+      });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const [one, two, three] = await client.devices('c1', ['s1']);
+    expect(one).toMatchObject({
+      manufacturer: 'Dell',
+      model: 'OptiPlex 7090',
+      serial: 'SN-e1',
+      protection: 'running',
+      protectionProduct: 'Windows Defender',
+      online: false,
+      lastSeenAt: '2026-09-29T08:30:00.000Z',
+    });
+    // The maker goes in Manufacturer only; the BIOS vendor is kept as its own field.
+    const labels = one!.extra.map(([label]) => label.toLowerCase());
+    expect(labels.some((l) => l.includes('baseboard') && l.includes('manufacturer'))).toBe(false);
+    expect(labels.some((l) => l.includes('bios') && l.includes('manufacturer'))).toBe(true);
+    expect(two).toMatchObject({ protection: 'not_running', protectionProduct: 'SentinelOne', online: true });
+    expect(two!.lastSeenAt).toBe('2026-09-30T05:00:00.000Z');
+    expect(three).toMatchObject({ protection: 'missing', online: null, lastSeenAt: null });
+  });
+});
+
+describe('ConnectWise RMM loosely named fields', () => {
+  it('reads manufacturer, check-in and protection under other names, with the manufacturer in its own field only', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const now = Date.now();
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      if (url.pathname === '/api/platform/v2/device/companies/c1/sites/s1/endpoints/e1')
+        return Response.json({
+          companyID: 'c1',
+          siteID: 's1',
+          endpointID: 'e1',
+          platform: {
+            deviceName: 'WS-01',
+            systemManufacturer: 'Dell Inc.',
+            bios: { manufacturer: 'American Megatrends Inc.' },
+            lastContactedAt: new Date(now - 3_600_000).toISOString(),
+          },
+        });
+      if (url.pathname.endsWith('/endpoints/heartbeat'))
+        return Response.json({
+          successfulRecords: [
+            {
+              endpoints: [
+                { EndpointID: 'e1', Availability: true },
+                { EndpointID: 'e2', Availability: true },
+              ],
+            },
+          ],
+        });
+      if (url.pathname.endsWith('/endpoints/systemstate'))
+        return Response.json({
+          successfulRecords: [
+            {
+              endpoints: [
+                { endpointID: 'e1', antivirusStatus: 'Enabled', antivirusName: 'Defender' },
+                { endpointID: 'e2', avStatus: 'Not Protected', lastLoggedOnUser: { username: 'x' } },
+              ],
+            },
+          ],
+        });
+      if (url.pathname.includes('/endpoints/'))
+        return Response.json({ message: 'resource not found' }, { status: 404 });
+      return Response.json({
+        platform: [
+          { endpointID: 'e1', siteID: 's1', deviceName: 'WS-01' },
+          { endpointID: 'e2', siteID: 's1', deviceName: 'WS-02', manufacturer: 'LENOVO' },
+        ],
+      });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const [one, two] = await client.devices('c1', ['s1']);
+    expect(one).toMatchObject({
+      manufacturer: 'Dell',
+      protection: 'running',
+      protectionProduct: 'Defender',
+      online: true,
+    });
+    expect(Date.parse(one!.lastSeenAt!)).toBe(now - 3_600_000);
+    expect(one!.extra.map(([label]) => label.toLowerCase()).join('|')).not.toMatch(/system manufacturer/);
+    // No check-in time given, but the heartbeat says it's up now.
+    expect(two).toMatchObject({ manufacturer: 'Lenovo', protection: 'not_running', online: true });
+    expect(Date.parse(two!.lastSeenAt!)).toBeGreaterThanOrEqual(now - 1000);
+  });
+});
+
+describe('ConnectWise RMM device list paging and sites', () => {
+  it('follows the Link header to the next page and looks each device up in its own site', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const calls: string[] = [];
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      calls.push(`${url.pathname}?${url.searchParams.get('cursor') ?? ''}`);
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      if (url.pathname === '/api/platform/v2/device/categories/all/endpoints') {
+        const cursor = url.searchParams.get('cursor');
+        if (cursor === '0')
+          return Response.json(
+            { platform: [{ companyID: 'c1', siteID: 's2', endpoints: [{ endpointID: 'e1', deviceName: 'A' }] }] },
+            { headers: { Link: `<${url.origin}${url.pathname}?limit=500&cursor=7>; rel="next"` } },
+          );
+        if (cursor === '7')
+          return Response.json({
+            platform: [{ companyID: 'c1', siteID: 's3', endpoints: [{ endpointID: 'e2', deviceName: 'B' }] }],
+          });
+        return Response.json({ message: 'unexpected cursor' }, { status: 400 });
+      }
+      const m = /\/sites\/(s\d)\/endpoints\/(e\d)$/.exec(url.pathname);
+      if (m) return Response.json({ endpointID: m[2], siteID: m[1], platform: { deviceName: m[2] } });
+      return Response.json({ successfulRecords: [] });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const devices = await client.devices('c1', ['s1', 's2', 's3']);
+    expect(devices.map((d) => [d.id, d.siteId])).toEqual([
+      ['e1', 's2'],
+      ['e2', 's3'],
+    ]);
+    // Straight to each device's own site; no probing the others.
+    expect(calls.filter((c) => c.includes('/sites/'))).toEqual([
+      '/api/platform/v2/device/companies/c1/sites/s2/endpoints/e1?',
+      '/api/platform/v2/device/companies/c1/sites/s3/endpoints/e2?',
+    ]);
   });
 });
