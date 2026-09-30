@@ -1,13 +1,13 @@
-import { useState, type MouseEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { Fragment, useState, type FormEvent, type MouseEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, Ticket } from 'lucide-react';
-import { TICKET_DAYS, type TicketDays, type TicketReport, type TicketView } from '@atlas/shared';
+import { TICKET_DAYS, type TicketDays, type TicketNotes, type TicketReport, type TicketView } from '@atlas/shared';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
-import { Card, CardHeader, Dialog, EmptyState, Skeleton } from './ui';
+import { Button, Card, CardHeader, Dialog, EmptyState, FormError, Skeleton, Textarea } from './ui';
 
 const query = (params: Record<string, string | undefined>) => {
   const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => e[1] !== undefined));
@@ -182,8 +182,72 @@ function TicketNumber({ t }: { t: TicketView }) {
   );
 }
 
+/** A ticket's notes from ConnectWise, and a box to add one when that option is on. Note text is escaped. */
+function TicketNotesPanel({ ticketId }: { ticketId: string }) {
+  const key = ['tickets', 'notes', ticketId];
+  const qc = useQueryClient();
+  const notes = useQuery({ queryKey: key, queryFn: () => api<TicketNotes>(`/tickets/${ticketId}/notes`) });
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const add = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      qc.setQueryData(key, await api<TicketNotes>(`/tickets/${ticketId}/notes`, { method: 'POST', body: { text } }));
+      setText('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The note could not be added.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (notes.isPending) return <Skeleton className="h-10" />;
+  if (notes.isError) return <FormError message={notes.error.message} />;
+  return (
+    <div className="space-y-2">
+      {notes.data.notes.length ? (
+        <ul className="space-y-2">
+          {notes.data.notes.map((n) => (
+            <li key={n.id} className="rounded-md border border-border p-2">
+              <p className="text-xs text-muted">
+                {n.createdBy || 'ConnectWise'}
+                {n.createdAt && ` · ${relativeTime(n.createdAt)}`}
+              </p>
+              <p className="whitespace-pre-wrap break-words text-text">{n.text}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted">No notes on this ticket.</p>
+      )}
+      {notes.data.canAdd && (
+        <form onSubmit={add} className="space-y-2">
+          <Textarea
+            aria-label="New note"
+            placeholder="Add an internal note to this ticket in ConnectWise"
+            value={text}
+            maxLength={4000}
+            rows={2}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <FormError message={error} />
+          <Button type="submit" size="sm" disabled={busy || !text.trim()}>
+            Add note
+          </Button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 /** Tickets as a table: number (linked to ConnectWise), summary, status, age, and last update. Text is escaped. */
 function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClient: boolean }) {
+  const [open, setOpen] = useState<string | null>(null);
+  // Notes are internal to the MSP: client portal users don't get them.
+  const staff = useActor().isStaff;
+  const cols = showClient ? 7 : 6;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -206,33 +270,57 @@ function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClien
             <th scope="col" className="py-2 pr-3 font-medium">
               Age
             </th>
-            <th scope="col" className="py-2 font-medium">
+            <th scope="col" className="py-2 pr-3 font-medium">
               Last updated
             </th>
+            {staff && (
+              <th scope="col" className="py-2 font-medium">
+                <span className="sr-only">Notes</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {tickets.map((t) => (
-            <tr key={t.id} className="align-top">
-              <td className="py-2 pr-3 whitespace-nowrap">
-                <TicketNumber t={t} />
-              </td>
-              <td className="max-w-80 py-2 pr-3 break-words text-text">{t.summary || '(no summary)'}</td>
-              {showClient && (
-                <td className="py-2 pr-3 text-text-2">
-                  <AppLink to={`/clients/${t.clientId}`} className="hover:underline">
-                    {t.clientName}
-                  </AppLink>
+            <Fragment key={t.id}>
+              <tr className="align-top">
+                <td className="py-2 pr-3 whitespace-nowrap">
+                  <TicketNumber t={t} />
                 </td>
+                <td className="max-w-80 py-2 pr-3 break-words text-text">{t.summary || '(no summary)'}</td>
+                {showClient && (
+                  <td className="py-2 pr-3 text-text-2">
+                    <AppLink to={`/clients/${t.clientId}`} className="hover:underline">
+                      {t.clientName}
+                    </AppLink>
+                  </td>
+                )}
+                <td className="py-2 pr-3 text-text-2">{t.status}</td>
+                <td className="py-2 pr-3 whitespace-nowrap text-text-2 tabular-nums">
+                  {ticketAge(t.openedAt, t.closedAt)}
+                </td>
+                <td className="py-2 pr-3 whitespace-nowrap text-text-2">
+                  {t.updatedAt ? relativeTime(t.updatedAt) : 'Not reported'}
+                </td>
+                <td className="py-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-expanded={open === t.id}
+                    onClick={() => setOpen(open === t.id ? null : t.id)}
+                  >
+                    Notes
+                  </Button>
+                </td>
+              </tr>
+              {open === t.id && (
+                <tr>
+                  <td colSpan={cols} className="pb-3">
+                    <TicketNotesPanel ticketId={t.id} />
+                  </td>
+                </tr>
               )}
-              <td className="py-2 pr-3 text-text-2">{t.status}</td>
-              <td className="py-2 pr-3 whitespace-nowrap text-text-2 tabular-nums">
-                {ticketAge(t.openedAt, t.closedAt)}
-              </td>
-              <td className="py-2 whitespace-nowrap text-text-2">
-                {t.updatedAt ? relativeTime(t.updatedAt) : 'Not reported'}
-              </td>
-            </tr>
+            </Fragment>
           ))}
         </tbody>
       </table>

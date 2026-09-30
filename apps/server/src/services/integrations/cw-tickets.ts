@@ -3,7 +3,7 @@ import { schema, type Database } from '@atlas/db';
 import { HttpError } from '../../errors.js';
 import type { ImportRun } from '../importers/common.js';
 import type { StoredCwRmm } from '../settings.js';
-import type { CwRmmRegion } from '@atlas/shared';
+import type { CwRmmRegion, TicketNoteView } from '@atlas/shared';
 import { ACCESS_DENIED, listOf, pick, shapeOf, text, type CwRmmClient } from './cw-rmm.js';
 
 type Json = Record<string, unknown>;
@@ -239,13 +239,55 @@ export class CwTicketReader {
   }
 }
 
+const notesPath = (ticketId: string) =>
+  `/api/platform/v1/service/ticketing/tickets/${encodeURIComponent(ticketId)}/notes`;
+/** Notes shown per ticket, newest first. */
+const MAX_NOTES = 100;
+
+/** A ticket note as Atlas shows it; null without text. */
+export function mapNote(n: Json, now = Date.now()): TicketNoteView | null {
+  const detail = clean(text(n, 'detail', 'text', 'note'), 12_000);
+  if (!detail) return null;
+  return {
+    id: clean(text(n, 'id') || detail.slice(0, 40), 100),
+    text: detail,
+    createdAt: ticketTime(pick(n, 'createdAt', 'dateCreated'), now)?.toISOString() ?? null,
+    createdBy: clean(text(n, 'createdBy', 'member.name', 'createdByName'), 200),
+  };
+}
+
+/** A ticket's notes from ConnectWise, newest first. */
+export async function ticketNotes(client: CwRmmClient, ticketId: string, now = Date.now()) {
+  const notes = listOf(await client.get(notesPath(ticketId)))
+    .map((n) => mapNote(n, now))
+    .filter((n): n is TicketNoteView => !!n);
+  return notes
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+    .slice(0, MAX_NOTES);
+}
+
+/**
+ * Adds an internal note (visible to the partner only, never the end customer) to a ConnectWise ticket. Only the
+ * opt-in ticket notes option calls this.
+ */
+export async function addTicketNote(client: CwRmmClient, ticketId: string, detail: string) {
+  const body = clean(detail, 12_000);
+  if (!body) throw new HttpError(400, 'Write the note first.');
+  await client.post(notesPath(ticketId), { detail: body, visibility: 2 });
+}
+
+/** The ticket number a reveal reason names ("#1234", "ticket 1234", "T1234"), if any. */
+export function ticketNumberIn(reason: string): string | null {
+  return /(?:#|\bticket\s*(?:no\.?|number)?\s*#?\s*|\bT)(\d{1,18})\b/i.exec(reason)?.[1] ?? null;
+}
+
 /** Deletes an organization's synced tickets, when ticket syncing is switched off or ConnectWise disconnected. */
 export async function clearTickets(db: Database, orgId: string) {
   await db.delete(schema.tickets).where(and(eq(schema.tickets.orgId, orgId), eq(schema.tickets.source, TICKET_SOURCE)));
 }
 
 /**
- * Syncs the tickets of every linked company. Read-only: nothing is ever written to ConnectWise. Tickets a company
+ * Syncs the tickets of every linked company. Read-only: the sync never writes to ConnectWise. Tickets a company
  * no longer returns are deleted, but only when that company was read; tickets of unlinked companies are deleted.
  */
 export async function runTicketSync(

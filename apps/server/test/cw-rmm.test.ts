@@ -252,6 +252,8 @@ describe('ConnectWise RMM sync', () => {
       devices: false,
       contacts: true,
       tickets: true,
+      atlasLinks: false,
+      ticketNotes: false,
       layoutId: null,
     });
     const sitesOnly = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);

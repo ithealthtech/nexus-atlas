@@ -1703,6 +1703,21 @@ on('GET', '/clients/:id/security', () => ({ linked: false }));
 on('GET', '/assets/:id/security', () => ({ linked: false }));
 on('GET', '/tickets', (_m, _b, q) => ticketReport(q.get('client'), Number(q.get('days')) || 30));
 on('GET', '/tickets/list', (_m, _b, q) => ticketList(q.get('client'), q.get('status'), Number(q.get('days')) || 30));
+const demoNotes = new Map<string, { id: string; text: string; createdAt: string; createdBy: string }[]>();
+on('GET', '/tickets/:id/notes', (m) => ({ notes: demoNotes.get(m[1]!) ?? [], canAdd: true }));
+on('POST', '/tickets/:id/notes', (m, b) => {
+  const notes = [
+    {
+      id: uuid(),
+      text: `${String(b.text)}\n\n(Added from Nexus Atlas by Demo User)`,
+      createdAt: new Date().toISOString(),
+      createdBy: 'API',
+    },
+    ...(demoNotes.get(m[1]!) ?? []),
+  ];
+  demoNotes.set(m[1]!, notes);
+  return { notes, canAdd: true };
+});
 on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
 on('GET', '/warranty/assets', (_m, _b, q) =>
   warrantyAssets(q.get('client'))
@@ -1859,7 +1874,15 @@ let cwRmm: {
   hasSecret: true;
   autoSync: boolean;
   lastSyncAt: string | null;
-  options: { locations: boolean; devices: boolean; contacts: boolean; tickets: boolean; layoutId: string | null };
+  options: {
+    locations: boolean;
+    devices: boolean;
+    contacts: boolean;
+    tickets: boolean;
+    atlasLinks: boolean;
+    ticketNotes: boolean;
+    layoutId: string | null;
+  };
 } | null = null;
 const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
 const cwCompanies = () => [
@@ -1889,7 +1912,15 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     hasSecret: true,
     autoSync: b.autoSync !== false,
     lastSyncAt: cwRmm?.lastSyncAt ?? null,
-    options: cwRmm?.options ?? { locations: true, devices: true, contacts: true, tickets: true, layoutId: null },
+    options: cwRmm?.options ?? {
+      locations: true,
+      devices: true,
+      contacts: true,
+      tickets: true,
+      atlasLinks: false,
+      ticketNotes: false,
+      layoutId: null,
+    },
   };
   return { ...cwRmm, companies: cwCompanies().length };
 });
@@ -1901,6 +1932,8 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
     devices: b.devices !== false,
     contacts: b.contacts !== false,
     tickets: b.tickets !== false,
+    atlasLinks: b.atlasLinks === true,
+    ticketNotes: b.ticketNotes === true,
     layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,
   };
   return cwRmm;
