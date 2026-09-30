@@ -168,17 +168,21 @@ export class CwDeviceInsight {
       }
     };
     const devices = client();
-    const [disks, memory, cpu, groups, policies] = await Promise.all([
-      attempt('Disks', 'Devices read', [], async () => disksOf(await devices.get(`/api/platform/v2/device/endpoints/${id}/disk-usage`))),
+    // The usage reads share one token. Device groups and policy each sign in with their own scope, one after the
+    // other: ConnectWise locks a key (423) that asks for several tokens at once.
+    const [disks, memory, cpu] = await Promise.all([
+      attempt('Disks', 'Devices read', [], async () =>
+        disksOf(await devices.get(`/api/platform/v2/device/endpoints/${id}/disk-usage`)),
+      ),
       attempt('Memory', 'Devices read', null, async () =>
         memoryOf(await devices.get(`/api/platform/v2/device/endpoints/${id}/memory-usage?minutes=${WINDOW_MINUTES}`)),
       ),
       attempt('CPU', 'Devices read', null, async () =>
         cpuOf(await devices.get(`/api/platform/v2/device/endpoints/${id}/cpu-usage?minutes=${WINDOW_MINUTES}`)),
       ),
-      attempt('Device groups', 'Device Groups read', null, () => this.groups(client(GROUP_SCOPES), id)),
-      attempt('Policy', 'Policies read', null, () => this.policies(client, endpointId, companies)),
     ]);
+    const groups = await attempt('Device groups', 'Device Groups read', null, () => this.groups(client(GROUP_SCOPES), id));
+    const policies = await attempt('Policy', 'Policies read', null, () => this.policies(client, endpointId, companies));
     return { disks, memory, cpu, groups, policies, notes };
   }
 

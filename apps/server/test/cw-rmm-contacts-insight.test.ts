@@ -9,7 +9,7 @@ const GB = 1024 ** 3;
 
 /** A fake platform API with one company, one site, one device, its contacts, usage, groups, and policy. */
 function fakeAsio() {
-  const state = { scopes: [] as string[], policyRefused: false };
+  const state = { scopes: [] as string[], policyRefused: false, signingIn: 0, maxSignIns: 0 };
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
@@ -18,6 +18,9 @@ function fakeAsio() {
     if (path === '/v1/token') {
       const body = JSON.parse(String(init?.body));
       state.scopes.push(body.scope);
+      state.maxSignIns = Math.max(state.maxSignIns, ++state.signingIn);
+      await new Promise((r) => setTimeout(r, 20));
+      state.signingIn--;
       if (body.scope === 'platform.policies.read' && state.policyRefused)
         return json({ message: 'missing scope' }, 403);
       return json({ access_token: 'tok', expires_in: 3600 });
@@ -222,6 +225,8 @@ describe('ConnectWise contacts and device insight', () => {
       ],
       notes: [],
     });
+    // One sign-in at a time: none starts while another is still waiting for its token.
+    expect(asio.state.maxSignIns).toBe(1);
     // Groups and policy sign in with their own scope, so a key without them still shows the rest.
     expect(asio.state.scopes).toEqual(expect.arrayContaining(['platform.deviceGroups.read', 'platform.policies.read']));
 
