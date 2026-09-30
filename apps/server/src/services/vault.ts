@@ -841,9 +841,9 @@ export class VaultService {
       (await scope.restrictedAccess()) !== 'listed'
         ? null
         : await this.allowedRestricted(
-          scope,
-          rows.filter((r) => r.p.restricted).map((r) => r.p.id),
-        );
+            scope,
+            rows.filter((r) => r.p.restricted).map((r) => r.p.id),
+          );
     return rows.filter((r) => !r.p.restricted || !allowed || allowed.has(r.p.id));
   }
 
