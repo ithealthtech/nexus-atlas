@@ -24,6 +24,8 @@ import {
   type RmmHealthSettings,
   warrantySettingsSchema,
   type WarrantySettings,
+  trackerSettingsSchema,
+  type TrackerSettings,
   assetStatsSettingsSchema,
   type AssetStatsSettings,
   smtpSettingsSchema,
@@ -69,6 +71,7 @@ interface StoredSettings {
   erase?: EraseRequest;
   health?: PasswordHealthSettings & { lastRunAt?: string };
   entra?: StoredEntra;
+  trackers?: TrackerSettings;
   rmmHealth?: RmmHealthSettings;
   warranty?: WarrantySettings;
   assetStats?: AssetStatsSettings;
@@ -285,6 +288,16 @@ export class SettingsService {
     const body = assetStatsSettingsSchema.parse(input);
     body.layouts = Object.fromEntries(Object.entries(body.layouts).filter(([, v]) => v !== 'auto'));
     await this.put(orgId, 'assetStats', body);
+    return body;
+  }
+
+  async trackers(orgId: string): Promise<TrackerSettings> {
+    return trackerSettingsSchema.parse((await this.load(orgId)).trackers ?? {});
+  }
+
+  async saveTrackers(orgId: string, input: unknown): Promise<TrackerSettings> {
+    const body = trackerSettingsSchema.parse(input);
+    await this.put(orgId, 'trackers', body);
     return body;
   }
 

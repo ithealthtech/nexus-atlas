@@ -12,6 +12,7 @@ import type {
   RelationView,
   RmmHealthSettings,
   WarrantySettings,
+  TrackerSettings,
   AssetStatsSettings,
   RevisionView,
   SearchResult,
@@ -50,6 +51,8 @@ export const useRmmHealthSettings = () =>
   useQuery({ queryKey: ['settings', 'rmm-health'], queryFn: () => api<RmmHealthSettings>('/settings/rmm-health') });
 export const useWarrantySettings = () =>
   useQuery({ queryKey: ['settings', 'warranty'], queryFn: () => api<WarrantySettings>('/settings/warranty') });
+export const useTrackerSettings = () =>
+  useQuery({ queryKey: ['settings', 'trackers'], queryFn: () => api<TrackerSettings>('/settings/trackers') });
 export const useAssetStatsSettings = () =>
   useQuery({ queryKey: ['settings', 'asset-stats'], queryFn: () => api<AssetStatsSettings>('/settings/asset-stats') });
 export const useNotificationSettings = () =>

@@ -9,6 +9,7 @@ import {
   type NotificationSettings,
   type RmmHealthSettings,
   type WarrantySettings,
+  type TrackerSettings,
   type SmtpPreset,
   type SmtpSecurity,
   type SmtpSettingsView,
@@ -36,6 +37,7 @@ import {
   useRmmHealthSettings,
   useSave,
   useWarrantySettings,
+  useTrackerSettings,
 } from '@/lib/queries';
 import { ApiKeysCard } from './SettingsExtra';
 import { DangerZone } from './DangerZone';
@@ -683,6 +685,54 @@ function AssetStatsSettingsCard({ current }: { current: AssetStatsSettings }) {
   );
 }
 
+function TrackerSettingsCard({ current }: { current: TrackerSettings }) {
+  const toast = useToast();
+  const [form, setForm] = useState(current);
+  const [error, setError] = useState<string | null>(null);
+  const save = useSave(
+    (body: object) => api<TrackerSettings>('/settings/trackers', { method: 'PUT', body }),
+    [['settings', 'trackers']],
+  );
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await save.mutateAsync(form);
+      toast('Domain and SSL tracker settings saved.');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader
+        title="Domain and SSL trackers"
+        description="Keeps domain and certificate expiry dates current. Alerts go out on the alert days above."
+      />
+      <form onSubmit={submit} className="space-y-5 p-5" noValidate>
+        <Checkbox
+          checked={form.enabled}
+          onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
+          label="Check on a schedule"
+          description="Re-checks each domain with its registry (weekly, daily when it expires within 60 days) and reads each certificate daily. Off leaves only Check now."
+        />
+        <Checkbox
+          checked={form.createCertificates}
+          onChange={(e) => setForm((f) => ({ ...f, createCertificates: e.target.checked }))}
+          label="Add SSL certificates for domains"
+          description="When a domain's website serves a certificate and the client has no SSL certificates asset for it, add one."
+        />
+        <FormError message={error} />
+        <div className="flex justify-end">
+          <Button type="submit" loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 export function Settings() {
   const actor = useActor();
   const email = useEmailSettings();
@@ -690,12 +740,13 @@ export function Settings() {
   const rmmHealth = useRmmHealthSettings();
   const warranty = useWarrantySettings();
   const assetStats = useAssetStatsSettings();
+  const trackers = useTrackerSettings();
   return (
     <>
       <PageHeader
         eyebrow="Administration"
         title="Settings"
-        description="Email, alerts, log retention, RMM health, warranty, asset statistics, branding, and API keys."
+        description="Email, alerts, log retention, RMM health, warranty, asset statistics, domain and SSL trackers, branding, and API keys."
       />
       <div className="grid max-w-3xl gap-6">
         {email.data ? (
@@ -725,6 +776,11 @@ export function Settings() {
           <AssetStatsSettingsCard key={JSON.stringify(assetStats.data)} current={assetStats.data} />
         ) : (
           <Skeleton className="h-48" />
+        )}
+        {trackers.data ? (
+          <TrackerSettingsCard key={JSON.stringify(trackers.data)} current={trackers.data} />
+        ) : (
+          <Skeleton className="h-40" />
         )}
 
         <EntraSettings />

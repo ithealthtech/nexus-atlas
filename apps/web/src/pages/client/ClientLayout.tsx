@@ -4,9 +4,11 @@ import { Outlet, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Pencil, StickyNote } from 'lucide-react';
 import { LEVEL_INFO, atLeast } from '@atlas/shared';
 import { Badge, Button, Card, EmptyState, Skeleton } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { useClient } from '@/lib/queries';
 import { useActor } from '@/lib/session';
 import { ExportButton } from '@/components/ExportButton';
+import { TRACKER, useTrackers } from '@/components/Trackers';
 import { ClientForm, accessTone, statusTone } from '../Clients';
 
 const TABS = [
@@ -26,6 +28,7 @@ export function ClientLayout() {
   const { data: client, isLoading, error } = useClient(clientId);
   const [editing, setEditing] = useState(false);
   const actor = useActor();
+  const trackers = useTrackers(clientId).data;
   if (isLoading) return <Skeleton className="h-40" />;
   if (error || !client)
     return (
@@ -89,6 +92,46 @@ export function ClientLayout() {
             </AppLink>
           ),
         )}
+        <div
+          role="group"
+          aria-labelledby="client-trackers"
+          className="ml-2 flex items-center border-l border-border pl-2"
+        >
+          <span
+            id="client-trackers"
+            className="px-1.5 text-xs font-semibold tracking-wide whitespace-nowrap text-muted uppercase"
+          >
+            Trackers
+          </span>
+          {(['domain', 'ssl'] as const).map((kind) => {
+            const counts = trackers?.[kind];
+            const attention = counts ? counts.expired + counts.soon : 0;
+            return (
+              <AppLink
+                key={kind}
+                to={`/clients/${clientId}/trackers/${TRACKER[kind].path}`}
+                className="relative -mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
+              >
+                {TRACKER[kind].title}
+                {counts && (
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 text-xs tabular-nums',
+                      attention ? 'bg-warning-soft text-warning' : 'bg-surface-3 text-text-2',
+                    )}
+                  >
+                    {counts.total}
+                    <span className="sr-only">
+                      {' '}
+                      {counts.total === 1 ? TRACKER[kind].noun : `${TRACKER[kind].noun}s`}
+                      {attention ? `, ${attention} expired or expiring soon` : ''}
+                    </span>
+                  </span>
+                )}
+              </AppLink>
+            );
+          })}
+        </div>
       </nav>
       <Outlet />
       <ClientForm client={client} open={editing} onClose={() => setEditing(false)} />

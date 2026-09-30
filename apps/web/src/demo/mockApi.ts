@@ -27,6 +27,12 @@ import {
   type TicketReport,
   type TicketStatusCount,
   type TicketView,
+  type TrackerCounts,
+  type TrackerFilter,
+  type TrackerItem,
+  type TrackerKind,
+  type TrackerReport,
+  type TrackerSettings,
   type WarrantyAsset,
   type WarrantyCounts,
   type WarrantyFilter,
@@ -397,6 +403,58 @@ function assetStatsReport(client: string | null): AssetStatsReport {
     })
     .sort((a, b) => b.counts.total - a.counts.total);
   return { totals: kindCounts(list), os, clients };
+}
+
+// ---------- domain and SSL trackers (the sample's Domains and SSL certificates assets) ----------
+let trackerSettings: TrackerSettings = { enabled: true, createCertificates: true };
+const TRACKER_LAYOUT: Record<string, TrackerKind> = { domain: 'domain', ssl_certificate: 'ssl' };
+const trackerStanding = (daysLeft: number | null): TrackerFilter =>
+  daysLeft === null ? 'unknown' : daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'soon' : 'active';
+function trackerItems(client: string | null): TrackerItem[] {
+  const start = Date.parse(`${now().slice(0, 10)}T00:00:00Z`);
+  return assets
+    .filter((a) => !a.archived && (!client || a.clientId === client) && TRACKER_LAYOUT[layoutOf(a.layoutId).key])
+    .map((a, i) => {
+      const kind = TRACKER_LAYOUT[layoutOf(a.layoutId).key]!;
+      const fields = a.fields as Record<string, unknown>;
+      const expires = typeof fields.expires === 'string' && fields.expires ? fields.expires : null;
+      const daysLeft = expires ? Math.round((Date.parse(`${expires}T00:00:00Z`) - start) / 86_400_000) : null;
+      const source = String(fields[kind === 'domain' ? 'registrar' : 'issuer'] ?? '');
+      return {
+        assetId: a.id,
+        kind,
+        name: a.name,
+        clientId: a.clientId,
+        clientName: clientName(a.clientId) ?? '',
+        source,
+        expires,
+        daysLeft,
+        standing: trackerStanding(daysLeft),
+        checkedAt: ago(40 + i * 17),
+        ok: !!expires,
+        detail: expires
+          ? source && `${kind === 'domain' ? 'Registrar' : 'Issued by'} ${source}`
+          : "The registry didn't give an expiry date.",
+      };
+    })
+    .sort((a, b) => (a.expires ?? '9999').localeCompare(b.expires ?? '9999') || a.name.localeCompare(b.name));
+}
+function trackerCounts(list: TrackerItem[]): TrackerCounts {
+  const c: TrackerCounts = { total: list.length, expired: 0, soon: 0, active: 0, unknown: 0 };
+  for (const i of list) c[i.standing]++;
+  return c;
+}
+function trackerReport(client: string | null): TrackerReport {
+  const list = trackerItems(client);
+  const of = (kind: TrackerKind, id?: string) =>
+    trackerCounts(list.filter((i) => i.kind === kind && (!id || i.clientId === id)));
+  const clients = [...new Set(list.map((i) => i.clientId))].map((id) => ({
+    clientId: id,
+    clientName: clientName(id) ?? '',
+    domain: of('domain', id),
+    ssl: of('ssl', id),
+  }));
+  return { soonDays: 30, domain: of('domain'), ssl: of('ssl'), clients };
 }
 
 // ---------- documentation ----------
@@ -1539,6 +1597,23 @@ on('PUT', '/settings/asset-stats', (_m, b) => {
   return (assetStatsSettings = { layouts: Object.fromEntries(layouts) });
 });
 on('GET', '/settings/warranty', () => warrantySettings);
+on('GET', '/trackers', (_m, _b, q) => trackerReport(q.get('client')));
+on('GET', '/trackers/items', (_m, _b, q) =>
+  trackerItems(q.get('client')).filter(
+    (i) => i.kind === q.get('kind') && (!q.get('filter') || i.standing === q.get('filter')),
+  ),
+);
+on('POST', '/trackers/check', () => {
+  const list = trackerItems(null);
+  return {
+    domains: list.filter((i) => i.kind === 'domain').length,
+    certificates: list.filter((i) => i.kind === 'ssl').length,
+    created: 0,
+    failed: list.filter((i) => !i.ok).length,
+  };
+});
+on('GET', '/settings/trackers', () => trackerSettings);
+on('PUT', '/settings/trackers', (_m, b) => (trackerSettings = b as TrackerSettings));
 on('PUT', '/settings/warranty', (_m, b) => (warrantySettings = b as WarrantySettings));
 on('GET', '/rmm-health/trend', (_m, _b, q) => rmmTrend(q.get('client')));
 on('GET', '/settings/rmm-health', () => rmmSettings);
