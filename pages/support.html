@@ -170,7 +170,71 @@
               <div>
                 <p>
                   Run it again. The importer updates what it already brought in rather than duplicating it, and a stuck
-                  run is picked up again automatically.
+                  run is picked up again automatically. Clients duplicated by an import before 1.7.3 can be merged on
+                  the
+                  <strong>Duplicates</strong> page.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>ConnectWise devices or tickets are missing</summary>
+              <div>
+                <p>
+                  Open <strong>Import &amp; export &rarr; ConnectWise RMM</strong> and check that the company is linked
+                  to a client, that Devices and Tickets are ticked under <em>What to sync</em>, and read the last sync's
+                  messages. Tickets need the tickets read permission on the API key. Choose <strong>Sync now</strong>
+                  after a change.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>Manufacturer, check-in, or protection is blank on a synced device</summary>
+              <div>
+                <p>
+                  Update to 1.7.6 and sync again: earlier versions didn't ask ConnectWise for the hardware and antivirus
+                  details. A device ConnectWise has no antivirus data for shows as not reported.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>A warranty date is missing</summary>
+              <div>
+                <p>
+                  Automatic lookups cover Dell, Lenovo, and HP devices that have a serial number. Choose
+                  <strong>Check warranty</strong> on the asset to try again now, or type the date in; a date someone
+                  entered is never replaced. Lookups can be turned off under
+                  <strong>Settings &rarr; Asset warranty</strong>.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>A domain or certificate shows as unknown</summary>
+              <div>
+                <p>
+                  Choose <strong>Check now</strong> on the client's Domain Tracker or SSL Tracker. Some registries don't
+                  publish an expiry date, and a certificate can only be read from a site Atlas can reach on port 443;
+                  for those, enter the date on the asset.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>A password rotation failed</summary>
+              <div>
+                <p>
+                  The old password is still in the vault. Read the reason under
+                  <strong>Administration &rarr; Password rotation &rarr; Recent attempts</strong> or in the entry's
+                  access history. Check the script ID, that the device is online in ConnectWise, and that the API key
+                  has Automation read and create. Failed accounts are tried again after a day.
+                </p>
+              </div>
+            </details>
+            <details data-filter-item>
+              <summary>The browser extension won't sign in</summary>
+              <div>
+                <p>
+                  Enter your Atlas address in the extension, then approve the browser in Atlas after checking that the
+                  codes match. Its session ends after 7 days unused, 30 days in total, or when your password changes;
+                  sign in again the same way. Client accounts can't use it.
                 </p>
               </div>
             </details>

@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupOwner, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -76,5 +79,25 @@ describe('request hardening', () => {
     const disposition = String(res.headers['content-disposition']);
     expect(disposition).toMatch(/^attachment; filename="[\x20-\x7e]+"; filename\*=UTF-8''/);
     expect(decodeURIComponent(disposition.split("UTF-8''")[1]!)).toContain('東京');
+  });
+});
+
+describe('web app routes', () => {
+  it('loads the app for client-side pages under /assets/, and 404s only missing files there', async () => {
+    const dist = mkdtempSync(join(tmpdir(), 'atlas-web-'));
+    mkdirSync(join(dist, 'assets'));
+    writeFileSync(join(dist, 'index.html'), '<!doctype html><title>Atlas</title>');
+    writeFileSync(join(dist, 'assets', 'app-1234.js'), 'console.log(1)');
+    const t = await startApp({ WEB_DIST: dist });
+    try {
+      const page = await t.app.inject({ url: '/assets/5f0c2a4e-1b7d-4c55-9f0e-2d3c4b5a6978' });
+      expect(page.statusCode).toBe(200);
+      expect(page.body).toContain('<title>Atlas</title>');
+      expect((await t.app.inject({ url: '/assets/app-1234.js' })).body).toBe('console.log(1)');
+      expect((await t.app.inject({ url: '/assets/missing-99.js' })).statusCode).toBe(404);
+      expect((await t.app.inject({ url: '/clients/x?tab=1' })).statusCode).toBe(200);
+    } finally {
+      await t.close();
+    }
   });
 });

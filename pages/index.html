@@ -166,7 +166,7 @@
               <h3>Ticket dashboard</h3>
               <p>
                 Tickets from the ConnectWise platform with opened and closed per day, a tile per status, and a ticket
-                table on each client, each linked to its page in ConnectWise.
+                table on each client. In North America, tickets link to their page in ConnectWise.
               </p>
             </article>
             <article class="card">
@@ -229,29 +229,75 @@
           <figure class="panel">
             <img
               src="images/dashboard.png"
-              alt="MSP Atlas dashboard listing clients, recent activity, and upcoming expirations"
+              alt="The MSP Atlas dashboard with client, asset, document, and password health totals above the RMM health card"
               loading="lazy"
             />
             <figcaption>
-              <strong>Dashboard.</strong> Your clients, recent changes, and what expires soon: certificates, domains,
-              warranties, and passwords due for rotation.
+              <strong>Dashboard.</strong> Totals for clients, assets, documents, and password health, then the cards you
+              choose to show: RMM health, tickets, asset statistics, domain and SSL expiry, favorites, and what expires
+              next. Customize shows, hides, and reorders them.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/rmm-health.png"
+              alt="RMM health card with agent online, stale agent, and endpoint protection charts and a per-client table"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>RMM health.</strong> Devices synced from ConnectWise RMM, with agents online from the heartbeat,
+              stale check-ins, and endpoint protection, plus the clients with the most trouble first.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/tickets.png"
+              alt="Tickets card with opened and closed tickets per day for 30 days and a count per status"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>Tickets.</strong> Read-only from the ConnectWise platform: opened and closed per day over 7, 30,
+              or 90 days, a tile per status, and a ticket table on each client. North American connections link each
+              ticket to ConnectWise.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/asset-stats.png"
+              alt="Asset statistics card with device counts by kind and an operating system chart marking versions out of support"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>Asset statistics.</strong> Servers, workstations, network devices, printers, and phones, with an
+              operating system chart that flags the ones past end of support.
+            </figcaption>
+          </figure>
+          <figure class="panel">
+            <img
+              src="images/trackers.png"
+              alt="Domain Tracker for a client listing each domain, its expiry status, and when it was last checked"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>Domain and SSL trackers.</strong> Registrations are re-checked with the registry and certificates
+              read from each site on a schedule, so expirations and alerts use real dates.
             </figcaption>
           </figure>
           <figure class="panel">
             <img
               src="images/asset.png"
-              alt="An asset page showing its fields, related items, attached files, and version history"
+              alt="An asset page showing a firewall's fields, a Check warranty button, related runbook and password, and version history"
               loading="lazy"
             />
             <figcaption>
               <strong>Assets.</strong> Thirteen built-in layouts plus your own, with related items, safe attachments,
-              and full version history.
+              full version history, and Check warranty for Dell, Lenovo, and HP.
             </figcaption>
           </figure>
           <figure class="panel">
             <img
               src="images/document.png"
-              alt="A runbook in the rich-text editor, linked to the firewall it describes"
+              alt="A runbook with a checklist and an escalation section, linked to the firewall it describes"
               loading="lazy"
             />
             <figcaption>
@@ -262,23 +308,34 @@
           <figure class="panel">
             <img
               src="images/password.png"
-              alt="A password entry with reveal, a live one-time code, share links, and access history"
+              alt="A password entry with reveal and copy, a hidden one-time code, health, rotation date, share links, and access history"
               loading="lazy"
             />
             <figcaption>
-              <strong>Password vault.</strong> Logins with live one-time codes, BitLocker recovery keys, a generator,
-              rotation reminders, and one-time share links encrypted in the browser.
+              <strong>Password vault.</strong> Logins with live one-time codes, secure notes and encrypted files, health
+              and rotation, one-time share links encrypted in the browser, and a record of every reveal.
             </figcaption>
           </figure>
           <figure class="panel">
             <img
               src="images/people.png"
-              alt="The people and access page showing roles, client access levels, and groups"
+              alt="The people and access page listing roles, client access, sign-in status, and two-step verification"
               loading="lazy"
             />
             <figcaption>
               <strong>People and access.</strong> Six roles, per-client access levels, and groups. Changes apply
               immediately, even to people already signed in.
+            </figcaption>
+          </figure>
+          <figure class="panel panel-phone">
+            <img
+              src="images/mobile-dark.png"
+              alt="A password entry on a phone in the dark theme, with copy buttons and a hidden one-time code"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>On any screen.</strong> The same app on a phone or tablet, in light or dark, tested to WCAG 2.2
+              AA.
             </figcaption>
           </figure>
         </div>
@@ -340,8 +397,9 @@ PostgreSQL 16  +  attachments folder</code></pre>
             <p class="section-kicker">Roadmap</p>
             <h2>What's coming next</h2>
             <p>
-              Planned work, not yet released. The ConnectWise items reuse the existing ConnectWise platform connection,
-              with no new vendor keys. Some depend on which ConnectWise products you license.
+              Work that isn't in a release yet. Security and compliance is finished and ships in the next release; the
+              rest is planned. The ConnectWise items reuse the existing ConnectWise platform connection, with no new
+              vendor keys. Some depend on which ConnectWise products you license.
             </p>
           </div>
           <div class="grid-3">
@@ -357,7 +415,7 @@ PostgreSQL 16  +  attachments folder</code></pre>
               </ul>
             </article>
             <article class="card">
-              <span class="badge badge-warning">Planned</span>
+              <span class="badge badge-success">Next release</span>
               <h3>Security and compliance</h3>
               <ul>
                 <li>Backup status and DR readiness on the client overview</li>

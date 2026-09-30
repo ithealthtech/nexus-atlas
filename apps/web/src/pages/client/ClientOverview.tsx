@@ -30,7 +30,7 @@ export function ClientOverview() {
     .map((l) => ({ ...l, count: assets.filter((a) => a.layoutId === l.id).length }))
     .filter((l) => l.count > 0);
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-6">
         <Card>
           {/* Every field shows, even when empty, so the gaps are easy to spot and fill. */}

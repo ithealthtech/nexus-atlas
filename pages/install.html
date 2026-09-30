@@ -63,6 +63,8 @@
             <a href="#windows">Windows Server</a>
             <a href="#key">The master key</a>
             <a href="#first-day">First day</a>
+            <a href="#connectwise">ConnectWise</a>
+            <a href="#apps">Browser extension and Windows app</a>
             <a href="#backups">Backups and restore</a>
             <a href="#upgrade">Upgrading</a>
           </nav>
@@ -145,10 +147,50 @@ docker compose -f deploy/docker-compose.yml logs app | grep "setup code"</code><
                 Set up email under <strong>Settings &rarr; Email</strong> (there's a Microsoft 365 preset) so password
                 resets and expiry alerts work.
               </li>
-              <li>Add your clients, or import them from Hudu or CSV under <strong>Import &amp; export</strong>.</li>
+              <li>
+                Add your clients, or import them from Hudu or CSV under <strong>Import &amp; export</strong>. A Hudu
+                company links to the Atlas client with the same name instead of adding a second one.
+              </li>
+              <li>Connect ConnectWise to bring in devices and tickets (below).</li>
               <li>Invite technicians and set their client access under <strong>People &amp; access</strong>.</li>
               <li>Open <strong>System status</strong> and make sure every check is green.</li>
             </ol>
+
+            <h2 id="connectwise">ConnectWise</h2>
+            <p>
+              Atlas reads devices and tickets from the ConnectWise platform API. In ConnectWise RMM, open
+              <strong>Integrations &rarr; API Access</strong> and create a client ID and secret. Add the tickets read
+              permission for the ticket dashboard, and <strong>Automation read</strong> and
+              <strong>Automation create</strong> if you'll use password rotation. In Atlas, enter them under
+              <strong>Import &amp; export &rarr; ConnectWise RMM</strong>, link each ConnectWise company to a client,
+              and choose what to sync.
+            </p>
+            <ul>
+              <li>
+                <strong>Devices</strong> become device assets with manufacturer, model, serial number, operating system,
+                last check-in, online status, and endpoint protection. Fields you add to them are kept on each sync.
+              </li>
+              <li><strong>Tickets</strong> are read-only and feed the Tickets card and each client's ticket table.</li>
+              <li>
+                <strong>Warranty dates</strong> for Dell, Lenovo, and HP are looked up by serial number when ConnectWise
+                has none. There are no vendor keys to set up, and a date someone typed in is never replaced.
+              </li>
+            </ul>
+            <p>The sync runs every hour, and <strong>Sync now</strong> runs it straight away.</p>
+
+            <h2 id="apps">Browser extension and Windows app</h2>
+            <p>
+              The <strong>browser extension</strong> for Edge and Chrome fills saved logins for staff. Build it with
+              <code>npm run build:extension</code>, then load <code>apps/extension/dist</code> unpacked to try it, or
+              publish the zip privately and force-install it with the <code>ExtensionInstallForcelist</code> group
+              policy. Each browser is approved in Atlas after checking a code, and stores no passwords.
+            </p>
+            <p>
+              <strong>Atlas for Windows</strong> (preview) is a tray app: Ctrl+Shift+Space searches what you can see and
+              copies a username, password, or one-time code. It signs in through your browser and keeps only a
+              DPAPI-protected session token. Build it from <code>apps/windows</code>; a signed installer with automatic
+              updates is planned.
+            </p>
 
             <h2 id="backups">Backups and restore</h2>
             <p>
