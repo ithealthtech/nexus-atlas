@@ -257,18 +257,23 @@ describe('Hudu import', () => {
     expect(preview.data).toMatchObject({ companies: 26, assetLayouts: 1, assets: 1, articles: 2, passwords: 2 });
     expect(hudu.calls).toContain('/api/v1/companies?page=2');
 
+    // A client already in Atlas under the same name is linked to its Hudu company, not duplicated.
+    const existing = (await owner.call('POST', '/api/clients', { name: 'harbor dental group' })).data.id;
+
     const start = await owner.call('POST', '/api/import/hudu/run', {});
     expect(start.status).toBe(202);
     const job = await waitForJob(owner, start.data.id);
     expect(job.status, JSON.stringify(job)).toBe('done');
-    expect(job.counts.clients).toMatchObject({ created: 26, failed: 0 });
+    expect(job.counts.clients).toMatchObject({ created: 25, updated: 1, failed: 0 });
     expect(job.counts.assets).toMatchObject({ created: 1, failed: 0 });
     expect(job.counts.documents, JSON.stringify(job.messages)).toMatchObject({ created: 2 });
     expect(job.counts.passwords).toMatchObject({ created: 1, skipped: 1 });
 
     const clients = (await owner.call('GET', '/api/clients')).data as { id: string; name: string; notes: string }[];
     expect(clients.map((c) => c.name)).not.toContain('Old Client');
+    expect(clients).toHaveLength(26);
     const harbor = clients.find((c) => c.name === 'Harbor Dental Group')!;
+    expect(harbor.id).toBe(existing);
     expect(harbor.notes).toContain('Three offices');
     expect((await owner.call('GET', `/api/clients/${harbor.id}/locations`)).data[0]).toMatchObject({
       address: '410 Harbor St',
