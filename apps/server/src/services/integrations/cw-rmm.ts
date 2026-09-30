@@ -26,8 +26,13 @@ export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.auto
 export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
 /** Adding ticket notes (the scope names CallBridge uses against the same API). Asked for only when notes are on. */
 export const TICKET_NOTE_SCOPES = `${TICKET_SCOPES} platform.tickets.create`;
-/** Writing the "Atlas link" custom fields. Asked for only when that option is on. */
+/** Writing the "Atlas link" custom fields on devices. Asked for only when that option is on. */
 export const LINK_SCOPES = `${SCOPES} platform.devices.write`;
+/**
+ * Writing them on companies. The spec names no scope for company custom fields; this follows its devices.write
+ * naming, on a token of its own so a key refused it still writes device links.
+ */
+export const COMPANY_LINK_SCOPES = `${SCOPES} platform.companies.write`;
 const RETRY_MS = 2000;
 /** The code on errors that mean the key can't sign in or lacks a permission: no other request shape will help. */
 export const ACCESS_DENIED = 'cw_access_denied';

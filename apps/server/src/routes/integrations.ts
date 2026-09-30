@@ -16,6 +16,7 @@ import { actorFor } from '../identity/service.js';
 import type { StoredCwRmm } from '../services/settings.js';
 import { ImportRun } from '../services/importers/common.js';
 import {
+  COMPANY_LINK_SCOPES,
   companiesWithMapping,
   CwRmmClient,
   deviceLayout,
@@ -68,8 +69,10 @@ async function startSync(
       } else await clearTickets(db, actor.orgId);
       // Writing into ConnectWise is opt-in, and gets its own token so read-only keys never ask for write scopes.
       if (options.atlasLinks && publicUrl) {
-        const writer = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, LINK_SCOPES);
-        await runLinkWriteBack(db, actor.orgId, new CwLinkWriter(writer), run, saved.map, publicUrl);
+        const writer = (scopes: string) =>
+          CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, scopes);
+        const links = new CwLinkWriter(writer(LINK_SCOPES), writer(COMPANY_LINK_SCOPES));
+        await runLinkWriteBack(db, actor.orgId, links, run, saved.map, publicUrl);
       }
       await run.flush('done');
       await settings.patchCwRmm(actor.orgId, { lastSyncAt: new Date().toISOString() });

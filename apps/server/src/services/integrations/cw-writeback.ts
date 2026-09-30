@@ -23,11 +23,17 @@ export function atlasUrl(publicUrl: string, entity: Entity, atlasId: string) {
   return `${publicUrl.replace(/\/+$/, '')}/${entity === 'endpoint' ? 'assets' : 'clients'}/${atlasId}`;
 }
 
-/** Writes Atlas links into the "Atlas link" custom field, making the field once when ConnectWise has none. */
+/**
+ * Writes Atlas links into the "Atlas link" custom field, making the field once when ConnectWise has none. Devices
+ * and companies may use separate clients, as their write permissions differ.
+ */
 export class CwLinkWriter {
   private readonly fields = new Map<Entity, Promise<string>>();
+  private readonly clients: Record<Entity, CwRmmClient>;
 
-  constructor(private readonly client: CwRmmClient) {}
+  constructor(devices: CwRmmClient, companies: CwRmmClient = devices) {
+    this.clients = { endpoint: devices, client: companies };
+  }
 
   /** The ID of the "Atlas link" field for devices or companies. */
   field(entity: Entity): Promise<string> {
@@ -42,11 +48,12 @@ export class CwLinkWriter {
   }
 
   private async findOrCreate(entity: Entity) {
-    const existing = listOf(await this.client.get(DEFINITIONS)).find(
+    const client = this.clients[entity];
+    const existing = listOf(await client.get(DEFINITIONS)).find(
       (d) => ENTITY_NAMES[entity].test(text(d, 'entityType')) && text(d, 'name').toLowerCase() === LINK_FIELD.toLowerCase(),
     );
     if (existing && text(existing, 'id')) return text(existing, 'id');
-    const created = await this.client.post(DEFINITIONS, {
+    const created = await client.post(DEFINITIONS, {
       entityType: entity,
       name: LINK_FIELD,
       description: 'Opens this in Nexus Atlas, for its documentation and passwords.',
@@ -65,7 +72,7 @@ export class CwLinkWriter {
       entity === 'endpoint'
         ? `/api/platform/v2/device/endpoints/${encodeURIComponent(id)}/custom-fields`
         : `/api/platform/v1/company/companies/${encodeURIComponent(id)}/custom-fields`;
-    await this.client.put(path, [{ entityId: id, attributeId, value: url }]);
+    await this.clients[entity].put(path, [{ entityId: id, attributeId, value: url }]);
   }
 }
 

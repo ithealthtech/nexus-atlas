@@ -245,6 +245,8 @@ function TicketNotesPanel({ ticketId }: { ticketId: string }) {
 /** Tickets as a table: number (linked to ConnectWise), summary, status, age, and last update. Text is escaped. */
 function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClient: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
+  // Notes are internal to the MSP: client portal users don't get them.
+  const staff = useActor().isStaff;
   const cols = showClient ? 7 : 6;
   return (
     <div className="overflow-x-auto">
@@ -271,9 +273,11 @@ function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClien
             <th scope="col" className="py-2 pr-3 font-medium">
               Last updated
             </th>
-            <th scope="col" className="py-2 font-medium">
-              <span className="sr-only">Notes</span>
-            </th>
+            {staff && (
+              <th scope="col" className="py-2 font-medium">
+                <span className="sr-only">Notes</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
