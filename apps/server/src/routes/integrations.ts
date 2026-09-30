@@ -40,7 +40,7 @@ async function startSync(
       // Tickets use their own token, so a key without ticket access still syncs devices.
       if (options.tickets) {
         const tickets = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, TICKET_SCOPES);
-        await runTicketSync(db, actor.orgId, new CwTicketReader(tickets), run, saved.map);
+        await runTicketSync(db, actor.orgId, new CwTicketReader(tickets, saved.region), run, saved.map);
       } else await clearTickets(db, actor.orgId);
       await run.flush('done');
       await settings.patchCwRmm(actor.orgId, { lastSyncAt: new Date().toISOString() });
