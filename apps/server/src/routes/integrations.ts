@@ -6,7 +6,14 @@ import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { actorFor } from '../identity/service.js';
 import { ImportRun } from '../services/importers/common.js';
-import { companiesWithMapping, CwRmmClient, runCwRmmSync, saveMapping } from '../services/integrations/cw-rmm.js';
+import {
+  companiesWithMapping,
+  CwRmmClient,
+  runCwRmmSync,
+  saveMapping,
+  TICKET_SCOPES,
+} from '../services/integrations/cw-rmm.js';
+import { clearTickets, CwTicketReader, runTicketSync } from '../services/integrations/cw-tickets.js';
 import { RmmHealthService } from '../services/rmm-health.js';
 import type { SettingsService } from '../services/settings.js';
 
@@ -24,10 +31,16 @@ async function startSync(
   if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
   const client = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher);
   const run = await ImportRun.start(db, actor, 'cw-rmm');
-  const done = runCwRmmSync(db, actor, client, run, saved.map, cwRmmSyncOptionsSchema.parse(saved.options ?? {}))
+  const options = cwRmmSyncOptionsSchema.parse(saved.options ?? {});
+  const done = runCwRmmSync(db, actor, client, run, saved.map, options)
     .then(async (complete) => {
       // Today's point on the RMM health trend lines, for the clients whose devices were read.
       await new RmmHealthService(settings).snapshot(db, actor.orgId, complete).catch((error) => log(error));
+      // Tickets use their own token, so a key without ticket access still syncs devices.
+      if (options.tickets) {
+        const tickets = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, TICKET_SCOPES);
+        await runTicketSync(db, actor.orgId, new CwTicketReader(tickets), run, saved.map);
+      } else await clearTickets(db, actor.orgId);
       await run.flush('done');
       await settings.patchCwRmm(actor.orgId, { lastSyncAt: new Date().toISOString() });
     })
@@ -39,7 +52,7 @@ async function startSync(
   return { id: run.jobId, done };
 }
 
-/** ConnectWise RMM (Asio): connection, company mapping, and syncs (manual and hourly). */
+/** ConnectWise RMM (Asio): connection, company mapping, and syncs of devices and tickets (manual and hourly). */
 export function registerIntegrationRoutes(
   app: FastifyInstance,
   deps: {
@@ -88,6 +101,8 @@ export function registerIntegrationRoutes(
     const actor = admin(req);
     recent(req);
     await settings.forgetCwRmm(actor.orgId);
+    // Synced devices stay as documentation; tickets are only a copy of ConnectWise's, so they go.
+    await clearTickets(db, actor.orgId);
     await event(req, 'ConnectWise RMM connection removed');
     return { ok: true };
   });
@@ -104,7 +119,10 @@ export function registerIntegrationRoutes(
   });
   app.put('/api/integrations/cw-rmm/options', authed, async (req) => {
     const actor = admin(req);
-    await settings.patchCwRmm(actor.orgId, { options: cwRmmSyncOptionsSchema.parse(req.body) });
+    const options = cwRmmSyncOptionsSchema.parse(req.body);
+    await settings.patchCwRmm(actor.orgId, { options });
+    // Tickets switched off leave the dashboard at once, rather than staying frozen at the last sync.
+    if (!options.tickets) await clearTickets(db, actor.orgId);
     return settings.cwRmmView(actor.orgId);
   });
   app.post('/api/integrations/cw-rmm/sync', authed, async (req, reply) => {

@@ -21,7 +21,11 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
 /** Running the rotation script needs automation scopes too. Only rotation asks for them, so a key without them still syncs. */
 export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.automation.create`;
+/** Tickets get their own token, so a key without ticket access still syncs devices. */
+export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
 const RETRY_MS = 2000;
+/** The code on errors that mean the key can't sign in or lacks a permission: no other request shape will help. */
+export const ACCESS_DENIED = 'cw_access_denied';
 // Five attempts at this length, plus the lead-in and the company prefix, fit an import job message (800 characters).
 const ATTEMPT_CHARS = 100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,21 +46,21 @@ const DEVICE_QUERIES: DeviceQuery[] = [
 
 // The Asio API's field names vary between endpoints and versions, so each value is read from the first
 // name that's present.
-const pick = (o: Json, ...keys: string[]): unknown => {
+export const pick = (o: Json, ...keys: string[]): unknown => {
   for (const key of keys) {
     const value = key.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Json)[k] : undefined), o);
     if (value !== undefined && value !== null && value !== '') return value;
   }
   return undefined;
 };
-const text = (o: Json, ...keys: string[]) => {
+export const text = (o: Json, ...keys: string[]) => {
   const v = pick(o, ...keys);
   if (Array.isArray(v)) return v.filter((x) => typeof x === 'string').join(', ');
   return typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
 };
 /** The list inside a response, whatever it's called. */
-const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices'];
-const listOf = (body: unknown, depth = 0): Json[] => {
+const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices', 'tickets'];
+export const listOf = (body: unknown, depth = 0): Json[] => {
   if (Array.isArray(body)) return body as Json[];
   if (!body || typeof body !== 'object' || depth > 3) return [];
   const obj = body as Json;
@@ -370,7 +374,7 @@ function recordsOf(body: unknown, depth = 0): Json[] {
   });
 }
 /** A response's field names (never values), two levels deep, for diagnosing an unexpected shape. */
-const shapeOf = (body: unknown): string => {
+export const shapeOf = (body: unknown): string => {
   if (Array.isArray(body)) return `a list of ${body.length}`;
   if (!body || typeof body !== 'object') return typeof body;
   return Object.entries(body as Json)
@@ -523,11 +527,13 @@ export class CwRmmClient {
       throw new HttpError(
         400,
         `ConnectWise RMM rejected the client ID or secret, or the key is missing a scope.${await detail(res)}`,
+        ACCESS_DENIED,
       );
     if (res.status === 423)
       throw new HttpError(
         502,
         'ConnectWise RMM has temporarily locked this API key after too many sign-ins. Wait a few minutes, then sync again.',
+        ACCESS_DENIED,
       );
     if (!res.ok) throw new HttpError(502, `ConnectWise RMM returned ${res.status} when signing in.${await detail(res)}`);
     const body = (await res.json()) as Json;
@@ -536,6 +542,11 @@ export class CwRmmClient {
     const seconds = Number(pick(body, 'expires_in', 'expiresIn')) || 3600;
     this.token = { value, expires: Date.now() + seconds * 1000 };
     return value;
+  }
+
+  /** A GET for another part of the platform API (tickets), with the same sign-in, retries, and errors. */
+  get(path: string): Promise<unknown> {
+    return this.call('GET', path);
   }
 
   private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
@@ -557,6 +568,7 @@ export class CwRmmClient {
       throw new HttpError(
         400,
         `ConnectWise RMM refused ${where}. Check the key's scopes in API Access.${await detail(res)}`,
+        ACCESS_DENIED,
       );
     if (!res.ok)
       throw new HttpError(

@@ -138,8 +138,22 @@
     {
       "idx": 19,
       "version": "7",
-      "when": 1790721210454,
-      "tag": "0019_password_rotation",
+      "when": 1790720401414,
+      "tag": "0019_tickets",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790730655808,
+      "tag": "0020_trackers",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790730868400,
+      "tag": "0021_password_rotation",
       "breakpoints": true
     }
   ]
