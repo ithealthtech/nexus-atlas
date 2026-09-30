@@ -136,6 +136,8 @@ export class CwTicketReader {
   note = '';
   /** Tickets with no CW-System note naming their portal ticket number yet. */
   noPortalId = 0;
+  /** Portal ticket numbers found on earlier syncs, by ticket ID, so each ticket's notes are read only once. */
+  readonly portalNumbers = new Map<string, string>();
   /** Whether ConnectWise refused to show ticket notes, where the portal ticket number is. */
   notesDenied = false;
   /** Companies with more tickets than one sync lists: their tickets not listed are kept, not deleted. */
@@ -185,7 +187,15 @@ export class CwTicketReader {
    * Read through the ticket notes API, as the notes panel is.
    */
   private async portalIds(list: CwTicket[], link: (number: string) => string | null) {
+    for (const t of list) {
+      const found = this.portalNumbers.get(t.id);
+      if (!numeric(t.number) && found && numeric(found)) {
+        t.number = found;
+        t.url = link(found) ?? t.url;
+      }
+    }
     if (this.notesDenied) return;
+    // Only tickets still without one are looked up, so each sync reaches tickets the last one didn't.
     for (const t of list.filter((k) => !numeric(k.number)).slice(0, MAX_PORTAL_LOOKUPS)) {
       let notes: Json[];
       try {
@@ -310,14 +320,12 @@ export async function runTicketSync(
   const linked = Object.entries(map).flatMap(([companyId, m]) =>
     m.action === 'link' ? [[companyId, m.clientId] as const] : [],
   );
-  const known = new Set(
-    (
-      await db
-        .select({ id: t.externalId })
-        .from(t)
-        .where(and(eq(t.orgId, orgId), eq(t.source, TICKET_SOURCE)))
-    ).map((r) => r.id),
-  );
+  const stored = await db
+    .select({ id: t.externalId, number: t.number })
+    .from(t)
+    .where(and(eq(t.orgId, orgId), eq(t.source, TICKET_SOURCE)));
+  const known = new Set(stored.map((r) => r.id));
+  for (const r of stored) if (r.number) reader.portalNumbers.set(r.id, r.number);
   const read: string[] = [];
   const seen: string[] = [];
   for (const [companyId, clientId] of linked) {
