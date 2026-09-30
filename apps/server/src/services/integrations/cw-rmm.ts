@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type CwRmmCompany, type CwRmmRegion, type LayoutField, type RmmDeviceKind, type RmmProtection, MAX_LAYOUT_FIELDS } from '@atlas/shared';
+import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type AssetView, type CwRmmCompany, type CwRmmRegion, type LayoutField, type RmmDeviceKind, type RmmProtection, MAX_LAYOUT_FIELDS } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
@@ -1084,9 +1084,46 @@ export async function saveMapping(
   await settings.patchCwRmm(actor.orgId, { map });
 }
 
+// A layout named for devices, which the sync saves devices in when no layout was chosen.
+const DEVICE_LAYOUT = /^(managed |rmm )?devices?( assets?)?$/;
+
 /**
- * Syncs linked companies: sites become locations, devices become Configurations assets. A device the RMM no
- * longer reports is archived, but only when its company's device list was fetched in full.
+ * The layout devices are saved in: the one chosen in the sync options, else a layout named for devices
+ * ("Devices", "Device assets"), else Configurations. `configurationId` is the Configurations layout, whose synced
+ * devices move to the chosen layout.
+ */
+export async function deviceLayout(db: Database, orgId: string, chosen: string | null) {
+  const layouts = await db
+    .select({
+      id: schema.assetLayouts.id,
+      key: schema.assetLayouts.key,
+      name: schema.assetLayouts.name,
+      archived: schema.assetLayouts.archived,
+    })
+    .from(schema.assetLayouts)
+    .where(eq(schema.assetLayouts.orgId, orgId));
+  const configuration = layouts.find((l) => l.key === 'configuration');
+  if (chosen) {
+    const picked = layouts.find((l) => l.id === chosen);
+    if (!picked || picked.archived)
+      throw new HttpError(
+        400,
+        'The asset layout chosen for ConnectWise RMM devices is missing or archived. Pick another to sync devices.',
+      );
+    return { id: picked.id, configurationId: configuration?.id ?? null };
+  }
+  const named = layouts
+    .filter((l) => !l.archived && l.key !== 'configuration')
+    .find((l) => DEVICE_LAYOUT.test(l.name.trim().toLowerCase()) || DEVICE_LAYOUT.test(l.key));
+  if (named) return { id: named.id, configurationId: configuration?.id ?? null };
+  if (!configuration || configuration.archived)
+    throw new HttpError(400, 'The Configurations asset layout is missing or archived. Restore it to sync devices.');
+  return { id: configuration.id, configurationId: configuration.id };
+}
+
+/**
+ * Syncs linked companies: sites become locations, devices become assets in the device layout (see deviceLayout).
+ * A device the RMM no longer reports is archived, but only when its company's device list was fetched in full.
  */
 export async function runCwRmmSync(
   db: Database,
@@ -1101,12 +1138,13 @@ export async function runCwRmmSync(
   const assets = new AssetService(layoutService);
   // The client is shared between syncs; each sync notes the field names it saw.
   client.lastDeviceFields = '';
-  const [layout] = await db
-    .select({ id: schema.assetLayouts.id, archived: schema.assetLayouts.archived })
-    .from(schema.assetLayouts)
-    .where(and(eq(schema.assetLayouts.orgId, actor.orgId), eq(schema.assetLayouts.key, 'configuration')));
-  if (!layout || layout.archived)
-    throw new HttpError(400, 'The Configurations asset layout is missing or archived. Restore it to sync devices.');
+  const layout = await deviceLayout(db, actor.orgId, options.layoutId);
+  // Devices an earlier sync saved in Configurations move to the device layout when that is another one.
+  const moveFrom = layout.configurationId !== layout.id ? layout.configurationId : null;
+  // Assets in the sync's own layout are never matched as ones already there: Configurations when devices go there
+  // (only the sync puts them there), and otherwise the device layout, whose assets a device may well be.
+  const ownLayout = moveFrom ?? layout.id;
+  let moved = 0;
 
   const linked = Object.entries(map).flatMap(([companyId, m]) => (m.action === 'link' ? [[companyId, m.clientId] as const] : []));
   if (!linked.length) run.note('No ConnectWise RMM companies are linked to Atlas clients yet.');
@@ -1170,7 +1208,7 @@ export async function runCwRmmSync(
       [d.name, d.hostname]
         .filter(Boolean)
         .flatMap((n) => existing.byName.get(n.toLowerCase()) ?? [])
-        .filter((a) => a.id !== except && a.layoutId !== layout.id && !claimed.has(a.id))
+        .filter((a) => a.id !== except && a.layoutId !== ownLayout && !claimed.has(a.id))
         // The asset whose layout takes the most of the device's fields, then the oldest.
         .sort((a, b) => b.fit - a.fit || a.createdAt.getTime() - b.createdAt.getTime())[0];
     for (const d of devices) {
@@ -1227,6 +1265,29 @@ export async function runCwRmmSync(
           await assets.update(scope, id, { fields: merged, version: current.version }, 'Synced from ConnectWise RMM');
         claimed.add(id);
       };
+      /** The device's values keyed by the device layout's own fields, adding fields it lacks. */
+      const deviceFields = async () =>
+        fitFields(await ensureDeviceFields(layoutService, actor, layout.id, existing.layoutFields, fields), fields);
+      /** Moves a device's asset out of Configurations into the device layout, keeping what fits there. */
+      const moveToDeviceLayout = async (current: AssetView) => {
+        const from = existing.layoutFields.get(current.layoutId) ?? [];
+        const to = await ensureDeviceFields(layoutService, actor, layout.id, existing.layoutFields, fields);
+        // Values Atlas users entered go into the same-keyed or same-labelled field, where it can hold them.
+        const kept: Record<string, string> = {};
+        for (const [key, value] of Object.entries(current.fields)) {
+          const label = from.find((f) => f.key === key)?.label.trim().toLowerCase();
+          const field =
+            to.find((f) => f.key === key) ?? (label ? to.find((f) => f.label.trim().toLowerCase() === label) : undefined);
+          const fitted = field && typeof value === 'string' ? valueFor(field, value) : undefined;
+          if (field && fitted !== undefined) kept[field.key] = fitted;
+        }
+        return assets.moveToLayout(
+          scope,
+          current.id,
+          { layoutId: layout.id, fields: kept, version: current.version },
+          'Moved to the device layout by the ConnectWise RMM sync',
+        );
+      };
       const synced = await run.upsert(
         'assets',
         d.id,
@@ -1242,14 +1303,15 @@ export async function runCwRmmSync(
             await assets.create(scope, clientId, {
               layoutId: layout.id,
               name,
-              fields: { ...(await extras(layout.id)), ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)) },
+              fields: { ...(await extras(layout.id)), ...(await deviceFields()) },
               notes: 'Synced from ConnectWise RMM.',
             })
           ).id;
         },
         async (existingId) => {
-          const current = await assets.get(scope, existingId);
-          if (current.layoutId !== layout.id) return updateOther(existingId);
+          let current = await assets.get(scope, existingId);
+          const misplaced = moveFrom !== null && current.layoutId === moveFrom;
+          if (current.layoutId !== layout.id && !misplaced) return updateOther(existingId);
           // A copy an earlier sync made beside an asset that was already there: move the link to that asset and
           // archive the copy (it can be restored).
           const other = match(d, existingId);
@@ -1260,11 +1322,16 @@ export async function runCwRmmSync(
             folded++;
             return;
           }
+          // A device an earlier sync saved in Configurations moves to the device layout.
+          if (misplaced) {
+            current = await moveToDeviceLayout(current);
+            moved++;
+          }
           // Fields Atlas users added stay; the RMM's own values are refreshed.
           const merged = {
             ...current.fields,
             ...(await extras(layout.id)),
-            ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v)),
+            ...(await deviceFields()),
           };
           if (current.archived) await assets.setArchived(scope, existingId, false);
           if (current.name !== name || JSON.stringify(merged) !== JSON.stringify(current.fields))
@@ -1284,6 +1351,8 @@ export async function runCwRmmSync(
     if (options.devices) readInFull.add(clientId);
   }
 
+  if (moved)
+    run.note(`${moved} device${moved === 1 ? '' : 's'} moved out of Configurations into the device layout.`);
   if (matched)
     run.note(`${matched} device${matched === 1 ? '' : 's'} matched an asset already in Atlas by name, and updated it.`);
   if (folded)
@@ -1327,7 +1396,7 @@ export async function runCwRmmSync(
           eq(schema.externalRefs.source, 'cw-rmm'),
           eq(schema.externalRefs.kind, 'assets'),
           inArray(schema.assets.clientId, complete),
-          // Only the sync's own Configurations assets: an existing asset it matched and updated is never archived.
+          // Only the sync's own assets, in the device layout: an existing asset it matched and updated is never archived.
           eq(schema.assets.layoutId, layout.id),
         ),
       );

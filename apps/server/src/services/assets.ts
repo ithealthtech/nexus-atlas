@@ -230,6 +230,62 @@ export class AssetService {
   }
 
   /**
+   * Moves an asset to another layout with the given fields (checked against that layout), as a new version. Its
+   * relations, passwords, and history stay with it.
+   */
+  async moveToLayout(
+    scope: Scope,
+    id: string,
+    input: { layoutId: string; fields: Record<string, unknown>; version: number },
+    action = 'Moved',
+  ): Promise<AssetView> {
+    const current = await this.get(scope, id);
+    await scope.require(current.clientId, 'edit', 'Asset');
+    if (input.version !== current.version)
+      throw new HttpError(
+        409,
+        'Someone else changed this asset. Reload to see their changes before saving.',
+        'conflict',
+      );
+    const layout = await this.layouts.get(scope.actor, input.layoutId);
+    if (layout.archived) throw new HttpError(400, 'That asset layout is archived.');
+    const next: Snapshot = {
+      name: current.name,
+      status: current.status,
+      fields: await this.detect(layout, current.name, validateFields(layout.fields as LayoutField[], input.fields)),
+      notes: current.notes,
+    };
+    await scope.db.transaction(async (tx) => {
+      const updated = await tx
+        .update(schema.assets)
+        .set({
+          layoutId: layout.id,
+          fields: next.fields,
+          version: current.version + 1,
+          updatedBy: scope.actor.id,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(schema.assets.id, id), eq(schema.assets.version, current.version)))
+        .returning({ id: schema.assets.id });
+      if (!updated.length)
+        throw new HttpError(
+          409,
+          'Someone else changed this asset. Reload to see their changes before saving.',
+          'conflict',
+        );
+      await snapshot(tx, scope.actor, 'asset', id, current.version + 1, next);
+      await recordActivity(tx, scope.actor, {
+        clientId: current.clientId,
+        action,
+        entityType: 'asset',
+        entityId: id,
+        title: next.name,
+      });
+    });
+    return this.get(scope, id);
+  }
+
+  /**
    * Fills in the manufacturer of every asset, in the clients the actor can edit, where it's blank and can be
    * worked out. Each change is saved as a new version, so it can be reviewed and undone.
    */

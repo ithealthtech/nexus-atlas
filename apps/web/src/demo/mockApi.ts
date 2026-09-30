@@ -1847,7 +1847,7 @@ let cwRmm: {
   hasSecret: true;
   autoSync: boolean;
   lastSyncAt: string | null;
-  options: { locations: boolean; devices: boolean; tickets: boolean };
+  options: { locations: boolean; devices: boolean; tickets: boolean; layoutId: string | null };
 } | null = null;
 const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
 const cwCompanies = () => [
@@ -1877,14 +1877,19 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     hasSecret: true,
     autoSync: b.autoSync !== false,
     lastSyncAt: cwRmm?.lastSyncAt ?? null,
-    options: cwRmm?.options ?? { locations: true, devices: true, tickets: true },
+    options: cwRmm?.options ?? { locations: true, devices: true, tickets: true, layoutId: null },
   };
   return { ...cwRmm, companies: cwCompanies().length };
 });
 on('DELETE', '/integrations/cw-rmm', () => ((cwRmm = null), { ok: true }));
 on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
   if (!cwRmm) throw new MockError(400, 'Connect ConnectWise RMM first.');
-  cwRmm.options = { locations: b.locations !== false, devices: b.devices !== false, tickets: b.tickets !== false };
+  cwRmm.options = {
+    locations: b.locations !== false,
+    devices: b.devices !== false,
+    tickets: b.tickets !== false,
+    layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,
+  };
   return cwRmm;
 });
 on('GET', '/integrations/cw-rmm/companies', () => cwView());

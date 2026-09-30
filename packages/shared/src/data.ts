@@ -85,6 +85,11 @@ export const cwRmmSyncOptionsSchema = z.object({
   devices: z.boolean().default(true),
   /** Tickets, read-only, for the ticket dashboard. */
   tickets: z.boolean().default(true),
+  /**
+   * The asset layout new devices are saved in. Null picks one: a layout named for devices ("Devices", "Device
+   * assets") when there is one, otherwise Configurations.
+   */
+  layoutId: z.string().uuid().nullable().default(null),
 });
 export type CwRmmSyncOptions = z.infer<typeof cwRmmSyncOptionsSchema>;
 /** A ConnectWise RMM company and what Atlas does with it. */

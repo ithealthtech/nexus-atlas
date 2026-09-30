@@ -248,7 +248,7 @@ describe('ConnectWise RMM sync', () => {
     expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
 
     const saved = await owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: true, devices: false });
-    expect(saved.data.options).toEqual({ locations: true, devices: false, tickets: true });
+    expect(saved.data.options).toEqual({ locations: true, devices: false, tickets: true, layoutId: null });
     const sitesOnly = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
     expect(sitesOnly.counts.assets).toBeUndefined();
     expect(sitesOnly.counts.locations.updated).toBe(1);
@@ -264,6 +264,84 @@ describe('ConnectWise RMM sync', () => {
     );
     expect(devicesOnly.counts.locations).toBeUndefined();
     expect(devicesOnly.counts.assets.updated).toBe(2);
+  });
+
+  it('saves devices in the device layout, not Configurations, and moves ones an earlier sync put there', async () => {
+    asio.state.devices.set('c1', [
+      { endpointId: 'e1', siteId: 's1', friendlyName: 'HDG-DC-01', hostName: 'hdg-dc-01', endpointType: 'Server' },
+      { endpointId: 'e2', siteId: 's1', friendlyName: 'HDG-WS-02', hostName: 'hdg-ws-02', ipAddress: '10.0.0.6' },
+      { endpointId: 'e3', siteId: 's1', friendlyName: 'HDG-WS-03', hostName: 'hdg-ws-03' },
+    ]);
+    await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [{ companyId: 'c1', action: 'link', clientId: harbor }],
+    });
+    // Before there is a device layout, devices go to Configurations.
+    await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    const layoutsBefore = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
+    const configuration = layoutsBefore.find((l) => l.key === 'configuration')!.id;
+    type Row = { id: string; name: string; layoutId: string; fields: Record<string, string> };
+    const synced = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as Row[];
+    expect(synced.every((a) => a.layoutId === configuration)).toBe(true);
+    // Someone added a note to one of them.
+    const ws2 = synced.find((a) => a.name === 'HDG-WS-02')!;
+    const ws2Full = (await owner.call('GET', `/api/assets/${ws2.id}`)).data;
+    await owner.call('PATCH', `/api/assets/${ws2.id}`, {
+      fields: { ...ws2Full.fields, purchase_date: '2024-02-01' },
+      version: ws2Full.version,
+    });
+
+    // The organization documents devices in their own layout, where one of them already is.
+    const devices = (
+      await owner.call('POST', '/api/layouts', {
+        name: 'Devices',
+        icon: 'monitor',
+        fields: [
+          { key: 'host', label: 'Hostname', type: 'text' },
+          { key: 'ip', label: 'IP address', type: 'ip' },
+          { key: 'bought', label: 'Purchase date', type: 'date' },
+        ],
+      })
+    ).data.id;
+    const dc = (
+      await owner.call('POST', `/api/clients/${harbor}/assets`, { layoutId: devices, name: 'HDG-DC-01', fields: {} })
+    ).data;
+    asio.state.devices.get('c1')!.push({ endpointId: 'e4', siteId: 's1', friendlyName: 'HDG-WS-04' });
+
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(job.counts.assets.failed ?? 0).toBe(0);
+    expect(job.messages.join(' ')).toContain('2 devices moved out of Configurations');
+    expect(job.messages.join(' ')).toContain('1 copy from earlier syncs archived');
+    const after = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as Row[];
+    // Every device is in Devices, once: the copy of HDG-DC-01 folded into the one already there.
+    expect(after.map((a) => [a.name, a.layoutId]).sort()).toEqual([
+      ['HDG-DC-01', devices],
+      ['HDG-WS-02', devices],
+      ['HDG-WS-03', devices],
+      ['HDG-WS-04', devices],
+    ]);
+    expect(after.find((a) => a.name === 'HDG-DC-01')!.id).toBe(dc.id);
+    // The moved asset is the same one, with what Atlas users entered and the RMM's values in its new fields.
+    const moved = (await owner.call('GET', `/api/assets/${ws2.id}`)).data;
+    expect(moved.layoutId).toBe(devices);
+    expect(moved.fields).toMatchObject({ host: 'hdg-ws-02', ip: '10.0.0.6', bought: '2024-02-01' });
+
+    // Stays settled on the next run.
+    const again = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(again.counts.assets.created ?? 0).toBe(0);
+    expect(again.messages.join(' ')).not.toContain('moved');
+    expect(again.messages.join(' ')).not.toContain('archived');
+
+    // An administrator can pick the layout; one from elsewhere is refused.
+    const options = { locations: true, devices: true, tickets: true };
+    const bad = await owner.call('PUT', '/api/integrations/cw-rmm/options', {
+      ...options,
+      layoutId: '00000000-0000-4000-8000-000000000000',
+    });
+    expect(bad.status).toBe(400);
+    const picked = await owner.call('PUT', '/api/integrations/cw-rmm/options', { ...options, layoutId: configuration });
+    expect(picked.data.options.layoutId).toBe(configuration);
   });
 
   it('keeps a device whose extra values a field cannot hold, instead of failing it', async () => {
