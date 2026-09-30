@@ -55,6 +55,7 @@ import { RotationScheduler, registerRotationRoutes } from './routes/rotation.js'
 import { RotationService } from './services/rotation.js';
 import { failInterruptedJobs } from './services/importers/common.js';
 import { ApiKeyService } from './services/api-keys.js';
+import { NativeAppService, isAppToken } from './identity/native.js';
 import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
 import { StatusService } from './services/status.js';
@@ -188,6 +189,7 @@ export async function buildApp({
   const account = new AccountSecurity(db, identity, mail, { publicOrigin: config.publicOrigin, rpName: 'MSP Atlas' });
   const audit = new AuditService(db, keys, settings);
   const apiKeys = new ApiKeyService(db);
+  const nativeApps = new NativeAppService(db, identity);
   const limiter = failureLimiter(10, 15 * 60_000);
   const cookieName = config.secureCookies ? '__Host-atlas_session' : 'atlas_session';
   const cookieOptions = { httpOnly: true, sameSite: 'strict' as const, path: '/', secure: config.secureCookies };
@@ -285,6 +287,11 @@ export async function buildApp({
 
   async function authenticate(req: FastifyRequest) {
     if ((req.raw as { atlasApi?: boolean }).atlasApi) {
+      // Desktop apps (Atlas for Windows) send an app session token; everything else is an API key.
+      if (isAppToken(req.headers.authorization)) {
+        req.session = await nativeApps.authenticate(req.headers.authorization, req.method, req.url, req.ip);
+        return;
+      }
       const key = await apiKeys.authenticate(req.headers.authorization, req.method, req.url, req.ip);
       const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, key.user.orgId));
       const at = new Date();
@@ -302,6 +309,10 @@ export async function buildApp({
           lastSeenAt: at,
           ip: req.ip,
           userAgent: String(req.headers['user-agent'] ?? ''),
+          kind: 'browser',
+          client: '',
+          deviceName: '',
+          scopes: [],
         },
         user: key.user,
         // Audit and activity entries name the key as well as the person it acts for.
@@ -522,6 +533,37 @@ export async function buildApp({
   app.post('/api/account/sessions/end-others', authed, async (req) => account.endOtherSessions(req.session!, req.ip));
   app.delete<{ Params: { id: string } }>('/api/account/devices/:id', authed, async (req) => {
     await account.forgetDevice(req.session!, req.params.id, req.ip);
+    return { ok: true };
+  });
+
+  // ---- desktop apps (native sign-in: authorization code + PKCE + loopback redirect) ----
+  // The browser half: the signed-in person approves the app. Approving hands out a long-lived session, so the
+  // password (or passkey) must have been entered in the last few minutes.
+  app.post('/api/native/authorize', authed, async (req) => {
+    const approving = (req.body as { approve?: unknown } | null)?.approve === true;
+    if (approving) identity.requireRecentAuth(req.session!);
+    return nativeApps.decide(req.session!, req.body, req.ip);
+  });
+  // The app half: no session yet, so the one-time code and PKCE verifier are the proof. Failures count toward the
+  // per-address limit like wrong passwords.
+  app.post('/api/native/token', async (req) => {
+    limiter.check(req.ip);
+    try {
+      return await nativeApps.exchange(req.body, meta(req));
+    } catch (error) {
+      if (error instanceof HttpError && error.code === 'invalid_grant') limiter.fail(req.ip);
+      throw error;
+    }
+  });
+  // The app's own session, with its bearer token (via /api/v1).
+  const appOnly = async (req: FastifyRequest) => {
+    if (!isAppToken(req.headers.authorization) || !(req.raw as { atlasApi?: boolean }).atlasApi)
+      throw new HttpError(404, 'Not found.');
+    await authenticate(req);
+  };
+  app.get('/api/native/session', { onRequest: appOnly }, async (req) => nativeApps.describe(req.session!));
+  app.delete('/api/native/session', { onRequest: appOnly }, async (req) => {
+    await nativeApps.signOut(req.session!, req.ip);
     return { ok: true };
   });
 

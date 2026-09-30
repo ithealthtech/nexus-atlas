@@ -11,7 +11,7 @@ const hash = (token: string) => createHash('sha256').update(token).digest('hex')
 const PREFIX_ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /** Paths an API key may call (after /api/v1 is mapped to /api). Accounts, people, and settings stay browser-only. */
-const API_ROUTES = [
+export const API_ROUTES = [
   /^\/api\/clients(\/|$|\?)/,
   /^\/api\/(assets|documents|folders|contacts|locations|layouts|items|search|activity|passwords|expirations)(\/|$|\?)/,
 ];

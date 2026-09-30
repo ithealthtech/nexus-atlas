@@ -179,8 +179,39 @@ export const sessions = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     ip: text('ip').notNull().default(''),
     userAgent: text('user_agent').notNull().default(''),
+    // 'browser' (cookie) or 'app' (a desktop app's bearer token). App sessions live in this table so every way
+    // of signing someone out (lockout, reset, password change, disabling) ends them too.
+    kind: text('kind').notNull().default('browser'),
+    // App sessions only: which app, what the app calls the computer, and what the app may do.
+    client: text('client').notNull().default(''),
+    deviceName: text('device_name').notNull().default(''),
+    scopes: jsonb('scopes').$type<string[]>().notNull().default([]),
   },
-  (t) => [index('sessions_user').on(t.userId), uniqueIndex('sessions_id').on(t.id)],
+  (t) => [
+    index('sessions_user').on(t.userId),
+    uniqueIndex('sessions_id').on(t.id),
+    check('sessions_kind_check', sql`${t.kind} in ('browser','app')`),
+  ],
+);
+
+// One-time authorization codes for native-app sign-in. Only a hash of the code is stored; a code works once, for
+// two minutes, and only with the PKCE verifier and redirect address it was issued for.
+export const nativeAuthCodes = pgTable(
+  'native_auth_codes',
+  {
+    codeHash: text('code_hash').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    client: text('client').notNull(),
+    redirectUri: text('redirect_uri').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    deviceName: text('device_name').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: created(),
+  },
+  (t) => [index('native_auth_codes_user').on(t.userId)],
 );
 
 // "Remember this device": skips the second factor on this browser for 30 days.

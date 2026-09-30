@@ -19,6 +19,9 @@ Everything on this page is under **Import & export** (administrators) and **Sett
 curl -H "Authorization: Bearer $ATLAS_KEY" https://atlas.example.com/api/v1/clients
 ```
 
+- **Quick search:** `GET /api/v1/search?q=<text>&limit=<1–50>` matches clients, assets, documents, contacts, locations, and password entries (name, username, and address only, never secrets) that the caller can see, by prefix, so it works as you type.
+- **Desktop apps** (Atlas for Windows) use the same API with an app session token (`atlasd_…`) instead of an API key. See [Desktop apps](IDENTITY.md#desktop-apps).
+
 ## Import from Hudu
 
 1. In Hudu, go to **Admin → API Keys** and create a key. A key without password access imports everything except passwords.

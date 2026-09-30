@@ -867,12 +867,22 @@ on('GET', '/account/security', () => ({
   passkeys,
   sessions,
   devices,
+  desktopApps: [],
   apps,
   notifyDigest,
 }));
 on('PATCH', '/account/preferences', (_m, b) => {
   notifyDigest = !!b.notifyDigest;
-  return { totp: true, recoveryCodesLeft: recoveryLeft, passkeys, sessions, devices, apps, notifyDigest };
+  return {
+    totp: true,
+    recoveryCodesLeft: recoveryLeft,
+    passkeys,
+    sessions,
+    devices,
+    desktopApps: [],
+    apps,
+    notifyDigest,
+  };
 });
 on('POST', '/account/recovery-codes', () => {
   recoveryLeft = 10;

@@ -38,6 +38,7 @@ import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
 import { VaultPolicies } from '@/pages/VaultPolicies';
 import { Account } from '@/pages/Account';
+import { NativeAuthorize } from '@/pages/NativeAuthorize';
 import { ConnectApp } from '@/pages/ConnectApp';
 import { NotFound } from '@/pages/NotFound';
 import { DEMO } from '@/lib/demo';
@@ -250,6 +251,8 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/checklists', component: ChecklistsPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklist-runs/$runId', component: RunPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
+  // Atlas for Windows opens this in the browser to sign in (after the usual sign-in and second step).
+  createRoute({ getParentRoute: () => appRoute, path: '/native/authorize', component: NativeAuthorize }),
   createRoute({
     getParentRoute: () => appRoute,
     path: '/apps/connect',

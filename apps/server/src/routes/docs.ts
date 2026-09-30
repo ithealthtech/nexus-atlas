@@ -267,8 +267,12 @@ export function registerDocumentationRoutes(
   });
 
   // ---- search and activity ----
-  app.get<{ Querystring: { q?: string; client?: string } }>('/api/search', authed, async (req) =>
-    search(scopeOf(req), String(req.query.q ?? ''), { clientId: req.query.client || undefined }),
+  // Quick search (the command palette, and Atlas for Windows as you type) asks for fewer results.
+  app.get<{ Querystring: { q?: string; client?: string; limit?: string } }>('/api/search', authed, async (req) =>
+    search(scopeOf(req), String(req.query.q ?? ''), {
+      clientId: req.query.client || undefined,
+      limit: Math.max(1, Math.min(Number(req.query.limit) || 30, 50)),
+    }),
   );
   app.get<{ Querystring: { client?: string; item?: string; limit?: string } }>('/api/activity', authed, async (req) =>
     listActivity(scopeOf(req), {

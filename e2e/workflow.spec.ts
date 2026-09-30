@@ -1,4 +1,7 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { totp, totpStep } from '../apps/server/src/identity/totp';
@@ -755,6 +758,77 @@ test.describe.serial('data in and out, and the client portal', () => {
       page.getByRole('button', { name: /^Download backup from/ }).click(),
     ]);
     expect(file.suggestedFilename()).toMatch(/^atlas-\d{8}-\d{6}\.atlasbak$/);
+  });
+
+  test('Atlas for Windows signs in through the browser and can be signed out from the Account page', async ({
+    page,
+  }) => {
+    watch(page);
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    // Stand in for the app: a one-shot listener on 127.0.0.1, and PKCE.
+    const verifier = randomBytes(32).toString('base64url');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const state = randomBytes(24).toString('base64url');
+    let received: URLSearchParams | null = null;
+    const listener = createServer((req, res) => {
+      received = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+      res
+        .writeHead(200, { 'content-type': 'text/html' })
+        .end('<!doctype html><title>Signed in</title><h1>Signed in</h1>');
+    });
+    await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
+    const redirect = `http://127.0.0.1:${(listener.address() as AddressInfo).port}/callback`;
+    try {
+      const query = new URLSearchParams({
+        client_id: 'atlas-windows',
+        redirect_uri: redirect,
+        response_type: 'code',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+        state,
+        scope: 'read reveal',
+        device_name: 'E2E-PC',
+      });
+      await page.goto(`/native/authorize?${query}`);
+      await expect(page.getByRole('heading', { name: 'Sign in to Atlas for Windows?' })).toBeVisible();
+      await expect(page.getByText('E2E-PC')).toBeVisible();
+      await accessible(page);
+      await page.getByRole('button', { name: 'Allow and sign in' }).click();
+      // Approving needs a password entered in the last 10 minutes; a reused session may be older.
+      const reauth = page.getByRole('dialog', { name: "Confirm it's you" });
+      const back = page.getByRole('heading', { name: 'Signed in' });
+      await expect(back.or(reauth)).toBeVisible();
+      if (await reauth.isVisible()) {
+        await reauth.getByLabel('Your password').fill(OWNER.password);
+        await reauth.getByRole('button', { name: 'Confirm' }).click();
+      }
+      await expect(back).toBeVisible();
+      expect(received!.get('state')).toBe(state);
+
+      const token = await page.request.post('/api/v1/native/token', {
+        data: {
+          grant_type: 'authorization_code',
+          client_id: 'atlas-windows',
+          code: received!.get('code'),
+          redirect_uri: redirect,
+          code_verifier: verifier,
+        },
+      });
+      expect(token.status()).toBe(200);
+      const bearer = { authorization: `Bearer ${(await token.json()).access_token}` };
+      const found = await page.request.get('/api/v1/search?q=harbor&limit=5', { headers: bearer });
+      expect((await found.json()).map((r: { title: string }) => r.title)).toContain('Harbor Dental Group');
+
+      await page.goto('/account');
+      const app = page.getByRole('listitem').filter({ hasText: 'Atlas for Windows on E2E-PC' });
+      await expect(app).toBeVisible();
+      await accessible(page);
+      await app.getByRole('button', { name: 'Sign out' }).click();
+      await expect(page.getByText('App signed out.')).toBeVisible();
+      expect((await page.request.get('/api/v1/clients', { headers: bearer })).status()).toBe(401);
+    } finally {
+      listener.close();
+    }
   });
 
   test('a client viewer sees the passwords shared with their client, read-only', async ({ page }) => {
