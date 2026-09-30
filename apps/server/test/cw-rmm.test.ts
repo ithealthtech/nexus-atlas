@@ -372,7 +372,7 @@ describe('ConnectWise RMM sync', () => {
     const ws3 = after.find((a) => a.name === 'HDG-WS-03')!;
     expect((await owner.call('GET', `/api/assets/${ws3.id}`)).data.archived).toBe(true);
 
-    // Choosing another layout moves the devices the sync made there, but not the one that was already there.
+    // Choosing another endpoint layout folds it into Endpoints, so every device stays in the one layout.
     const computers = (
       await owner.call('POST', '/api/layouts', {
         name: 'Computers',
@@ -391,8 +391,8 @@ describe('ConnectWise RMM sync', () => {
     const switched = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as Row[];
     expect(switched.map((a) => [a.name, a.layoutId === computers ? 'computers' : a.layoutId]).sort()).toEqual([
       ['HDG-DC-01', devices],
-      ['HDG-WS-02', 'computers'],
-      ['HDG-WS-04', 'computers'],
+      ['HDG-WS-02', devices],
+      ['HDG-WS-04', devices],
     ]);
 
     // An administrator can pick the layout; one from elsewhere is refused.

@@ -252,7 +252,12 @@ async function mergePeopleOrPlaces(
  * layout has no field for gets a new field on that layout. Notes are joined, links and files moved, and the others
  * are archived (restorable) with a note saying where they went.
  */
-async function mergeAssets(db: Database, actor: Actor, keepId: string, mergeIds: string[]): Promise<MergeResult> {
+export async function mergeAssets(
+  db: Database,
+  actor: Actor,
+  keepId: string,
+  mergeIds: string[],
+): Promise<MergeResult> {
   const scope = new Scope(db, actor);
   const layoutService = new LayoutService(db);
   const assets = new AssetService(layoutService);

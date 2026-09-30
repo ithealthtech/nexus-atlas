@@ -5,7 +5,7 @@ import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
-import { endpointLayout } from '../endpoint-layout.js';
+import { endpointLayout, isEndpointName } from '../endpoint-layout.js';
 import { LayoutService } from '../layouts.js';
 import { contacts as contactService, locations } from '../people.js';
 import { Scope } from '../scope.js';
@@ -1707,7 +1707,7 @@ export async function saveMapping(
  * "Endpoints", "Devices" or "Computer Assets", renamed to Endpoints; see endpointLayout), else Configurations. `configurationId` is the Configurations layout, whose synced
  * devices move to the chosen layout.
  */
-export async function deviceLayout(db: Database, orgId: string, chosen: string | null) {
+export async function deviceLayout(db: Database, orgId: string, chosen: string | null, actor?: Actor) {
   const layouts = await db
     .select({
       id: schema.assetLayouts.id,
@@ -1720,6 +1720,10 @@ export async function deviceLayout(db: Database, orgId: string, chosen: string |
   const configuration = layouts.find((l) => l.key === 'configuration');
   if (chosen) {
     const picked = layouts.find((l) => l.id === chosen);
+    // A chosen Devices or Computer Assets layout means the Endpoints layout, which it's folded into (and archived).
+    const endpoints = picked && picked.key !== 'configuration' && isEndpointName(picked.name);
+    const folded = endpoints ? await endpointLayout(db, orgId, actor) : null;
+    if (folded) return { id: folded, configurationId: configuration?.id ?? null };
     if (!picked || picked.archived)
       throw new HttpError(
         400,
@@ -1727,7 +1731,7 @@ export async function deviceLayout(db: Database, orgId: string, chosen: string |
       );
     return { id: picked.id, configurationId: configuration?.id ?? null };
   }
-  const named = await endpointLayout(db, orgId);
+  const named = await endpointLayout(db, orgId, actor);
   if (named) return { id: named, configurationId: configuration?.id ?? null };
   if (!configuration || configuration.archived)
     throw new HttpError(400, 'The Configurations asset layout is missing or archived. Restore it to sync devices.');
@@ -1796,7 +1800,7 @@ export async function runCwRmmSync(
   const assets = new AssetService(layoutService);
   // The client is shared between syncs; each sync notes the field names it saw.
   client.lastDeviceFields = '';
-  const layout = await deviceLayout(db, actor.orgId, options.layoutId);
+  const layout = await deviceLayout(db, actor.orgId, options.layoutId, actor);
   // Assets the sync made, which it keeps in the device layout and archives when their device goes. Those in
   // Configurations are all its own (it never matches devices to assets there); elsewhere they are marked.
   const owned = await ownedByRmm(db, actor.orgId);
