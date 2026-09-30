@@ -1,7 +1,9 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { MAX_LAYOUT_FIELDS, type Actor, type LayoutField } from '@atlas/shared';
+import { recordActivity } from './activity.js';
 import { mergeAssets } from './duplicates.js';
+import { snapshot } from './revisions.js';
 
 /** The one layout for PCs, Macs, Linux workstations and servers, which Hudu and ConnectWise RMM both import into. */
 export const ENDPOINTS = 'Endpoints';
@@ -75,7 +77,8 @@ async function foldInto(db: Database, actor: Actor, toId: string, fromId: string
       let fieldKey = f.key;
       for (let n = 2; used.has(fieldKey); n++) fieldKey = `${f.key.slice(0, 36)}_${n}`;
       used.add(fieldKey);
-      field = { ...f, key: fieldKey };
+      // Optional, so the Endpoints assets that have no value for it can still be saved.
+      field = { ...f, key: fieldKey, required: false };
       fields.push(field);
     }
     keyFor.set(f.key, field ?? null);
@@ -89,8 +92,6 @@ async function foldInto(db: Database, actor: Actor, toId: string, fromId: string
         id: schema.assets.id,
         clientId: schema.assets.clientId,
         name: schema.assets.name,
-        fields: schema.assets.fields,
-        notes: schema.assets.notes,
         archived: schema.assets.archived,
       })
       .from(schema.assets)
@@ -104,26 +105,52 @@ async function foldInto(db: Database, actor: Actor, toId: string, fromId: string
       // Values fill the Endpoints asset's blanks; links, files and import links move; the copy is archived.
       await mergeAssets(db, actor, same, [a.id]);
     }
-    // Moved (the merged copy too, archived, so the old layout is left empty).
+    // Moved (the merged copy too, archived, so the old layout is left empty), as a new version like any move.
+    const [current] = await db.select().from(schema.assets).where(eq(schema.assets.id, a.id));
+    if (!current) continue;
     const values: Record<string, unknown> = {};
     const left: string[] = [];
-    for (const [k, v] of Object.entries((a.fields ?? {}) as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries((current.fields ?? {}) as Record<string, unknown>)) {
       if (!present(v)) continue;
       const field = keyFor.get(k);
-      const fits = field && (!['select', 'multiselect'].includes(field.type) || field.options.includes(String(v)));
+      const fits =
+        field &&
+        (field.type === 'multiselect'
+          ? Array.isArray(v) && v.every((o) => field.options.includes(String(o)))
+          : field.type !== 'select' || field.options.includes(String(v)));
       if (field && fits && !present(values[field.key])) values[field.key] = v;
       else
         left.push(`${theirs.find((f) => f.key === k)?.label ?? k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
     }
-    const [current] = await db
-      .select({ notes: schema.assets.notes })
-      .from(schema.assets)
-      .where(eq(schema.assets.id, a.id));
-    const notes = [current?.notes ?? a.notes, ...left].filter(Boolean).join('\n');
-    await db
-      .update(schema.assets)
-      .set({ layoutId: toId, fields: values, notes, updatedAt: new Date() })
-      .where(eq(schema.assets.id, a.id));
+    const next = {
+      name: current.name,
+      status: current.status,
+      fields: values,
+      notes: [current.notes, ...left].filter(Boolean).join('\n'),
+      layoutId: toId,
+      fromLayoutId: fromId,
+    };
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.assets)
+        .set({
+          layoutId: toId,
+          fields: values,
+          notes: next.notes,
+          version: current.version + 1,
+          updatedBy: actor.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.assets.id, a.id));
+      await snapshot(tx, actor, 'asset', a.id, current.version + 1, next);
+      await recordActivity(tx, actor, {
+        clientId: current.clientId,
+        action: `Moved to ${ENDPOINTS}`,
+        entityType: 'asset',
+        entityId: a.id,
+        title: current.name,
+      });
+    });
   }
   await db
     .update(schema.assetLayouts)

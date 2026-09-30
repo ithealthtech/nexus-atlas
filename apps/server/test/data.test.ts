@@ -593,10 +593,13 @@ describe('Hudu import', () => {
     const devices = await layout('Devices', [{ key: 'rmm_agent', label: 'RMM agent', type: 'text' }]);
     const computers = await layout('Computer Assets', [
       { key: 'operating_system', label: 'Operating System', type: 'text' },
-      { key: 'assigned_user', label: 'Assigned User', type: 'text' },
+      { key: 'assigned_user', label: 'Assigned User', type: 'text', required: true },
     ]);
     const kept = await asset(devices, 'HDG-WS-014', { rmm_agent: 'online' });
-    const copy = await asset(computers, 'HDG-WS-014', { operating_system: 'Windows 11 Pro' });
+    const copy = await asset(computers, 'HDG-WS-014', {
+      operating_system: 'Windows 11 Pro',
+      assigned_user: 'Sam Ortiz',
+    });
     const only = await asset(computers, 'HDG-LT-020', { assigned_user: 'Dana Reyes' });
 
     await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
@@ -615,7 +618,11 @@ describe('Hudu import', () => {
       operating_system: 'Windows 11 Pro',
     });
     const moved = (await owner.call('GET', `/api/assets/${only}`)).data;
-    expect(moved).toMatchObject({ layoutId: devices, fields: { assigned_user: 'Dana Reyes' } });
+    expect(moved).toMatchObject({ layoutId: devices, version: 2, fields: { assigned_user: 'Dana Reyes' } });
+    // The added field is optional, so an Endpoints asset without it still saves.
+    const keptNow = (await owner.call('GET', `/api/assets/${kept}`)).data;
+    const renamed = await owner.call('PATCH', `/api/assets/${kept}`, { name: 'HDG-WS-014B', version: keptNow.version });
+    expect(renamed.status).toBe(200);
     expect((await owner.call('GET', `/api/assets/${copy}`)).data).toMatchObject({ archived: true, layoutId: devices });
   });
 
