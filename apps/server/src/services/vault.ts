@@ -837,9 +837,10 @@ export class VaultService {
       )
       .orderBy(asc(sql`lower(${schema.passwords.name})`))
       .limit(limit);
-    const allowed = this.isAdmin(scope)
-      ? null
-      : await this.allowedRestricted(
+    const allowed =
+      (await scope.restrictedAccess()) !== 'listed'
+        ? null
+        : await this.allowedRestricted(
           scope,
           rows.filter((r) => r.p.restricted).map((r) => r.p.id),
         );
@@ -906,6 +907,7 @@ export class VaultService {
    */
   async fill(scope: Scope, id: string, input: unknown, ip: string): Promise<{ username: string; password: string }> {
     const { p, requireReason } = await this.load(scope, id);
+    await this.requireReveal(scope);
     const body = deviceFillSchema.parse(input ?? {});
     const page = siteOf(body.url);
     if (p.kind !== 'login' || p.archived || !page || !matchLogin(p.url, page))
