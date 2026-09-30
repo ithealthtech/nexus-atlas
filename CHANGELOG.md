@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **The ConnectWise ticket sync uses only the v2 platform ticket API.** The legacy v1 company, status and ticket note lookups (PSA) are gone from the sync. Tickets link by the platform company ID, and a company's record number no longer takes priority over its sites.
+
 ## [1.7.15] - 2026-09-30
 
 ### Fixed
