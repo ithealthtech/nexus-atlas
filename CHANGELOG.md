@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.10] - 2026-09-30
+
+### Fixed
+
+- **One Endpoints layout, no duplicate machines.** Hudu imports and ConnectWise RMM syncs fold leftover Devices, Computer Assets and similar layouts into Endpoints. A machine with the same name in the same client is merged into one asset, the rest move over with their values as a new version, and the emptied layout is archived. (#143)
+
 ## [1.7.9] - 2026-09-30
 
 ### Fixed
