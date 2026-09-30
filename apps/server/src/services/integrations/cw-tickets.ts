@@ -199,7 +199,8 @@ export class CwTicketReader {
     if (closed) {
       // Every page: the list is by creation date, and a ticket opened long ago may have closed last week.
       try {
-        recent = map(await this.pages(`${company}&statusIds=${encodeURIComponent(`[in],${closed}`)}`));
+        // The spec's "in" filter is the bare list; only "not in" takes a prefix.
+        recent = map(await this.pages(`${company}&statusIds=${encodeURIComponent(closed)}`));
       } catch (error) {
         if (!(error instanceof HttpError) || error.status !== 400 || error.code === ACCESS_DENIED) throw error;
         this.openOnly.add(companyId);

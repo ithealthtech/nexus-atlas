@@ -117,6 +117,26 @@ function deviceObject(body: unknown, id: string): Json {
 
 const SITE_ID_KEYS =['siteId', 'siteID', 'site_id', 'site.id', 'site.siteId'];
 const DETAIL_CONCURRENCY = 4;
+// The platformEndpointDetail fields Atlas reads: the device's own, the maker (baseboard; bios is kept as a field),
+// and endpoint protection (antiViruses, and services, which mark antivirus services and their status).
+const DETAIL_FIELDS = [
+  'deviceName',
+  'friendlyName',
+  'resourceType',
+  'endpointType',
+  'ipAddress',
+  'macAddress',
+  'type',
+  'subResourceType',
+  'remoteAddress',
+  'virtualType',
+  'os',
+  'system',
+  'baseboard',
+  'bios',
+  'antiViruses',
+  'services',
+].join(',');
 
 /** Maps a device record (summary merged with details) onto Atlas's fields, reading whichever names are present. */
 function mapDevice(id: string, companyId: string, siteId: string, record: Json): RmmDevice {
@@ -429,6 +449,8 @@ const MAPPED = new Set(
   ].map((k) => k.toLowerCase()),
 );
 const CATEGORIES = new Set(['platform', 'network', 'cloud']);
+// Read for endpoint protection only: a device's full service list isn't worth a field per service.
+const NOT_KEPT = new Set(['services']);
 
 /** Every other value in a device record, as [label, value]: nested objects flattened, lists of values joined. */
 function extraValues(record: Json, prefix = '', depth = 0, skip = new Set<string>(), path = ''): [string, string][] {
@@ -439,7 +461,7 @@ function extraValues(record: Json, prefix = '', depth = 0, skip = new Set<string
     if (skip.has(at)) continue;
     // The category object's fields were read as the device's own, so they aren't prefixed with it.
     if (!prefix && CATEGORIES.has(key) && typeof value === 'object' && !Array.isArray(value)) continue;
-    if (!prefix && MAPPED.has(key.toLowerCase())) continue;
+    if (!prefix && (MAPPED.has(key.toLowerCase()) || NOT_KEPT.has(key))) continue;
     const label = prefix ? `${prefix} ${key}` : key;
     if (Array.isArray(value)) {
       const items = value.filter((v) => v !== null && typeof v !== 'object').map(String);
@@ -581,6 +603,8 @@ export class CwRmmClient {
   lastDeviceList = '';
   /** Field names of one real device (summary and details), for a single job note per sync. */
   lastDeviceFields = '';
+  /** Whether the tenant takes a field list on device details; false after it refuses one. */
+  private detailFields = true;
   // One client (and so one token) per set of credentials, shared by every request and sync: signing in for
   // each page load gets the key locked.
   private static shared = new WeakMap<typeof fetch, Map<string, CwRmmClient>>();
@@ -689,6 +713,11 @@ export class CwRmmClient {
     return this.call('PUT', path, body);
   }
 
+  /** One page of another part of the platform API (patching, backup, security), with the next page's cursor. */
+  page(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ body: unknown; nextCursor: number | null }> {
+    return this.request(method, path, body);
+  }
+
   private async call(method: Method, path: string, body?: unknown): Promise<unknown> {
     return (await this.request(method, path, body)).body;
   }
@@ -741,8 +770,10 @@ export class CwRmmClient {
    * Runs a script from the ConnectWise RMM script library on one device, now, with these parameters. Returns the
    * task ID ConnectWise gives back ('' when it gives none).
    *
-   * This follows ConnectWise's automation task shape (a script task targeting one endpoint, run once); it has not
-   * been checked against a live tenant, so ConnectWise's own answer is passed on whole when it refuses.
+   * The platform API spec schedules a script with POST /v2/automation/endpoints/schedule-tasks: the script as the
+   * template, the endpoint IDs as targets, and the parameters as one JSON string. The spec doesn't list the schedule
+   * values; RunNow is ConnectWise's tasking name for "run once, now". ConnectWise's own answer is passed on whole
+   * when it refuses.
    */
   async runScript(input: {
     companyId: string;
@@ -751,15 +782,17 @@ export class CwRmmClient {
     name: string;
     parameters: Record<string, string>;
   }): Promise<string> {
-    const body = await this.call('POST', '/api/platform/v1/automation/tasks', {
+    const body = await this.call('POST', '/api/platform/v2/automation/endpoints/schedule-tasks', {
+      templateID: input.scriptId,
+      templateType: 'script',
       name: input.name.slice(0, 100),
-      scriptId: input.scriptId,
-      companyId: input.companyId,
-      targets: [{ type: 'endpoint', id: input.endpointId }],
-      parameters: Object.entries(input.parameters).map(([name, value]) => ({ name, value })),
-      schedule: { type: 'runOnce', runNow: true },
+      description: input.name.slice(0, 100),
+      parameters: JSON.stringify(input.parameters),
+      targets: [input.endpointId],
+      targetType: 'MANAGED_ENDPOINT',
+      schedule: { regularity: 'RunNow' },
     });
-    return text((body ?? {}) as Json, 'id', 'taskId', 'data.id', 'data.taskId');
+    return text((body ?? {}) as Json, 'taskId', 'taskID', 'id', 'data.taskId');
   }
 
   async companies(): Promise<RmmCompany[]> {
@@ -865,10 +898,8 @@ export class CwRmmClient {
         let detailNote = candidates.length ? '' : 'no site to look it up in';
         for (const site of candidates) {
           try {
-            const body = await this.call(
-              'GET',
-              `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(site)}/endpoints/${encodeURIComponent(id)}`,
-            );
+            const path = `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(site)}/endpoints/${encodeURIComponent(id)}`;
+            const body = await this.detailsOf(path);
             detail = deviceObject(body, id);
             siteId = text(detail, ...SITE_ID_KEYS) || site;
             hits.set(site, (hits.get(site) ?? 0) + 1);
@@ -888,6 +919,22 @@ export class CwRmmClient {
     };
     await Promise.all(Array.from({ length: Math.min(DETAIL_CONCURRENCY, listed.length) }, worker));
     return out;
+  }
+
+  /**
+   * A device's details. Without a field list ConnectWise returns only the minimal fields (metadata, os and system),
+   * so the hardware and protection sections are asked for by name; a tenant that refuses the list gets the default.
+   */
+  private async detailsOf(path: string) {
+    if (this.detailFields) {
+      try {
+        return await this.call('GET', `${path}?field=${DETAIL_FIELDS}`);
+      } catch (error) {
+        if (!(error instanceof HttpError && error.status === 400)) throw error;
+        this.detailFields = false;
+      }
+    }
+    return this.call('GET', path);
   }
 
   private async devicePages(companyId: string, siteIds: string[], shape: DeviceQuery) {

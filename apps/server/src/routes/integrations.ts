@@ -26,6 +26,7 @@ import {
   TICKET_NOTE_SCOPES,
   TICKET_SCOPES,
 } from '../services/integrations/cw-rmm.js';
+import { CwSecurityService } from '../services/integrations/cw-security.js';
 import {
   addTicketNote,
   clearTickets,
@@ -266,6 +267,26 @@ export function registerIntegrationRoutes(
     );
   };
 
+  // ---- security and compliance (patching, backup, vulnerabilities, MDR), read live for anyone who can see the client ----
+  const security = new CwSecurityService(db, settings, deps.cwRmmFetch);
+  app.get<{ Params: { id: string } }>('/api/clients/:id/security', authed, async (req) => {
+    const actor = req.session!.actor;
+    if (!isUuid(req.params.id)) throw new HttpError(404, 'Client not found.');
+    await new Scope(db, actor).require(req.params.id, 'read', 'Client');
+    return security.forClient(actor.orgId, req.params.id);
+  });
+  app.get<{ Params: { id: string } }>('/api/assets/:id/security', authed, async (req) => {
+    const actor = req.session!.actor;
+    const [asset] = isUuid(req.params.id)
+      ? await db
+          .select({ clientId: schema.assets.clientId })
+          .from(schema.assets)
+          .where(and(eq(schema.assets.id, req.params.id), eq(schema.assets.orgId, actor.orgId)))
+      : [];
+    if (!asset) throw new HttpError(404, 'Asset not found.');
+    await new Scope(db, actor).require(asset.clientId, 'read', 'Asset');
+    return security.forDevice(actor.orgId, asset.clientId, req.params.id);
+  });
   app.post('/api/integrations/cw-rmm/sync', authed, async (req, reply) => {
     const actor = admin(req);
     const { id } = await startSync(
