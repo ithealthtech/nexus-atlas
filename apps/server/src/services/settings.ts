@@ -22,8 +22,14 @@ import {
   notificationSettingsSchema,
   rmmHealthSettingsSchema,
   type RmmHealthSettings,
+  rotationSettingsSchema,
+  type RotationSettings,
   warrantySettingsSchema,
   type WarrantySettings,
+  trackerSettingsSchema,
+  type TrackerSettings,
+  assetStatsSettingsSchema,
+  type AssetStatsSettings,
   smtpSettingsSchema,
   type MailMethod,
   type NotificationSettings,
@@ -67,8 +73,11 @@ interface StoredSettings {
   erase?: EraseRequest;
   health?: PasswordHealthSettings & { lastRunAt?: string };
   entra?: StoredEntra;
+  trackers?: TrackerSettings;
   rmmHealth?: RmmHealthSettings;
+  rotation?: RotationSettings;
   warranty?: WarrantySettings;
+  assetStats?: AssetStatsSettings;
   m365?: StoredM365;
 }
 export interface StoredEntra {
@@ -263,6 +272,16 @@ export class SettingsService {
     return body;
   }
 
+  async rotation(orgId: string): Promise<RotationSettings> {
+    return rotationSettingsSchema.parse((await this.load(orgId)).rotation ?? {});
+  }
+
+  async saveRotation(orgId: string, input: unknown): Promise<RotationSettings> {
+    const body = rotationSettingsSchema.parse(input);
+    await this.put(orgId, 'rotation', body);
+    return body;
+  }
+
   async warranty(orgId: string): Promise<WarrantySettings> {
     return warrantySettingsSchema.parse((await this.load(orgId)).warranty ?? {});
   }
@@ -270,6 +289,28 @@ export class SettingsService {
   async saveWarranty(orgId: string, input: unknown): Promise<WarrantySettings> {
     const body = warrantySettingsSchema.parse(input);
     await this.put(orgId, 'warranty', body);
+    return body;
+  }
+
+  async assetStats(orgId: string): Promise<AssetStatsSettings> {
+    return assetStatsSettingsSchema.parse((await this.load(orgId)).assetStats ?? {});
+  }
+
+  /** Saves which layouts count as which kind of device; "auto" entries aren't stored, since that's the default. */
+  async saveAssetStats(orgId: string, input: unknown): Promise<AssetStatsSettings> {
+    const body = assetStatsSettingsSchema.parse(input);
+    body.layouts = Object.fromEntries(Object.entries(body.layouts).filter(([, v]) => v !== 'auto'));
+    await this.put(orgId, 'assetStats', body);
+    return body;
+  }
+
+  async trackers(orgId: string): Promise<TrackerSettings> {
+    return trackerSettingsSchema.parse((await this.load(orgId)).trackers ?? {});
+  }
+
+  async saveTrackers(orgId: string, input: unknown): Promise<TrackerSettings> {
+    const body = trackerSettingsSchema.parse(input);
+    await this.put(orgId, 'trackers', body);
     return body;
   }
 
@@ -333,6 +374,12 @@ export class SettingsService {
     return saved
       ? { ...saved, map: saved.map ?? {}, clientSecret: open(this.keys, saved.secretSealed, cwAad(orgId)) }
       : null;
+  }
+
+  /** The company links and sync options, without the secret, for reading synced data. */
+  async cwRmmLinks(orgId: string): Promise<Pick<StoredCwRmm, 'map' | 'options' | 'lastSyncAt'> | null> {
+    const saved = (await this.load(orgId)).cwRmm;
+    return saved ? { map: saved.map ?? {}, options: saved.options, lastSyncAt: saved.lastSyncAt } : null;
   }
 
   async cwRmmView(orgId: string): Promise<CwRmmView | null> {

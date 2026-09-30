@@ -22,6 +22,9 @@ export type DashboardArea = 'top' | 'main' | 'side';
 export const DASHBOARD_WIDGETS = [
   'stats',
   'rmm-health',
+  'trackers',
+  'tickets',
+  'asset-stats',
   'favorites',
   'recent-clients',
   'activity',
@@ -38,6 +41,9 @@ export const DASHBOARD_WIDGET_INFO: Record<
 > = {
   stats: { label: 'Totals', description: 'Clients, assets, documents, and password health.', area: 'top' },
   'rmm-health': { label: 'RMM health', description: 'Agents online, checking in, and protected.', area: 'top' },
+  trackers: { label: 'Domain and SSL trackers', description: 'Domains and certificates by expiry.', area: 'top' },
+  tickets: { label: 'Tickets', description: 'Open tickets from the ConnectWise platform.', area: 'top' },
+  'asset-stats': { label: 'Asset statistics', description: 'Devices by kind and operating system.', area: 'top' },
   favorites: {
     label: 'Favorites',
     description: 'Clients, documents, assets, and passwords you starred.',

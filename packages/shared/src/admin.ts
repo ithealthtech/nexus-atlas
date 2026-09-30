@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ACCESS_LEVELS, type AccessLevel } from './access.js';
 import { emailSchema, passwordSchema } from './schemas.js';
+import type { ConnectedAppView } from './devices.js';
 
 // ---------- account security ----------
 export const recoveryCodeSchema = z.object({
@@ -48,6 +49,8 @@ export interface AccountSecurityView {
   passkeys: PasskeyView[];
   sessions: SessionListItem[];
   devices: TrustedDeviceView[];
+  /** Apps signed in through Atlas, like the browser extension. */
+  apps: ConnectedAppView[];
   notifyDigest: boolean;
 }
 

@@ -13,11 +13,13 @@ import {
 } from '@atlas/shared';
 import { Badge, Button, Card, Checkbox, Dialog, EmptyState, Skeleton, useToast } from '@/components/ui';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { useClient, useClientCounts, useWorkspacePrefs } from '@/lib/queries';
 import { useActor } from '@/lib/session';
 import { ExportButton } from '@/components/ExportButton';
 import { FavoriteStar } from '@/components/Favorites';
 import { QuickNote } from '@/components/QuickNote';
+import { TRACKER, useTrackers } from '@/components/Trackers';
 import { ClientForm, accessTone, statusTone } from '../Clients';
 
 const SECTION_LABELS: Record<ClientSection, string> = {
@@ -39,6 +41,7 @@ export function ClientLayout() {
   const actor = useActor();
   const counts = useClientCounts(clientId).data;
   const prefs = useWorkspacePrefs().data;
+  const trackers = useTrackers(clientId).data;
   if (isLoading) return <Skeleton className="h-40" />;
   if (error || !client)
     return (
@@ -118,6 +121,46 @@ export function ClientLayout() {
                 </AppLink>
               );
             })}
+        </div>
+        <div
+          role="group"
+          aria-labelledby="client-trackers"
+          className="ml-2 flex items-center border-l border-border pl-2"
+        >
+          <span
+            id="client-trackers"
+            className="px-1.5 text-xs font-semibold tracking-wide whitespace-nowrap text-muted uppercase"
+          >
+            Trackers
+          </span>
+          {(['domain', 'ssl'] as const).map((kind) => {
+            const tracked = trackers?.[kind];
+            const attention = tracked ? tracked.expired + tracked.soon : 0;
+            return (
+              <AppLink
+                key={kind}
+                to={`/clients/${clientId}/trackers/${TRACKER[kind].path}`}
+                className="relative -mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
+              >
+                {TRACKER[kind].title}
+                {tracked && (
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 text-xs tabular-nums',
+                      attention ? 'bg-warning-soft text-warning' : 'bg-surface-3 text-text-2',
+                    )}
+                  >
+                    {tracked.total}
+                    <span className="sr-only">
+                      {' '}
+                      {tracked.total === 1 ? TRACKER[kind].noun : `${TRACKER[kind].noun}s`}
+                      {attention ? `, ${attention} expired or expiring soon` : ''}
+                    </span>
+                  </span>
+                )}
+              </AppLink>
+            );
+          })}
         </div>
         <Button
           variant="ghost"

@@ -141,9 +141,10 @@ describe('ConnectWise RMM sync', () => {
     expect(job.counts.assets.created).toBe(206);
     expect(job.counts.locations.created).toBe(1);
     // Paged past the first 200 devices, and never asked about the skipped company.
-    // One rejected shape (client), then three pages of 100 for Harbor and one for Northline, with a single sign-in.
+    // One rejected shape (client), then three pages of 100 for Harbor and one for Northline, with a single sign-in
+    // for devices (tickets sign in once more, with their own scope).
     expect(asio.state.calls.filter((c) => c.includes('/categories/all/endpoints')).length).toBe(5);
-    expect(asio.state.tokens).toBe(1);
+    expect(asio.state.tokens).toBe(2);
 
     const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
       id: string;
@@ -247,7 +248,7 @@ describe('ConnectWise RMM sync', () => {
     expect((await owner.call('GET', `/api/assets?client=${harbor}`)).data).toHaveLength(2);
 
     const saved = await owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: true, devices: false });
-    expect(saved.data.options).toEqual({ locations: true, devices: false });
+    expect(saved.data.options).toEqual({ locations: true, devices: false, tickets: true });
     const sitesOnly = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
     expect(sitesOnly.counts.assets).toBeUndefined();
     expect(sitesOnly.counts.locations.updated).toBe(1);

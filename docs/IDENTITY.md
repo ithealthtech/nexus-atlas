@@ -45,6 +45,13 @@
 ## API keys and client accounts
 
 - **API keys:** administrators create them and each key acts as its creator, limited to the scopes it was given (`read`, `write`, `passwords`) and to documentation and vault endpoints. Creating, revoking, and using keys are recorded. See [Data in and out](DATA.md#rest-api).
+- **Browser extension (device sign-in):** staff sign the extension in through Atlas rather than typing a password into it.
+  - The extension makes a P-256 key pair whose private half can't be exported, and asks to sign in with the public half. It shows a code like `K7QX-4MPD`, valid for 10 minutes.
+  - The person opens the approval page in Atlas, checks the code and the requesting address, and allows it. Approving needs a password entered in the last 10 minutes, and is recorded as *Device sign-in approved*.
+  - The extension then collects its session by signing the request with its key, once. Every later request carries the session token and a signature over the method, path, time, a one-time nonce, and the body's hash. The server keeps only the token's hash and the public key, refuses requests more than 2 minutes old, and refuses a nonce it has seen. A copied token is useless without the key.
+  - A device session acts as its person and reaches only the extension's routes (`/api/device/…`): logins matching a page, search, fill, and copy. These go through the same vault checks, reasons, and access history as the web app. It never uses cookies, so the browser origin checks don't apply to these routes.
+  - Sessions end after 7 days unused or 30 days after signing in, and each person has at most 10. People see them under **Signed-in apps** on their account page and can sign any out. Changing or resetting a password, disabling the account, a lockout, and **Sign out everywhere** end them too.
+  - The same sign-in is meant for the Windows app (#23).
 - **Client accounts** see only the clients they're granted. They see a password only when staff share it with the client, never restricted ones, and reveals follow the same reason and access-history rules as staff.
 
 ## Coming later

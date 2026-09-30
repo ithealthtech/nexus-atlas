@@ -1,5 +1,5 @@
 {
-  "id": "e43c3158-ab01-4c08-b65e-57dec64fa2a6",
+  "id": "499a2da7-206d-420e-a590-221ba0dd3d42",
   "prevId": "6a625f11-e62c-4925-8879-7307e3102bda",
   "version": "7",
   "dialect": "postgresql",
@@ -1490,45 +1490,6 @@
           "notNull": true,
           "default": "''"
         },
-        "notes_version": {
-          "name": "notes_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "notes_updated_by": {
-          "name": "notes_updated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes_updated_by_name": {
-          "name": "notes_updated_by_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes_updated_at": {
-          "name": "notes_updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "hours": {
-          "name": "hours",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "maintenance_window": {
-          "name": "maintenance_window",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
         "require_reveal_reason": {
           "name": "require_reveal_reason",
           "type": "boolean",
@@ -1601,19 +1562,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "clients_notes_updated_by_users_id_fk": {
-          "name": "clients_notes_updated_by_users_id_fk",
-          "tableFrom": "clients",
-          "tableTo": "users",
-          "columnsFrom": [
-            "notes_updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -2120,72 +2068,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.favorites": {
-      "name": "favorites",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "entity_type": {
-          "name": "entity_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "entity_id": {
-          "name": "entity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "favorites_user_id_users_id_fk": {
-          "name": "favorites_user_id_users_id_fk",
-          "tableFrom": "favorites",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "favorites_user_id_entity_type_entity_id_pk": {
-          "name": "favorites_user_id_entity_type_entity_id_pk",
-          "columns": [
-            "user_id",
-            "entity_type",
-            "entity_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "favorites_entity_type_check": {
-          "name": "favorites_entity_type_check",
-          "value": "\"favorites\".\"entity_type\" in ('client','document','asset')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.folders": {
@@ -4706,6 +4588,173 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.tickets": {
+      "name": "tickets",
+      "schema": "",
+      "columns": {
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "closed": {
+          "name": "closed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "number": {
+          "name": "number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "opened_at": {
+          "name": "opened_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "remote_updated_at": {
+          "name": "remote_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "tickets_client": {
+          "name": "tickets_client",
+          "columns": [
+            {
+              "expression": "org_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tickets_org_id_orgs_id_fk": {
+          "name": "tickets_org_id_orgs_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "orgs",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tickets_client_id_clients_id_fk": {
+          "name": "tickets_client_id_clients_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tickets_org_id_source_external_id_pk": {
+          "name": "tickets_org_id_source_external_id_pk",
+          "columns": [
+            "org_id",
+            "source",
+            "external_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.trusted_devices": {
       "name": "trusted_devices",
       "schema": "",
@@ -4904,13 +4953,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "workspace": {
-          "name": "workspace",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
         },
         "entra_oid": {
           "name": "entra_oid",

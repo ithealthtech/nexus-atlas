@@ -42,7 +42,10 @@ import { AppLink } from '@/components/AppLink';
 import { FavoritesCard } from '@/components/Favorites';
 import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard } from '@/components/RmmHealth';
+import { TrackerCard } from '@/components/Trackers';
+import { TicketsCard } from '@/components/Tickets';
 import { WarrantyCard } from '@/components/Warranty';
+import { AssetStatsCard } from '@/components/AssetStats';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
 import {
@@ -177,6 +180,9 @@ export function Dashboard() {
       </div>
     ),
     'rmm-health': <RmmHealthCard />,
+    trackers: <TrackerCard />,
+    tickets: <TicketsCard />,
+    'asset-stats': <AssetStatsCard />,
     favorites: <FavoritesCard />,
     'recent-clients': (
       <Card>
