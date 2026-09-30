@@ -112,8 +112,12 @@ const DETAIL_CONCURRENCY = 4;
 function mapDevice(id: string, companyId: string, siteId: string, record: Json): RmmDevice {
   // ConnectWise's details put a device's own fields under its category, e.g. platform{deviceName, ipAddress,
   // macAddress, type}; those are read as if they were top-level.
-  const inner = ['platform', 'network', 'cloud'].map((k) => record[k]).find((v) => v && typeof v === 'object' && !Array.isArray(v));
-  const d: Json = { ...record, ...(inner as Json | undefined) };
+  const category = ['platform', 'network', 'cloud'].find((k) => {
+    const v = record[k];
+    return v && typeof v === 'object' && !Array.isArray(v);
+  });
+  const { [category ?? '']: inner, ...rest } = record;
+  const d: Json = category ? { ...rest, ...(inner as Json) } : record;
   const hostname = text(
     d,
     'hostName',
@@ -169,15 +173,7 @@ function mapDevice(id: string, companyId: string, siteId: string, record: Json):
       'macAddresses',
     ),
     // Firmware names ("Dell Inc.", "To be filled by O.E.M.") are tidied; a blank one is filled in when the asset is saved.
-    manufacturer: normalizeManufacturer(text(
-      d,
-      'manufacturer',
-      'system.manufacturer',
-      'hardware.manufacturer',
-      'bios.manufacturer',
-      'baseBoard.manufacturer',
-      'vendor',
-    )),
+    manufacturer: normalizeManufacturer(makerOf(d)),
     model: text(d, 'model', 'system.model', 'hardware.model', 'systemModel', 'productName'),
     serial: text(
       d,
@@ -189,10 +185,11 @@ function mapDevice(id: string, companyId: string, siteId: string, record: Json):
       'serial',
     ),
     online: onlineState(pick(d, ...ONLINE_KEYS)),
-    lastSeenAt: seenAt(pick(d, ...LAST_SEEN_KEYS)),
+    lastSeenAt: lastSeenOf(d),
     warrantyExpires: warrantyDate(pick(d, ...WARRANTY_KEYS)),
     ...protectionOf(d),
-    extra: extraValues(d),
+    // The manufacturer goes in the Manufacturer field only, not a second field named after where it was found.
+    extra: extraValues(d, '', 0, new Set([makerPath(d) ?? ''])),
   };
 }
 
@@ -236,6 +233,55 @@ const WARRANTY_KEYS = [
 ];
 const PROTECTION_OBJECTS = ['endpointProtection', 'antivirus', 'antiVirus', 'av', 'securityProduct', 'security.antivirus'];
 
+/** Every plain value in a record with its dotted path, nested objects opened (lists aren't). */
+function leaves(o: Json, prefix = '', depth = 0): [string, unknown][] {
+  const out: [string, unknown][] = [];
+  for (const [key, value] of Object.entries(o)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === 'object') {
+      if (!Array.isArray(value) && depth < 3) out.push(...leaves(value as Json, path, depth + 1));
+    } else if (value !== null && value !== undefined && value !== '') out.push([path, value]);
+  }
+  return out;
+}
+
+// ConnectWise's names for these vary by tenant and agent (systemManufacturer, lastContactedAt, ...), so when none
+// of the names listed above is present, a field whose name says what it is is used.
+const MAKER_NAMES = ['manufacturer', 'system.manufacturer', 'hardware.manufacturer', 'baseBoard.manufacturer', 'vendor'];
+const MAKER_KEY = /^(system|computer|hardware|device|machine|product|endpoint|oem)?_?(manufacturer|make)(_?name)?$/i;
+// A BIOS, board, or part maker (American Megatrends, Intel) isn't the device's.
+const MAKER_SKIP = /bios|firmware|board|processor|cpu|gpu|video|display|monitor|disk|drive|memory|ram|network|adapter|nic|battery|printer|software|antivirus|protection|os\b|operatingsystem/i;
+const makerPath = (d: Json) =>
+  MAKER_NAMES.find((k) => text(d, k)) ??
+  leaves(d).find(([path, v]) => {
+    const parts = path.split('.');
+    return typeof v === 'string' && MAKER_KEY.test(parts.pop()!) && !MAKER_SKIP.test(parts.join('.'));
+  })?.[0];
+const makerOf = (d: Json) => {
+  const path = makerPath(d);
+  return path ? text(d, path) : '';
+};
+
+const SEEN_KEY = /^(last|latest)_?(seen|contact|contacted|check_?in|heartbeat|communicat|connect|report|sync|online|agent)|(heartbeat|check_?in|contact)_?(time|date|at|on|timestamp)?$/i;
+const SEEN_SKIP = /boot|logon|login|loggedon|user|patch|scan|reboot|install|shutdown|restart/i;
+const seenPath = (d: Json) =>
+  LAST_SEEN_KEYS.find((k) => seenAt(pick(d, k))) ??
+  leaves(d).find(([path, v]) => {
+    const key = path.split('.').pop()!;
+    return SEEN_KEY.test(key) && !SEEN_SKIP.test(path) && seenAt(v) !== null;
+  })?.[0];
+/** When the agent last checked in, from a listed name or one that plainly says so; null when nothing does. */
+export function lastSeenOf(d: Json): string | null {
+  const path = seenPath(d);
+  return path ? seenAt(pick(d, path)) : null;
+}
+
+const PROTECTION_KEY = /anti_?virus|endpoint_?protection|security_?product|defender|(^|\s)edr(\s|$)/i;
+const AV_KEY = /(^|\s)(av|AV)([A-Z_\s]|$)/; // av, avStatus, AV_state; not availability
+/** Endpoint protection values found by name (antivirusStatus, endpointProtection.state, ...). */
+const protectionLeaves = (d: Json) =>
+  leaves(d).filter(([path]) => PROTECTION_KEY.test(path.replace(/\./g, ' ')) || AV_KEY.test(path.replace(/\./g, ' ')));
+
 /** true for online, false for offline, null when the value doesn't say. */
 export function onlineState(value: unknown): boolean | null {
   if (typeof value === 'boolean') return value;
@@ -277,27 +323,36 @@ export function protectionOf(d: Json): { protection: RmmProtection | null; prote
   );
   const product = (
     (obj && text(obj, 'name', 'product', 'productName', 'vendor')) ||
-    text(d, 'antivirusProduct', 'antivirusName', 'avProduct', 'endpointProtectionProduct', 'securityProductName')
+    text(d, 'antivirusProduct', 'antivirusName', 'avProduct', 'endpointProtectionProduct', 'securityProductName') ||
+    String(protectionLeaves(d).find(([path, v]) => typeof v === 'string' && /(name|product|vendor)$/i.test(path.split('.').pop()!))?.[1] ?? '')
   ).slice(0, 200);
-  const installed = pick(obj ?? {}, 'installed', 'isInstalled') ?? pick(d, 'isAntivirusInstalled', 'antivirusInstalled');
+  // Any other value named for the protection, by what its name ends with.
+  const loose = (end: RegExp) => protectionLeaves(d).find(([path]) => end.test(path.split('.').pop()!))?.[1];
+  const installed =
+    pick(obj ?? {}, 'installed', 'isInstalled') ??
+    pick(d, 'isAntivirusInstalled', 'antivirusInstalled') ??
+    loose(/installed$/i);
   const running =
     pick(obj ?? {}, 'running', 'isRunning', 'enabled', 'isEnabled', 'active') ??
-    pick(d, 'isAntivirusRunning', 'antivirusRunning', 'antivirusEnabled');
+    pick(d, 'isAntivirusRunning', 'antivirusRunning', 'antivirusEnabled') ??
+    loose(/(running|enabled|active|protected)$/i);
   const bare = pick(d, ...PROTECTION_OBJECTS);
   const status = String(
     pick(obj ?? {}, 'status', 'state', 'protectionStatus') ??
       pick(d, 'antivirusStatus', 'avStatus', 'endpointProtectionStatus', 'protectionStatus') ??
-      (typeof bare === 'string' ? bare : ''),
+      (typeof bare === 'string' ? bare : undefined) ??
+      loose(/(status|state)$/i) ??
+      '',
   )
     .trim()
     .toLowerCase();
   // "Installed" on its own doesn't say whether it runs, so it stays unknown.
   let protection: RmmProtection | null = null;
-  if (installed === false || /^(not ?installed|none|missing|absent|no ?av|unprotected)$/.test(status))
+  if (installed === false || /^(not ?installed|none|missing|absent|no ?av|unprotected|not ?found)$/.test(status))
     protection = 'missing';
   else if (running === true || /^(running|active|enabled|protected|on|ok|healthy|up ?to ?date)$/.test(status))
     protection = 'running';
-  else if (running === false || /^(disabled|stopped|not ?running|inactive|off|expired|out ?of ?date|outdated|at ?risk)$/.test(status))
+  else if (running === false || /^(disabled|stopped|not ?running|inactive|off|expired|out ?of ?date|outdated|at ?risk|not ?protected)$/.test(status))
     protection = 'not_running';
   return { protection, protectionProduct: product };
 }
@@ -335,10 +390,12 @@ const MAPPED = new Set(
 const CATEGORIES = new Set(['platform', 'network', 'cloud']);
 
 /** Every other value in a device record, as [label, value]: nested objects flattened, lists of values joined. */
-function extraValues(record: Json, prefix = '', depth = 0): [string, string][] {
+function extraValues(record: Json, prefix = '', depth = 0, skip = new Set<string>(), path = ''): [string, string][] {
   const out: [string, string][] = [];
   for (const [key, value] of Object.entries(record)) {
     if (value === null || value === undefined || value === '') continue;
+    const at = path ? `${path}.${key}` : key;
+    if (skip.has(at)) continue;
     // The category object's fields were read as the device's own, so they aren't prefixed with it.
     if (!prefix && CATEGORIES.has(key) && typeof value === 'object' && !Array.isArray(value)) continue;
     if (!prefix && MAPPED.has(key.toLowerCase())) continue;
@@ -349,9 +406,9 @@ function extraValues(record: Json, prefix = '', depth = 0): [string, string][] {
       else if (depth < 2)
         value
           .filter((v): v is Json => !!v && typeof v === 'object')
-          .forEach((v, i) => out.push(...extraValues(v, value.length > 1 ? `${label} ${i + 1}` : label, depth + 1)));
+          .forEach((v, i) => out.push(...extraValues(v, value.length > 1 ? `${label} ${i + 1}` : label, depth + 1, skip, `${at}.${i}`)));
     } else if (typeof value === 'object') {
-      if (depth < 2) out.push(...extraValues(value as Json, label, depth + 1));
+      if (depth < 2) out.push(...extraValues(value as Json, label, depth + 1, skip, at));
     } else out.push([readableLabel(label), String(value).slice(0, 2000)]);
   }
   return out.slice(0, 150);
@@ -383,10 +440,10 @@ export const shapeOf = (body: unknown): string => {
       Array.isArray(v)
         ? `${k}[${v.length}]`
         : v && typeof v === 'object'
-          ? `${k}{${Object.keys(v as Json).slice(0, 8).join(',')}}`
+          ? `${k}{${Object.keys(v as Json).slice(0, 40).join(',')}}`
           : k,
     )
-    .slice(0, 12)
+    .slice(0, 30)
     .join(', ');
 };
 
@@ -637,9 +694,13 @@ export class CwRmmClient {
         const listed = await this.devicePages(companyId, siteIds, shape);
         this.deviceQuery = shape;
         const devices = await this.withDetails(companyId, siteIds, listed);
-        // Neither the list nor the details say whether the agent is online; the heartbeat API does.
-        const online = await this.heartbeats(companyId);
-        return devices.map((d) => (online.has(d.id) ? { ...d, online: online.get(d.id)! } : d));
+        // Neither the list nor the details say whether the agent is online, when it last checked in, or how its
+        // protection is doing; the heartbeat and system state APIs do.
+        const [beats, states] = await Promise.all([
+          this.endpointStates(companyId, 'heartbeat'),
+          this.endpointStates(companyId, 'systemstate'),
+        ]);
+        return devices.map((d) => withState(d, beats.get(d.id), states.get(d.id)));
       } catch (error) {
         // Only a rejected request is worth trying another shape for.
         if (!(error instanceof HttpError && error.status === 400)) throw error;
@@ -656,18 +717,18 @@ export class CwRmmClient {
     );
   }
 
-  /** Whether each of the company's agents is online, by endpoint ID; empty when ConnectWise won't say. */
-  private async heartbeats(companyId: string): Promise<Map<string, boolean>> {
-    const online = new Map<string, boolean>();
+  /** Each of the company's endpoints' record from a bulk state API, by endpoint ID; empty when ConnectWise won't say. */
+  private async endpointStates(companyId: string, api: 'heartbeat' | 'systemstate'): Promise<Map<string, Json>> {
+    const out = new Map<string, Json>();
     let body: unknown;
     try {
       body = await this.call(
         'GET',
-        `/api/platform/v2/device/endpoints/heartbeat?resourceType=companies&resources=${encodeURIComponent(companyId)}`,
+        `/api/platform/v2/device/endpoints/${api}?resourceType=companies&resources=${encodeURIComponent(companyId)}`,
       );
     } catch (error) {
-      // Online status is extra: without it the devices still sync, as unknown.
-      if (error instanceof HttpError) return online;
+      // These are extra: without them the devices still sync, with the values unknown.
+      if (error instanceof HttpError) return out;
       throw error;
     }
     const records = pick((body ?? {}) as Json, 'successfulRecords');
@@ -675,11 +736,10 @@ export class CwRmmClient {
       const endpoints = pick(record, 'endpoints');
       for (const e of Array.isArray(endpoints) ? (endpoints as Json[]) : []) {
         const id = text(e, 'EndpointID', 'endpointID', 'endpointId');
-        const up = onlineState(pick(e, 'Availability', 'availability'));
-        if (id && up !== null) online.set(id, up);
+        if (id) out.set(id, e);
       }
     }
-    return online;
+    return out;
   }
 
   /**
@@ -790,6 +850,29 @@ export class CwRmmClient {
         (noId ? `; a record without one has fields ${shapeOf(noId)}` : '');
     return out;
   }
+}
+
+/**
+ * A device with what the heartbeat and system state APIs say about it: online or not, when it last checked in, and
+ * its protection, each only where the device's own record didn't say.
+ */
+export function withState(d: RmmDevice, beat: Json | undefined, state: Json | undefined, now = new Date()): RmmDevice {
+  const both: Json = { ...state, ...beat };
+  const online = beat ? onlineState(pick(beat, 'Availability', 'availability')) : null;
+  const protection = d.protection ? d : protectionOf(both);
+  const lastSeenAt =
+    d.lastSeenAt ??
+    lastSeenOf(both) ??
+    // An agent the heartbeat API says is up is checking in now.
+    (online === true ? now.toISOString() : null);
+  return {
+    ...d,
+    online: online ?? d.online,
+    lastSeenAt,
+    protection: protection.protection,
+    protectionProduct: d.protectionProduct || protection.protectionProduct,
+    manufacturer: d.manufacturer || normalizeManufacturer(makerOf(both)),
+  };
 }
 
 // Which fields of another layout can take a device value: its own key, or a label that means the same thing.

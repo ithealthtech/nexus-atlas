@@ -741,3 +741,69 @@ describe('ConnectWise RMM sync with warranty lookup', () => {
     expect((await list()).find((a) => a.name === 'HDG-WS-01')!.fields.warranty_expires).toBe('2031-01-01');
   });
 });
+
+describe('ConnectWise RMM loosely named fields', () => {
+  it('reads manufacturer, check-in and protection under other names, with the manufacturer in its own field only', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const now = Date.now();
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      if (url.pathname === '/api/platform/v2/device/companies/c1/sites/s1/endpoints/e1')
+        return Response.json({
+          companyID: 'c1',
+          siteID: 's1',
+          endpointID: 'e1',
+          platform: {
+            deviceName: 'WS-01',
+            systemManufacturer: 'Dell Inc.',
+            bios: { manufacturer: 'American Megatrends Inc.' },
+            lastContactedAt: new Date(now - 3_600_000).toISOString(),
+          },
+        });
+      if (url.pathname.endsWith('/endpoints/heartbeat'))
+        return Response.json({
+          successfulRecords: [
+            {
+              endpoints: [
+                { EndpointID: 'e1', Availability: true },
+                { EndpointID: 'e2', Availability: true },
+              ],
+            },
+          ],
+        });
+      if (url.pathname.endsWith('/endpoints/systemstate'))
+        return Response.json({
+          successfulRecords: [
+            {
+              endpoints: [
+                { endpointID: 'e1', antivirusStatus: 'Enabled', antivirusName: 'Defender' },
+                { endpointID: 'e2', avStatus: 'Not Protected', lastLoggedOnUser: { username: 'x' } },
+              ],
+            },
+          ],
+        });
+      if (url.pathname.includes('/endpoints/'))
+        return Response.json({ message: 'resource not found' }, { status: 404 });
+      return Response.json({
+        platform: [
+          { endpointID: 'e1', siteID: 's1', deviceName: 'WS-01' },
+          { endpointID: 'e2', siteID: 's1', deviceName: 'WS-02', manufacturer: 'LENOVO' },
+        ],
+      });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const [one, two] = await client.devices('c1', ['s1']);
+    expect(one).toMatchObject({
+      manufacturer: 'Dell',
+      protection: 'running',
+      protectionProduct: 'Defender',
+      online: true,
+    });
+    expect(Date.parse(one!.lastSeenAt!)).toBe(now - 3_600_000);
+    expect(one!.extra.map(([label]) => label.toLowerCase()).join('|')).not.toMatch(/system manufacturer/);
+    // No check-in time given, but the heartbeat says it's up now.
+    expect(two).toMatchObject({ manufacturer: 'Lenovo', protection: 'not_running', online: true });
+    expect(Date.parse(two!.lastSeenAt!)).toBeGreaterThanOrEqual(now - 1000);
+  });
+});
