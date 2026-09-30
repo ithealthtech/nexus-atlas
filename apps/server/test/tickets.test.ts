@@ -284,24 +284,22 @@ describe('ticket sync and dashboard', () => {
   });
 
   it('shows and links the portal ID a CW-System note gives a dotted platform ticket', async () => {
-    tickets
-      .get('c1')!
-      .push(
-        {
-          id: 't-a1',
-          number: '133023.1670',
-          summary: 'Network attack',
-          status: { id: 's-new', name: 'New' },
-          createdAt: ago(2),
-        },
-        {
-          id: 't-a2',
-          number: '133023.1671',
-          summary: 'No note yet',
-          status: { id: 's-new', name: 'New' },
-          createdAt: ago(3),
-        },
-      );
+    tickets.get('c1')!.push(
+      {
+        id: 't-a1',
+        number: '133023.1670',
+        summary: 'Network attack',
+        status: { id: 's-new', name: 'New' },
+        createdAt: ago(2),
+      },
+      {
+        id: 't-a2',
+        number: '133023.1671',
+        summary: 'No note yet',
+        status: { id: 's-new', name: 'New' },
+        createdAt: ago(3),
+      },
+    );
     await connect(tickets);
     platform.notes.set('t-a1', [
       {
