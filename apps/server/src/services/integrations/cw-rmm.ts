@@ -6,7 +6,7 @@ import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
 import { ClientService } from '../clients.js';
 import { LayoutService } from '../layouts.js';
-import { locations } from '../people.js';
+import { contacts as contactService, locations } from '../people.js';
 import { Scope } from '../scope.js';
 import type { SettingsService, StoredCwRmm } from '../settings.js';
 import { ImportRun } from '../importers/common.js';
@@ -24,6 +24,15 @@ const SCOPES = 'platform.companies.read platform.sites.read platform.devices.rea
 export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.automation.create`;
 /** Tickets get their own token, so a key without ticket access still syncs devices. */
 export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
+/** Adding ticket notes (the scope names CallBridge uses against the same API). Asked for only when notes are on. */
+export const TICKET_NOTE_SCOPES = `${TICKET_SCOPES} platform.tickets.create`;
+/** Writing the "Atlas link" custom fields on devices. Asked for only when that option is on. */
+export const LINK_SCOPES = `${SCOPES} platform.devices.write`;
+/**
+ * Writing them on companies. The spec names no scope for company custom fields; this follows its devices.write
+ * naming, on a token of its own so a key refused it still writes device links.
+ */
+export const COMPANY_LINK_SCOPES = `${SCOPES} platform.companies.write`;
 const RETRY_MS = 2000;
 /** The code on errors that mean the key can't sign in or lacks a permission: no other request shape will help. */
 export const ACCESS_DENIED = 'cw_access_denied';
@@ -32,6 +41,7 @@ const ATTEMPT_CHARS = 100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Json = Record<string, unknown>;
+type Method = 'GET' | 'POST' | 'PUT';
 
 type DeviceQuery = { kind: 'v2'; resourceType: string; limit: number } | { kind: 'v1'; limit: number };
 // The platform API spec takes company, site, or endpoint as the resource type, up to 500 devices a page. The first
@@ -60,7 +70,7 @@ export const text = (o: Json, ...keys: string[]) => {
   return typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
 };
 /** The list inside a response, whatever it's called. */
-const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'endpoints', 'devices', 'tickets'];
+const LIST_KEYS = ['data', 'items', 'results', 'companies', 'sites', 'contacts', 'endpoints', 'devices', 'tickets'];
 export const listOf = (body: unknown, depth = 0): Json[] => {
   if (Array.isArray(body)) return body as Json[];
   if (!body || typeof body !== 'object' || depth > 3) return [];
@@ -562,6 +572,58 @@ export interface RmmSite {
   postalCode: string;
   country: string;
 }
+export interface RmmContact {
+  id: string;
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+  mobile: string;
+  /** The company's primary contact. */
+  primary: boolean;
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** A phone number record as one string: country code, number, and extension when given. */
+const phoneText = (p: Json | undefined) => {
+  if (!p || typeof p !== 'object') return '';
+  const number = text(p, 'nationalNumber', 'number', 'phoneNumber', 'value');
+  if (!number) return '';
+  const code = text(p, 'countryCode');
+  const ext = text(p, 'extension');
+  return `${code && !number.startsWith('+') ? `+${code.replace(/^\+/, '')} ` : ''}${number}${ext ? ` x${ext}` : ''}`;
+};
+
+/**
+ * A ConnectWise contact (a company's primaryContact, or a contact record) in Atlas's terms; null when it has no ID
+ * or name, or is inactive. Contact records list emails and phone numbers; the company's primary contact gives one
+ * of each.
+ */
+export function mapContact(c: Json, primary = false): RmmContact | null {
+  const id = text(c, 'id', 'contactId');
+  const name = [text(c, 'firstName'), text(c, 'lastName')].filter(Boolean).join(' ') || text(c, 'name', 'fullName');
+  if (!id || !name || c.activeFlag === false) return null;
+  const list = (key: string) => (Array.isArray(c[key]) ? (c[key] as Json[]).filter((v) => v && typeof v === 'object') : []);
+  const first = (items: Json[]) => items.find((v) => v.primaryFlag === true) ?? items[0];
+  const email = text(c, 'primaryEmail.emailAddress', 'email', 'emailAddress') || text(first(list('emails')) ?? {}, 'emailAddress');
+  const phones = list('phoneNumbers');
+  const isMobile = (p: Json) => /mobile|cell/i.test(`${text(p, 'designation', 'type.name', 'description')}`);
+  const mobile = phoneText(phones.find(isMobile));
+  const phone =
+    phoneText(pick(c, 'primaryPhoneNumber') as Json | undefined) ||
+    phoneText(first(phones.filter((p) => !isMobile(p)))) ||
+    text(c, 'phone', 'phoneNumber');
+  return {
+    id,
+    name: name.slice(0, 120),
+    title: text(c, 'title', 'jobTitle').slice(0, 120),
+    email: EMAIL.test(email) && email.length <= 254 ? email.toLowerCase() : '',
+    phone: phone.slice(0, 40),
+    mobile: mobile.slice(0, 40),
+    primary,
+  };
+}
+
 export interface RmmDevice {
   id: string;
   companyId: string;
@@ -785,18 +847,27 @@ export class CwRmmClient {
     return this.call('GET', path);
   }
 
+  /** A write to the platform API. Only the opt-in write-back options use these. */
+  post(path: string, body: unknown): Promise<unknown> {
+    return this.call('POST', path, body);
+  }
+
+  put(path: string, body: unknown): Promise<unknown> {
+    return this.call('PUT', path, body);
+  }
+
   /** One page of another part of the platform API (patching, backup, security), with the next page's cursor. */
   page(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ body: unknown; nextCursor: number | null }> {
     return this.request(method, path, body);
   }
 
-  private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
+  private async call(method: Method, path: string, body?: unknown): Promise<unknown> {
     return (await this.request(method, path, body)).body;
   }
 
   /** A call's body, with the next page's cursor when ConnectWise gives one in its Link header. */
   private async request(
-    method: 'GET' | 'POST',
+    method: Method,
     path: string,
     body?: unknown,
   ): Promise<{ body: unknown; nextCursor: number | null }> {
@@ -825,7 +896,17 @@ export class CwRmmClient {
         res.status === 400 || res.status === 404 ? res.status : 502,
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
-    return { body: await res.json(), nextCursor: nextCursorOf(res.headers.get('link')) };
+    let parsed: unknown;
+    if (method === 'GET') parsed = await res.json();
+    else {
+      // A write can answer with no body (204), or one that isn't JSON; either way it worked.
+      try {
+        parsed = JSON.parse(await res.text());
+      } catch {
+        parsed = null;
+      }
+    }
+    return { body: parsed, nextCursor: nextCursorOf(res.headers.get('link')) };
   }
 
   /**
@@ -878,6 +959,30 @@ export class CwRmmClient {
         country: text(s, 'address.country', 'country', 'countryName'),
       }))
       .filter((s) => s.id);
+  }
+
+  /**
+   * The company's contacts: its primary contact (from the company record, as the spec gives it), plus any others
+   * the contact list returns for this company. The spec documents only creating contacts, so the list is a bonus:
+   * when ConnectWise refuses it, the primary contact is still synced.
+   */
+  async contacts(companyId: string): Promise<RmmContact[]> {
+    const company = (await this.call('GET', `/api/platform/v1/company/companies/${encodeURIComponent(companyId)}`)) as Json;
+    const primary = mapContact((pick(company ?? {}, 'primaryContact', 'data.primaryContact') ?? {}) as Json, true);
+    const out = new Map<string, RmmContact>(primary ? [[primary.id, primary]] : []);
+    let listed: Json[] = [];
+    try {
+      listed = listOf(await this.call('GET', `/api/platform/v1/contact/contacts?companyId=${encodeURIComponent(companyId)}`));
+    } catch (error) {
+      if (!(error instanceof HttpError)) throw error;
+    }
+    for (const c of listed) {
+      // Only contacts that say they belong to this company: a list that ignored the filter mustn't mix clients.
+      if (text(c, 'company.id', 'companyId', 'company.companyId') !== companyId) continue;
+      const mapped = mapContact(c, primary?.id === text(c, 'id', 'contactId'));
+      if (mapped) out.set(mapped.id, mapped);
+    }
+    return [...out.values()];
   }
 
   /** Every device for the company, page by page, using the first request shape the tenant accepts. */
@@ -1634,7 +1739,51 @@ export async function deviceLayout(db: Database, orgId: string, chosen: string |
 }
 
 /**
- * Syncs linked companies: sites become locations, devices become assets in the device layout (see deviceLayout).
+ * A company's contacts into its Atlas client. A contact already there with the same email (or, without one, the
+ * same name) is linked and updated rather than copied. Notes, and which contact is primary, are left as Atlas has
+ * them once a contact exists.
+ */
+async function syncContacts(scope: Scope, client: CwRmmClient, run: ImportRun, companyId: string, clientId: string) {
+  let found: RmmContact[];
+  try {
+    found = await client.contacts(companyId);
+  } catch (error) {
+    run.note(`Company ${companyId}: contacts ${error instanceof HttpError ? error.message.replace(/^ConnectWise RMM /, '') : 'could not be read.'}`);
+    return;
+  }
+  const existing = await contactService.list(scope, clientId);
+  const hasPrimary = existing.some((c) => c.primary);
+  for (const c of found) {
+    const body = { name: c.name, title: c.title, email: c.email, phone: c.phone, mobile: c.mobile };
+    // A value ConnectWise leaves blank doesn't wipe one typed into Atlas.
+    const filled = Object.fromEntries(Object.entries(body).filter(([, v]) => v));
+    await run.upsert(
+      'contacts',
+      c.id,
+      c.name,
+      async () => {
+        const same = existing.find((e) =>
+          c.email ? e.email.toLowerCase() === c.email : e.name.trim().toLowerCase() === c.name.toLowerCase(),
+        );
+        if (same) {
+          await contactService.update(scope, same.id, filled);
+          return same.id;
+        }
+        const created = await contactService.create(scope, clientId, {
+          ...body,
+          primary: c.primary && !hasPrimary,
+          notes: 'Synced from ConnectWise.',
+        });
+        existing.push(created);
+        return created.id;
+      },
+      async (id) => void (await contactService.update(scope, id, filled)),
+    );
+  }
+}
+
+/**
+ * Syncs linked companies: sites become locations, contacts become contacts, devices become assets in the device layout (see deviceLayout).
  * A device the RMM no longer reports is archived, but only when its company's device list was fetched in full.
  */
 export async function runCwRmmSync(
@@ -1660,10 +1809,12 @@ export async function runCwRmmSync(
 
   const linked = Object.entries(map).flatMap(([companyId, m]) => (m.action === 'link' ? [[companyId, m.clientId] as const] : []));
   if (!linked.length) run.note('No ConnectWise RMM companies are linked to Atlas clients yet.');
-  if (!options.locations || !options.devices)
-    run.note(
-      `Not synced this time, as chosen: ${[!options.locations && 'sites (locations)', !options.devices && 'devices'].filter(Boolean).join(' and ')}.`,
-    );
+  const skipped = [
+    !options.locations && 'sites (locations)',
+    !options.contacts && 'contacts',
+    !options.devices && 'devices',
+  ].filter(Boolean);
+  if (skipped.length) run.note(`Not synced this time, as chosen: ${skipped.join(', ')}.`);
   const seen = new Set<string>();
   const readInFull = new Set<string>();
   // A client linked to several companies is read in full only if every one of them was.
@@ -1719,6 +1870,7 @@ export async function runCwRmmSync(
         async (existing) => void (await locations.update(scope, existing, body)),
       );
     }
+    if (options.contacts) await syncContacts(scope, client, run, companyId, clientId);
     // Assets already in this client (from Hudu, a CSV, or typed in) that a device may be, by name or hostname:
     // the existing asset is updated instead of a copy being made.
     const existing = await sameNameCandidates(db, actor.orgId, clientId);

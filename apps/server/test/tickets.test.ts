@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { mapTicket } from '../src/services/integrations/cw-tickets.js';
+import { mapNote, mapTicket, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const CLIENT_ID = 'asio-client-id-123';
@@ -24,6 +24,10 @@ const STATUSES = [
  */
 function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: boolean; closedFails?: boolean } = {}) {
   const calls: string[] = [];
+  /** Notes and custom field values ConnectWise was sent, by ticket and by path. */
+  const notes = new Map<string, Ticket[]>();
+  const fields = new Map<string, unknown>();
+  const definitions: Ticket[] = [];
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
@@ -46,6 +50,29 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     if (url.pathname.includes('/ticketing/') && auth !== 'Bearer ticket-tok')
       return json({ message: 'missing scope' }, 403);
     if (url.pathname === '/api/platform/v1/service/ticketing/statuses') return json(STATUSES);
+    const noteOf = /^\/api\/platform\/v1\/service\/ticketing\/tickets\/([^/]+)\/notes$/.exec(url.pathname);
+    if (noteOf) {
+      const list = notes.get(noteOf[1]) ?? [];
+      if (init?.method !== 'POST') return json(list);
+      const note = {
+        id: `n-${list.length + 1}`,
+        createdAt: new Date().toISOString(),
+        createdBy: 'API',
+        ...JSON.parse(String(init.body)),
+      };
+      notes.set(noteOf[1], [...list, note]);
+      return json(note, 201);
+    }
+    if (url.pathname === '/api/platform/v1/custom-field/definitions') {
+      if (init?.method !== 'POST') return json(definitions);
+      const created = { id: `def-${definitions.length + 1}`, ...JSON.parse(String(init.body)) };
+      definitions.push(created);
+      return json(created, 201);
+    }
+    if (url.pathname.endsWith('/custom-fields') && init?.method === 'PUT') {
+      fields.set(url.pathname, JSON.parse(String(init.body)));
+      return new Response(null, { status: 204 });
+    }
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets') {
       // As the spec defines it: "id1,id2" is in, "[notIn],id1,id2" is not in; anything else in brackets is refused,
       // as a real tenant did with "[in]".
@@ -65,7 +92,7 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     }
     return json({}, 404);
   }) as typeof fetch;
-  return { fetcher, calls };
+  return { fetcher, calls, notes, fields, definitions };
 }
 
 async function waitForJob(b: Browser, id: string) {
@@ -110,6 +137,27 @@ describe('ticket values', () => {
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),
     ).toMatchObject({ id: 'u-1', number: '7', status: 'Done', closed: true });
+  });
+});
+
+describe('ticket notes', () => {
+  it('finds a ticket number in a reveal reason', () => {
+    expect(ticketNumberIn('Fixing #4512 for Jane')).toBe('4512');
+    expect(ticketNumberIn('ticket 88 printer')).toBe('88');
+    expect(ticketNumberIn('Ticket no. 301')).toBe('301');
+    expect(ticketNumberIn('T1234')).toBe('1234');
+    expect(ticketNumberIn('checking the backup')).toBeNull();
+  });
+  it('maps a note, dropping control characters', () => {
+    expect(
+      mapNote({ id: 'n1', detail: 'Called\u0007 client', createdAt: '2026-09-01T10:00:00Z', createdBy: 'Sam' }),
+    ).toEqual({
+      id: 'n1',
+      text: 'Called client',
+      createdAt: '2026-09-01T10:00:00.000Z',
+      createdBy: 'Sam',
+    });
+    expect(mapNote({ id: 'n2', detail: '  ' })).toBeNull();
   });
 });
 
@@ -351,5 +399,73 @@ describe('ticket sync and dashboard', () => {
     expect((await owner.call('DELETE', '/api/integrations/cw-rmm')).status).toBe(200);
     const rows = await t.handle.db.execute(sql`select count(*)::int as n from tickets`);
     expect(rows.rows[0]).toEqual({ n: 0 });
+  });
+
+  const allOptions = (extra: Record<string, unknown>) =>
+    owner.call('PUT', '/api/integrations/cw-rmm/options', { locations: true, devices: true, tickets: true, ...extra });
+
+  it('shows ticket notes, and adds them from Atlas and on a password reveal only when switched on', async () => {
+    await connect(tickets);
+    await link();
+    await sync();
+    platform.notes.set('t-101', [{ id: 'n-0', detail: 'Rebooted the server', createdBy: 'Sam', createdAt: ago(0.05) }]);
+    const shown = (await owner.call('GET', '/api/tickets/t-101/notes')).data;
+    expect(shown).toMatchObject({ canAdd: false, notes: [{ text: 'Rebooted the server', createdBy: 'Sam' }] });
+    expect((await owner.call('GET', '/api/tickets/nope/notes')).status).toBe(404);
+
+    // Off by default: nothing is written, from the ticket or from a reveal.
+    expect((await owner.call('POST', '/api/tickets/t-101/notes', { text: 'Hello' })).status).toBe(403);
+    const pw = await owner.call('POST', `/api/clients/${harbor}/passwords`, { name: 'Server admin', secret: TEMP });
+    expect(pw.status).toBe(201);
+    await owner.call('POST', `/api/passwords/${pw.data.id}/reveal`, { reason: 'Working #101' });
+    expect(platform.calls.filter((c) => c.startsWith('POST') && c.includes('/notes'))).toEqual([]);
+
+    expect((await allOptions({ ticketNotes: true })).data.options.ticketNotes).toBe(true);
+    const added = await owner.call('POST', '/api/tickets/t-101/notes', { text: 'Replaced the disk' });
+    expect(added.status).toBe(200);
+    expect(added.data.canAdd).toBe(true);
+    expect(platform.notes.get('t-101')!.at(-1)).toMatchObject({
+      detail: expect.stringMatching(/^Replaced the disk\n\n\(Added from Nexus Atlas by /),
+      visibility: 2,
+    });
+
+    // A reveal naming the ticket notes who looked and why, never the password.
+    await owner.call('POST', `/api/passwords/${pw.data.id}/reveal`, { reason: 'Working #101', copy: true });
+    await owner.call('POST', `/api/passwords/${pw.data.id}/reveal`, { reason: 'Working #201' });
+    await owner.call('POST', `/api/passwords/${pw.data.id}/reveal`, { reason: 'no ticket' });
+    const onTicket = platform.notes.get('t-101')!.at(-1)!;
+    expect(onTicket.detail).toMatch(/copied the password of “Server admin” in Nexus Atlas\.\nReason: Working #101$/);
+    expect(JSON.stringify([...platform.notes.values()])).not.toContain(TEMP);
+    // Ticket 201 belongs to another client, so it gets nothing.
+    expect(platform.notes.get('t-201')).toBeUndefined();
+    expect(platform.notes.get('t-101')).toHaveLength(3);
+  });
+
+  it('writes Atlas links into ConnectWise custom fields only when switched on, and only when changed', async () => {
+    await connect(tickets);
+    await link();
+    await sync();
+    expect(platform.calls.filter((c) => c.includes('custom-field'))).toEqual([]);
+
+    await allOptions({ atlasLinks: true });
+    const job = await sync();
+    expect(job.counts.atlasLinks).toMatchObject({ created: 2, failed: 0 });
+    // The field is made once, for companies.
+    expect(platform.definitions).toEqual([
+      expect.objectContaining({ entityType: 'client', name: 'Atlas link', attributeType: 'string' }),
+    ]);
+    expect(platform.fields.get('/api/platform/v1/company/companies/c1/custom-fields')).toEqual([
+      { entityId: 'c1', attributeId: 'def-1', value: expect.stringMatching(new RegExp(`/clients/${harbor}$`)) },
+    ]);
+
+    // Unchanged links aren't written again.
+    const before = platform.calls.length;
+    expect((await sync()).counts.atlasLinks).toMatchObject({ created: 0, skipped: 2 });
+    expect(platform.calls.slice(before).filter((c) => c.startsWith('PUT'))).toEqual([]);
+
+    // Switched off and on again, they're all written again.
+    await allOptions({ atlasLinks: false });
+    await allOptions({ atlasLinks: true });
+    expect((await sync()).counts.atlasLinks).toMatchObject({ created: 2 });
   });
 });

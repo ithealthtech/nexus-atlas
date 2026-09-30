@@ -37,6 +37,7 @@ import { relativeTime } from '@/lib/format';
 import { AppLink } from '@/components/AppLink';
 import { cn } from '@/lib/cn';
 import { FavoriteStar } from '@/components/Favorites';
+import { RmmInsightPanel } from '@/components/RmmInsight';
 import { DeviceSecurityCard } from '@/components/CwSecurity';
 
 const statusTone = { active: 'success', inactive: 'warning', retired: 'neutral' } as const;
@@ -550,6 +551,7 @@ export function AssetDetail() {
           <ItemActivity id={asset.id} />
         </div>
         <div className="space-y-6">
+          {!asset.archived && <RmmInsightPanel assetId={asset.id} />}
           <RelatedPanel type="asset" id={asset.id} clientId={asset.clientId} canEdit={canEdit} />
           <AttachmentsPanel type="asset" id={asset.id} canEdit={canEdit} />
           <RevisionsPanel

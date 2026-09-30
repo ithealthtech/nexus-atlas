@@ -84,10 +84,22 @@ export const cwRmmSyncOptionsSchema = z.object({
   locations: z.boolean().default(true),
   /** Devices, as assets. */
   devices: z.boolean().default(true),
+  /** Each company's contacts, as the client's contacts. */
+  contacts: z.boolean().default(true),
   /** Tickets, read-only, for the ticket dashboard. */
   tickets: z.boolean().default(true),
   /** Each device's installed software, who signs in to it, and which host a virtual machine runs on. */
   inventory: z.boolean().default(true),
+  /**
+   * Writes each synced device's and linked company's Atlas address into an "Atlas link" custom field in
+   * ConnectWise, so techs can jump from the RMM to the docs. Changes the ConnectWise tenant, so off by default.
+   */
+  atlasLinks: z.boolean().default(false),
+  /**
+   * Lets Atlas add notes to ConnectWise tickets: from the ticket list, and when a password is revealed with a
+   * ticket number in the reason. Changes the ConnectWise tenant, so off by default.
+   */
+  ticketNotes: z.boolean().default(false),
   /**
    * The asset layout new devices are saved in. Null picks one: a layout named for devices ("Devices", "Device
    * assets") when there is one, otherwise Configurations.
@@ -95,6 +107,21 @@ export const cwRmmSyncOptionsSchema = z.object({
   layoutId: z.string().uuid().nullable().default(null),
 });
 export type CwRmmSyncOptions = z.infer<typeof cwRmmSyncOptionsSchema>;
+/** What ConnectWise RMM says about one synced device right now: resource use, device groups, and policy. */
+export interface RmmDeviceInsight {
+  /** Logical disks, with free and total bytes. */
+  disks: { name: string; freeBytes: number; totalBytes: number }[];
+  /** Physical memory: the latest sample and the day's peak use, as percentages. */
+  memory: { totalBytes: number; percent: number; peakPercent: number; samples: number[] } | null;
+  /** CPU utilization: the latest sample and the day's peak, as percentages. */
+  cpu: { percent: number; peakPercent: number; samples: number[] } | null;
+  /** RMM device group names; null when they couldn't be read (for example, no Device Groups read permission). */
+  groups: string[] | null;
+  /** The policies that decide the device's effective settings, with where each applies and how many settings it wins. */
+  policies: { name: string; level: string; settings: number }[] | null;
+  /** What couldn't be read, in plain words. */
+  notes: string[];
+}
 /** A ConnectWise RMM company and what Atlas does with it. */
 export interface CwRmmCompany {
   id: string;
@@ -159,6 +186,19 @@ export interface TicketView {
   /** The ticket in ConnectWise, when it gave a link. */
   url: string | null;
 }
+/** A note on a ConnectWise ticket. */
+export interface TicketNoteView {
+  id: string;
+  text: string;
+  createdAt: string | null;
+  createdBy: string;
+}
+export interface TicketNotes {
+  notes: TicketNoteView[];
+  /** Whether notes can be added from Atlas (the ConnectWise option is on and the user can edit the client). */
+  canAdd: boolean;
+}
+export const ticketNoteSchema = z.object({ text: z.string().trim().min(1).max(4000) });
 
 // ---------- security and compliance (ConnectWise platform, read live) ----------
 /**
