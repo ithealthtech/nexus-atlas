@@ -3,6 +3,7 @@ import { schema, type Database } from '@atlas/db';
 import { HttpError } from '../../errors.js';
 import type { ImportRun } from '../importers/common.js';
 import type { StoredCwRmm } from '../settings.js';
+import type { CwRmmRegion } from '@atlas/shared';
 import { ACCESS_DENIED, listOf, pick, shapeOf, text, type CwRmmClient } from './cw-rmm.js';
 
 type Json = Record<string, unknown>;
@@ -14,21 +15,16 @@ const DAY = 86_400_000;
 export const KEEP_CLOSED_DAYS = 90;
 const PAGE = 100;
 const MAX_PAGES = 200;
+/** Closed tickets are read newest first until a page holds only tickets opened before this. */
+const CLOSED_LOOKBACK_DAYS = 365;
 
-type TicketQuery = { label: string; path: (companyId: string, query: string) => string };
-// ConnectWise doesn't publish which of these the platform answers; the first that works is kept for the run, as
-// for devices.
-const TICKET_QUERIES: TicketQuery[] = [
-  {
-    label: 'tickets by company',
-    path: (c, q) => `/api/platform/v1/ticket/companies/${encodeURIComponent(c)}/tickets?${q}`,
-  },
-  { label: 'ticket list', path: (c, q) => `/api/platform/v1/ticket/tickets?companyId=${encodeURIComponent(c)}&${q}` },
-  {
-    label: 'service tickets',
-    path: (c, q) => `/api/platform/v1/service/companies/${encodeURIComponent(c)}/tickets?${q}`,
-  },
-];
+// The ConnectWise platform's service ticketing API.
+const TICKETS = '/api/platform/v2/service/ticketing/tickets';
+const STATUSES = '/api/platform/v1/service/ticketing/statuses';
+const COMPANIES = '/api/platform/v1/company/companies';
+
+/** The web app for each API region. Only North America's is known, so other regions get no ticket links. */
+const CW_WEB: Partial<Record<CwRmmRegion, string>> = { na: 'https://control.itsupport247.net' };
 
 export interface CwTicket {
   id: string;
@@ -59,93 +55,188 @@ export function ticketTime(value: unknown, now = Date.now()): Date | null {
 const clean = (s: string, max: number) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, max);
 
 const CLOSED_STATUS = /^(closed|completed?|resolved|cancell?ed)\b/i;
+const numeric = (s: string) => /^\d{1,18}$/.test(s);
 
-/** Maps a ticket record onto Atlas's fields, reading whichever names are present; null without an ID. */
-export function mapTicket(t: Json, now = Date.now()): CwTicket | null {
-  const id = text(t, 'ticketId', 'id', 'ticketNumber');
+/** A browser link to a platform ticket, from the route the web app uses (keyed by ticket and company number). */
+export function ticketLink(web: string | undefined, number: string, companyNumber: string) {
+  if (!web || !numeric(number) || !numeric(companyNumber)) return null;
+  return `${web}/#??asio_route=/service-tickets/bms-ticket-overview?ticketId=${number}&companyId=${companyNumber}&projectIssue=false&tabId=unified-ticket-detail-screen??`;
+}
+
+/**
+ * Maps a ticket record onto Atlas's fields, reading whichever names are present; null without an ID. A status
+ * whose ID is in `closedStatuses` (ConnectWise's "Closed" category) marks the ticket closed.
+ */
+export function mapTicket(
+  t: Json,
+  now = Date.now(),
+  closedStatuses: ReadonlySet<string> = new Set(),
+  link?: (number: string) => string | null,
+): CwTicket | null {
+  const id = text(t, 'id', 'ticketId', 'ticketNumber');
   if (!id) return null;
   const status = clean(text(t, 'status.name', 'statusName', 'status', 'state.name', 'state'), 100);
-  const closedAt = ticketTime(pick(t, 'closedDate', 'closedAt', 'dateClosed', 'resolvedDate', 'resolvedAt'), now);
+  const closedAt = ticketTime(
+    pick(t, 'closedAt', 'closedOn', 'closedDate', 'dateClosed', 'resolvedAt', 'resolvedOn', 'resolvedDate'),
+    now,
+  );
   const flag = pick(t, 'closedFlag', 'isClosed', 'closed', 'status.closed', 'status.closedStatus');
-  const closed = typeof flag === 'boolean' ? flag : !!closedAt || CLOSED_STATUS.test(status);
-  const link = text(t, 'url', 'link', 'webUrl', 'ticketUrl', '_links.self.href');
+  const category = text(t, 'status.category', 'statusCategory');
+  const closed =
+    closedStatuses.has(text(t, 'status.id', 'statusId')) ||
+    /^closed$/i.test(category) ||
+    (typeof flag === 'boolean' ? flag : !!closedAt || CLOSED_STATUS.test(status));
+  const number = clean(text(t, 'number', 'ticketNumber', 'displayId') || id, 100);
+  const given = text(t, 'url', 'link', 'webUrl', 'ticketUrl', '_links.self.href');
+  // Only a web address; anything else (a script URL, say) is dropped.
+  const url = /^https:\/\/[^\s"'<>]+$/i.test(given) ? given : (link?.(number) ?? null);
+  const updatedAt = ticketTime(
+    pick(t, 'updatedAt', 'updatedOn', 'lastUpdated', 'modifiedAt', 'modifiedDate', 'lastModified', '_info.lastUpdated'),
+    now,
+  );
   return {
     id: clean(id, 100),
-    number: clean(text(t, 'ticketNumber', 'number', 'displayId', 'id') || id, 100),
+    number,
     summary: clean(text(t, 'summary', 'subject', 'title'), 500),
     status: status || (closed ? 'Closed' : 'Open'),
     closed,
     priority: clean(text(t, 'priority.name', 'priorityName', 'priority'), 100),
     openedAt: ticketTime(
-      pick(t, 'dateEntered', 'createdDate', 'createdAt', 'openedDate', 'dateCreated', '_info.dateEntered', 'created'),
+      pick(t, 'createdAt', 'createdOn', 'dateEntered', 'createdDate', 'openedDate', 'dateCreated', '_info.dateEntered'),
       now,
     ),
-    closedAt: closed ? closedAt : null,
-    updatedAt: ticketTime(pick(t, 'lastUpdated', 'updatedAt', 'modifiedDate', 'lastModified', '_info.lastUpdated'), now),
-    // Only a web address; anything else (a script URL, say) is dropped.
-    url: /^https:\/\/[^\s"'<>]+$/i.test(link) ? link.slice(0, 1000) : null,
+    // A closed ticket without a closing date was last changed when it closed.
+    closedAt: closed ? (closedAt ?? updatedAt) : null,
+    updatedAt,
+    url: url && url.length <= 1000 ? url : null,
   };
 }
 
-/** Reads a company's tickets from the ConnectWise platform API, using the first request shape it answers. */
+/**
+ * Reads a company's tickets from the ConnectWise platform's service ticketing API: open tickets, then those in a
+ * closed status, newest first.
+ */
 export class CwTicketReader {
   /** What the last ticket list looked like (field names only), for a job note. */
   lastList = '';
-  private query: TicketQuery | null = null;
+  /** Something worth a job note once per sync, such as closed tickets that couldn't be listed. */
+  note = '';
+  private statuses: Promise<Set<string>> | null = null;
+  private companyNumbers: Promise<Map<string, string>> | null = null;
+  private readonly web: string | undefined;
 
-  constructor(private readonly client: CwRmmClient) {}
+  constructor(
+    private readonly client: CwRmmClient,
+    region: CwRmmRegion = 'na',
+  ) {
+    this.web = CW_WEB[region];
+  }
+
+  /** The IDs of statuses in ConnectWise's "Closed" category. */
+  private closedStatuses() {
+    this.statuses ??= this.client.get(STATUSES).then(
+      (body) =>
+        new Set(
+          listOf(body)
+            .filter((s) => /^closed$/i.test(text(s, 'category')) || pick(s, 'closedFlag', 'closedStatus') === true)
+            .map((s) => text(s, 'id'))
+            .filter(Boolean),
+        ),
+      (error) => {
+        // Without the list, closed tickets are told apart by their status names.
+        if (error instanceof HttpError && error.status === 404 && error.code !== ACCESS_DENIED) return new Set<string>();
+        throw error;
+      },
+    );
+    return this.statuses;
+  }
+
+  /** Each company's number for ticket links: the one numeric external ID, as the web app's links use. */
+  private numbers() {
+    this.companyNumbers ??= this.web
+      ? this.client.get(COMPANIES).then(
+          (body) =>
+            new Map(
+              listOf(body).flatMap((c) => {
+                const external = Array.isArray(c.externalIds) ? (c.externalIds as Json[]) : [];
+                const ids = [...new Set(external.map((e) => text(e, 'externalId')))].filter(numeric);
+                const own = text(c, 'number', 'companyNumber');
+                const number = numeric(own) ? own : ids.length === 1 ? ids[0] : '';
+                return number ? [[text(c, 'id'), number] as const] : [];
+              }),
+            ),
+          () => new Map<string, string>(),
+        )
+      : Promise.resolve(new Map<string, string>());
+    return this.companyNumbers;
+  }
 
   /** Every open ticket, and those closed in the last 90 days. */
   async tickets(companyId: string, now = Date.now()): Promise<CwTicket[]> {
-    const shapes = this.query ? [this.query] : TICKET_QUERIES;
-    const tried: string[] = [];
-    let notFound = 0;
-    for (const shape of shapes) {
+    const closedIds = await this.closedStatuses();
+    const companyNumber = (await this.numbers()).get(companyId) ?? '';
+    const link = (number: string) => ticketLink(this.web, number, companyNumber);
+    const map = (records: Json[]) =>
+      records.map((r) => mapTicket(r, now, closedIds, link)).filter((t): t is CwTicket => !!t);
+    const company = `companyIds=${encodeURIComponent(companyId)}`;
+    const closed = [...closedIds].join(',');
+
+    let open: CwTicket[];
+    try {
+      open = map(await this.pages(closed ? `${company}&statusIds=${encodeURIComponent(`[notIn],${closed}`)}` : company));
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status !== 400 || error.code === ACCESS_DENIED) throw error;
+      throw new HttpError(
+        400,
+        `ConnectWise wouldn't list tickets. Check the API key has the Tickets read permission. ${error.message}`.slice(
+          0,
+          400,
+        ),
+      );
+    }
+    // Without the closed statuses, the list above already held every ticket.
+    let recent: CwTicket[] = [];
+    if (closed) {
+      const oldest = now - CLOSED_LOOKBACK_DAYS * DAY;
       try {
-        const records = await this.pages(companyId, shape);
-        this.query = shape;
-        const since = now - KEEP_CLOSED_DAYS * DAY;
-        return records
-          .map((r) => mapTicket(r, now))
-          .filter((t): t is CwTicket => !!t)
-          .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt)?.getTime() ?? 0) >= since);
+        recent = map(
+          await this.pages(`${company}&statusIds=${encodeURIComponent(`[in],${closed}`)}`, (page) =>
+            page.every((r) => (ticketTime(pick(r, 'createdAt', 'createdOn', 'dateEntered'), now)?.getTime() ?? 0) < oldest),
+          ),
+        );
       } catch (error) {
-        // A sign-in or permission failure isn't about the request shape: trying the others only signs in again.
-        if (!(error instanceof HttpError && (error.status === 400 || error.status === 404)) || error.code === ACCESS_DENIED)
-          throw error;
-        if (error.status === 404) notFound++;
-        const said = /ConnectWise said: (.*)$/.exec(error.message)?.[1] ?? error.message;
-        tried.push(`${shape.label}: ${said.slice(0, 100)}`);
+        if (!(error instanceof HttpError) || error.status !== 400 || error.code === ACCESS_DENIED) throw error;
+        this.note ||= `Closed tickets couldn't be listed, so the closed counts are missing: ${error.message.slice(0, 150)}`;
       }
     }
-    // "Not found" everywhere is a company with no tickets, as it is for devices.
-    if (notFound === tried.length) {
-      this.lastList = `no tickets (${tried.join('; ')})`.slice(0, 400);
-      return [];
-    }
-    throw new HttpError(
-      400,
-      `ConnectWise wouldn't list tickets. Check the API key has the Tickets read permission. Tried ${tried.join('; ')}`,
-    );
+    const since = now - KEEP_CLOSED_DAYS * DAY;
+    const seen = new Set<string>();
+    return [...open, ...recent]
+      .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
+      .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
   }
 
-  private async pages(companyId: string, shape: TicketQuery): Promise<Json[]> {
+  /** Every page of a ticket list, newest first, stopping early when `enough` says so. */
+  private async pages(filter: string, enough?: (page: Json[]) => boolean): Promise<Json[]> {
     const out: Json[] = [];
-    for (let cursor = 0, page = 0; page < MAX_PAGES; page++) {
+    for (let page = 1; page <= MAX_PAGES; page++) {
       let body: unknown;
       try {
-        body = await this.client.get(shape.path(companyId, `limit=${PAGE}&cursor=${cursor}`));
+        body = await this.client.get(`${TICKETS}?${filter}&pageSize=${PAGE}&pageNum=${page}&sortBy=createdAt&sortDir=desc`);
       } catch (error) {
-        // Past the last page ConnectWise may answer "not found"; on the first page that's for the caller.
-        if (page && error instanceof HttpError && error.status === 404) break;
+        // "Not found" is how ConnectWise answers a company with no tickets, or a page past the last.
+        if (error instanceof HttpError && error.status === 404 && error.code !== ACCESS_DENIED) {
+          if (page === 1) this.lastList ||= 'ticket list: not found';
+          break;
+        }
         throw error;
       }
       const records = listOf(body);
       out.push(...records);
-      if (!page) this.lastList = `${shape.label}: response fields ${shapeOf(body)}; ${records.length} on the first page`;
-      if (records.length < PAGE) break;
-      const next = Number(pick((body ?? {}) as Json, 'nextCursor', 'pageInfo.nextCursor', 'next'));
-      cursor = Number.isFinite(next) && next > cursor ? next : cursor + records.length;
+      if (page === 1) this.lastList = `ticket list: response fields ${shapeOf(body)}; ${records.length} on the first page`;
+      const total = Number(pick((body ?? {}) as Json, 'totalCount', 'total', 'count'));
+      if (!records.length || (Number.isFinite(total) ? out.length >= total : records.length < PAGE)) break;
+      if (enough?.(records)) break;
     }
     return out;
   }
@@ -249,6 +340,7 @@ export async function runTicketSync(
     }
     read.push(companyId);
   }
+  if (reader.note) run.note(reader.note);
   if (linked.length && !seen.length && reader.lastList) run.note(`No tickets listed (${reader.lastList}).`);
 
   // Tickets the companies that were read no longer return: deleted, or closed more than 90 days ago.

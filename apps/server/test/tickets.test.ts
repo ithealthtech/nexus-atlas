@@ -11,9 +11,16 @@ const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 
 type Ticket = Record<string, unknown>;
 
+const STATUSES = [
+  { id: 's-new', name: 'New', category: 'New' },
+  { id: 's-wait', name: 'Waiting for parts', category: 'InProgress' },
+  { id: 's-prog', name: 'In progress', category: 'InProgress' },
+  { id: 's-done', name: 'Closed', category: 'Closed' },
+];
+
 /**
- * A fake ConnectWise platform API with two companies. Tickets answer only on the ticket list (the first request
- * shape is refused), and only to a token that asked for the tickets scope.
+ * A fake ConnectWise platform API with two companies and its service ticketing API, which answers only to a token
+ * that asked for the tickets scope.
  */
 function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: boolean } = {}) {
   const calls: string[] = [];
@@ -30,18 +37,24 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     const auth = (init?.headers as Record<string, string>).Authorization;
     if (url.pathname === '/api/platform/v1/company/companies')
       return json([
-        { id: 'c1', name: 'Harbor Dental Group' },
+        { id: 'c1', name: 'Harbor Dental Group', externalIds: [{ externalId: '19304' }] },
         { id: 'c2', name: 'Northline Architecture' },
       ]);
     if (/companies\/\w+\/sites$/.test(url.pathname)) return json([]);
     if (url.pathname === '/api/platform/v2/device/categories/all/endpoints')
       return json({ message: 'resource not found' }, 404);
-    if (url.pathname.startsWith('/api/platform/v1/ticket/companies/')) return json({ message: 'no such route' }, 400);
-    if (url.pathname === '/api/platform/v1/ticket/tickets') {
-      if (auth !== 'Bearer ticket-tok') return json({ message: 'missing scope' }, 403);
-      const all = tickets.get(url.searchParams.get('companyId') ?? '') ?? [];
-      const cursor = Number(url.searchParams.get('cursor'));
-      return json({ tickets: all.slice(cursor, cursor + Number(url.searchParams.get('limit'))) });
+    if (url.pathname.includes('/ticketing/') && auth !== 'Bearer ticket-tok')
+      return json({ message: 'missing scope' }, 403);
+    if (url.pathname === '/api/platform/v1/service/ticketing/statuses') return json(STATUSES);
+    if (url.pathname === '/api/platform/v2/service/ticketing/tickets') {
+      const [op, ...ids] = (url.searchParams.get('statusIds') ?? '').split(',');
+      const all = (tickets.get(url.searchParams.get('companyIds') ?? '') ?? []).filter((k) => {
+        const status = (k.status as { id: string }).id;
+        return op === '[notIn]' ? !ids.includes(status) : op === '[in]' ? ids.includes(status) : true;
+      });
+      const size = Number(url.searchParams.get('pageSize'));
+      const from = (Number(url.searchParams.get('pageNum')) - 1) * size;
+      return json({ tickets: all.slice(from, from + size), totalCount: all.length });
     }
     return json({}, 404);
   }) as typeof fetch;
@@ -86,6 +99,10 @@ describe('ticket values', () => {
     });
     expect(mapTicket({ id: 1, status: 'Scheduled', closedFlag: false, closedDate: '2026-09-01' })!.closed).toBe(false);
     expect(mapTicket({ summary: 'no id' })).toBeNull();
+    // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
+    expect(
+      mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),
+    ).toMatchObject({ id: 'u-1', number: '7', status: 'Done', closed: true });
   });
 });
 
@@ -115,33 +132,69 @@ describe('ticket sync and dashboard', () => {
   const sync = async () => waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
 
   beforeEach(() => {
+    const status = (id: string) => ({ id, name: STATUSES.find((x) => x.id === id)!.name });
     tickets = new Map([
       [
         'c1',
         [
-          { id: 101, summary: 'Server down', status: { name: 'New' }, dateEntered: ago(0.1), lastUpdated: ago(0.1) },
-          { id: 102, summary: 'Printer', status: { name: 'New' }, dateEntered: ago(3), lastUpdated: ago(2) },
           {
-            id: 103,
+            id: 't-101',
+            number: '101',
+            summary: 'Server down',
+            status: status('s-new'),
+            createdAt: ago(0.1),
+            updatedAt: ago(0.1),
+          },
+          {
+            id: 't-102',
+            number: '102',
+            summary: 'Printer',
+            status: status('s-new'),
+            createdAt: ago(3),
+            updatedAt: ago(2),
+          },
+          {
+            id: 't-103',
+            number: '103',
             summary: 'Laptop order',
-            status: { name: 'Waiting for parts' },
-            dateEntered: ago(20),
-            lastUpdated: ago(15),
+            status: status('s-wait'),
+            createdAt: ago(20),
+            updatedAt: ago(15),
             url: 'https://na.myconnectwise.net/ticket/103',
           },
+          // Closed is told by the status's category, not its name.
           {
-            id: 104,
+            id: 't-104',
+            number: '104',
             summary: 'Password reset',
-            status: { name: 'Closed' },
-            closedFlag: true,
-            dateEntered: ago(5),
-            closedDate: ago(4),
+            status: status('s-done'),
+            createdAt: ago(5),
+            updatedAt: ago(4),
           },
           // Closed long ago: not kept.
-          { id: 105, summary: 'Old', status: { name: 'Closed' }, closedFlag: true, closedDate: ago(200) },
+          {
+            id: 't-105',
+            number: '105',
+            summary: 'Old',
+            status: status('s-done'),
+            createdAt: ago(210),
+            updatedAt: ago(200),
+          },
         ],
       ],
-      ['c2', [{ id: 201, summary: 'VPN', status: { name: 'In progress' }, dateEntered: ago(40), lastUpdated: ago(1) }]],
+      [
+        'c2',
+        [
+          {
+            id: 't-201',
+            number: '201',
+            summary: 'VPN',
+            status: status('s-prog'),
+            createdAt: ago(40),
+            updatedAt: ago(1),
+          },
+        ],
+      ],
     ]);
   });
   afterEach(async () => {
@@ -180,13 +233,23 @@ describe('ticket sync and dashboard', () => {
     const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
     expect(list.map((k: { number: string }) => k.number)).toEqual(['103', '102', '101']);
     expect(list[0]).toMatchObject({ status: 'Waiting for parts', url: 'https://na.myconnectwise.net/ticket/103' });
+    // Without a link of its own, a ticket links to the platform's web app by ticket and company number.
+    expect(list[1].url).toBe(
+      'https://control.itsupport247.net/#??asio_route=/service-tickets/bms-ticket-overview?ticketId=102&companyId=19304&projectIssue=false&tabId=unified-ticket-detail-screen??',
+    );
+    // Open tickets and recently closed ones are asked for separately, by status.
+    const lists = platform.calls.filter((c) => c.includes('/v2/service/ticketing/tickets?companyIds=c1'));
+    expect(lists.map((c) => new URL(c.split(' ')[1], 'https://x').searchParams.get('statusIds'))).toEqual([
+      '[notIn],s-done',
+      '[in],s-done',
+    ]);
     const closed = (await owner.call('GET', `/api/tickets/list?client=${harbor}&status=Closed`)).data;
     expect(closed.map((k: { number: string }) => k.number)).toEqual(['104']);
 
     // A ticket gone from ConnectWise is removed; an unlinked company's tickets go.
     tickets.set(
       'c1',
-      tickets.get('c1')!.filter((k) => k.id !== 101),
+      tickets.get('c1')!.filter((k) => k.id !== 't-101'),
     );
     await owner.call('PUT', '/api/integrations/cw-rmm/companies', { mappings: [{ companyId: 'c2', action: 'skip' }] });
     expect((await sync()).status).toBe('done');
