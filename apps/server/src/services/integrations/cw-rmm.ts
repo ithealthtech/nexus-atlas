@@ -206,6 +206,9 @@ const ONLINE_KEYS = [
   'agentStatus',
 ];
 const LAST_SEEN_KEYS = [
+  // The heartbeat API's time of the agent's last heartbeat.
+  'DcDateTimeUTC',
+  'dcDateTimeUTC',
   'lastSeen',
   'lastSeenAt',
   'lastSeenDate',
@@ -247,7 +250,15 @@ function leaves(o: Json, prefix = '', depth = 0): [string, unknown][] {
 
 // ConnectWise's names for these vary by tenant and agent (systemManufacturer, lastContactedAt, ...), so when none
 // of the names listed above is present, a field whose name says what it is is used.
-const MAKER_NAMES = ['manufacturer', 'system.manufacturer', 'hardware.manufacturer', 'baseBoard.manufacturer', 'vendor'];
+// ConnectWise's endpoint details give the maker as baseboard.manufacturer; bios.manufacturer is the firmware vendor.
+const MAKER_NAMES = [
+  'manufacturer',
+  'system.manufacturer',
+  'hardware.manufacturer',
+  'baseboard.manufacturer',
+  'baseBoard.manufacturer',
+  'vendor',
+];
 const MAKER_KEY = /^(system|computer|hardware|device|machine|product|endpoint|oem)?_?(manufacturer|make)(_?name)?$/i;
 // A BIOS, board, or part maker (American Megatrends, Intel) isn't the device's.
 const MAKER_SKIP = /bios|firmware|board|processor|cpu|gpu|video|display|monitor|disk|drive|memory|ram|network|adapter|nic|battery|printer|software|antivirus|protection|os\b|operatingsystem/i;
@@ -318,6 +329,26 @@ export function warrantyDate(value: unknown): string {
 
 /** Endpoint protection: running, installed but not running, or missing, with the product name when given. */
 export function protectionOf(d: Json): { protection: RmmProtection | null; protectionProduct: string } {
+  // ConnectWise's endpoint details: antiViruses lists the products running, and services marks antivirus services
+  // with their status.
+  const avServices = (Array.isArray(d.services) ? (d.services as Json[]) : []).filter(
+    (s) => s && typeof s === 'object' && s.antivirus === true,
+  );
+  if (avServices.length) {
+    const up = avServices.filter((s) => /^(running|started)$/i.test(text(s, 'serviceStatus', 'status')));
+    return {
+      protection: up.length ? 'running' : 'not_running',
+      protectionProduct: text((up[0] ?? avServices[0])!, 'displayName', 'serviceName').slice(0, 200),
+    };
+  }
+  if (Array.isArray(d.antiViruses)) {
+    const names = [
+      ...new Set((d.antiViruses as Json[]).map((a) => (a && typeof a === 'object' ? text(a, 'name', 'applicationName') : ''))),
+    ].filter(Boolean);
+    return names.length
+      ? { protection: 'running', protectionProduct: names.join(', ').slice(0, 200) }
+      : { protection: 'missing', protectionProduct: '' };
+  }
   const obj = PROTECTION_OBJECTS.map((k) => pick(d, k)).find(
     (v): v is Json => !!v && typeof v === 'object' && !Array.isArray(v),
   );
@@ -859,7 +890,7 @@ export class CwRmmClient {
 export function withState(d: RmmDevice, beat: Json | undefined, state: Json | undefined, now = new Date()): RmmDevice {
   const both: Json = { ...state, ...beat };
   const online = beat ? onlineState(pick(beat, 'Availability', 'availability')) : null;
-  const protection = d.protection ? d : protectionOf(both);
+  const protection = protectionOf(both);
   const lastSeenAt =
     d.lastSeenAt ??
     lastSeenOf(both) ??
@@ -869,7 +900,7 @@ export function withState(d: RmmDevice, beat: Json | undefined, state: Json | un
     ...d,
     online: online ?? d.online,
     lastSeenAt,
-    protection: protection.protection,
+    protection: d.protection ?? protection.protection,
     protectionProduct: d.protectionProduct || protection.protectionProduct,
     manufacturer: d.manufacturer || normalizeManufacturer(makerOf(both)),
   };

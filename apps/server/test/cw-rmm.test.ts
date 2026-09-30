@@ -742,6 +742,77 @@ describe('ConnectWise RMM sync with warranty lookup', () => {
   });
 });
 
+describe('ConnectWise RMM fields as the platform API spec gives them', () => {
+  it('takes the maker from baseboard, protection from antiViruses and services, and check-in from the heartbeat', async () => {
+    const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
+    const detail = (id: string, extra: Record<string, unknown>) => ({
+      companyID: 'c1',
+      siteID: 's1',
+      endpointID: id,
+      platform: {
+        deviceName: `WS-${id}`,
+        bios: { manufacturer: 'American Megatrends Inc.' },
+        baseboard: { manufacturer: 'Dell Inc.', product: '0XYZ' },
+        system: { model: 'OptiPlex 7090', serialNumber: `SN-${id}` },
+        ...extra,
+      },
+    });
+    const fetcher = (async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v1/token') return Response.json({ access_token: 'tok', expires_in: 3600 });
+      const m = /\/sites\/s1\/endpoints\/(e\d)$/.exec(url.pathname);
+      if (m?.[1] === 'e1') return Response.json(detail('e1', { antiViruses: [{ name: 'Windows Defender' }] }));
+      if (m?.[1] === 'e2')
+        return Response.json(
+          detail('e2', {
+            antiViruses: [],
+            services: [
+              { serviceName: 'SentinelAgent', displayName: 'SentinelOne', antivirus: true, serviceStatus: 'Stopped' },
+            ],
+          }),
+        );
+      if (m?.[1] === 'e3') return Response.json(detail('e3', { antiViruses: [] }));
+      if (url.pathname.endsWith('/endpoints/heartbeat'))
+        return Response.json({
+          status: 'success',
+          successfulRecords: [
+            {
+              companyID: 'c1',
+              siteID: 's1',
+              endpoints: [
+                { EndpointID: 'e1', DcDateTimeUTC: '2026-09-29T08:30:00Z', Availability: false },
+                { EndpointID: 'e2', DcDateTimeUTC: '2026-09-30T05:00:00Z', Availability: true },
+              ],
+            },
+          ],
+          failedRecords: [],
+        });
+      if (url.pathname.endsWith('/endpoints/systemstate')) return Response.json({ successfulRecords: [] });
+      return Response.json({
+        platform: ['e1', 'e2', 'e3'].map((id) => ({ endpointID: id, siteID: 's1', deviceName: `WS-${id}` })),
+      });
+    }) as typeof fetch;
+    const client = new CwRmmClient('na', 'id', 'secret', fetcher);
+    const [one, two, three] = await client.devices('c1', ['s1']);
+    expect(one).toMatchObject({
+      manufacturer: 'Dell',
+      model: 'OptiPlex 7090',
+      serial: 'SN-e1',
+      protection: 'running',
+      protectionProduct: 'Windows Defender',
+      online: false,
+      lastSeenAt: '2026-09-29T08:30:00.000Z',
+    });
+    // The maker goes in Manufacturer only; the BIOS vendor is kept as its own field.
+    const labels = one!.extra.map(([label]) => label.toLowerCase());
+    expect(labels.some((l) => l.includes('baseboard') && l.includes('manufacturer'))).toBe(false);
+    expect(labels.some((l) => l.includes('bios') && l.includes('manufacturer'))).toBe(true);
+    expect(two).toMatchObject({ protection: 'not_running', protectionProduct: 'SentinelOne', online: true });
+    expect(two!.lastSeenAt).toBe('2026-09-30T05:00:00.000Z');
+    expect(three).toMatchObject({ protection: 'missing', online: null, lastSeenAt: null });
+  });
+});
+
 describe('ConnectWise RMM loosely named fields', () => {
   it('reads manufacturer, check-in and protection under other names, with the manufacturer in its own field only', async () => {
     const { CwRmmClient } = await import('../src/services/integrations/cw-rmm.js');
