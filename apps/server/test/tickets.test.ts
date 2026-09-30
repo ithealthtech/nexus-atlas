@@ -30,6 +30,7 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
   const definitions: Ticket[] = [];
   /** Company records by ID, as their own endpoint returns them (the list carries less). */
   const companies = new Map<string, Ticket>();
+  const sites = new Map<string, Ticket[]>();
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
@@ -46,7 +47,8 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
         { id: 'c1', name: 'Harbor Dental Group', externalIds: [{ externalId: '19304' }] },
         { id: 'c2', name: 'Northline Architecture' },
       ]);
-    if (/companies\/\w+\/sites$/.test(url.pathname)) return json([]);
+    const sitesOf = /companies\/(\w+)\/sites$/.exec(url.pathname);
+    if (sitesOf) return json(sites.get(sitesOf[1]!) ?? []);
     const companyOf = /^\/api\/platform\/v1\/company\/companies\/(\w+)$/.exec(url.pathname);
     if (companyOf && companies.has(companyOf[1]!)) return json(companies.get(companyOf[1]!));
     if (url.pathname === '/api/platform/v2/device/categories/all/endpoints')
@@ -96,7 +98,7 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     }
     return json({}, 404);
   }) as typeof fetch;
-  return { fetcher, calls, notes, fields, definitions, companies };
+  return { fetcher, calls, notes, fields, definitions, companies, sites };
 }
 
 async function waitForJob(b: Browser, id: string) {
@@ -287,6 +289,16 @@ describe('ticket sync and dashboard', () => {
     await t.close();
   });
 
+  it("links a company's tickets by the number its sites carry when its own records have none", async () => {
+    await connect(tickets);
+    platform.companies.set('c2', { id: 'c2', externalIds: [] });
+    platform.sites.set('c2', [{ id: 's-1', company: { id: 'c2', externalIds: [{ externalId: '19301' }] } }]);
+    expect((await link()).status).toBe(200);
+    await sync();
+    const list = (await owner.call('GET', `/api/tickets/list?client=${northline}`)).data;
+    expect(list[0].url).toContain('ticketId=201&companyId=19301');
+  });
+
   it("links a company's tickets by the number on its own record when the company list has none", async () => {
     await connect(tickets);
     platform.companies.set('c2', { id: 'c2', externalIds: [{ externalId: '19300', productId: 'psa' }] });
@@ -340,6 +352,7 @@ describe('ticket sync and dashboard', () => {
     expect(job.messages.join(' ')).toContain('2 automation tickets have no link yet');
     // Northline's number is only on its own record; with none there, the note shows what ConnectWise gave.
     expect(job.messages.join(' ')).toContain('Northline Architecture (IDs from ConnectWise: none)');
+    expect(job.messages.join(' ')).toContain('What ConnectWise returned for Northline Architecture: company fields');
     expect(job.messages.join(' ')).not.toContain('Harbor Dental Group have no ConnectWise link');
     const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
     const shown = (s: string) => list.find((k: { summary: string }) => k.summary === s);
