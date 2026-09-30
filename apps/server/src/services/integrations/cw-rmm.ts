@@ -107,6 +107,26 @@ function deviceObject(body: unknown, id: string): Json {
 
 const SITE_ID_KEYS =['siteId', 'siteID', 'site_id', 'site.id', 'site.siteId'];
 const DETAIL_CONCURRENCY = 4;
+// The platformEndpointDetail fields Atlas reads: the device's own, the maker (baseboard; bios is kept as a field),
+// and endpoint protection (antiViruses, and services, which mark antivirus services and their status).
+const DETAIL_FIELDS = [
+  'deviceName',
+  'friendlyName',
+  'resourceType',
+  'endpointType',
+  'ipAddress',
+  'macAddress',
+  'type',
+  'subResourceType',
+  'remoteAddress',
+  'virtualType',
+  'os',
+  'system',
+  'baseboard',
+  'bios',
+  'antiViruses',
+  'services',
+].join(',');
 
 /** Maps a device record (summary merged with details) onto Atlas's fields, reading whichever names are present. */
 function mapDevice(id: string, companyId: string, siteId: string, record: Json): RmmDevice {
@@ -419,6 +439,8 @@ const MAPPED = new Set(
   ].map((k) => k.toLowerCase()),
 );
 const CATEGORIES = new Set(['platform', 'network', 'cloud']);
+// Read for endpoint protection only: a device's full service list isn't worth a field per service.
+const NOT_KEPT = new Set(['services']);
 
 /** Every other value in a device record, as [label, value]: nested objects flattened, lists of values joined. */
 function extraValues(record: Json, prefix = '', depth = 0, skip = new Set<string>(), path = ''): [string, string][] {
@@ -429,7 +451,7 @@ function extraValues(record: Json, prefix = '', depth = 0, skip = new Set<string
     if (skip.has(at)) continue;
     // The category object's fields were read as the device's own, so they aren't prefixed with it.
     if (!prefix && CATEGORIES.has(key) && typeof value === 'object' && !Array.isArray(value)) continue;
-    if (!prefix && MAPPED.has(key.toLowerCase())) continue;
+    if (!prefix && (MAPPED.has(key.toLowerCase()) || NOT_KEPT.has(key))) continue;
     const label = prefix ? `${prefix} ${key}` : key;
     if (Array.isArray(value)) {
       const items = value.filter((v) => v !== null && typeof v !== 'object').map(String);
@@ -571,6 +593,8 @@ export class CwRmmClient {
   lastDeviceList = '';
   /** Field names of one real device (summary and details), for a single job note per sync. */
   lastDeviceFields = '';
+  /** Whether the tenant takes a field list on device details; false after it refuses one. */
+  private detailFields = true;
   // One client (and so one token) per set of credentials, shared by every request and sync: signing in for
   // each page load gets the key locked.
   private static shared = new WeakMap<typeof fetch, Map<string, CwRmmClient>>();
@@ -840,10 +864,8 @@ export class CwRmmClient {
         let detailNote = candidates.length ? '' : 'no site to look it up in';
         for (const site of candidates) {
           try {
-            const body = await this.call(
-              'GET',
-              `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(site)}/endpoints/${encodeURIComponent(id)}`,
-            );
+            const path = `/api/platform/v2/device/companies/${encodeURIComponent(companyId)}/sites/${encodeURIComponent(site)}/endpoints/${encodeURIComponent(id)}`;
+            const body = await this.detailsOf(path);
             detail = deviceObject(body, id);
             siteId = text(detail, ...SITE_ID_KEYS) || site;
             hits.set(site, (hits.get(site) ?? 0) + 1);
@@ -863,6 +885,22 @@ export class CwRmmClient {
     };
     await Promise.all(Array.from({ length: Math.min(DETAIL_CONCURRENCY, listed.length) }, worker));
     return out;
+  }
+
+  /**
+   * A device's details. Without a field list ConnectWise returns only the minimal fields (metadata, os and system),
+   * so the hardware and protection sections are asked for by name; a tenant that refuses the list gets the default.
+   */
+  private async detailsOf(path: string) {
+    if (this.detailFields) {
+      try {
+        return await this.call('GET', `${path}?field=${DETAIL_FIELDS}`);
+      } catch (error) {
+        if (!(error instanceof HttpError && error.status === 400)) throw error;
+        this.detailFields = false;
+      }
+    }
+    return this.call('GET', path);
   }
 
   private async devicePages(companyId: string, siteIds: string[], shape: DeviceQuery) {
