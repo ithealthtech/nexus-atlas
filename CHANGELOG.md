@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.4] - 2026-09-30
+
+### Added
+
+- **Warranty lookup by serial number.** Dell, Lenovo and HP devices get their warranty end date from the vendor's public warranty check, with no API keys to set up. It is looked up when a device with a serial number and no warranty date is saved, and during the ConnectWise RMM sync for devices the RMM gives no date for. A date someone typed in is never replaced. Each asset has a **Check warranty** button that looks it up right away, and Settings, Asset warranty can turn automatic lookups off. (#122)
+
 ## [1.7.3] - 2026-09-30
 
 ### Fixed
