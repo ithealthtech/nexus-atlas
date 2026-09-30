@@ -28,6 +28,8 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
   const notes = new Map<string, Ticket[]>();
   const fields = new Map<string, unknown>();
   const definitions: Ticket[] = [];
+  /** Company records by ID, as their own endpoint returns them (the list carries less). */
+  const companies = new Map<string, Ticket>();
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
@@ -45,6 +47,8 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
         { id: 'c2', name: 'Northline Architecture' },
       ]);
     if (/companies\/\w+\/sites$/.test(url.pathname)) return json([]);
+    const companyOf = /^\/api\/platform\/v1\/company\/companies\/(\w+)$/.exec(url.pathname);
+    if (companyOf && companies.has(companyOf[1]!)) return json(companies.get(companyOf[1]!));
     if (url.pathname === '/api/platform/v2/device/categories/all/endpoints')
       return json({ message: 'resource not found' }, 404);
     if (url.pathname.includes('/ticketing/') && auth !== 'Bearer ticket-tok')
@@ -92,7 +96,7 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     }
     return json({}, 404);
   }) as typeof fetch;
-  return { fetcher, calls, notes, fields, definitions };
+  return { fetcher, calls, notes, fields, definitions, companies };
 }
 
 async function waitForJob(b: Browser, id: string) {
@@ -283,6 +287,16 @@ describe('ticket sync and dashboard', () => {
     await t.close();
   });
 
+  it("links a company's tickets by the number on its own record when the company list has none", async () => {
+    await connect(tickets);
+    platform.companies.set('c2', { id: 'c2', externalIds: [{ externalId: '19300', productId: 'psa' }] });
+    expect((await link()).status).toBe(200);
+    const job = await sync();
+    expect(job.messages.join(' ')).not.toContain('Northline Architecture');
+    const list = (await owner.call('GET', `/api/tickets/list?client=${northline}`)).data;
+    expect(list[0].url).toContain('ticketId=201&companyId=19300');
+  });
+
   it('shows and links the portal ID a CW-System note gives a dotted platform ticket', async () => {
     tickets.get('c1')!.push(
       {
@@ -324,6 +338,8 @@ describe('ticket sync and dashboard', () => {
     expect(job.status).toBe('done');
     // The two without a portal ID are named as such, not blamed on the company's number.
     expect(job.messages.join(' ')).toContain('2 automation tickets have no link yet');
+    // Northline's number is only on its own record; with none there, the note shows what ConnectWise gave.
+    expect(job.messages.join(' ')).toContain('Northline Architecture (IDs from ConnectWise: none)');
     expect(job.messages.join(' ')).not.toContain('Harbor Dental Group have no ConnectWise link');
     const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
     const shown = (s: string) => list.find((k: { summary: string }) => k.summary === s);

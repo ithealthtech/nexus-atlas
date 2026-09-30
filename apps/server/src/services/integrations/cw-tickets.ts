@@ -140,6 +140,9 @@ export class CwTicketReader {
   readonly openOnly = new Set<string>();
   private statuses: Promise<Set<string>> | null = null;
   private companyNumbers: Promise<Map<string, string>> | null = null;
+  /** The product whose external IDs are the portal's company numbers, and each company's external IDs. */
+  private portalProduct = '';
+  private readonly externalIds = new Map<string, { id: string; product: string }[]>();
   private readonly web: string | undefined;
 
   constructor(
@@ -173,31 +176,20 @@ export class CwTicketReader {
     this.companyNumbers ??= this.web
       ? this.client.get(COMPANIES).then(
           (body) => {
-            const companies = listOf(body).map((c) => ({
-              id: text(c, 'id'),
-              own: text(c, 'number', 'companyNumber'),
-              ids: (Array.isArray(c.externalIds) ? (c.externalIds as Json[]) : [])
-                .map((e) => ({ id: text(e, 'externalId'), product: text(e, 'productId') }))
-                .filter((e) => numeric(e.id)),
-            }));
+            const companies = listOf(body).map(companyIds);
             // A company with numeric IDs from several products: take the one from the product most companies'
             // single numeric ID comes from, which is the portal's company number.
             const products = new Map<string, number>();
-            for (const c of companies)
-              if (new Set(c.ids.map((e) => e.id)).size === 1 && c.ids[0]!.product)
-                products.set(c.ids[0]!.product, (products.get(c.ids[0]!.product) ?? 0) + 1);
-            const portal = [...products].sort((a, b) => b[1] - a[1])[0]?.[0];
+            for (const c of companies) {
+              const numbers = c.ids.filter((e) => numeric(e.id));
+              if (new Set(numbers.map((e) => e.id)).size === 1 && numbers[0]!.product)
+                products.set(numbers[0]!.product, (products.get(numbers[0]!.product) ?? 0) + 1);
+            }
+            this.portalProduct = [...products].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+            for (const c of companies) this.externalIds.set(c.id, c.ids);
             return new Map(
               companies.flatMap((c) => {
-                const unique = [...new Set(c.ids.map((e) => e.id))];
-                const fromPortal = [...new Set(c.ids.filter((e) => portal && e.product === portal).map((e) => e.id))];
-                const number = numeric(c.own)
-                  ? c.own
-                  : unique.length === 1
-                    ? unique[0]!
-                    : fromPortal.length === 1
-                      ? fromPortal[0]!
-                      : '';
+                const number = companyNumber(c, this.portalProduct);
                 return number ? [[c.id, number] as const] : [];
               }),
             );
@@ -208,10 +200,35 @@ export class CwTicketReader {
     return this.companyNumbers;
   }
 
+  /** A company's number from its own record, for a company the list gave none: the record may carry more IDs. */
+  private async numberOf(companyId: string) {
+    const listed = (await this.numbers()).get(companyId);
+    if (listed || !this.web) return listed ?? '';
+    try {
+      const c = companyIds((await this.client.get(`${COMPANIES}/${encodeURIComponent(companyId)}`)) as Json);
+      if (c.ids.length) this.externalIds.set(companyId, c.ids);
+      return companyNumber(c, this.portalProduct);
+    } catch (error) {
+      if (error instanceof HttpError) return '';
+      throw error;
+    }
+  }
+
+  /** What ConnectWise gave a company to link by, for the job note: its external IDs and their products. */
+  idsSeen(companyId: string) {
+    const ids = this.externalIds.get(companyId) ?? [];
+    return ids.length
+      ? ids
+          .slice(0, 4)
+          .map((e) => `${clean(e.id, 40)}${e.product ? ` (product ${clean(e.product, 40)})` : ''}`)
+          .join(', ')
+      : 'none';
+  }
+
   /** Every open ticket, and those closed in the last 90 days. */
   async tickets(companyId: string, now = Date.now()): Promise<CwTicket[]> {
     const closedIds = await this.closedStatuses();
-    const companyNumber = (await this.numbers()).get(companyId) ?? '';
+    const companyNumber = await this.numberOf(companyId);
     const link = (number: string) => ticketLink(this.web, number, companyNumber);
     const map = (records: Json[]) =>
       records.map((r) => mapTicket(r, now, closedIds, link)).filter((t): t is CwTicket => !!t);
@@ -322,6 +339,27 @@ export function portalIdIn(note: string, asioNumber: string): string | null {
       note,
     );
   return m && m[2] === asioNumber ? (m[1] ?? null) : null;
+}
+
+/** A company record's own number and external IDs. */
+function companyIds(c: Json) {
+  return {
+    id: text(c, 'id'),
+    own: text(c, 'number', 'companyNumber'),
+    ids: (Array.isArray(c.externalIds) ? (c.externalIds as Json[]) : [])
+      .map((e) => ({ id: text(e, 'externalId'), product: text(e, 'productId') }))
+      .filter((e) => e.id),
+  };
+}
+
+/** The portal's company number: its own, its one numeric external ID, or the one from the portal's product. */
+function companyNumber(c: ReturnType<typeof companyIds>, portalProduct: string) {
+  if (numeric(c.own)) return c.own;
+  const numbers = c.ids.filter((e) => numeric(e.id));
+  const unique = [...new Set(numbers.map((e) => e.id))];
+  if (unique.length === 1) return unique[0]!;
+  const fromPortal = [...new Set(numbers.filter((e) => portalProduct && e.product === portalProduct).map((e) => e.id))];
+  return fromPortal.length === 1 ? fromPortal[0]! : '';
 }
 
 const notesPath = (ticketId: string) =>
@@ -482,9 +520,11 @@ export async function runTicketSync(
           .where(inArray(schema.clients.id, ids))
       ).map((r) => [r.id, r.name]),
     );
-    const shown = ids.slice(0, 5).map((id) => names.get(id) ?? id);
+    const shown = [...reader.unlinked]
+      .slice(0, 5)
+      .map((c) => `${names.get(byCompany.get(c) ?? c) ?? c} (IDs from ConnectWise: ${reader.idsSeen(c)})`);
     run.note(
-      `Tickets for ${shown.join(', ')}${ids.length > 5 ? ` and ${ids.length - 5} more` : ''} have no ConnectWise ` +
+      `Tickets for ${shown.join('; ')}${ids.length > 5 ? ` and ${ids.length - 5} more` : ''} have no ConnectWise ` +
         "link: ConnectWise gives these companies no single numeric company ID (an external ID) to link by, or the " +
         'account is outside North America.',
     );
