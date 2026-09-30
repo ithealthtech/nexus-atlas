@@ -22,7 +22,7 @@ import type { VaultService } from '../vault.js';
 import { ImportRun } from './common.js';
 import { htmlToRichText, htmlToText } from './html.js';
 
-// Hudu REST API v1 (https://<instance>/api/v1, header x-api-key). Lists return 25 items per page.
+// Hudu REST API v1 (https://<instance>/api/v1, header x-api-key). Lists return 25 items per page by default.
 type HuduCompany = {
   id: number;
   name: string;
@@ -45,6 +45,8 @@ type HuduLayoutField = {
   required?: boolean;
   hint?: string | null;
   position?: number;
+  // A field deleted from the layout, still listed by the API.
+  is_destroyed?: boolean;
 };
 type HuduLayout = { id: number; name: string; fields?: HuduLayoutField[]; active?: boolean };
 type HuduAsset = {
@@ -100,10 +102,12 @@ export class HuduClient {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  private async page<T>(path: string, key: string, page: number): Promise<T[]> {
+  private async page<T>(path: string, key: string, page: number, sized: boolean): Promise<T[]> {
     let response: Response;
+    // page_size is asked for explicitly where Hudu takes it (asset_layouts doesn't), so the last-page check holds.
+    const query = sized ? `page=${page}&page_size=${PAGE_SIZE}` : `page=${page}`;
     try {
-      response = await this.fetcher(`${this.baseUrl}/api/v1/${path}?page=${page}`, {
+      response = await this.fetcher(`${this.baseUrl}/api/v1/${path}?${query}`, {
         headers: { 'x-api-key': this.apiKey, accept: 'application/json' },
         signal: AbortSignal.timeout(30_000),
         redirect: 'error',
@@ -120,10 +124,10 @@ export class HuduClient {
     return items as T[];
   }
 
-  async all<T>(path: string, key: string): Promise<T[]> {
+  async all<T>(path: string, key: string, sized = true): Promise<T[]> {
     const out: T[] = [];
     for (let page = 1; page <= MAX_PAGES; page++) {
-      const items = await this.page<T>(path, key, page);
+      const items = await this.page<T>(path, key, page, sized);
       out.push(...items);
       if (items.length < PAGE_SIZE) break;
     }
@@ -131,7 +135,7 @@ export class HuduClient {
   }
 
   companies = () => this.all<HuduCompany>('companies', 'companies');
-  layouts = () => this.all<HuduLayout>('asset_layouts', 'asset_layouts');
+  layouts = () => this.all<HuduLayout>('asset_layouts', 'asset_layouts', false);
   assets = () => this.all<HuduAsset>('assets', 'assets');
   articles = () => this.all<HuduArticle>('articles', 'articles');
   passwords = () => this.all<HuduPassword>('asset_passwords', 'asset_passwords');
@@ -191,7 +195,9 @@ function mapLayout(layout: HuduLayout): MappedLayout {
   const byLabel = new Map<string, LayoutField>();
   const byId = new Map<number, LayoutField>();
   const excluded = new Set<string | number>();
-  for (const f of [...(layout.fields ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))) {
+  for (const f of [...(layout.fields ?? [])]
+    .filter((x) => !x.is_destroyed)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))) {
     const type = FIELD_TYPES[f.field_type] ?? (f.field_type in FIELD_TYPES ? null : 'text');
     if (!type) {
       excluded.add(norm(f.label));
