@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Clearer ticket link warnings, and more companies linked.** The sync log names companies by their Atlas client name and says whether a missing link is the company's number or an automation ticket still waiting on its portal ID. A ConnectWise company with numeric IDs from several products now links by the one from the product most companies' IDs come from.
+
 ## [1.7.11] - 2026-09-30
 
 ### Fixed
