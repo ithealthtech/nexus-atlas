@@ -83,6 +83,8 @@ export const cwRmmSyncOptionsSchema = z.object({
   locations: z.boolean().default(true),
   /** Devices, as assets. */
   devices: z.boolean().default(true),
+  /** Tickets, read-only, for the ticket dashboard. */
+  tickets: z.boolean().default(true),
 });
 export type CwRmmSyncOptions = z.infer<typeof cwRmmSyncOptionsSchema>;
 /** A ConnectWise RMM company and what Atlas does with it. */
@@ -108,6 +110,47 @@ export const cwRmmMappingSchema = z.object({
     )
     .max(2000),
 });
+
+// ---------- tickets (ConnectWise platform) ----------
+/** The periods the ticket statistics chart can cover, in days. */
+export const TICKET_DAYS = [7, 30, 90] as const;
+export type TicketDays = (typeof TICKET_DAYS)[number];
+export interface TicketStatusCount {
+  /** The status as ConnectWise names it. */
+  name: string;
+  count: number;
+  /** A closed status: open tickets are counted in full, closed ones only within the period. */
+  closed: boolean;
+}
+export interface TicketReport {
+  /** Whether a ConnectWise company is linked (to this client, when one is asked for). */
+  linked: boolean;
+  /** When tickets were last synced, or null before any sync. */
+  updatedAt: string | null;
+  days: TicketDays;
+  open: number;
+  /** Tickets per status, open statuses first; statuses with no tickets are left out. */
+  statuses: TicketStatusCount[];
+  /** Tickets opened and closed on each day of the period, oldest first, days with none included. */
+  trend: { day: string; opened: number; closed: number }[];
+}
+export interface TicketView {
+  id: string;
+  /** The ticket number ConnectWise shows. */
+  number: string;
+  summary: string;
+  status: string;
+  closed: boolean;
+  priority: string;
+  clientId: string;
+  clientName: string;
+  openedAt: string | null;
+  closedAt: string | null;
+  /** When the ticket last changed in ConnectWise. */
+  updatedAt: string | null;
+  /** The ticket in ConnectWise, when it gave a link. */
+  url: string | null;
+}
 
 // ---------- RMM health ----------
 export type RmmDeviceKind = 'server' | 'workstation' | 'other';
@@ -215,6 +258,90 @@ export interface WarrantyAsset {
   /** YYYY-MM-DD, or null when no date is entered. */
   warrantyExpires: string | null;
   daysLeft: number | null;
+}
+
+// ---------- asset statistics ----------
+/** What kind of device an asset is, for the count tiles. */
+export const ASSET_KINDS = ['server', 'workstation', 'switch', 'network', 'printer', 'phone', 'other'] as const;
+export type AssetKind = (typeof ASSET_KINDS)[number];
+export const ASSET_KIND_LABELS: Record<AssetKind, string> = {
+  server: 'Servers',
+  workstation: 'Workstations',
+  switch: 'Switches',
+  network: 'Network devices',
+  printer: 'Printers',
+  phone: 'Phones',
+  other: 'Other devices',
+};
+/**
+ * Which layouts count as which kind of device. "auto" reads each asset's Type field (and its operating system);
+ * "none" leaves the layout out of the statistics. Layouts not listed are "auto".
+ */
+export const assetStatsSettingsSchema = z.object({
+  layouts: z
+    .record(z.string().uuid(), z.enum([...ASSET_KINDS, 'auto', 'none']))
+    .refine((r) => Object.keys(r).length <= 500, 'Too many layouts.')
+    .default({}),
+});
+export type AssetStatsSettings = z.infer<typeof assetStatsSettingsSchema>;
+/** Operating system families on the OS chart. */
+export const ASSET_OS = [
+  'windows-11',
+  'windows-10',
+  'windows-old',
+  'server-2025',
+  'server-2022',
+  'server-2019',
+  'server-2016',
+  'server-old',
+  'macos',
+  'linux',
+  'other',
+  'unknown',
+] as const;
+export type AssetOs = (typeof ASSET_OS)[number];
+export const ASSET_OS_INFO: Record<AssetOs, { label: string; endOfSupport: boolean }> = {
+  'windows-11': { label: 'Windows 11', endOfSupport: false },
+  'windows-10': { label: 'Windows 10', endOfSupport: true },
+  'windows-old': { label: 'Windows 8.1 or older', endOfSupport: true },
+  'server-2025': { label: 'Windows Server 2025', endOfSupport: false },
+  'server-2022': { label: 'Windows Server 2022', endOfSupport: false },
+  'server-2019': { label: 'Windows Server 2019', endOfSupport: false },
+  'server-2016': { label: 'Windows Server 2016', endOfSupport: false },
+  'server-old': { label: 'Windows Server 2012 R2 or older', endOfSupport: true },
+  macos: { label: 'macOS', endOfSupport: false },
+  linux: { label: 'Linux', endOfSupport: false },
+  other: { label: 'Other', endOfSupport: false },
+  unknown: { label: 'Not recorded', endOfSupport: false },
+};
+export type AssetKindCounts = Record<AssetKind, number> & { total: number };
+export interface AssetStatsReport {
+  totals: AssetKindCounts;
+  /** Devices per operating system family; every family is present. */
+  os: Record<AssetOs, number>;
+  /** One row per client with devices, most devices first. */
+  clients: { clientId: string; clientName: string; counts: AssetKindCounts; endOfSupport: number }[];
+}
+/** `kind:<AssetKind>`, `os:<AssetOs>`, or `eos` (every end-of-support device). */
+export type AssetStatsFilter = `kind:${AssetKind}` | `os:${AssetOs}` | 'eos';
+export function isAssetStatsFilter(v: unknown): v is AssetStatsFilter {
+  if (v === 'eos') return true;
+  if (typeof v !== 'string') return false;
+  const [what, value] = v.split(':');
+  return what === 'kind'
+    ? (ASSET_KINDS as readonly string[]).includes(value!)
+    : what === 'os' && (ASSET_OS as readonly string[]).includes(value!);
+}
+export interface AssetStatsAsset {
+  assetId: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  layoutName: string;
+  kind: AssetKind;
+  os: AssetOs;
+  /** The operating system as recorded on the asset. */
+  osName: string;
 }
 
 // ---------- Microsoft 365 documentation sync ----------

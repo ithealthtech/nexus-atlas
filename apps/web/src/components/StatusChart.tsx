@@ -193,7 +193,7 @@ export function StatusChart<F extends string>({
               const label = (
                 <>
                   <Icon className={cn('size-4 shrink-0', SWATCH[s.tone])} aria-hidden />
-                  <span className="truncate">{s.label}</span>
+                  <span className="min-w-0">{s.label}</span>
                 </>
               );
               return (
@@ -241,19 +241,33 @@ export function Tile({
   value,
   icon: Icon,
   alert,
+  onClick,
 }: {
   label: string;
   value: number;
   icon: LucideIcon;
   alert?: boolean;
+  /** Opens the list behind the tile. */
+  onClick?: () => void;
 }) {
-  return (
-    <div className="rounded-lg border border-border px-4 py-3">
+  const body = (
+    <>
       <div className="flex items-center justify-between text-xs text-muted">
         {label}
         <Icon className={cn('size-4', alert && SWATCH.critical)} aria-hidden />
       </div>
       <div className="mt-1 text-2xl font-semibold tracking-tight text-text tabular-nums">{value}</div>
-    </div>
+    </>
+  );
+  return onClick && value > 0 ? (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-lg border border-border px-4 py-3 text-left hover:border-primary hover:bg-surface-2"
+    >
+      {body}
+    </button>
+  ) : (
+    <div className="rounded-lg border border-border px-4 py-3">{body}</div>
   );
 }

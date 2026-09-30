@@ -7,7 +7,9 @@ import { ActivityFeed } from '@/components/panels';
 import { ItemIcon } from '@/components/ItemIcon';
 import { RmmHealthCard } from '@/components/RmmHealth';
 import { TrackerCard } from '@/components/Trackers';
+import { TicketDetails, TicketsCard } from '@/components/Tickets';
 import { WarrantyCard } from '@/components/Warranty';
+import { AssetStatsCard } from '@/components/AssetStats';
 import { useActivity, useAssets, useClient, useContacts, useDocuments, useLayouts, useLocations } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
 
@@ -70,6 +72,9 @@ export function ClientOverview() {
         </Card>
         <RmmHealthCard clientId={clientId} />
         <TrackerCard clientId={clientId} />
+        <TicketsCard clientId={clientId} />
+        <TicketDetails clientId={clientId} />
+        <AssetStatsCard clientId={clientId} />
         <Card>
           <CardHeader
             title="Recently updated documents"

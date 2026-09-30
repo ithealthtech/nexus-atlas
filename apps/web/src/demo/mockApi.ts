@@ -22,17 +22,31 @@ import {
   type RmmHealthReport,
   type RmmHealthSettings,
   type RmmHealthTrendPoint,
-  type WarrantyAsset,
-  type WarrantyCounts,
-  type WarrantyFilter,
-  type WarrantyReport,
-  type WarrantySettings,
+  TICKET_DAYS,
+  type TicketDays,
+  type TicketReport,
+  type TicketStatusCount,
+  type TicketView,
   type TrackerCounts,
   type TrackerFilter,
   type TrackerItem,
   type TrackerKind,
   type TrackerReport,
   type TrackerSettings,
+  type WarrantyAsset,
+  type WarrantyCounts,
+  type WarrantyFilter,
+  type WarrantyReport,
+  type WarrantySettings,
+  ASSET_KINDS,
+  ASSET_OS,
+  ASSET_OS_INFO,
+  type AssetKind,
+  type AssetKindCounts,
+  type AssetOs,
+  type AssetStatsAsset,
+  type AssetStatsReport,
+  type AssetStatsSettings,
   type ItemType,
   type LayoutField,
   type RichText,
@@ -204,6 +218,89 @@ function rmmTrend(client: string | null): RmmHealthTrendPoint[] {
   });
 }
 
+// ---------- tickets (sample tickets for the first three clients) ----------
+const TICKET_STATUSES = [
+  'New',
+  'Assigned',
+  'In progress',
+  'Scheduled',
+  'Waiting on client',
+  'Waiting for parts',
+  'Escalated',
+];
+const TICKET_SUMMARIES = [
+  'Printer offline in reception',
+  'New starter laptop setup',
+  'VPN drops every afternoon',
+  'Outlook asks for password',
+  'Replace failing disk on file server',
+  'Firewall firmware update',
+  'Shared mailbox permissions',
+  'Slow Wi-Fi in conference room',
+];
+const TICKET_SAMPLE: TicketView[] = db.clients.slice(0, 3).flatMap((c, ci) =>
+  Array.from({ length: [48, 30, 18][ci]! }, (_, i): TicketView => {
+    const n = (i * 7 + ci * 5) % 23;
+    const openedDays = (i * 13 + ci * 3) % 88;
+    const closed = n < 12 && openedDays > 1;
+    const closedDays = closed ? Math.max(openedDays - 1 - (n % 5), 0) : null;
+    return {
+      id: `${ci}-${i}`,
+      number: String(48210 + ci * 100 + i),
+      summary: TICKET_SUMMARIES[(i + ci) % TICKET_SUMMARIES.length]!,
+      status: closed ? (n % 3 ? 'Closed' : 'Completed') : TICKET_STATUSES[n % TICKET_STATUSES.length]!,
+      closed,
+      priority: `Priority ${(n % 4) + 1}`,
+      clientId: c.id,
+      clientName: c.name,
+      openedAt: ago(openedDays * 24 * 60 + n * 17),
+      closedAt: closedDays === null ? null : ago(closedDays * 24 * 60),
+      updatedAt: ago((closedDays ?? Math.min(openedDays, n % 9)) * 24 * 60 + n * 11),
+      url: null,
+    };
+  }),
+);
+const ticketsIn = (client: string | null) => TICKET_SAMPLE.filter((t) => !client || t.clientId === client);
+const ticketStart = (days: number) =>
+  Date.parse(`${new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10)}T00:00:00Z`);
+function ticketReport(client: string | null, days: number): TicketReport {
+  const period = (TICKET_DAYS as readonly number[]).includes(days) ? (days as TicketDays) : 30;
+  const start = ticketStart(period);
+  const list = ticketsIn(client);
+  const trend = Array.from({ length: period }, (_, i) => ({
+    day: new Date(start + i * 86_400_000).toISOString().slice(0, 10),
+    opened: 0,
+    closed: 0,
+  }));
+  const counts = new Map<string, TicketStatusCount>();
+  for (const t of list) {
+    const o = trend.find((p) => p.day === t.openedAt?.slice(0, 10));
+    if (o) o.opened++;
+    const c = trend.find((p) => p.day === t.closedAt?.slice(0, 10));
+    if (c) c.closed++;
+    if (t.closed && Date.parse(t.closedAt!) < start) continue;
+    const s = counts.get(t.status) ?? { name: t.status, count: 0, closed: t.closed };
+    s.count++;
+    counts.set(t.status, s);
+  }
+  return {
+    linked: !client || list.length > 0,
+    updatedAt: list.length ? ago(12) : null,
+    days: period,
+    open: list.filter((t) => !t.closed).length,
+    statuses: [...counts.values()].sort((a, b) => Number(a.closed) - Number(b.closed) || b.count - a.count),
+    trend,
+  };
+}
+function ticketList(client: string | null, status: string | null, days: number): TicketView[] {
+  const start = ticketStart(days);
+  return ticketsIn(client)
+    .filter((t) =>
+      status === null ? !t.closed : t.status === status && (!t.closed || Date.parse(t.closedAt!) >= start),
+    )
+    .sort((a, b) => (a.updatedAt ?? '').localeCompare(b.updatedAt ?? ''));
+}
+
 // ---------- asset warranty (sample dates on the RMM sample's devices) ----------
 let warrantySettings: WarrantySettings = { soonDays: 90 };
 const WARRANTY_SAMPLE: WarrantyAsset[] = RMM_SAMPLE.map((d, i) => {
@@ -238,6 +335,74 @@ function warrantyReport(client: string | null): WarrantyReport {
     counts: warrantyCounts(list.filter((a) => a.clientId === id)),
   }));
   return { soonDays: warrantySettings.soonDays, totals: warrantyCounts(list), clients };
+}
+
+// ---------- asset statistics (kinds and operating systems for the RMM sample's devices) ----------
+let assetStatsSettings: AssetStatsSettings = { layouts: {} };
+const SAMPLE_OS: Record<'server' | 'workstation', [AssetOs, string][]> = {
+  server: [
+    ['server-2022', 'Windows Server 2022 Standard'],
+    ['server-2019', 'Windows Server 2019 Standard'],
+    ['server-old', 'Windows Server 2012 R2 Standard'],
+    ['server-2016', 'Windows Server 2016 Standard'],
+  ],
+  workstation: [
+    ['windows-11', 'Windows 11 Pro'],
+    ['windows-11', 'Windows 11 Pro'],
+    ['windows-10', 'Windows 10 Pro'],
+    ['macos', 'macOS Sonoma'],
+    ['windows-11', 'Windows 11 Enterprise'],
+    ['unknown', ''],
+  ],
+};
+const OTHER_KINDS: AssetKind[] = ['switch', 'network', 'printer', 'phone'];
+const STATS_SAMPLE: AssetStatsAsset[] = RMM_SAMPLE.map((d, i) => {
+  const kind: AssetKind = d.kind === 'other' ? OTHER_KINDS[i % OTHER_KINDS.length]! : d.kind;
+  const choices = d.kind === 'other' ? null : SAMPLE_OS[d.kind];
+  const [os, osName] = choices ? choices[i % choices.length]! : (['unknown', ''] as [AssetOs, string]);
+  return {
+    assetId: d.assetId,
+    name: d.name,
+    clientId: d.clientId,
+    clientName: d.clientName,
+    layoutName: 'Configurations',
+    kind,
+    os,
+    osName,
+  };
+});
+// The sample devices all sit in Configurations, so the administrator's choice for that layout applies to all of them.
+const statsAssets = (client: string | null): AssetStatsAsset[] => {
+  const layout = db.layouts.find((l) => l.key === 'configuration');
+  const chosen = (layout && assetStatsSettings.layouts[layout.id]) ?? 'auto';
+  if (chosen === 'none') return [];
+  return STATS_SAMPLE.filter((a) => !client || a.clientId === client).map((a) =>
+    chosen === 'auto' ? a : { ...a, kind: chosen },
+  );
+};
+function kindCounts(list: AssetStatsAsset[]): AssetKindCounts {
+  const c = { total: list.length, ...Object.fromEntries(ASSET_KINDS.map((k) => [k, 0])) } as AssetKindCounts;
+  for (const a of list) c[a.kind]++;
+  return c;
+}
+function assetStatsReport(client: string | null): AssetStatsReport {
+  const list = statsAssets(client);
+  const os = Object.fromEntries(ASSET_OS.map((o) => [o, list.filter((a) => a.os === o).length])) as Record<
+    AssetOs,
+    number
+  >;
+  const clients = [...new Set(list.map((a) => a.clientId))]
+    .map((id) => {
+      const mine = list.filter((a) => a.clientId === id);
+      return {
+        clientId: id,
+        clientName: clientName(id) ?? '',
+        counts: kindCounts(mine),
+        endOfSupport: mine.filter((a) => ASSET_OS_INFO[a.os].endOfSupport).length,
+      };
+    })
+    .sort((a, b) => b.counts.total - a.counts.total);
+  return { totals: kindCounts(list), os, clients };
 }
 
 // ---------- domain and SSL trackers (the sample's Domains and SSL certificates assets) ----------
@@ -1409,12 +1574,28 @@ on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
 on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+on('GET', '/tickets', (_m, _b, q) => ticketReport(q.get('client'), Number(q.get('days')) || 30));
+on('GET', '/tickets/list', (_m, _b, q) => ticketList(q.get('client'), q.get('status'), Number(q.get('days')) || 30));
 on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
 on('GET', '/warranty/assets', (_m, _b, q) =>
   warrantyAssets(q.get('client'))
     .filter((a) => warrantyStanding(a) === q.get('filter'))
     .sort((a, b) => (a.warrantyExpires ?? '').localeCompare(b.warrantyExpires ?? '') || a.name.localeCompare(b.name)),
 );
+on('GET', '/asset-stats', (_m, _b, q) => assetStatsReport(q.get('client')));
+on('GET', '/asset-stats/assets', (_m, _b, q) => {
+  const [what, value] = (q.get('filter') ?? '').split(':');
+  return statsAssets(q.get('client'))
+    .filter((a) =>
+      what === 'eos' ? ASSET_OS_INFO[a.os].endOfSupport : what === 'kind' ? a.kind === value : a.os === value,
+    )
+    .sort((a, b) => a.clientName.localeCompare(b.clientName) || a.name.localeCompare(b.name));
+});
+on('GET', '/settings/asset-stats', () => assetStatsSettings);
+on('PUT', '/settings/asset-stats', (_m, b) => {
+  const layouts = Object.entries((b as AssetStatsSettings).layouts).filter(([, v]) => v !== 'auto');
+  return (assetStatsSettings = { layouts: Object.fromEntries(layouts) });
+});
 on('GET', '/settings/warranty', () => warrantySettings);
 on('GET', '/trackers', (_m, _b, q) => trackerReport(q.get('client')));
 on('GET', '/trackers/items', (_m, _b, q) =>
@@ -1548,7 +1729,7 @@ let cwRmm: {
   hasSecret: true;
   autoSync: boolean;
   lastSyncAt: string | null;
-  options: { locations: boolean; devices: boolean };
+  options: { locations: boolean; devices: boolean; tickets: boolean };
 } | null = null;
 const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
 const cwCompanies = () => [
@@ -1578,14 +1759,14 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     hasSecret: true,
     autoSync: b.autoSync !== false,
     lastSyncAt: cwRmm?.lastSyncAt ?? null,
-    options: cwRmm?.options ?? { locations: true, devices: true },
+    options: cwRmm?.options ?? { locations: true, devices: true, tickets: true },
   };
   return { ...cwRmm, companies: cwCompanies().length };
 });
 on('DELETE', '/integrations/cw-rmm', () => ((cwRmm = null), { ok: true }));
 on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
   if (!cwRmm) throw new MockError(400, 'Connect ConnectWise RMM first.');
-  cwRmm.options = { locations: b.locations !== false, devices: b.devices !== false };
+  cwRmm.options = { locations: b.locations !== false, devices: b.devices !== false, tickets: b.tickets !== false };
   return cwRmm;
 });
 on('GET', '/integrations/cw-rmm/companies', () => cwView());
