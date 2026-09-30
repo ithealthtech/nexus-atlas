@@ -148,6 +148,13 @@
       "when": 1790730655808,
       "tag": "0020_trackers",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790730868400,
+      "tag": "0021_password_rotation",
+      "breakpoints": true
     }
   ]
 }

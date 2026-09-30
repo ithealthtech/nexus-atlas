@@ -37,6 +37,21 @@ Changes to access apply to people who are already signed in, straight away.
 - **Access history:** every reveal, copy, change, and share is recorded on the password and in **Security log → Vault access**.
 - **Sharing with the client:** ticking *Share with the client's own accounts* on an entry lets that client's own contacts see it, read-only.
 
+## Automatic password rotation
+
+**Administration → Password rotation** changes local administrator and Active Directory service account passwords on a schedule, through ConnectWise RMM, and keeps the new ones in the vault.
+
+1. **Set up ConnectWise RMM.** Connect it under **Import & export** and sync the client's devices. Give its API key the **Automation read** and **Automation create** permissions as well.
+2. **Add the script.** Import `deploy/rmm/Invoke-AtlasPasswordRotation.ps1` into ConnectWise RMM (**Automation → Scripts**) as a PowerShell script, and enter its ID on the Password rotation page. Tick **Rotate passwords automatically**.
+3. **Add a policy** for each account type: how often (in days) and the password rules (length and kinds of character). A policy for **All clients** is the default; a client's own policy replaces it for that client. Without an active policy, nothing rotates.
+4. **Choose the passwords.** Pick the client, the vault entry, and the device the script runs on. The entry's username is the account that's changed. For an AD service account, choose a domain controller (or a server with the ActiveDirectory PowerShell module).
+
+**How a rotation works.** Atlas starts the script on the device with a token that works for that one rotation only, for two hours. The script generates a password to the policy and sends it to Atlas *before* changing anything; Atlas checks it against the policy and holds it encrypted. The script then sets the password and reports whether that worked. Only a confirmed change replaces the password in the vault; the old one moves to the entry's history.
+
+**When a rotation fails,** the old password stays in the vault, and Atlas records the failure in the password's access history and the security log, and emails administrators (when email is set up). If a device reported a password but never confirmed setting it, that password is also kept in the entry's history, marked *unconfirmed*, in case the device did change the account. A failed account is tried again after a day.
+
+**Revoking tokens.** Cancel one attempt from **Recent attempts**, or choose **Revoke device tokens** to stop every attempt in progress. Turning rotation off does the same.
+
 ## Keeping Atlas healthy
 
 Check **System status** every week or so. It shows:

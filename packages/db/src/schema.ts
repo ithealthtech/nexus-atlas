@@ -961,3 +961,109 @@ export const trackerChecks = pgTable(
     check('tracker_checks_kind_check', sql`${t.kind} in ('domain','ssl')`),
   ],
 );
+
+// ---------------------------------------------------------------- automated password rotation
+
+// How often, and to what rules, one account type is rotated: for one client, or (client null) for every client
+// without a policy of its own.
+export const rotationPolicies = pgTable(
+  'rotation_policies',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+    accountType: text('account_type').notNull(),
+    intervalDays: integer('interval_days').notNull(),
+    complexity: jsonb('complexity')
+      .$type<{ length: number; upper: boolean; lower: boolean; digits: boolean; symbols: boolean }>()
+      .notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    updatedBy: updatedBy(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    // One policy per account type per client, and one organization-wide default per account type.
+    uniqueIndex('rotation_policies_scope').on(t.orgId, sql`coalesce(${t.clientId}::text, '')`, t.accountType),
+    check('rotation_policies_type_check', sql`${t.accountType} in ('local_admin','ad_service')`),
+  ],
+);
+
+// A vault password under automatic rotation, and the RMM device its script runs on.
+export const rotationTargets = pgTable(
+  'rotation_targets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    accountType: text('account_type').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    lastRotatedAt: timestamp('last_rotated_at', { withTimezone: true }),
+    // When the last attempt started; a failed attempt waits a day before the next.
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('rotation_targets_password').on(t.passwordId),
+    index('rotation_targets_client').on(t.orgId, t.clientId),
+    check('rotation_targets_type_check', sql`${t.accountType} in ('local_admin','ad_service')`),
+  ],
+);
+
+// One rotation attempt. The device authenticates with a token for this run only (stored as a hash), which stops
+// working when the run finishes, expires, or is cancelled. The password the device reports is held here, sealed to
+// the run, until the device confirms it was set.
+export const rotationRuns = pgTable(
+  'rotation_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    targetId: uuid('target_id').references(() => rotationTargets.id, { onDelete: 'set null' }),
+    passwordId: uuid('password_id').references(() => passwords.id, { onDelete: 'set null' }),
+    passwordName: text('password_name').notNull(),
+    assetName: text('asset_name').notNull(),
+    status: text('status').notNull().default('dispatched'),
+    tokenHash: text('token_hash').notNull(),
+    // The policy's character rules when the run started; the reported password must meet them.
+    complexity: jsonb('complexity')
+      .$type<{ length: number; upper: boolean; lower: boolean; digits: boolean; symbols: boolean }>()
+      .notNull(),
+    candidate: text('candidate'),
+    error: text('error').notNull().default(''),
+    startedBy: uuid('started_by').references(() => users.id, { onDelete: 'set null' }),
+    startedByName: text('started_by_name').notNull(),
+    createdAt: created(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('rotation_runs_token').on(t.tokenHash),
+    index('rotation_runs_org').on(t.orgId, t.createdAt),
+    // At most one open run per account, enforced by the database so two dispatches can't both win.
+    uniqueIndex('rotation_runs_one_open')
+      .on(t.targetId)
+      .where(sql`${t.status} in ('dispatched','candidate')`),
+    check(
+      'rotation_runs_status_check',
+      sql`${t.status} in ('dispatched','candidate','succeeded','failed','cancelled')`,
+    ),
+  ],
+);

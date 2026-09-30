@@ -19,6 +19,8 @@ export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
   au: 'https://openapi.service.auplatform.connectwise.com',
 };
 const SCOPES = 'platform.companies.read platform.sites.read platform.devices.read';
+/** Running the rotation script needs automation scopes too. Only rotation asks for them, so a key without them still syncs. */
+export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.automation.create`;
 /** Tickets get their own token, so a key without ticket access still syncs devices. */
 export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
 const RETRY_MS = 2000;
@@ -456,7 +458,7 @@ export class CwRmmClient {
     clientId: string,
     clientSecret: string,
     fetcher: typeof fetch = fetch,
-    scopes = SCOPES,
+    scopes: string = SCOPES,
   ) {
     const key = [region, clientId, createHash('sha256').update(clientSecret).digest('hex'), scopes].join('|');
     let clients = CwRmmClient.shared.get(fetcher);
@@ -474,7 +476,7 @@ export class CwRmmClient {
     private readonly clientId: string,
     private readonly clientSecret: string,
     private readonly fetcher: typeof fetch = fetch,
-    private readonly scopes = SCOPES,
+    private readonly scopes: string = SCOPES,
   ) {
     this.base = CW_RMM_BASE[region];
   }
@@ -574,6 +576,31 @@ export class CwRmmClient {
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
     return res.json();
+  }
+
+  /**
+   * Runs a script from the ConnectWise RMM script library on one device, now, with these parameters. Returns the
+   * task ID ConnectWise gives back ('' when it gives none).
+   *
+   * This follows ConnectWise's automation task shape (a script task targeting one endpoint, run once); it has not
+   * been checked against a live tenant, so ConnectWise's own answer is passed on whole when it refuses.
+   */
+  async runScript(input: {
+    companyId: string;
+    endpointId: string;
+    scriptId: string;
+    name: string;
+    parameters: Record<string, string>;
+  }): Promise<string> {
+    const body = await this.call('POST', '/api/platform/v1/automation/tasks', {
+      name: input.name.slice(0, 100),
+      scriptId: input.scriptId,
+      companyId: input.companyId,
+      targets: [{ type: 'endpoint', id: input.endpointId }],
+      parameters: Object.entries(input.parameters).map(([name, value]) => ({ name, value })),
+      schedule: { type: 'runOnce', runNow: true },
+    });
+    return text((body ?? {}) as Json, 'id', 'taskId', 'data.id', 'data.taskId');
   }
 
   async companies(): Promise<RmmCompany[]> {
