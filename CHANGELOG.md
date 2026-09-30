@@ -2,6 +2,21 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.7] - 2026-09-30
+
+### Added
+
+- **Security and compliance from ConnectWise.** Clients linked to a ConnectWise company get a Security and compliance card with Windows and third-party patch compliance, backup and DR readiness, vulnerabilities by severity, and open MDR cases; synced devices get their own card with missing patches, backup jobs, and CVEs. Areas a partner doesn't use show "Not available". (#130)
+- **ConnectWise contacts and a live device panel.** Each linked company's contacts sync into the client (matched by email), and a synced device's page shows disk space with a low-disk flag, CPU and memory use over the last day, device groups, and effective policies. (#131)
+- **Write back to ConnectWise (off by default).** Atlas links can be written into an "Atlas link" custom field on devices and companies, and techs can read and add internal ticket notes; a password revealed with a ticket number in the reason adds a note to that ticket, without the password. (#132)
+- **Installed software, sign-ins, and VM hosts.** Synced devices list their software and the accounts that sign in, the client overview gets a Software card that flags out-of-support, unlicensed, and over-seat apps, and devices link to their user's contact and to their VM host. (#133)
+- **Hudu import shares an Endpoints layout with RMM devices**, so machines are no longer imported twice, and Hudu websites become Domains assets for the domain tracker. (#134)
+
+### Fixed
+
+- **Asset links and reloads** open the asset page instead of showing a raw "Not found" error. (#135)
+- **The client overview fits a phone screen.** (#135)
+
 ## [1.7.6] - 2026-09-30
 
 ### Fixed
