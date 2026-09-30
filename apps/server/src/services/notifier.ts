@@ -1,7 +1,8 @@
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, lt, or, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { ROLE_INFO, type ExpirationItem, type Role } from '@atlas/shared';
 import { actorFor } from '../identity/service.js';
+import { DEVICE_LIMITS } from '../identity/devices.js';
 import type { AuditService } from './audit.js';
 import type { ExpirationService } from './expirations.js';
 import type { MailService } from './mail.js';
@@ -22,7 +23,7 @@ export function isoWeek(date: Date) {
 
 /**
  * Background work, run every few minutes: expiry alerts and the weekly digest by email, audit checkpoints,
- * log retention, and cleanup of expired sign-in records. A database lock keeps two servers from both sending.
+ * log retention, emergency access notices, and cleanup of expired sign-in records. A database lock keeps two servers from both sending.
  */
 export class Notifier {
   private timer?: NodeJS.Timeout;
@@ -37,6 +38,8 @@ export class Notifier {
       settings: SettingsService;
       expirations: ExpirationService;
       audit: AuditService;
+      /** Announces emergency access whose waiting period has ended. */
+      emergency?: { announceStarts(orgId: string, now?: Date): Promise<number> };
       /** Daily breach checks for stored passwords. */
       health?: { nightly(orgId: string): Promise<void> };
       publicOrigin: string;
@@ -65,6 +68,7 @@ export class Notifier {
         const orgs = await this.db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs);
         for (const org of orgs) {
           await this.deps.audit.applyRetention(org.id);
+          await this.deps.emergency?.announceStarts(org.id, now).catch(() => undefined);
           await this.deps.health?.nightly(org.id).catch(() => undefined);
           await this.deps.audit.checkpoint(org.id);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
@@ -84,6 +88,15 @@ export class Notifier {
     await this.db.delete(schema.authChallenges).where(lt(schema.authChallenges.expiresAt, now));
     await this.db.delete(schema.trustedDevices).where(lt(schema.trustedDevices.expiresAt, now));
     await this.db.delete(schema.nativeAuthCodes).where(lt(schema.nativeAuthCodes.expiresAt, now));
+    await this.db.delete(schema.devicePairings).where(lt(schema.devicePairings.expiresAt, now));
+    await this.db
+      .delete(schema.deviceSessions)
+      .where(
+        or(
+          lt(schema.deviceSessions.expiresAt, now),
+          lt(schema.deviceSessions.lastSeenAt, new Date(now.getTime() - DEVICE_LIMITS.idleMs)),
+        ),
+      );
     await this.db
       .delete(schema.notificationLog)
       .where(lt(schema.notificationLog.sentAt, new Date(now.getTime() - 120 * 86_400_000)));

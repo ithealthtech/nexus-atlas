@@ -37,6 +37,17 @@ You see a client's passwords only with *edit + passwords* access to that client.
 - **Sharing with someone outside Atlas:** **Share** creates a one-time link that expires. The password is encrypted in your browser, and the key is only in the link, so send the link through a different channel from the username.
 - **Sharing with the client's own staff:** tick *Share with the client's own accounts* so the client's contacts can see it when they sign in.
 
+## Browser extension
+
+The Atlas extension for Edge and Chrome fills logins from the vault. Your administrator installs it, or gives you the file.
+
+- **Signing in:** click the Atlas button in the toolbar, enter your Atlas address, and choose **Sign in through Atlas**. Atlas opens in a new tab. Check it shows the same code as the extension, then choose **Allow**. You may be asked for your password. You never type a password into the extension.
+- **Filling:** on a sign-in page, click the Atlas button (or press Alt+Shift+A). Logins saved for that site are listed first, then logins elsewhere on the same domain marked *Same domain*. **Fill** puts the username and password into the page. On sites that ask for the username first, fill once for the username and again on the password page.
+- **Copying:** search by name, username, address, or client to copy a password, username, or one-time code for any login you can use. Unlike the web app, the extension can't clear the clipboard after it closes, so prefer **Fill**.
+- **What's recorded:** fills and copies appear in the password's access history like a reveal, naming the extension and the site filled. Clients that require a reason ask for one first.
+- **Matching:** a login matches when its **Website or address** has the same host as the page, or the same domain (so a login saved for `login.example.com` is offered on `portal.example.com`). Addresses on shared hosting, like `*.github.io`, and IP addresses only match exactly, and an `https://` login is never offered on a plain `http://` page.
+- **Signing out:** use **Sign out** in the extension, or **Signed-in apps** on your account page. The extension also signs out after 7 days unused, 30 days after signing in, and whenever your password changes or an administrator signs you out.
+
 ## For client contacts
 
 When your IT provider gives you an account, you sign in at the same address and see only your organization.

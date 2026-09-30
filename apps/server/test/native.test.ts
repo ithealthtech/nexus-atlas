@@ -256,7 +256,7 @@ describe('Atlas for Windows sign-in (native apps)', () => {
   it('is listed on the Account page and ends with every kind of sign-out', async () => {
     const token = await signInApp(owner);
     const overview = (await owner.call('GET', '/api/account/security')).data;
-    expect(overview.apps).toEqual([
+    expect(overview.desktopApps).toEqual([
       expect.objectContaining({
         client: 'Atlas for Windows',
         deviceName: 'TECH-LAPTOP-07',
@@ -266,7 +266,7 @@ describe('Atlas for Windows sign-in (native apps)', () => {
     expect(overview.sessions).toHaveLength(1);
 
     // Removing it from the Account page.
-    expect((await owner.call('DELETE', `/api/account/sessions/${overview.apps[0].id}`)).status).toBe(200);
+    expect((await owner.call('DELETE', `/api/account/sessions/${overview.desktopApps[0].id}`)).status).toBe(200);
     expect((await v1('GET', '/clients', token)).statusCode).toBe(401);
 
     // Signing out everywhere else.

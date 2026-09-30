@@ -44,6 +44,7 @@ import { useActor } from '@/lib/session';
 import { useClient, useDocument, useDocuments, useFolders } from '@/lib/queries';
 import { formatDate, relativeTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { FavoriteStar } from '@/components/Favorites';
 
 export const docTone: Record<DocumentStatus, Tone> = { current: 'success', needs_review: 'warning', draft: 'neutral' };
 const EMPTY: RichText = { type: 'doc', content: [{ type: 'paragraph' }] };
@@ -607,7 +608,10 @@ export function DocumentPage() {
                 <p className="mb-2 text-xs font-bold tracking-[0.14em] text-muted uppercase">
                   {doc.clientName ?? 'MSP knowledge base'}
                 </p>
-                <h1 className="text-[28px] leading-tight font-semibold tracking-tight">{doc.title}</h1>
+                <div className="flex items-start gap-2">
+                  <h1 className="text-[28px] leading-tight font-semibold tracking-tight">{doc.title}</h1>
+                  {!doc.archived && <FavoriteStar type="document" id={doc.id} name={doc.title} />}
+                </div>
                 <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
                   <Badge tone={docTone[doc.status]}>{DOCUMENT_STATUS_LABELS[doc.status]}</Badge>
                   {doc.archived && <Badge tone="warning">Archived</Badge>}

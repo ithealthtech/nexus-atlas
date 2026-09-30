@@ -2,10 +2,14 @@
 // State lives in memory: reloading the page starts over with the sample data.
 import {
   DEFAULT_BRANDING,
+  DEFAULT_VAULT_POLICY,
+  type SiemSettingsView,
+  type VaultPolicy,
   LEVEL_INFO,
   ROLE_INFO,
   guessPasswordCategory,
   passwordStrength,
+  resolveWorkspace,
   type PasswordCategory,
   type AccessLevel,
   type ActivityView,
@@ -22,11 +26,31 @@ import {
   type RmmHealthReport,
   type RmmHealthSettings,
   type RmmHealthTrendPoint,
+  TICKET_DAYS,
+  type TicketDays,
+  type TicketReport,
+  type TicketStatusCount,
+  type TicketView,
+  type TrackerCounts,
+  type TrackerFilter,
+  type TrackerItem,
+  type TrackerKind,
+  type TrackerReport,
+  type TrackerSettings,
   type WarrantyAsset,
   type WarrantyCounts,
   type WarrantyFilter,
   type WarrantyReport,
   type WarrantySettings,
+  ASSET_KINDS,
+  ASSET_OS,
+  ASSET_OS_INFO,
+  type AssetKind,
+  type AssetKindCounts,
+  type AssetOs,
+  type AssetStatsAsset,
+  type AssetStatsReport,
+  type AssetStatsSettings,
   type ItemType,
   type LayoutField,
   type RichText,
@@ -198,6 +222,89 @@ function rmmTrend(client: string | null): RmmHealthTrendPoint[] {
   });
 }
 
+// ---------- tickets (sample tickets for the first three clients) ----------
+const TICKET_STATUSES = [
+  'New',
+  'Assigned',
+  'In progress',
+  'Scheduled',
+  'Waiting on client',
+  'Waiting for parts',
+  'Escalated',
+];
+const TICKET_SUMMARIES = [
+  'Printer offline in reception',
+  'New starter laptop setup',
+  'VPN drops every afternoon',
+  'Outlook asks for password',
+  'Replace failing disk on file server',
+  'Firewall firmware update',
+  'Shared mailbox permissions',
+  'Slow Wi-Fi in conference room',
+];
+const TICKET_SAMPLE: TicketView[] = db.clients.slice(0, 3).flatMap((c, ci) =>
+  Array.from({ length: [48, 30, 18][ci]! }, (_, i): TicketView => {
+    const n = (i * 7 + ci * 5) % 23;
+    const openedDays = (i * 13 + ci * 3) % 88;
+    const closed = n < 12 && openedDays > 1;
+    const closedDays = closed ? Math.max(openedDays - 1 - (n % 5), 0) : null;
+    return {
+      id: `${ci}-${i}`,
+      number: String(48210 + ci * 100 + i),
+      summary: TICKET_SUMMARIES[(i + ci) % TICKET_SUMMARIES.length]!,
+      status: closed ? (n % 3 ? 'Closed' : 'Completed') : TICKET_STATUSES[n % TICKET_STATUSES.length]!,
+      closed,
+      priority: `Priority ${(n % 4) + 1}`,
+      clientId: c.id,
+      clientName: c.name,
+      openedAt: ago(openedDays * 24 * 60 + n * 17),
+      closedAt: closedDays === null ? null : ago(closedDays * 24 * 60),
+      updatedAt: ago((closedDays ?? Math.min(openedDays, n % 9)) * 24 * 60 + n * 11),
+      url: null,
+    };
+  }),
+);
+const ticketsIn = (client: string | null) => TICKET_SAMPLE.filter((t) => !client || t.clientId === client);
+const ticketStart = (days: number) =>
+  Date.parse(`${new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10)}T00:00:00Z`);
+function ticketReport(client: string | null, days: number): TicketReport {
+  const period = (TICKET_DAYS as readonly number[]).includes(days) ? (days as TicketDays) : 30;
+  const start = ticketStart(period);
+  const list = ticketsIn(client);
+  const trend = Array.from({ length: period }, (_, i) => ({
+    day: new Date(start + i * 86_400_000).toISOString().slice(0, 10),
+    opened: 0,
+    closed: 0,
+  }));
+  const counts = new Map<string, TicketStatusCount>();
+  for (const t of list) {
+    const o = trend.find((p) => p.day === t.openedAt?.slice(0, 10));
+    if (o) o.opened++;
+    const c = trend.find((p) => p.day === t.closedAt?.slice(0, 10));
+    if (c) c.closed++;
+    if (t.closed && Date.parse(t.closedAt!) < start) continue;
+    const s = counts.get(t.status) ?? { name: t.status, count: 0, closed: t.closed };
+    s.count++;
+    counts.set(t.status, s);
+  }
+  return {
+    linked: !client || list.length > 0,
+    updatedAt: list.length ? ago(12) : null,
+    days: period,
+    open: list.filter((t) => !t.closed).length,
+    statuses: [...counts.values()].sort((a, b) => Number(a.closed) - Number(b.closed) || b.count - a.count),
+    trend,
+  };
+}
+function ticketList(client: string | null, status: string | null, days: number): TicketView[] {
+  const start = ticketStart(days);
+  return ticketsIn(client)
+    .filter((t) =>
+      status === null ? !t.closed : t.status === status && (!t.closed || Date.parse(t.closedAt!) >= start),
+    )
+    .sort((a, b) => (a.updatedAt ?? '').localeCompare(b.updatedAt ?? ''));
+}
+
 // ---------- asset warranty (sample dates on the RMM sample's devices) ----------
 let warrantySettings: WarrantySettings = { soonDays: 90 };
 const WARRANTY_SAMPLE: WarrantyAsset[] = RMM_SAMPLE.map((d, i) => {
@@ -232,6 +339,126 @@ function warrantyReport(client: string | null): WarrantyReport {
     counts: warrantyCounts(list.filter((a) => a.clientId === id)),
   }));
   return { soonDays: warrantySettings.soonDays, totals: warrantyCounts(list), clients };
+}
+
+// ---------- asset statistics (kinds and operating systems for the RMM sample's devices) ----------
+let assetStatsSettings: AssetStatsSettings = { layouts: {} };
+const SAMPLE_OS: Record<'server' | 'workstation', [AssetOs, string][]> = {
+  server: [
+    ['server-2022', 'Windows Server 2022 Standard'],
+    ['server-2019', 'Windows Server 2019 Standard'],
+    ['server-old', 'Windows Server 2012 R2 Standard'],
+    ['server-2016', 'Windows Server 2016 Standard'],
+  ],
+  workstation: [
+    ['windows-11', 'Windows 11 Pro'],
+    ['windows-11', 'Windows 11 Pro'],
+    ['windows-10', 'Windows 10 Pro'],
+    ['macos', 'macOS Sonoma'],
+    ['windows-11', 'Windows 11 Enterprise'],
+    ['unknown', ''],
+  ],
+};
+const OTHER_KINDS: AssetKind[] = ['switch', 'network', 'printer', 'phone'];
+const STATS_SAMPLE: AssetStatsAsset[] = RMM_SAMPLE.map((d, i) => {
+  const kind: AssetKind = d.kind === 'other' ? OTHER_KINDS[i % OTHER_KINDS.length]! : d.kind;
+  const choices = d.kind === 'other' ? null : SAMPLE_OS[d.kind];
+  const [os, osName] = choices ? choices[i % choices.length]! : (['unknown', ''] as [AssetOs, string]);
+  return {
+    assetId: d.assetId,
+    name: d.name,
+    clientId: d.clientId,
+    clientName: d.clientName,
+    layoutName: 'Configurations',
+    kind,
+    os,
+    osName,
+  };
+});
+// The sample devices all sit in Configurations, so the administrator's choice for that layout applies to all of them.
+const statsAssets = (client: string | null): AssetStatsAsset[] => {
+  const layout = db.layouts.find((l) => l.key === 'configuration');
+  const chosen = (layout && assetStatsSettings.layouts[layout.id]) ?? 'auto';
+  if (chosen === 'none') return [];
+  return STATS_SAMPLE.filter((a) => !client || a.clientId === client).map((a) =>
+    chosen === 'auto' ? a : { ...a, kind: chosen },
+  );
+};
+function kindCounts(list: AssetStatsAsset[]): AssetKindCounts {
+  const c = { total: list.length, ...Object.fromEntries(ASSET_KINDS.map((k) => [k, 0])) } as AssetKindCounts;
+  for (const a of list) c[a.kind]++;
+  return c;
+}
+function assetStatsReport(client: string | null): AssetStatsReport {
+  const list = statsAssets(client);
+  const os = Object.fromEntries(ASSET_OS.map((o) => [o, list.filter((a) => a.os === o).length])) as Record<
+    AssetOs,
+    number
+  >;
+  const clients = [...new Set(list.map((a) => a.clientId))]
+    .map((id) => {
+      const mine = list.filter((a) => a.clientId === id);
+      return {
+        clientId: id,
+        clientName: clientName(id) ?? '',
+        counts: kindCounts(mine),
+        endOfSupport: mine.filter((a) => ASSET_OS_INFO[a.os].endOfSupport).length,
+      };
+    })
+    .sort((a, b) => b.counts.total - a.counts.total);
+  return { totals: kindCounts(list), os, clients };
+}
+
+// ---------- domain and SSL trackers (the sample's Domains and SSL certificates assets) ----------
+let trackerSettings: TrackerSettings = { enabled: true, createCertificates: true };
+const TRACKER_LAYOUT: Record<string, TrackerKind> = { domain: 'domain', ssl_certificate: 'ssl' };
+const trackerStanding = (daysLeft: number | null): TrackerFilter =>
+  daysLeft === null ? 'unknown' : daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'soon' : 'active';
+function trackerItems(client: string | null): TrackerItem[] {
+  const start = Date.parse(`${now().slice(0, 10)}T00:00:00Z`);
+  return assets
+    .filter((a) => !a.archived && (!client || a.clientId === client) && TRACKER_LAYOUT[layoutOf(a.layoutId).key])
+    .map((a, i) => {
+      const kind = TRACKER_LAYOUT[layoutOf(a.layoutId).key]!;
+      const fields = a.fields as Record<string, unknown>;
+      const expires = typeof fields.expires === 'string' && fields.expires ? fields.expires : null;
+      const daysLeft = expires ? Math.round((Date.parse(`${expires}T00:00:00Z`) - start) / 86_400_000) : null;
+      const source = String(fields[kind === 'domain' ? 'registrar' : 'issuer'] ?? '');
+      return {
+        assetId: a.id,
+        kind,
+        name: a.name,
+        clientId: a.clientId,
+        clientName: clientName(a.clientId) ?? '',
+        source,
+        expires,
+        daysLeft,
+        standing: trackerStanding(daysLeft),
+        checkedAt: ago(40 + i * 17),
+        ok: !!expires,
+        detail: expires
+          ? source && `${kind === 'domain' ? 'Registrar' : 'Issued by'} ${source}`
+          : "The registry didn't give an expiry date.",
+      };
+    })
+    .sort((a, b) => (a.expires ?? '9999').localeCompare(b.expires ?? '9999') || a.name.localeCompare(b.name));
+}
+function trackerCounts(list: TrackerItem[]): TrackerCounts {
+  const c: TrackerCounts = { total: list.length, expired: 0, soon: 0, active: 0, unknown: 0 };
+  for (const i of list) c[i.standing]++;
+  return c;
+}
+function trackerReport(client: string | null): TrackerReport {
+  const list = trackerItems(client);
+  const of = (kind: TrackerKind, id?: string) =>
+    trackerCounts(list.filter((i) => i.kind === kind && (!id || i.clientId === id)));
+  const clients = [...new Set(list.map((i) => i.clientId))].map((id) => ({
+    clientId: id,
+    clientName: clientName(id) ?? '',
+    domain: of('domain', id),
+    ssl: of('ssl', id),
+  }));
+  return { soonDays: 30, domain: of('domain'), ssl: of('ssl'), clients };
 }
 
 // ---------- documentation ----------
@@ -339,6 +566,7 @@ const passwordView = (p: (typeof passwords)[0]) => ({
   updatedAt: p.updatedAt,
   updatedByName: p.updatedByName,
   requireReason: !!db.clients.find((c) => c.id === p.clientId)?.requireRevealReason,
+  canReveal: true,
   ...(() => {
     const chosen = (p as { category?: PasswordCategory | null }).category ?? null;
     return {
@@ -395,6 +623,21 @@ let smtp = {
   fromAddress: 'atlas@itdoneright.demo',
   fromName: 'IT Done Right',
 };
+let vaultPolicy: VaultPolicy = DEFAULT_VAULT_POLICY;
+let siem: SiemSettingsView = {
+  enabled: false,
+  method: 'webhook',
+  url: '',
+  hasSecret: false,
+  host: '',
+  port: 6514,
+  transport: 'tls',
+  security: true,
+  vault: true,
+  lastSentAt: null,
+  lastError: null,
+  pending: 0,
+};
 let notifications = { alertDays: [30, 14, 7], weeklyDigest: true, auditRetentionDays: 365 as number | null };
 const passkeys = [
   { id: 'demo-passkey-1', name: 'Office laptop', createdAt: ago(60 * 24 * 10), lastUsedAt: ago(60 * 5) },
@@ -428,6 +671,17 @@ const devices = [
     expiresAt: new Date(Date.now() + 26 * 86_400_000).toISOString(),
   },
 ];
+const apps = [
+  {
+    id: uuid(),
+    kind: 'browser_extension' as const,
+    name: 'Microsoft Edge on Windows',
+    ip: '203.0.113.24',
+    createdAt: ago(60 * 24 * 6),
+    lastSeenAt: ago(12),
+    expiresAt: new Date(Date.now() + 24 * 86_400_000).toISOString(),
+  },
+];
 const codes = () =>
   Array.from({ length: 10 }, () => {
     const raw = Array.from(
@@ -450,6 +704,7 @@ function expirations(days: number): ExpirationItem[] {
           id: a.id,
           title: a.name,
           label: `${l.name} · ${f.label}`,
+          layoutKey: l.key,
           clientId: a.clientId,
           clientName: clientName(a.clientId),
           date: v,
@@ -612,12 +867,22 @@ on('GET', '/account/security', () => ({
   passkeys,
   sessions,
   devices,
-  apps: [],
+  desktopApps: [],
+  apps,
   notifyDigest,
 }));
 on('PATCH', '/account/preferences', (_m, b) => {
   notifyDigest = !!b.notifyDigest;
-  return { totp: true, recoveryCodesLeft: recoveryLeft, passkeys, sessions, devices, notifyDigest };
+  return {
+    totp: true,
+    recoveryCodesLeft: recoveryLeft,
+    passkeys,
+    sessions,
+    devices,
+    desktopApps: [],
+    apps,
+    notifyDigest,
+  };
 });
 on('POST', '/account/recovery-codes', () => {
   recoveryLeft = 10;
@@ -655,6 +920,13 @@ on('POST', '/account/sessions/end-others', () => {
   sessions.splice(0, sessions.length, ...sessions.filter((s) => s.current));
   return { ended };
 });
+on('DELETE', '/account/apps/:id', (m) => {
+  apps.splice(
+    apps.findIndex((a) => a.id === m[1]),
+    1,
+  );
+  return { ok: true };
+});
 on('DELETE', '/account/devices/:id', (m) => {
   devices.splice(
     devices.findIndex((d) => d.id === m[1]),
@@ -673,6 +945,11 @@ on('POST', '/clients', (_m, b) => {
     type: String(b.type || 'Customer'),
     status: 'active' as const,
     notes: String(b.notes ?? ''),
+    notesVersion: b.notes ? 1 : 0,
+    notesUpdatedAt: b.notes ? now() : null,
+    notesUpdatedByName: b.notes ? db.owner.name : null,
+    hours: String(b.hours ?? ''),
+    maintenanceWindow: String(b.maintenanceWindow ?? ''),
     requireRevealReason: false,
     createdAt: now(),
     updatedAt: now(),
@@ -685,7 +962,17 @@ on('POST', '/clients', (_m, b) => {
 on('GET', '/clients/:id', (m) => clientSummary(find(db.clients, m[1]!, 'Client')));
 on('PATCH', '/clients/:id', (m, b) => {
   const c = find(db.clients, m[1]!, 'Client');
-  Object.assign(c, b, { updatedAt: now() });
+  const { notesVersion, ...rest } = b;
+  if (rest.notes !== undefined && rest.notes !== c.notes) {
+    if (notesVersion !== undefined && notesVersion !== c.notesVersion)
+      throw new MockError(409, 'Someone else changed these notes. Reload to see their changes before saving.');
+    if (!revisions.has(`notes:${c.id}`) && c.notesVersion)
+      snapshot(`notes:${c.id}`, c.notesVersion, { notes: c.notes });
+    Object.assign(c, { notesVersion: c.notesVersion + 1, notesUpdatedAt: now(), notesUpdatedByName: db.owner.name });
+    snapshot(`notes:${c.id}`, c.notesVersion, { notes: String(rest.notes) });
+    record('Updated quick notes of', 'client', c.id, c.name, c.id);
+  }
+  Object.assign(c, rest, { updatedAt: now() });
   return clientSummary(c);
 });
 
@@ -1348,17 +1635,73 @@ on('PUT', '/settings/email', (_m, b) => {
 });
 on('POST', '/settings/email/test', () => notInDemo('Sending email'));
 on('POST', '/settings/email/permissions', () => notInDemo('Checking Microsoft 365 permissions'));
+on('GET', '/vault/policy', () => vaultPolicy);
+on('GET', '/settings/vault-policy', () => ({ ...vaultPolicy, mfa: { requiredForStaff: true, withoutMfa: [] } }));
+on('PUT', '/settings/vault-policy', (_m, b) => {
+  vaultPolicy = { ...vaultPolicy, ...(b as VaultPolicy) };
+  event('Vault policies changed');
+  return { ...vaultPolicy, mfa: { requiredForStaff: true, withoutMfa: [] } };
+});
+on('GET', '/emergency-access', () => ({
+  canManage: true,
+  me: { trusted: false, waitHours: null },
+  contacts: [],
+  requests: [],
+}));
+on('PUT', '/emergency-access/contacts', () => notInDemo('Emergency access'));
+on('GET', '/settings/siem', () => siem);
+on('PUT', '/settings/siem', (_m, b) => {
+  const { secret, ...rest } = b as Partial<SiemSettingsView> & { secret?: string };
+  siem = { ...siem, ...rest, hasSecret: siem.hasSecret || !!secret };
+  event('SIEM streaming changed', siem.enabled ? siem.method : 'Off');
+  return siem;
+});
+on('POST', '/settings/siem/test', () => notInDemo('Sending to a SIEM'));
+on('POST', '/settings/siem/send', () => notInDemo('Sending to a SIEM'));
 on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
 on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+on('GET', '/tickets', (_m, _b, q) => ticketReport(q.get('client'), Number(q.get('days')) || 30));
+on('GET', '/tickets/list', (_m, _b, q) => ticketList(q.get('client'), q.get('status'), Number(q.get('days')) || 30));
 on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
 on('GET', '/warranty/assets', (_m, _b, q) =>
   warrantyAssets(q.get('client'))
     .filter((a) => warrantyStanding(a) === q.get('filter'))
     .sort((a, b) => (a.warrantyExpires ?? '').localeCompare(b.warrantyExpires ?? '') || a.name.localeCompare(b.name)),
 );
+on('GET', '/asset-stats', (_m, _b, q) => assetStatsReport(q.get('client')));
+on('GET', '/asset-stats/assets', (_m, _b, q) => {
+  const [what, value] = (q.get('filter') ?? '').split(':');
+  return statsAssets(q.get('client'))
+    .filter((a) =>
+      what === 'eos' ? ASSET_OS_INFO[a.os].endOfSupport : what === 'kind' ? a.kind === value : a.os === value,
+    )
+    .sort((a, b) => a.clientName.localeCompare(b.clientName) || a.name.localeCompare(b.name));
+});
+on('GET', '/settings/asset-stats', () => assetStatsSettings);
+on('PUT', '/settings/asset-stats', (_m, b) => {
+  const layouts = Object.entries((b as AssetStatsSettings).layouts).filter(([, v]) => v !== 'auto');
+  return (assetStatsSettings = { layouts: Object.fromEntries(layouts) });
+});
 on('GET', '/settings/warranty', () => warrantySettings);
+on('GET', '/trackers', (_m, _b, q) => trackerReport(q.get('client')));
+on('GET', '/trackers/items', (_m, _b, q) =>
+  trackerItems(q.get('client')).filter(
+    (i) => i.kind === q.get('kind') && (!q.get('filter') || i.standing === q.get('filter')),
+  ),
+);
+on('POST', '/trackers/check', () => {
+  const list = trackerItems(null);
+  return {
+    domains: list.filter((i) => i.kind === 'domain').length,
+    certificates: list.filter((i) => i.kind === 'ssl').length,
+    created: 0,
+    failed: list.filter((i) => !i.ok).length,
+  };
+});
+on('GET', '/settings/trackers', () => trackerSettings);
+on('PUT', '/settings/trackers', (_m, b) => (trackerSettings = b as TrackerSettings));
 on('PUT', '/settings/warranty', (_m, b) => (warrantySettings = b as WarrantySettings));
 on('GET', '/rmm-health/trend', (_m, _b, q) => rmmTrend(q.get('client')));
 on('GET', '/settings/rmm-health', () => rmmSettings);
@@ -1474,7 +1817,7 @@ let cwRmm: {
   hasSecret: true;
   autoSync: boolean;
   lastSyncAt: string | null;
-  options: { locations: boolean; devices: boolean };
+  options: { locations: boolean; devices: boolean; tickets: boolean };
 } | null = null;
 const cwMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>();
 const cwCompanies = () => [
@@ -1504,14 +1847,14 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
     hasSecret: true,
     autoSync: b.autoSync !== false,
     lastSyncAt: cwRmm?.lastSyncAt ?? null,
-    options: cwRmm?.options ?? { locations: true, devices: true },
+    options: cwRmm?.options ?? { locations: true, devices: true, tickets: true },
   };
   return { ...cwRmm, companies: cwCompanies().length };
 });
 on('DELETE', '/integrations/cw-rmm', () => ((cwRmm = null), { ok: true }));
 on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
   if (!cwRmm) throw new MockError(400, 'Connect ConnectWise RMM first.');
-  cwRmm.options = { locations: b.locations !== false, devices: b.devices !== false };
+  cwRmm.options = { locations: b.locations !== false, devices: b.devices !== false, tickets: b.tickets !== false };
   return cwRmm;
 });
 on('GET', '/integrations/cw-rmm/companies', () => cwView());
@@ -1526,6 +1869,46 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
 on('POST', '/assets/detect-manufacturers', () => ({ checked: 3, filled: 2 }));
+// Password rotation: policies can be edited; rotations need a real ConnectWise RMM.
+let rotationSettings = { enabled: false, scriptId: '' };
+const rotationPolicies: Json[] = [];
+on('GET', '/rotation/settings', () => rotationSettings);
+on('PUT', '/rotation/settings', (_m, b) => {
+  const next = { enabled: b.enabled === true, scriptId: String(b.scriptId ?? '') };
+  if (next.enabled && !next.scriptId)
+    throw new MockError(400, 'Enter the ConnectWise RMM script ID before turning rotation on.');
+  return (rotationSettings = next);
+});
+on('GET', '/rotation/policies', () => rotationPolicies);
+on('PUT', '/rotation/policies', (_m, b) => {
+  const clientId = (b.clientId as string | null) ?? null;
+  const existing = rotationPolicies.findIndex((p) => p.clientId === clientId && p.accountType === b.accountType);
+  const policy = {
+    id: existing >= 0 ? rotationPolicies[existing]!.id : uuid(),
+    clientId,
+    clientName: clientId ? find(db.clients, clientId, 'Client').name : null,
+    accountType: b.accountType,
+    intervalDays: Number(b.intervalDays ?? 30),
+    complexity: b.complexity,
+    enabled: b.enabled !== false,
+    updatedAt: now(),
+  };
+  if (existing >= 0) rotationPolicies[existing] = policy;
+  else rotationPolicies.push(policy);
+  return policy;
+});
+on('DELETE', '/rotation/policies/:id', (m) => {
+  rotationPolicies.splice(
+    rotationPolicies.findIndex((p) => p.id === m[1]),
+    1,
+  );
+  return { ok: true };
+});
+on('GET', '/rotation/targets', () => []);
+on('GET', '/rotation/runs', () => []);
+on('GET', '/rotation/clients/:id/devices', () => []);
+on('POST', '/rotation/targets', () => notInDemo('Rotating passwords through a real ConnectWise RMM'));
+on('POST', '/rotation/revoke-tokens', () => ({ revoked: 0 }));
 // Microsoft 365: the first client is connected, the second waits for consent.
 const m365Redirect = 'https://atlas.example.com/api/integrations/m365/consent';
 let m365: {
@@ -1647,6 +2030,11 @@ on('POST', '/import/csv', (_m, b) => {
       type: r.type || 'Customer',
       status: 'active' as const,
       notes: r.notes ?? '',
+      notesVersion: 0,
+      notesUpdatedAt: null,
+      notesUpdatedByName: null,
+      hours: '',
+      maintenanceWindow: '',
       requireRevealReason: false,
       createdAt: now(),
       updatedAt: now(),
@@ -1932,6 +2320,101 @@ on('DELETE', '/checklist-runs/:id', (m) => {
   );
   return { ok: true };
 });
+
+// personal workspace: favorites, dashboard cards, section counts, quick notes history
+const starred: { type: 'client' | 'document' | 'asset'; id: string }[] = [];
+let workspace: Json = {};
+const favoriteTarget = (type: string, id: string) => {
+  const item =
+    type === 'client'
+      ? db.clients.find((c) => c.id === id)
+      : type === 'document'
+        ? documents.find((d) => d.id === id)
+        : type === 'asset'
+          ? assets.find((a) => a.id === id)
+          : undefined;
+  if (!item) throw new MockError(404, 'Not found.');
+  return item;
+};
+on('GET', '/favorites', () => [
+  ...starred.flatMap(({ type, id }): Json[] => {
+    if (type === 'client') {
+      const c = db.clients.find((x) => x.id === id);
+      return c ? [{ type, id, name: c.name, clientId: null, clientName: null }] : [];
+    }
+    if (type === 'document') {
+      const d = documents.find((x) => x.id === id && !x.archived);
+      return d ? [{ type, id, name: d.title, clientId: d.clientId, clientName: clientName(d.clientId) }] : [];
+    }
+    const a = assets.find((x) => x.id === id && !x.archived);
+    return a ? [{ type, id, name: a.name, clientId: a.clientId, clientName: clientName(a.clientId) }] : [];
+  }),
+  ...passwords
+    .filter((p) => favorites.has(p.id) && !p.archived)
+    .map((p) => ({
+      type: 'password',
+      id: p.id,
+      name: p.name,
+      clientId: p.clientId,
+      clientName: clientName(p.clientId),
+    })),
+]);
+on('PUT', '/favorites/:type/:id', (m) => {
+  favoriteTarget(m[1]!, m[2]!);
+  if (!starred.some((s) => s.type === m[1] && s.id === m[2]))
+    starred.push({ type: m[1] as 'client' | 'document' | 'asset', id: m[2]! });
+  return { favorite: true };
+});
+on('DELETE', '/favorites/:type/:id', (m) => {
+  const i = starred.findIndex((s) => s.type === m[1] && s.id === m[2]);
+  if (i >= 0) starred.splice(i, 1);
+  return { favorite: false };
+});
+on('GET', '/account/workspace', () => resolveWorkspace(workspace));
+on('PUT', '/account/workspace', (_m, b) => {
+  workspace = b;
+  return resolveWorkspace(workspace);
+});
+on('DELETE', '/account/workspace', () => {
+  workspace = {};
+  return resolveWorkspace(workspace);
+});
+on('GET', '/workspace/clients/:id/counts', (m) => {
+  const id = find(db.clients, m[1]!, 'Client').id;
+  return {
+    assets: assets.filter((a) => a.clientId === id && !a.archived).length,
+    documents: documents.filter((d) => d.clientId === id && !d.archived).length,
+    passwords: passwords.filter((p) => p.clientId === id && !p.archived).length,
+    contacts: contacts.filter((c) => c.clientId === id).length,
+    locations: locations.filter((l) => l.clientId === id).length,
+    checklists: checklists.filter((c) => c.clientId === id && !c.archived).length,
+  };
+});
+const notesHistory = (id: string) => {
+  const c = find(db.clients, id, 'Client');
+  if (!revisions.has(`notes:${id}`) && c.notesVersion) snapshot(`notes:${id}`, c.notesVersion, { notes: c.notes });
+  return revisions.get(`notes:${id}`) ?? [];
+};
+on('GET', '/clients/:id/notes/revisions', (m) =>
+  [...notesHistory(m[1]!)].reverse().map(({ version, authorName, createdAt }) => ({ version, authorName, createdAt })),
+);
+on('GET', '/clients/:id/notes/revisions/:version', (m) => {
+  const r = notesHistory(m[1]!).find((x) => x.version === Number(m[2]));
+  if (!r) throw new MockError(404, 'That version was not found.');
+  return r.snapshot;
+});
+on('POST', '/clients/:id/notes/restore', (m, b) => {
+  const r = notesHistory(m[1]!).find((x) => x.version === Number(b.version));
+  if (!r) throw new MockError(404, 'That version was not found.');
+  return mockRequestSync('PATCH', `/clients/${m[1]}`, { notes: r.snapshot.notes, notesVersion: b.expectedVersion });
+});
+const mockRequestSync = (method: string, path: string, body: Json) => {
+  for (const [m, pattern, handler] of routes) {
+    const match = m === method && path.match(pattern);
+    if (match) return handler(match, body, new URLSearchParams());
+  }
+  throw new MockError(404, 'Not found.');
+};
 
 /** Answers an API request from memory, after a short delay so loading states show as they would for real. */
 export async function mockRequest(path: string, method: string, body: unknown): Promise<unknown> {

@@ -7,6 +7,7 @@
   - The server also serves the built web app, with client-side routes falling back to `index.html`.
 - **Web app (`apps/web`):** React 19, TanStack Router and Query, and Tailwind 4. It is built into static files, with no inline scripts or styles, so the CSP stays at `script-src 'self'; style-src 'self'`. Dialogs are native `<dialog>` elements rather than libraries that inject style tags.
 - **Database (`packages/db`):** PostgreSQL 16 through Drizzle ORM. SQL migrations live in `packages/db/drizzle` and are generated with `npm run db:generate`. On start, migrations run under an advisory lock.
+- **Browser extension (`apps/extension`):** a Manifest V3 extension for Edge and Chrome with no dependencies, compiled by `tsc`. Its service worker holds the device key and talks to Atlas; the popup asks it for logins; a small function is run in the page only when someone chooses Fill. See [device sign-in](IDENTITY.md#api-keys-and-client-accounts).
 - **Shared code (`packages/shared`):** zod schemas, roles and access levels, and API types. The same validation runs in the browser (for messages) and on the server (for enforcement).
 
 ## Documentation model
@@ -34,9 +35,11 @@
   - `npm run rewrap-keys` re-encrypts data keys under a new master key.
 - **Reuse detection:** a keyed HMAC of each secret (the key is derived from the organization's first data key) lets Atlas spot the same password used twice without storing anything reversible. Strength is a rough score used for guidance only.
 - **Access:**
-  - Vault entries need `edit_passwords` on their client. Restricted entries also need an administrator or a place on the entry's allow-list. Everyone else gets 404.
+  - Vault entries need `edit_passwords` on their client. Restricted entries also need a place on the entry's allow-list, or access to every restricted entry (`Scope.restrictedAccess`): the owner always, administrators unless the *restricted means listed* policy is on, and a trusted administrator during emergency access. Everyone else gets 404.
+  - Vault policies live in `orgs.settings.vaultPolicy`; emergency access in `emergency_contacts` and `emergency_requests`, whose state follows from their timestamps, so access starts and ends on time without a background job.
   - Search and relationship lists apply the same rule, and match only names, usernames, and URLs, never secrets.
-- **Audit:** each reveal, copy, TOTP view, change, share, and restriction change goes into `vault_audit`, with the person, IP address, and optional reason. A client setting (`require_reveal_reason`) makes the reason mandatory.
+- **Audit:** each reveal, copy, TOTP view, change, share, and restriction change goes into `vault_audit`, with the person, IP address, and optional reason. A client setting (`require_reveal_reason`), or the organization's policy, makes the reason mandatory.
+- **SIEM streaming** (`services/siem.ts`): a cursor per log (the last row delivered) is kept in `orgs.settings.siem`; each pass sends rows after it in batches and moves it forward only after the SIEM accepts them.
 - **Share links:**
   - The browser reveals the secret (which is audited), encrypts it with a fresh AES-GCM key using WebCrypto, and uploads only the ciphertext.
   - The key goes in the link's `#fragment`, which browsers never send to the server. The server stores a hash of the link token.
@@ -71,5 +74,6 @@ The code is in `apps/server/src/crypto/keys.ts`.
 - **Cookies:** `__Host-atlas_session`, set as `HttpOnly; Secure; SameSite=Strict` when served over https. The database stores only a SHA-256 of the session token.
 - **CSRF:** each session has its own token, sent in the `X-CSRF-Token` header on every state-changing request.
 - **Headers:** CSP, HSTS (over https), `X-Frame-Options: DENY`, COOP/CORP, `nosniff`, `no-referrer`, and `Cache-Control: no-store` on API responses.
+- **Device routes:** `/api/device/…` (the browser extension) skip the Origin and `Sec-Fetch-Site` checks, because they never read cookies: each request carries a device token and a signature from the device's key instead.
 - **Rate limits:** each client address gets 10 failed sign-in, setup, or MFA attempts per 15 minutes, on top of the per-account lockout.
 - **Error handling:** validation errors return field-level messages, and unexpected errors are logged and returned as a generic 500.

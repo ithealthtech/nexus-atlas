@@ -19,6 +19,8 @@ export const SKIPPED_TABLES = new Set([
   'password_resets',
   'trusted_devices',
   'native_auth_codes',
+  'device_sessions',
+  'device_pairings',
   'backup_runs',
 ]);
 const BATCH = 500;

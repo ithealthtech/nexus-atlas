@@ -24,6 +24,7 @@ import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientOverview } from '@/pages/client/ClientOverview';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
+import { DomainTracker, SslTracker } from '@/components/Trackers';
 import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
@@ -35,12 +36,15 @@ import { Theme } from '@/pages/Theme';
 import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
+import { VaultPolicies } from '@/pages/VaultPolicies';
 import { Account } from '@/pages/Account';
 import { NativeAuthorize } from '@/pages/NativeAuthorize';
+import { ConnectApp } from '@/pages/ConnectApp';
 import { NotFound } from '@/pages/NotFound';
 import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
+import { PasswordRotation } from '@/pages/PasswordRotation';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
 import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
@@ -193,6 +197,8 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/trackers/domains', component: DomainTracker }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/trackers/ssl', component: SslTracker }),
 ];
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
@@ -231,10 +237,12 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/users', component: adminOnly(Users) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/layouts', component: adminOnly(Layouts) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/vault-policies', component: adminOnly(VaultPolicies) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/groups', component: adminOnly(Groups) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/rotation', component: adminOnly(PasswordRotation) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
@@ -245,6 +253,14 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
   // Atlas for Windows opens this in the browser to sign in (after the usual sign-in and second step).
   createRoute({ getParentRoute: () => appRoute, path: '/native/authorize', component: NativeAuthorize }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/apps/connect',
+    component: ConnectApp,
+    validateSearch: (search: Record<string, unknown>) => ({
+      code: typeof search.code === 'string' ? search.code : undefined,
+    }),
+  }),
 ];
 const router = createRouter({
   routeTree: rootRoute.addChildren([

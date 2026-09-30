@@ -50,6 +50,8 @@ export const users = pgTable(
     recoveryCodes: jsonb('recovery_codes').$type<string[]>().notNull().default([]),
     passkeyCount: integer('passkey_count').notNull().default(0),
     notifyDigest: boolean('notify_digest').notNull().default(true),
+    // Personal dashboard cards and hidden client sections. Validated by the API; missing keys use the defaults.
+    workspace: jsonb('workspace').notNull().default({}),
     // Microsoft Entra ID: the account's object ID once linked, and a match waiting for an administrator to confirm.
     entraOid: text('entra_oid'),
     entraPendingOid: text('entra_pending_oid'),
@@ -86,6 +88,13 @@ export const clients = pgTable(
     type: text('type').notNull().default('Customer'),
     status: text('status').notNull().default('active'),
     notes: text('notes').notNull().default(''),
+    // Quick notes are versioned: each change is kept in revisions as 'client_notes'.
+    notesVersion: integer('notes_version').notNull().default(0),
+    notesUpdatedBy: uuid('notes_updated_by').references(() => users.id, { onDelete: 'set null' }),
+    notesUpdatedByName: text('notes_updated_by_name'),
+    notesUpdatedAt: timestamp('notes_updated_at', { withTimezone: true }),
+    hours: text('hours').notNull().default(''),
+    maintenanceWindow: text('maintenance_window').notNull().default(''),
     // When true, technicians must give a reason before revealing a password for this client.
     requireRevealReason: boolean('require_reveal_reason').notNull().default(false),
     createdAt: created(),
@@ -220,6 +229,59 @@ export const trustedDevices = pgTable(
     createdAt: created(),
   },
   (t) => [uniqueIndex('trusted_devices_token').on(t.tokenHash), index('trusted_devices_user').on(t.userId)],
+);
+
+// Apps signed in through Atlas on one device: the browser extension (and later the Windows app). Each holds a
+// P-256 key that never leaves the device; a request counts only when it is signed with that key, so the token alone
+// is useless if it is copied. Only a hash of the token is stored.
+export const deviceSessions = pgTable(
+  'device_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    // SubjectPublicKeyInfo (DER, base64url) of the device's signing key.
+    publicKey: text('public_key').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    ip: text('ip').notNull().default(''),
+    userAgent: text('user_agent').notNull().default(''),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenIp: text('last_seen_ip').notNull().default(''),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('device_sessions_token').on(t.tokenHash),
+    index('device_sessions_user').on(t.userId),
+    check('device_sessions_kind_check', sql`${t.kind} in ('browser_extension')`),
+  ],
+);
+
+// A device asking to sign in. The person approves it in Atlas after checking the code the device shows; the device
+// then collects its session once, proving it holds the key the request was made with.
+export const devicePairings = pgTable(
+  'device_pairings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: text('code').notNull(),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    publicKey: text('public_key').notNull(),
+    ip: text('ip').notNull().default(''),
+    userAgent: text('user_agent').notNull().default(''),
+    // Set when someone approves it; the session is created for them.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('device_pairings_code').on(t.code)],
 );
 
 export const passkeys = pgTable(
@@ -740,6 +802,24 @@ export const passwordFavorites = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.passwordId] })],
 );
 
+// Clients, documents, and assets a person starred for their dashboard (per person, not shared). Rows whose item is
+// gone or no longer visible are skipped when listed.
+export const favorites = pgTable(
+  'favorites',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdAt: created(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.entityType, t.entityId] }),
+    check('favorites_entity_type_check', sql`${t.entityType} in ('client','document','asset')`),
+  ],
+);
+
 // ---------------------------------------------------------------- M3b: API, imports
 
 // REST API keys. Only a SHA-256 hash of the secret is stored; the prefix identifies the key in lists and logs.
@@ -933,4 +1013,213 @@ export const rmmHealthSnapshots = pgTable(
     updatedAt: updated(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('rmm_health_snapshots_day').on(t.orgId, t.day)],
+);
+
+// Tickets synced from the ConnectWise platform, read-only in Atlas: every open ticket of each linked company, and
+// those closed in the last 90 days. A ticket ConnectWise stops returning is deleted when its company is read in full.
+export const tickets = pgTable(
+  'tickets',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    source: text('source').notNull(),
+    externalId: text('external_id').notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    companyId: text('company_id').notNull(),
+    summary: text('summary').notNull().default(''),
+    status: text('status').notNull().default(''),
+    closed: boolean('closed').notNull().default(false),
+    number: text('number').notNull().default(''),
+    priority: text('priority').notNull().default(''),
+    openedAt: timestamp('opened_at', { withTimezone: true }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    remoteUpdatedAt: timestamp('remote_updated_at', { withTimezone: true }),
+    url: text('url'),
+    syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.source, t.externalId] }), index('tickets_client').on(t.orgId, t.clientId)],
+);
+
+/**
+ * The domain and SSL trackers' last check of each Domains or SSL certificates asset: when it ran, whether it
+ * worked, and what it found. The dates themselves are saved on the asset, so Expirations and alerts see them.
+ */
+export const trackerChecks = pgTable(
+  'tracker_checks',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    host: text('host').notNull(),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+    ok: boolean('ok').notNull(),
+    /** What went wrong, or a short note of what was found. */
+    detail: text('detail').notNull().default(''),
+  },
+  (t) => [
+    primaryKey({ columns: [t.assetId, t.kind] }),
+    index('tracker_checks_due').on(t.orgId, t.kind, t.checkedAt),
+    check('tracker_checks_kind_check', sql`${t.kind} in ('domain','ssl')`),
+  ],
+);
+
+// ---------------------------------------------------------------- automated password rotation
+
+// How often, and to what rules, one account type is rotated: for one client, or (client null) for every client
+// without a policy of its own.
+export const rotationPolicies = pgTable(
+  'rotation_policies',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+    accountType: text('account_type').notNull(),
+    intervalDays: integer('interval_days').notNull(),
+    complexity: jsonb('complexity')
+      .$type<{ length: number; upper: boolean; lower: boolean; digits: boolean; symbols: boolean }>()
+      .notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    updatedBy: updatedBy(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    // One policy per account type per client, and one organization-wide default per account type.
+    uniqueIndex('rotation_policies_scope').on(t.orgId, sql`coalesce(${t.clientId}::text, '')`, t.accountType),
+    check('rotation_policies_type_check', sql`${t.accountType} in ('local_admin','ad_service')`),
+  ],
+);
+
+// A vault password under automatic rotation, and the RMM device its script runs on.
+export const rotationTargets = pgTable(
+  'rotation_targets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    passwordId: uuid('password_id')
+      .notNull()
+      .references(() => passwords.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    accountType: text('account_type').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    lastRotatedAt: timestamp('last_rotated_at', { withTimezone: true }),
+    // When the last attempt started; a failed attempt waits a day before the next.
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('rotation_targets_password').on(t.passwordId),
+    index('rotation_targets_client').on(t.orgId, t.clientId),
+    check('rotation_targets_type_check', sql`${t.accountType} in ('local_admin','ad_service')`),
+  ],
+);
+
+// One rotation attempt. The device authenticates with a token for this run only (stored as a hash), which stops
+// working when the run finishes, expires, or is cancelled. The password the device reports is held here, sealed to
+// the run, until the device confirms it was set.
+export const rotationRuns = pgTable(
+  'rotation_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    targetId: uuid('target_id').references(() => rotationTargets.id, { onDelete: 'set null' }),
+    passwordId: uuid('password_id').references(() => passwords.id, { onDelete: 'set null' }),
+    passwordName: text('password_name').notNull(),
+    assetName: text('asset_name').notNull(),
+    status: text('status').notNull().default('dispatched'),
+    tokenHash: text('token_hash').notNull(),
+    // The policy's character rules when the run started; the reported password must meet them.
+    complexity: jsonb('complexity')
+      .$type<{ length: number; upper: boolean; lower: boolean; digits: boolean; symbols: boolean }>()
+      .notNull(),
+    candidate: text('candidate'),
+    error: text('error').notNull().default(''),
+    startedBy: uuid('started_by').references(() => users.id, { onDelete: 'set null' }),
+    startedByName: text('started_by_name').notNull(),
+    createdAt: created(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('rotation_runs_token').on(t.tokenHash),
+    index('rotation_runs_org').on(t.orgId, t.createdAt),
+    // At most one open run per account, enforced by the database so two dispatches can't both win.
+    uniqueIndex('rotation_runs_one_open')
+      .on(t.targetId)
+      .where(sql`${t.status} in ('dispatched','candidate')`),
+    check(
+      'rotation_runs_status_check',
+      sql`${t.status} in ('dispatched','candidate','succeeded','failed','cancelled')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------- vault policies: emergency access
+
+// Administrators the owner trusts to ask for emergency access to restricted passwords, and how long the owner has to
+// deny each one's request before access starts.
+export const emergencyContacts = pgTable(
+  'emergency_contacts',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    waitHours: integer('wait_hours').notNull(),
+    addedByName: text('added_by_name').notNull(),
+    createdAt: created(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.userId] }), check('emergency_contacts_wait', sql`${t.waitHours} > 0`)],
+);
+
+// Each request for emergency access. Its state follows from the timestamps: pending until available_at (or an early
+// approval), then active until ends_at, unless it was denied or ended first.
+export const emergencyRequests = pgTable(
+  'emergency_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    userName: text('user_name').notNull(),
+    reason: text('reason').notNull(),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    deniedAt: timestamp('denied_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    decidedByName: text('decided_by_name'),
+    // Set once the start of access has been logged and announced, so it happens once.
+    startNoticeAt: timestamp('start_notice_at', { withTimezone: true }),
+  },
+  (t) => [index('emergency_requests_org').on(t.orgId, t.requestedAt), index('emergency_requests_user').on(t.userId)],
 );

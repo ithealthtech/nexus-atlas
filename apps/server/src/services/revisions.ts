@@ -4,7 +4,7 @@ import type { Actor, RevisionView } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
-export type Versioned = 'asset' | 'document';
+export type Versioned = 'asset' | 'document' | 'client_notes';
 
 export async function snapshot(
   tx: Tx,

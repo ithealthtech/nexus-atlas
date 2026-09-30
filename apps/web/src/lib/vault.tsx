@@ -7,6 +7,7 @@ import type {
   RevealResult,
   ShareView,
   VaultAuditView,
+  VaultPolicy,
 } from '@atlas/shared';
 import { Button, Dialog, Field, Input } from '@/components/ui';
 import { ApiError, api } from './api';
@@ -42,6 +43,9 @@ export const useRotationDue = (enabled: boolean) =>
     queryFn: () => api<PasswordView[]>('/passwords/rotation-due'),
     enabled,
   });
+/** The organization's vault policies (the generator follows them). */
+export const useVaultPolicy = () =>
+  useQuery({ queryKey: ['vault-policy'], queryFn: () => api<VaultPolicy>('/vault/policy') });
 export const useVaultAudit = (enabled: boolean) =>
   useQuery({ queryKey: ['vault-audit'], queryFn: () => api<VaultAuditView[]>('/vault/audit'), enabled });
 
@@ -68,7 +72,7 @@ export function ReasonProvider({ children }: { children: ReactNode }) {
           onClose={() => finish(null)}
           size="sm"
           title={pending.title}
-          description="This client asks for a reason each time a password is used. It's saved in the access history."
+          description="A reason is required each time a password is used. It's saved in the access history."
           footer={
             <>
               <Button variant="secondary" onClick={() => finish(null)}>
@@ -219,8 +223,28 @@ export const GENERATOR_PRESETS: { id: string; label: string; hint: string; optio
     options: { ...DEFAULT_GENERATOR, mode: 'pin', length: 6 },
   },
 ];
-export const presetFor = (o: GeneratorOptions) =>
-  GENERATOR_PRESETS.find((p) => JSON.stringify(p.options) === JSON.stringify(o))?.id ?? null;
+/**
+ * Brings generator settings up to the organization's policy: character passwords at least the minimum length and with
+ * the required kinds of character, and no PINs where they aren't allowed. Passphrases are long by nature.
+ */
+export function applyGeneratorPolicy(o: GeneratorOptions, policy: VaultPolicy['generator']): GeneratorOptions {
+  if (o.mode === 'pin' && !policy.allowPins) o = { ...DEFAULT_GENERATOR };
+  if (o.mode !== 'characters') return o;
+  return {
+    ...o,
+    length: Math.max(o.length, policy.minLength),
+    digits: o.digits || policy.requireDigits,
+    symbols: o.symbols || policy.requireSymbols,
+  };
+}
+/** The presets the policy allows, each adjusted to it. */
+export const presetsFor = (policy: VaultPolicy['generator']) =>
+  GENERATOR_PRESETS.filter((p) => policy.allowPins || p.options.mode !== 'pin').map((p) => ({
+    ...p,
+    options: applyGeneratorPolicy(p.options, policy),
+  }));
+export const presetFor = (o: GeneratorOptions, presets = GENERATOR_PRESETS) =>
+  presets.find((p) => JSON.stringify(p.options) === JSON.stringify(o))?.id ?? null;
 
 const GENERATOR_KEY = 'atlas-generator';
 /** The last settings used in this browser, if any; falls back to the default. */

@@ -28,6 +28,7 @@ import { useAsset, useAssets, useClient, useClients, useLayouts } from '@/lib/qu
 import { relativeTime } from '@/lib/format';
 import { AppLink } from '@/components/AppLink';
 import { cn } from '@/lib/cn';
+import { FavoriteStar } from '@/components/Favorites';
 
 const statusTone = { active: 'success', inactive: 'warning', retired: 'neutral' } as const;
 
@@ -454,13 +455,16 @@ export function AssetDetail() {
           <ItemIcon type="asset" icon={asset.layoutIcon} className="size-12 rounded-xl [&_svg]:size-6" />
           <div className="min-w-0">
             <p className="text-xs font-bold tracking-[0.14em] text-muted uppercase">{asset.layoutName}</p>
-            <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
-              {asset.name}
-              <Badge tone={statusTone[asset.status]} className="capitalize">
-                {asset.status}
-              </Badge>
-              {asset.archived && <Badge tone="warning">Archived</Badge>}
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
+                {asset.name}
+                <Badge tone={statusTone[asset.status]} className="capitalize">
+                  {asset.status}
+                </Badge>
+                {asset.archived && <Badge tone="warning">Archived</Badge>}
+              </h1>
+              {!asset.archived && <FavoriteStar type="asset" id={asset.id} name={asset.name} />}
+            </div>
             <p className="mt-1 text-sm text-muted">
               Updated {relativeTime(asset.updatedAt)}
               {asset.updatedByName && ` by ${asset.updatedByName}`} · Version {asset.version}

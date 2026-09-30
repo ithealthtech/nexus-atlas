@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { ROLE_INFO, type ActivityView, type Actor } from '@atlas/shared';
+import type { ActivityView, Actor } from '@atlas/shared';
 import type { Scope } from './scope.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -44,9 +44,9 @@ export async function listActivity(
       ? or(ne(schema.activity.entityType, 'password'), inArray(schema.activity.clientId, vaultIds))!
       : ne(schema.activity.entityType, 'password'),
   );
-  // Restricted passwords only show to admins and the people listed on them (directly or through a group).
-  // This is part of the query, so the limit counts only rows the person may see.
-  if (!ROLE_INFO[scope.actor.role].admin) {
+  // Restricted passwords only show to the people listed on them (directly or through a group) and those who may use
+  // every restricted password. This is part of the query, so the limit counts only rows the person may see.
+  if ((await scope.restrictedAccess()) === 'listed') {
     const me = scope.actor.id;
     conditions.push(
       or(

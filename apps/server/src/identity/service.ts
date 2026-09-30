@@ -51,6 +51,10 @@ const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 export const hasMfa = (user: Pick<UserRow, 'mfaSecret' | 'passkeyCount'>) => !!user.mfaSecret || user.passkeyCount > 0;
 export const REAUTH_MS = 10 * 60_000;
 
+/** Signs out every app a user signed in to through Atlas, such as the browser extension. */
+export const endDeviceSessions = (db: Pick<Database, 'delete'>, userId: string) =>
+  db.delete(schema.deviceSessions).where(eq(schema.deviceSessions.userId, userId));
+
 export function actorFor(user: UserRow): Actor {
   return {
     id: user.id,
@@ -165,7 +169,10 @@ export class IdentityService {
       .update(schema.users)
       .set({ failedAttempts: lock ? 0 : attempts, lockedUntil: lock ? new Date(Date.now() + LIMITS.lockMs) : null })
       .where(eq(schema.users.id, user.id));
-    if (lock) await this.db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+    if (lock) {
+      await this.db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+      await endDeviceSessions(this.db, user.id);
+    }
     await this.event(
       user,
       lock ? 'Account locked' : reason === 'Incorrect password' ? 'Sign-in failed' : 'MFA verification failed',
@@ -437,6 +444,7 @@ export class IdentityService {
       await tx
         .delete(schema.sessions)
         .where(and(eq(schema.sessions.userId, user.id), ne(schema.sessions.tokenHash, context.hash)));
+      await endDeviceSessions(tx, user.id);
       await tx.insert(schema.securityEvents).values({
         orgId: user.orgId,
         userId: user.id,
@@ -617,7 +625,10 @@ export class IdentityService {
         if (validated.grants.length)
           await tx.insert(schema.clientAccess).values(validated.grants.map((g) => ({ ...g, userId: id })));
         // Access changes apply on the next request; disabling also ends every session.
-        if (disabled) await tx.delete(schema.sessions).where(eq(schema.sessions.userId, id));
+        if (disabled) {
+          await tx.delete(schema.sessions).where(eq(schema.sessions.userId, id));
+          await endDeviceSessions(tx, id);
+        }
         await tx.insert(schema.securityEvents).values({
           orgId: actor.orgId,
           userId: actor.id,
@@ -655,6 +666,7 @@ export class IdentityService {
         })
         .where(eq(schema.users.id, id));
       await tx.delete(schema.sessions).where(eq(schema.sessions.userId, id));
+      await endDeviceSessions(tx, id);
       if (body.resetMfa) {
         await tx.delete(schema.passkeys).where(eq(schema.passkeys.userId, id));
         await tx.delete(schema.trustedDevices).where(eq(schema.trustedDevices.userId, id));
