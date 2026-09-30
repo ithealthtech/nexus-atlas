@@ -143,8 +143,8 @@
             <p class="section-kicker">New in 1.7</p>
             <h2>A dashboard that runs your day, and a vault that goes where you work</h2>
             <p>
-              The 1.7 releases add ConnectWise platform sync, ticket and expiry dashboards, automated password rotation,
-              and apps for the browser and Windows.
+              The 1.7 releases add ConnectWise platform sync with security and compliance, ticket and expiry dashboards,
+              automated password rotation, and apps for the browser and Windows.
             </p>
           </div>
           <div class="grid-3">
@@ -202,6 +202,27 @@
               <p>
                 Fill saved logins in Edge and Chrome, or press Ctrl+Shift+Space in the Atlas for Windows tray app
                 (preview). Neither stores passwords, and every fill or copy is recorded.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Security and compliance</h3>
+              <p>
+                Patch compliance, backup and DR readiness, vulnerabilities by severity, and open MDR cases from
+                ConnectWise on each client and device. Areas you don't license show as not available.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Software, sign-ins, and live device data</h3>
+              <p>
+                Installed software with out-of-support, unlicensed, and over-seat flags; who signs in to each device; VM
+                hosts; disk, CPU, and memory use; device groups and policies; and contacts synced from ConnectWise.
+              </p>
+            </article>
+            <article class="card">
+              <h3>ConnectWise write-back</h3>
+              <p>
+                Optional &ldquo;Atlas link&rdquo; fields on ConnectWise devices and companies, and ticket notes you can
+                read and add from Atlas. A reveal that names a ticket notes it there, without the password.
               </p>
             </article>
             <article class="card">
@@ -396,61 +417,23 @@ PostgreSQL 16  +  attachments folder</code></pre>
           <div class="section-heading">
             <p class="section-kicker">Roadmap</p>
             <h2>What's coming next</h2>
-            <p>
-              Work that isn't in a release yet. Security and compliance is finished and ships in the next release; the
-              rest is planned. The ConnectWise items reuse the existing ConnectWise platform connection, with no new
-              vendor keys. Some depend on which ConnectWise products you license.
-            </p>
+            <p>Planned work, not yet released. The ConnectWise features on the list shipped in 1.7.7.</p>
           </div>
-          <div class="grid-3">
-            <article class="card">
-              <span class="badge badge-warning">Planned</span>
-              <h3>Device inventory from ConnectWise</h3>
-              <ul>
-                <li>Installed software and versions on each device, tied to license records</li>
-                <li>Who signs in to each device, linked to the Atlas contact</li>
-                <li>Hyper-V and VMware hosts related to their virtual machines</li>
-                <li>Disk, memory, and CPU trends with low-disk warnings</li>
-                <li>RMM device groups and the effective policy for each device</li>
-              </ul>
-            </article>
-            <article class="card">
-              <span class="badge badge-success">Next release</span>
-              <h3>Security and compliance</h3>
-              <ul>
-                <li>Backup status and DR readiness on the client overview</li>
-                <li>OS and third-party patch compliance, with missing patches per device</li>
-                <li>Vulnerability counts by severity per device and client</li>
-                <li>Open ConnectWise MDR security cases and their impacted devices</li>
-              </ul>
-            </article>
-            <article class="card">
-              <span class="badge badge-warning">Planned</span>
-              <h3>ConnectWise write-back</h3>
-              <ul>
-                <li>An &ldquo;Open in Atlas&rdquo; link on devices and companies inside ConnectWise</li>
-                <li>
-                  Ticket notes when a password or document is used for a ticket, and tickets for upcoming expirations
-                </li>
-              </ul>
-            </article>
-            <article class="card">
-              <span class="badge badge-warning">Planned</span>
-              <h3>Contacts and sites</h3>
-              <ul>
-                <li>Client contacts synced from ConnectWise into Atlas contacts</li>
-                <li>ConnectWise sites imported as Atlas locations, with devices filed under them</li>
-              </ul>
-            </article>
+          <div class="grid-2">
             <article class="card">
               <span class="badge badge-warning">Planned</span>
               <h3>Signed Windows app</h3>
-              <ul>
-                <li>
-                  A signed MSIX installer and automatic updates for Atlas for Windows, waiting on a code-signing
-                  certificate
-                </li>
-              </ul>
+              <p>
+                A signed MSIX installer and automatic updates for Atlas for Windows, waiting on a code-signing
+                certificate.
+              </p>
+            </article>
+            <article class="card">
+              <span class="badge badge-warning">Planned</span>
+              <h3>IT Glue and ITBoost importers</h3>
+              <p>
+                Bring documentation and passwords over from IT Glue and ITBoost, the way the Hudu importer does today.
+              </p>
             </article>
           </div>
         </div>
