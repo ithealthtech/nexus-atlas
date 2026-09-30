@@ -160,6 +160,123 @@ export interface TicketView {
   url: string | null;
 }
 
+// ---------- security and compliance (ConnectWise platform, read live) ----------
+/**
+ * One area's data, or why there is none. Backup, vulnerability and MDR data only come back for partners that use
+ * those ConnectWise products, so a refused or empty answer is "unavailable", never an error.
+ */
+export type SecuritySection<T> = { state: 'ok'; data: T } | { state: 'unavailable'; reason: string };
+export type VulnSeverity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
+export type VulnCounts = Record<VulnSeverity, number>;
+export type BackupStatus = 'success' | 'failure' | 'warning' | 'missed' | 'running' | 'paused' | 'unknown';
+export interface PatchDevice {
+  endpointId: string;
+  assetId: string | null;
+  name: string;
+  /** OS patch compliance, 0 to 100, or null when not assessed. */
+  osScore: number | null;
+  missing: number;
+  pendingReboot: number;
+  outOfSupport: boolean;
+  /** Third-party patch compliance, 0 to 100, or null when not assessed. */
+  thirdPartyScore: number | null;
+  thirdPartyPending: number;
+  assessedAt: string | null;
+}
+export interface PatchReport {
+  /** Average OS compliance across assessed devices, or null when none were. */
+  osScore: number | null;
+  thirdPartyScore: number | null;
+  /** Devices with nothing missing, of those assessed. */
+  compliant: number;
+  assessed: number;
+  missing: number;
+  /** Least compliant first. */
+  devices: PatchDevice[];
+}
+export interface BackupJob {
+  name: string;
+  device: string;
+  assetId: string | null;
+  product: string;
+  status: BackupStatus;
+  lastBackupAt: string | null;
+  summary: string;
+}
+export interface BackupAlarm {
+  name: string;
+  severity: string;
+  device: string;
+  description: string;
+  at: string | null;
+}
+export interface BackupReport {
+  jobs: number;
+  byStatus: Partial<Record<BackupStatus, number>>;
+  lastBackupAt: string | null;
+  /** DR verifications that passed, of those reported, as 0 to 100; null when none were reported. */
+  drScore: number | null;
+  drChecks: number;
+  /** Jobs that failed, were missed, or warned; worst first. */
+  failing: BackupJob[];
+  alarms: BackupAlarm[];
+}
+export interface VulnDevice {
+  endpointId: string;
+  assetId: string | null;
+  name: string;
+  counts: VulnCounts;
+}
+export interface VulnReport {
+  counts: VulnCounts;
+  /** Devices with the most severe findings first; devices with none are left out. */
+  devices: VulnDevice[];
+}
+export interface SecurityCase {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  category: string;
+  alerts: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+  /** Devices and users the case touches, by name. */
+  impacted: string[];
+}
+export interface ClientSecurity {
+  /** Whether ConnectWise is connected and a company is linked to this client. */
+  linked: boolean;
+  fetchedAt: string;
+  patching: SecuritySection<PatchReport>;
+  backup: SecuritySection<BackupReport>;
+  vulnerabilities: SecuritySection<VulnReport>;
+  /** Open MDR cases, newest change first. */
+  incidents: SecuritySection<SecurityCase[]>;
+}
+export interface MissingPatch {
+  /** KB number or application name. */
+  name: string;
+  kind: 'os' | 'third_party';
+  /** MSRC severity or classification for OS patches; installed and latest version for applications. */
+  detail: string;
+  link: string | null;
+}
+export interface Vulnerability {
+  cve: string;
+  severity: VulnSeverity;
+  cvss: number | null;
+  epss: number | null;
+}
+export interface DeviceSecurity {
+  /** Whether this asset was synced from ConnectWise RMM. */
+  linked: boolean;
+  fetchedAt: string;
+  patching: SecuritySection<{ device: PatchDevice | null; missing: MissingPatch[] }>;
+  backup: SecuritySection<BackupJob[]>;
+  vulnerabilities: SecuritySection<{ counts: VulnCounts; list: Vulnerability[] }>;
+}
+
 // ---------- RMM health ----------
 export type RmmDeviceKind = 'server' | 'workstation' | 'other';
 export type RmmProtection = 'running' | 'not_running' | 'missing';
