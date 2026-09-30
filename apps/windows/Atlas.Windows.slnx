@@ -1,0 +1,13 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="ARM64" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/Atlas.Windows.Core/Atlas.Windows.Core.csproj" />
+    <Project Path="src/Atlas.Windows/Atlas.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Atlas.Windows.Core.Tests/Atlas.Windows.Core.Tests.csproj" />
+  </Folder>
+</Solution>

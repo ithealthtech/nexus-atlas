@@ -1,5 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
-import { ROLE_INFO, type ItemRef, type SearchResult } from '@atlas/shared';
+import type { ItemRef, SearchResult } from '@atlas/shared';
 import type { Scope } from './scope.js';
 
 /** Turns user input into a prefix tsquery ("harb fire" → 'harb':* & 'fire':*), or null if nothing searchable. */
@@ -71,12 +71,15 @@ export async function search(
   const vaultIds = [...(await scope.levels())]
     .filter(([id, level]) => level === 'edit_passwords' && ids.includes(id))
     .map(([id]) => id);
+  const allRestricted = vaultIds.length > 0 && (await scope.restrictedAccess()) !== 'listed';
   if (vaultIds.length)
     parts.push(sql`select 'password', p.id, p.name, case p.kind when 'bitlocker' then 'BitLocker key' when 'note' then 'Secure note' else 'Password' end, p.client_id, c.name, nullif(p.username, ''),
         similarity(p.name, ${q}) * 2 + 0.2
       from passwords p join clients c on c.id = p.client_id
       where p.org_id = ${scope.actor.orgId} and not p.archived and p.client_id in ${vaultIds}
-        and (not p.restricted or ${ROLE_INFO[scope.actor.role].admin} or exists (select 1 from password_access pa where pa.password_id = p.id and pa.user_id = ${scope.actor.id}))
+        and (not p.restricted or ${allRestricted} or exists (select 1 from password_access pa where pa.password_id = p.id and pa.user_id = ${scope.actor.id})
+          or exists (select 1 from password_group_access pga join group_members gm on gm.group_id = pga.group_id
+            where pga.password_id = p.id and gm.user_id = ${scope.actor.id}))
         and (p.name ilike ${like} or p.username ilike ${like} or p.url ilike ${like})`);
   if (!options.clientId && ids.length)
     parts.push(sql`select 'client', c.id, c.name, c.type, c.id, c.name, null, similarity(c.name, ${q}) * 3 + 0.5

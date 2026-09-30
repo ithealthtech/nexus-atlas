@@ -14,3 +14,4 @@ data
 .env
 .env.*
 *.key
+apps/windows

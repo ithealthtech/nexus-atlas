@@ -8,6 +8,7 @@ import {
   MAX_NOTE_LENGTH,
   MAX_SECRET_LENGTH,
   PASSWORD_KIND_LABELS,
+  READ_ONLY_ROLES,
   ROLE_INFO,
   createPasswordSchema,
   guessPasswordCategory,
@@ -18,8 +19,10 @@ import {
   shareSchema,
   updatePasswordSchema,
   bulkPasswordSchema,
+  deviceFillSchema,
   type BulkPasswordResult,
   type PasswordAttachmentView,
+  type DeviceLoginView,
   type PasswordCategory,
   type PasswordFolderView,
   type PasswordHistoryView,
@@ -38,6 +41,7 @@ import { cleanName } from './attachments.js';
 import { isUuid, type Scope } from './scope.js';
 import { allowedRestricted } from './items.js';
 import { TooLargeError, readLimited, type FileStorage } from './storage.js';
+import { matchLogin, siteOf } from './login-match.js';
 
 type Row = typeof schema.passwords.$inferSelect;
 const editor = alias(schema.users, 'pw_editor');
@@ -59,16 +63,20 @@ const REVEAL_ACTIONS = {
   totp: 'Viewed one-time code',
   custom: 'Viewed custom field',
 } as const;
-// Audit actions that count as "using" a password, for Recently used (plus creating a share link).
+// Audit actions that count as "using" a password, for Recently used (plus creating a share link and filling).
 const USED_ACTIONS = [
   'Revealed password',
   'Copied password',
   'Viewed one-time code',
+  'Copied one-time code',
   'Viewed notes',
   'Viewed note',
   'Copied note',
 ] as const;
+const FILLED = 'Filled password on';
+const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 type Personal = { favorites: Set<string>; lastUsed: Map<string, string> };
+type Rules = { reasons: boolean; canReveal: boolean };
 
 export class VaultService {
   constructor(
@@ -113,13 +121,18 @@ export class VaultService {
       : [];
     // Anyone without vault access to the client, or outside a restricted item's list, gets the same 404.
     if (!row) throw notFound();
+    row.requireReason ||= (await scope.policy()).requireRevealReason;
     if (this.isPortal(scope)) {
       if (!portalOk || !row.p.clientVisible || row.p.restricted || (await scope.level(row.p.clientId)) === 'none')
         throw notFound();
       return row;
     }
     if ((await scope.level(row.p.clientId)) !== 'edit_passwords') throw notFound();
-    if (row.p.restricted && !this.isAdmin(scope) && !(await this.allowedRestricted(scope, [id])).has(id))
+    if (
+      row.p.restricted &&
+      (await scope.restrictedAccess()) === 'listed' &&
+      !(await this.allowedRestricted(scope, [id])).has(id)
+    )
       throw notFound();
     return row;
   }
@@ -189,6 +202,7 @@ export class VaultService {
 
   private view(
     r: { p: Row; clientName: string; requireReason: boolean; editor: string | null },
+    rules: Rules,
     reuse: Map<string, number>,
     links: Map<string, { id: string; name: string }[]> = new Map(),
     folders: Map<string, string> = new Map(),
@@ -219,7 +233,8 @@ export class VaultService {
       archived: r.p.archived,
       updatedAt: r.p.updatedAt.toISOString(),
       updatedByName: r.editor,
-      requireReason: r.requireReason,
+      requireReason: r.requireReason || rules.reasons,
+      canReveal: rules.canReveal,
       category: (r.p.category as PasswordCategory | null) ?? guessPasswordCategory(r.p.name, r.p.username, r.p.url),
       categoryGuessed: !r.p.category,
       linkedAssets: links.get(r.p.id) ?? [],
@@ -234,6 +249,16 @@ export class VaultService {
       folderName: r.p.folderId ? (folders.get(r.p.folderId) ?? null) : null,
       favorite: mine.favorites.has(r.p.id),
       lastUsedAt: mine.lastUsed.get(r.p.id) ?? null,
+    };
+  }
+
+  /** What the organization's vault policies mean for this actor. */
+  private async rules(scope: Scope): Promise<Rules> {
+    const policy = await scope.policy();
+    return {
+      reasons: policy.requireRevealReason,
+      // Read-only roles can't reveal anything when the organization blocks it.
+      canReveal: !(policy.blockReadOnlyReveal && READ_ONLY_ROLES.includes(scope.actor.role)),
     };
   }
 
@@ -255,7 +280,7 @@ export class VaultService {
           eq(a.orgId, scope.actor.orgId),
           eq(a.actorId, scope.actor.id),
           inArray(a.passwordId, ids),
-          sql`(${inArray(a.action, [...USED_ACTIONS])} or ${a.action} like 'Created a share link%')`,
+          sql`(${inArray(a.action, [...USED_ACTIONS])} or ${a.action} like 'Created a share link%' or ${a.action} like ${`${FILLED} %`})`,
         ),
       )
       .groupBy(a.passwordId);
@@ -390,7 +415,20 @@ export class VaultService {
     return { ok: true };
   }
 
-  private async audit(scope: Scope, row: Pick<Row, 'id' | 'clientId' | 'name'>, action: string, reason = '', ip = '') {
+  private async audit(
+    scope: Scope,
+    row: Pick<Row, 'id' | 'clientId' | 'name'> & { restricted?: boolean },
+    action: string,
+    reason = '',
+    ip = '',
+  ) {
+    // Using a restricted password the actor isn't listed on, through emergency access, says so in the log.
+    if (
+      row.restricted &&
+      (await scope.restrictedAccess()) === 'emergency' &&
+      !(await this.allowedRestricted(scope, [row.id])).has(row.id)
+    )
+      reason = reason ? `Emergency access: ${reason}` : 'Emergency access';
     await scope.db.insert(schema.vaultAudit).values({
       orgId: scope.actor.orgId,
       clientId: row.clientId,
@@ -405,8 +443,12 @@ export class VaultService {
   }
 
   // ---------- list and read ----------
-  async list(scope: Scope, filter: { clientId?: string; archived?: boolean }): Promise<PasswordView[]> {
-    if (this.isPortal(scope)) return this.portalList(scope, filter.clientId);
+  async list(
+    scope: Scope,
+    filter: { clientId?: string; archived?: boolean; favorites?: boolean },
+  ): Promise<PasswordView[]> {
+    if (this.isPortal(scope))
+      return (await this.portalList(scope, filter.clientId)).filter((p) => !filter.favorites || p.favorite);
     let ids = await this.vaultClients(scope);
     if (filter.clientId) {
       const level = await scope.require(filter.clientId, 'read', 'Client');
@@ -419,6 +461,16 @@ export class VaultService {
       inArray(schema.passwords.clientId, ids),
       eq(schema.passwords.archived, !!filter.archived),
     ];
+    if (filter.favorites)
+      conditions.push(
+        inArray(
+          schema.passwords.id,
+          scope.db
+            .select({ id: schema.passwordFavorites.passwordId })
+            .from(schema.passwordFavorites)
+            .where(eq(schema.passwordFavorites.userId, scope.actor.id)),
+        ),
+      );
     const rows = await scope.db
       .select({
         p: schema.passwords,
@@ -432,12 +484,13 @@ export class VaultService {
       .where(and(...conditions))
       .orderBy(asc(sql`lower(${schema.passwords.name})`))
       .limit(5000);
-    const allowed = this.isAdmin(scope)
-      ? null
-      : await this.allowedRestricted(
-          scope,
-          rows.filter((r) => r.p.restricted).map((r) => r.p.id),
-        );
+    const allowed =
+      (await scope.restrictedAccess()) !== 'listed'
+        ? null
+        : await this.allowedRestricted(
+            scope,
+            rows.filter((r) => r.p.restricted).map((r) => r.p.id),
+          );
     const visible = rows.filter((r) => !r.p.restricted || !allowed || allowed.has(r.p.id));
     const reuse = await this.reuseCounts(
       scope,
@@ -455,7 +508,8 @@ export class VaultService {
       scope,
       visible.map((r) => r.p.id),
     );
-    return visible.map((r) => this.view(r, reuse, links, folders, mine));
+    const rules = await this.rules(scope);
+    return visible.map((r) => this.view(r, rules, reuse, links, folders, mine));
   }
 
   /** Portal: passwords shared with the client accounts of clients the actor can read. */
@@ -487,15 +541,18 @@ export class VaultService {
       scope,
       rows.map((r) => r.p),
     );
-    return rows.map((r) => this.view(r, new Map(), new Map(), folders));
+    const rules = await this.rules(scope);
+    return rows.map((r) => this.view(r, rules, new Map(), new Map(), folders));
   }
 
   async get(scope: Scope, id: string): Promise<PasswordView> {
     const row = await this.load(scope, id, true);
     const folders = await this.folderNames(scope, [row.p]);
-    if (this.isPortal(scope)) return this.view(row, new Map(), new Map(), folders);
+    const rules = await this.rules(scope);
+    if (this.isPortal(scope)) return this.view(row, rules, new Map(), new Map(), folders);
     return this.view(
       row,
+      rules,
       await this.reuseCounts(scope, [row.p]),
       await this.linkedAssets(scope, [row.p.id]),
       folders,
@@ -539,8 +596,11 @@ export class VaultService {
       createdBy: scope.actor.id,
       updatedBy: scope.actor.id,
     };
+    // Where restricted passwords are for listed people only, restricting one lists its author, so they keep it.
+    const listAuthor = body.restricted && (await scope.restrictedAccess()) === 'listed';
     await scope.db.transaction(async (tx) => {
       await tx.insert(schema.passwords).values(values);
+      if (listAuthor) await tx.insert(schema.passwordAccess).values({ passwordId: id, userId: scope.actor.id });
       await tx.insert(schema.vaultAudit).values({
         orgId: org,
         clientId,
@@ -609,6 +669,7 @@ export class VaultService {
       set.breachCheckedAt = null;
       set.changedAt = new Date();
     }
+    const listEditor = body.restricted === true && !p.restricted && (await scope.restrictedAccess()) === 'listed';
     const historyId = randomUUID();
     // The previous secret is re-sealed for its history row, bound to that row.
     const previous = changedSecret
@@ -621,6 +682,8 @@ export class VaultService {
         .where(and(eq(schema.passwords.id, id), eq(schema.passwords.version, p.version)))
         .returning({ id: schema.passwords.id });
       if (!updated.length) throw conflict();
+      if (listEditor)
+        await tx.insert(schema.passwordAccess).values({ passwordId: id, userId: scope.actor.id }).onConflictDoNothing();
       if (previous)
         await tx.insert(schema.passwordHistory).values({
           id: historyId,
@@ -734,8 +797,14 @@ export class VaultService {
     return out;
   }
 
+  private async requireReveal(scope: Scope) {
+    if (!(await this.rules(scope)).canReveal)
+      throw new HttpError(403, 'Your organization doesn’t let read-only accounts reveal passwords.', 'reveal_blocked');
+  }
+
   async reveal(scope: Scope, id: string, input: unknown, ip: string): Promise<RevealResult> {
     const { p, requireReason } = await this.load(scope, id, true);
+    await this.requireReveal(scope);
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
@@ -765,10 +834,125 @@ export class VaultService {
           : 'Viewed note'
         : body.copy && body.field === 'secret'
           ? 'Copied password'
-          : REVEAL_ACTIONS[body.field];
+          : body.copy && body.field === 'totp'
+            ? 'Copied one-time code'
+            : REVEAL_ACTIONS[body.field];
     await this.audit(scope, p, action, body.reason, ip);
     if (body.field === 'totp') return { value: totp(value), expiresIn: 30 - (Math.floor(Date.now() / 1000) % 30) };
     return { value };
+  }
+
+  // ---------- browser extension ----------
+  /** Logins the actor may use, for the extension: staff only, not archived, in clients with password access. */
+  private async deviceRows(scope: Scope, where: SQL, limit: number) {
+    if (this.isPortal(scope)) return [];
+    const ids = await this.vaultClients(scope);
+    if (!ids.length) return [];
+    const rows = await scope.db
+      .select({
+        p: {
+          id: schema.passwords.id,
+          name: schema.passwords.name,
+          username: schema.passwords.username,
+          url: schema.passwords.url,
+          clientId: schema.passwords.clientId,
+          restricted: schema.passwords.restricted,
+          hasTotp: sql<boolean>`${schema.passwords.totp} is not null`,
+        },
+        clientName: schema.clients.name,
+        requireReason: schema.clients.requireRevealReason,
+      })
+      .from(schema.passwords)
+      .innerJoin(schema.clients, eq(schema.clients.id, schema.passwords.clientId))
+      .where(
+        and(
+          eq(schema.passwords.orgId, scope.actor.orgId),
+          inArray(schema.passwords.clientId, ids),
+          eq(schema.passwords.archived, false),
+          eq(schema.passwords.kind, 'login'),
+          where,
+        ),
+      )
+      .orderBy(asc(sql`lower(${schema.passwords.name})`))
+      .limit(limit);
+    const allowed = this.isAdmin(scope)
+      ? null
+      : await this.allowedRestricted(
+          scope,
+          rows.filter((r) => r.p.restricted).map((r) => r.p.id),
+        );
+    return rows.filter((r) => !r.p.restricted || !allowed || allowed.has(r.p.id));
+  }
+
+  private deviceView(
+    r: Awaited<ReturnType<VaultService['deviceRows']>>[number],
+    match: DeviceLoginView['match'],
+  ): DeviceLoginView {
+    return {
+      id: r.p.id,
+      name: r.p.name,
+      username: r.p.username,
+      url: r.p.url,
+      clientId: r.p.clientId,
+      clientName: r.clientName,
+      hasTotp: r.p.hasTotp,
+      requireReason: r.requireReason,
+      match,
+    };
+  }
+
+  /** Logins whose address matches the page: same host first, then the rest of its domain. */
+  async matchingLogins(scope: Scope, pageUrl: string): Promise<DeviceLoginView[]> {
+    const page = siteOf(pageUrl);
+    if (!page) return [];
+    // The address has to mention the domain (or the host, for addresses without one) to match at all.
+    const rows = await this.deviceRows(
+      scope,
+      sql`${schema.passwords.url} ilike ${likePattern(page.domain ?? page.host)}`,
+      500,
+    );
+    const rank = { exact: 0, domain: 1 } as const;
+    return rows
+      .map((r) => ({ r, match: matchLogin(r.p.url, page) }))
+      .filter((m) => m.match)
+      .sort((a, b) => rank[a.match!] - rank[b.match!])
+      .slice(0, 50)
+      .map((m) => this.deviceView(m.r, m.match));
+  }
+
+  /** Quick search by name, username, address, or client. */
+  async searchLogins(scope: Scope, query: string): Promise<DeviceLoginView[]> {
+    const q = query.trim().slice(0, 100);
+    if (q.length < 2) return [];
+    const pattern = likePattern(q);
+    const rows = await this.deviceRows(
+      scope,
+      or(
+        sql`${schema.passwords.name} ilike ${pattern}`,
+        sql`${schema.passwords.username} ilike ${pattern}`,
+        sql`${schema.passwords.url} ilike ${pattern}`,
+        sql`${schema.clients.name} ilike ${pattern}`,
+      )!,
+      25,
+    );
+    return rows.map((r) => this.deviceView(r, null));
+  }
+
+  /**
+   * The username and password to fill into a page, after the same checks as a reveal. The login's address must
+   * match the page, and the fill is audited with the page's host.
+   */
+  async fill(scope: Scope, id: string, input: unknown, ip: string): Promise<{ username: string; password: string }> {
+    const { p, requireReason } = await this.load(scope, id);
+    const body = deviceFillSchema.parse(input ?? {});
+    const page = siteOf(body.url);
+    if (p.kind !== 'login' || p.archived || !page || !matchLogin(p.url, page))
+      throw new HttpError(400, 'This login is not saved for this site.', 'site_mismatch');
+    if (requireReason && !body.reason)
+      throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
+    const password = await this.keys.open(scope.actor.orgId, p.secret, aad(id, 'secret'));
+    await this.audit(scope, p, `${FILLED} ${page.host}`.slice(0, 300), body.reason, ip);
+    return { username: p.username, password };
   }
 
   async history(scope: Scope, id: string): Promise<PasswordHistoryView[]> {
@@ -783,6 +967,7 @@ export class VaultService {
 
   async revealHistory(scope: Scope, id: string, historyId: string, input: unknown, ip: string): Promise<RevealResult> {
     const { p, requireReason } = await this.load(scope, id);
+    await this.requireReveal(scope);
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
@@ -1098,6 +1283,14 @@ export class VaultService {
       .select()
       .from(schema.passwords)
       .where(and(eq(schema.passwords.orgId, org), eq(schema.passwords.clientId, clientId)));
+    // Restricted passwords the administrator may not use stay out of the export.
+    const allowed =
+      (await scope.restrictedAccess()) === 'listed'
+        ? await this.allowedRestricted(
+            scope,
+            rows.filter((p) => p.restricted).map((p) => p.id),
+          )
+        : null;
     const out: {
       id: string;
       secret: string;
@@ -1106,6 +1299,7 @@ export class VaultService {
       customFields: { label: string; secret: boolean; value: string }[];
     }[] = [];
     for (const p of rows) {
+      if (p.restricted && allowed && !allowed.has(p.id)) continue;
       out.push({
         id: p.id,
         secret: await this.keys.open(org, p.secret, aad(p.id, 'secret')),
@@ -1180,6 +1374,7 @@ export class VaultService {
     ip: string,
   ): Promise<{ id: string; token: string; expiresAt: string }> {
     const { p, requireReason } = await this.load(scope, id);
+    await this.requireReveal(scope);
     const body = shareSchema.parse(input);
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before sharing passwords.', 'reason_required');
@@ -1238,7 +1433,129 @@ export class VaultService {
     if (!updated.length) throw new HttpError(404, 'Share link not found.');
     await this.audit(scope, p, 'Revoked a share link', '', ip);
   }
+
+  // ---------- automatic rotation ----------
+  // A rotation's new password arrives from the device before the device sets it. It is sealed to the run until the
+  // device confirms, then moved into the password here, so every vault write and its history stay in this service.
+
+  /** Seals the password a device reported for a rotation run, bound to that run. */
+  async sealCandidate(orgId: string, runId: string, value: string) {
+    return this.keys.seal(orgId, value, rotationAad(runId));
+  }
+
+  /**
+   * Makes a confirmed rotation the password: the old one goes to history, and the change is audited as the
+   * rotation. `also` runs in the same transaction (the run's own bookkeeping).
+   */
+  async commitRotation(
+    db: Database,
+    orgId: string,
+    run: { id: string; passwordId: string; candidate: string; label: string },
+    also: (tx: Parameters<Parameters<Database['transaction']>[0]>[0]) => Promise<void>,
+  ) {
+    const secret = await this.keys.open(orgId, run.candidate, rotationAad(run.id));
+    const sealed = await this.keys.seal(orgId, secret, aad(run.passwordId, 'secret'));
+    const fingerprint = await this.keys.fingerprint(orgId, secret);
+    const historyId = randomUUID();
+    await db.transaction(async (tx) => {
+      // Locked and read here, so history keeps the password actually replaced, even one a technician saved moments ago.
+      const [p] = await tx
+        .select()
+        .from(schema.passwords)
+        .where(and(eq(schema.passwords.id, run.passwordId), eq(schema.passwords.orgId, orgId)))
+        .for('update');
+      if (!p) throw notFound();
+      const previous = await this.keys.seal(
+        orgId,
+        await this.keys.open(orgId, p.secret, aad(p.id, 'secret')),
+        historyAad(historyId),
+      );
+      // Applied even if someone edited the entry meanwhile: the device now has this password, so the vault must too.
+      await tx
+        .update(schema.passwords)
+        .set({
+          secret: sealed,
+          fingerprint,
+          strength: passwordStrength(secret),
+          breachCount: null,
+          breachCheckedAt: null,
+          changedAt: new Date(),
+          version: sql`${schema.passwords.version} + 1`,
+          updatedBy: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.passwords.id, p.id));
+      await tx.insert(schema.passwordHistory).values({
+        id: historyId,
+        passwordId: p.id,
+        secret: previous,
+        changedBy: null,
+        changedByName: ROTATION_ACTOR,
+      });
+      await tx.insert(schema.vaultAudit).values({
+        orgId,
+        clientId: p.clientId,
+        passwordId: p.id,
+        passwordName: p.name,
+        actorName: ROTATION_ACTOR,
+        action: 'Changed password (automatic rotation)',
+        reason: run.label.slice(0, 300),
+      });
+      await tx.insert(schema.activity).values({
+        orgId,
+        clientId: p.clientId,
+        actorName: ROTATION_ACTOR,
+        action: 'Rotated the password for',
+        entityType: 'password',
+        entityId: p.id,
+        title: p.name.slice(0, 200),
+      });
+      await also(tx);
+    });
+  }
+
+  /**
+   * Keeps a password a device reported but never confirmed setting, as a previous password of the entry, so a
+   * technician can reveal it (audited, like any history) if the device did change the account.
+   */
+  async keepUnconfirmedCandidate(
+    db: Database,
+    orgId: string,
+    run: { id: string; passwordId: string; candidate: string },
+  ) {
+    const [p] = await db
+      .select({ id: schema.passwords.id, clientId: schema.passwords.clientId, name: schema.passwords.name })
+      .from(schema.passwords)
+      .where(and(eq(schema.passwords.id, run.passwordId), eq(schema.passwords.orgId, orgId)));
+    if (!p) return;
+    const historyId = randomUUID();
+    const sealed = await this.keys.seal(
+      orgId,
+      await this.keys.open(orgId, run.candidate, rotationAad(run.id)),
+      historyAad(historyId),
+    );
+    await db.transaction(async (tx) => {
+      await tx.insert(schema.passwordHistory).values({
+        id: historyId,
+        passwordId: p.id,
+        secret: sealed,
+        changedBy: null,
+        changedByName: `${ROTATION_ACTOR} (unconfirmed, not applied)`,
+      });
+      await tx.insert(schema.vaultAudit).values({
+        orgId,
+        clientId: p.clientId,
+        passwordId: p.id,
+        passwordName: p.name,
+        actorName: ROTATION_ACTOR,
+        action: 'Kept an unconfirmed rotation password in history',
+      });
+    });
+  }
 }
+
+export const ROTATION_ACTOR = 'Automatic rotation';
+const rotationAad = (runId: string) => `rot|${runId}|candidate`;
 
 /**
  * Opens a share link without signing in. Each successful open uses one view; the update is atomic,

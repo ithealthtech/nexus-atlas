@@ -37,6 +37,50 @@ Changes to access apply to people who are already signed in, straight away.
 - **Access history:** every reveal, copy, change, and share is recorded on the password and in **Security log → Vault access**.
 - **Sharing with the client:** ticking *Share with the client's own accounts* on an entry lets that client's own contacts see it, read-only.
 
+## Vault policies
+
+**Vault policies** holds the rules for the whole vault. Everyone who administers Atlas can see them; only the owner can change them.
+
+- **MFA:** staff must set up MFA before they can do anything (the server's `ATLAS_REQUIRE_STAFF_MFA`). The page lists every active account that can reach passwords without it, such as client accounts.
+- **Generator:** the shortest password the generator makes, whether it always includes numbers or symbols, and whether it offers PINs.
+- **Reasons everywhere:** *Require a reason for every reveal, copy, and share* applies to every client, on top of each client's own setting.
+- **Read-only accounts:** *Don't let read-only accounts reveal passwords* stops client viewers revealing or copying the passwords shared with them. They still see which ones are shared.
+- **Restricted means listed:** with *Restricted passwords are for the people listed on them*, administrators need a place on an entry's list like everyone else. The owner always has access. An administrator who restricts an entry is listed on it automatically.
+
+### Emergency access
+
+For when the owner can't be reached and a restricted password is needed.
+
+1. The owner adds trusted administrators under **Emergency access**, each with a wait (one hour to a week).
+2. A trusted administrator requests access and says why. The owner is emailed at once.
+3. During the wait the owner can **Deny** it, or **Approve now**. Otherwise access starts when the wait ends, and everyone involved is emailed.
+4. Access covers every restricted password for 24 hours. The owner can end it early, and removing the administrator from the list ends it too.
+
+Each step is in the security log, and each password used this way says *Emergency access* in its access history. It only matters once *Restricted passwords are for the people listed on them* is on; before that, administrators already see restricted passwords.
+
+### Streaming logs to a SIEM
+
+**Stream logs to a SIEM** sends new security events and password access as they happen, about every 30 seconds.
+
+- **HTTPS webhook:** each batch is POSTed as `{ "events": [...] }`. With a signing secret, the `X-Atlas-Signature` header is `sha256=` and the HMAC-SHA256 of the body, in hex. Redirects count as failures.
+- **Syslog:** RFC 5424 lines (facility *log audit*) with the event as JSON, over TLS (recommended), TCP with octet counting, or UDP.
+- **What's sent:** streaming starts with what happens after you turn it on. If the SIEM can't be reached, Atlas records the error on the page and tries again from the same place, so nothing is skipped. **Send a test event** checks the connection without sending real events.
+
+## Automatic password rotation
+
+**Administration → Password rotation** changes local administrator and Active Directory service account passwords on a schedule, through ConnectWise RMM, and keeps the new ones in the vault.
+
+1. **Set up ConnectWise RMM.** Connect it under **Import & export** and sync the client's devices. Give its API key the **Automation read** and **Automation create** permissions as well.
+2. **Add the script.** Import `deploy/rmm/Invoke-AtlasPasswordRotation.ps1` into ConnectWise RMM (**Automation → Scripts**) as a PowerShell script, and enter its ID on the Password rotation page. Tick **Rotate passwords automatically**.
+3. **Add a policy** for each account type: how often (in days) and the password rules (length and kinds of character). A policy for **All clients** is the default; a client's own policy replaces it for that client. Without an active policy, nothing rotates.
+4. **Choose the passwords.** Pick the client, the vault entry, and the device the script runs on. The entry's username is the account that's changed. For an AD service account, choose a domain controller (or a server with the ActiveDirectory PowerShell module).
+
+**How a rotation works.** Atlas starts the script on the device with a token that works for that one rotation only, for two hours. The script generates a password to the policy and sends it to Atlas *before* changing anything; Atlas checks it against the policy and holds it encrypted. The script then sets the password and reports whether that worked. Only a confirmed change replaces the password in the vault; the old one moves to the entry's history.
+
+**When a rotation fails,** the old password stays in the vault, and Atlas records the failure in the password's access history and the security log, and emails administrators (when email is set up). If a device reported a password but never confirmed setting it, that password is also kept in the entry's history, marked *unconfirmed*, in case the device did change the account. A failed account is tried again after a day.
+
+**Revoking tokens.** Cancel one attempt from **Recent attempts**, or choose **Revoke device tokens** to stop every attempt in progress. Turning rotation off does the same.
+
 ## Keeping Atlas healthy
 
 Check **System status** every week or so. It shows:
@@ -65,6 +109,17 @@ Check **System status** every week or so. It shows:
 - **The key acts as you:** it acts with your access, is shown once, and expires after a year unless you choose otherwise.
 - **Revoke keys** you no longer use.
 - The API is documented at `/api/openapi.json`. See [Data in and out](DATA.md#rest-api).
+
+## Browser extension
+
+The extension for Edge and Chrome (Manifest V3) fills logins from the vault for staff. Client accounts can't use it.
+
+- **Building it:** `npm run build:extension` writes the unpacked extension to `apps/extension/dist` and a zip to `apps/extension/package`. The extension's version follows Atlas's.
+- **Installing it:** for a trial, open `edge://extensions` or `chrome://extensions`, turn on developer mode, and choose **Load unpacked** with the `dist` folder. For your team, publish the zip privately to the Edge Add-ons or Chrome Web Store dashboard, or host it and force-install it with the `ExtensionInstallForcelist` group policy.
+- **Permissions:** it can only read and fill the tab you open it on (`activeTab`), and it asks to reach one address: your Atlas. It has no access to other sites and runs nothing on pages until you choose **Fill**.
+- **What it stores:** the Atlas address, a session token, and a signing key the browser won't let it export. No passwords, codes, or lists of logins.
+- **Sign-ins:** approvals and sign-ins appear in the security log as *Device sign-in approved* and *Signed in* (naming the browser). Each fill and copy is in the vault access history, and the person's name there includes the browser.
+- **Taking it away:** **Sign out everywhere** on the Users page, disabling the account, or resetting its sign-in also signs out the extension.
 
 ## If something goes wrong
 

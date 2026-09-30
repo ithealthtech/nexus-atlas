@@ -114,7 +114,7 @@ export async function requireItem(scope: Scope, type: ItemType, id: string, leve
 
 /**
  * Whether the actor may see an item at all. Passwords need "edit + passwords" access to their client,
- * and restricted ones need an admin or a place on the item's list.
+ * and restricted ones need a place on the item's list, or access to all restricted items (Scope.restrictedAccess).
  */
 export async function canSee(
   scope: Scope,
@@ -128,7 +128,7 @@ export async function canSee(
     .select({ restricted: schema.passwords.restricted })
     .from(schema.passwords)
     .where(eq(schema.passwords.id, item.id));
-  if (!row?.restricted || ROLE_INFO[scope.actor.role].admin) return true;
+  if (!row?.restricted || (await scope.restrictedAccess()) !== 'listed') return true;
   return (await allowedRestricted(scope, [item.id])).has(item.id);
 }
 
@@ -246,8 +246,9 @@ export async function visibleItems(scope: Scope, refs: { type: string; id: strin
 
   const info = ROLE_INFO[scope.actor.role];
   const staffPasswords = found.filter((i) => i.type === 'password' && i.restricted);
+  const allRestricted = staffPasswords.length > 0 && (await scope.restrictedAccess()) !== 'listed';
   const allowed =
-    info.staff && !info.admin
+    info.staff && staffPasswords.length && !allRestricted
       ? await allowedRestricted(
           scope,
           staffPasswords.map((i) => i.id),
@@ -260,7 +261,7 @@ export async function visibleItems(scope: Scope, refs: { type: string; id: strin
     if (level === 'none') continue;
     if (item.type === 'password') {
       const ok = info.staff
-        ? level === 'edit_passwords' && (!item.restricted || info.admin || allowed.has(item.id))
+        ? level === 'edit_passwords' && (!item.restricted || allRestricted || allowed.has(item.id))
         : item.clientVisible && !item.restricted;
       if (!ok) continue;
     }

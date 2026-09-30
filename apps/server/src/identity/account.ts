@@ -11,17 +11,22 @@ import {
 } from '@simplewebauthn/server';
 import { schema, type Database } from '@atlas/db';
 import {
+  NATIVE_CLIENTS,
   forgotPasswordSchema,
   notificationPrefsSchema,
   passkeyNameSchema,
   resetPasswordSchema,
   type AccountSecurityView,
   type Actor,
+  type AppScope,
+  type NativeClientId,
+  type DeviceKind,
 } from '@atlas/shared';
 import { fail } from '../errors.js';
 import type { MailService } from '../services/mail.js';
 import { checkPassword, hashPassword } from './passwords.js';
 import {
+  endDeviceSessions,
   hashRecoveryCode,
   hasMfa,
   isUuid,
@@ -30,6 +35,7 @@ import {
   type IdentityService,
   type SessionContext,
 } from './service.js';
+import { DEVICE_LIMITS } from './devices.js';
 
 export const DEVICE_DAYS = 30;
 const RESET_MS = 60 * 60_000;
@@ -63,7 +69,7 @@ export class AccountSecurity {
   async overview(context: SessionContext): Promise<AccountSecurityView> {
     const { user } = context;
     const [fresh] = await this.db.select().from(schema.users).where(eq(schema.users.id, user.id));
-    const [passkeys, sessions, devices] = await Promise.all([
+    const [passkeys, sessions, devices, apps] = await Promise.all([
       this.db.select().from(schema.passkeys).where(eq(schema.passkeys.userId, user.id)),
       this.db
         .select()
@@ -74,6 +80,17 @@ export class AccountSecurity {
         .select()
         .from(schema.trustedDevices)
         .where(and(eq(schema.trustedDevices.userId, user.id), gt(schema.trustedDevices.expiresAt, new Date()))),
+      this.db
+        .select()
+        .from(schema.deviceSessions)
+        .where(
+          and(
+            eq(schema.deviceSessions.userId, user.id),
+            gt(schema.deviceSessions.expiresAt, new Date()),
+            gt(schema.deviceSessions.lastSeenAt, new Date(Date.now() - DEVICE_LIMITS.idleMs)),
+          ),
+        )
+        .orderBy(sql`${schema.deviceSessions.lastSeenAt} desc`),
     ]);
     return {
       totp: !!fresh!.mfaSecret,
@@ -84,20 +101,42 @@ export class AccountSecurity {
         createdAt: p.createdAt.toISOString(),
         lastUsedAt: p.lastUsedAt?.toISOString() ?? null,
       })),
-      sessions: sessions.map((s) => ({
-        id: s.id,
-        current: s.tokenHash === context.hash,
-        ip: s.ip,
-        userAgent: s.userAgent,
-        createdAt: s.createdAt.toISOString(),
-        lastSeenAt: s.lastSeenAt.toISOString(),
-      })),
+      sessions: sessions
+        .filter((s) => s.kind === 'browser')
+        .map((s) => ({
+          id: s.id,
+          current: s.tokenHash === context.hash,
+          ip: s.ip,
+          userAgent: s.userAgent,
+          createdAt: s.createdAt.toISOString(),
+          lastSeenAt: s.lastSeenAt.toISOString(),
+        })),
+      desktopApps: sessions
+        .filter((s) => s.kind === 'app')
+        .map((s) => ({
+          id: s.id,
+          client: NATIVE_CLIENTS[s.client as NativeClientId]?.name ?? 'Desktop app',
+          deviceName: s.deviceName,
+          scopes: s.scopes as AppScope[],
+          ip: s.ip,
+          createdAt: s.createdAt.toISOString(),
+          lastSeenAt: s.lastSeenAt.toISOString(),
+        })),
       devices: devices.map((d) => ({
         id: d.id,
         userAgent: d.userAgent,
         ip: d.ip,
         createdAt: d.createdAt.toISOString(),
         expiresAt: d.expiresAt.toISOString(),
+      })),
+      apps: apps.map((a) => ({
+        id: a.id,
+        kind: a.kind as DeviceKind,
+        name: a.name,
+        ip: a.lastSeenIp || a.ip,
+        createdAt: a.createdAt.toISOString(),
+        lastSeenAt: a.lastSeenAt.toISOString(),
+        expiresAt: a.expiresAt.toISOString(),
       })),
       notifyDigest: fresh!.notifyDigest,
     };
@@ -197,9 +236,22 @@ export class AccountSecurity {
           ne(schema.sessions.tokenHash, context.hash),
         ),
       )
-      .returning({ ip: schema.sessions.ip });
+      .returning({
+        ip: schema.sessions.ip,
+        kind: schema.sessions.kind,
+        client: schema.sessions.client,
+        deviceName: schema.sessions.deviceName,
+      });
     if (!removed.length) fail(404, 'Session not found. To end this session, sign out.');
-    await this.identity.event(context.user, 'Session ended remotely', `Session from ${removed[0]!.ip}`, ip);
+    const ended = removed[0]!;
+    if (ended.kind === 'app')
+      await this.identity.event(
+        context.user,
+        'Desktop app signed out remotely',
+        `${NATIVE_CLIENTS[ended.client as NativeClientId]?.name ?? 'Desktop app'} on ${ended.deviceName}`,
+        ip,
+      );
+    else await this.identity.event(context.user, 'Session ended remotely', `Session from ${ended.ip}`, ip);
   }
 
   async endOtherSessions(context: SessionContext, ip: string) {
@@ -222,6 +274,7 @@ export class AccountSecurity {
     if (user!.role === 'owner' && actor.role !== 'owner') fail(403, 'Only an owner can sign out an owner.');
     await this.db.delete(schema.sessions).where(eq(schema.sessions.userId, id));
     await this.db.delete(schema.trustedDevices).where(eq(schema.trustedDevices.userId, id));
+    await endDeviceSessions(this.db, id);
     await this.identity.event(actor, 'User signed out everywhere', user!.email, ip);
   }
 
@@ -298,6 +351,7 @@ export class AccountSecurity {
         .set({ passwordHash, mustChangePassword: false, failedAttempts: 0, lockedUntil: null, updatedAt: new Date() })
         .where(eq(schema.users.id, user.id));
       await tx.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+      await endDeviceSessions(tx, user.id);
       await tx.insert(schema.securityEvents).values({
         orgId: user.orgId,
         userId: user.id,

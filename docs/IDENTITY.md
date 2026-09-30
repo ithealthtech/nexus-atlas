@@ -45,7 +45,25 @@
 ## API keys and client accounts
 
 - **API keys:** administrators create them and each key acts as its creator, limited to the scopes it was given (`read`, `write`, `passwords`) and to documentation and vault endpoints. Creating, revoking, and using keys are recorded. See [Data in and out](DATA.md#rest-api).
+- **Browser extension (device sign-in):** staff sign the extension in through Atlas rather than typing a password into it.
+  - The extension makes a P-256 key pair whose private half can't be exported, and asks to sign in with the public half. It shows a code like `K7QX-4MPD`, valid for 10 minutes.
+  - The person opens the approval page in Atlas, checks the code and the requesting address, and allows it. Approving needs a password entered in the last 10 minutes, and is recorded as *Device sign-in approved*.
+  - The extension then collects its session by signing the request with its key, once. Every later request carries the session token and a signature over the method, path, time, a one-time nonce, and the body's hash. The server keeps only the token's hash and the public key, refuses requests more than 2 minutes old, and refuses a nonce it has seen. A copied token is useless without the key.
+  - A device session acts as its person and reaches only the extension's routes (`/api/device/…`): logins matching a page, search, fill, and copy. These go through the same vault checks, reasons, and access history as the web app. It never uses cookies, so the browser origin checks don't apply to these routes.
+  - Sessions end after 7 days unused or 30 days after signing in, and each person has at most 10. People see them under **Signed-in apps** on their account page and can sign any out. Changing or resetting a password, disabling the account, a lockout, and **Sign out everywhere** end them too.
+  - The same sign-in is meant for the Windows app (#23).
 - **Client accounts** see only the clients they're granted. They see a password only when staff share it with the client, never restricted ones, and reveals follow the same reason and access-history rules as staff.
+
+## Desktop apps
+
+Atlas for Windows (`apps/windows`) signs in as the person using it, through their own browser, and never sees or stores their password.
+
+- **Sign-in flow:** the authorization code flow with PKCE (S256) and a loopback redirect, as RFC 8252 describes for native apps. The app opens `https://<atlas>/native/authorize?…` in the default browser. The person signs in there as usual (password and second step, or a passkey), sees which app and computer are asking and what it will be able to do, and chooses **Allow and sign in**. The browser returns a one-time code to the app on `http://127.0.0.1:<port>/callback`, and the app trades the code and its PKCE verifier for a session token at `POST /api/v1/native/token`.
+- **Checks:** approving needs a staff account, an active browser session, and a password (or passkey) entered in the last 10 minutes. The redirect must be `http://127.0.0.1` or `http://[::1]` with an explicit port and no query; `localhost` is refused. A code works once, for two minutes, and only with its verifier and redirect address; a wrong verifier burns it. Failed exchanges count toward the per-address sign-in limit. Only hashes of codes and tokens are stored.
+- **App sessions:** the token (`atlasd_…`) is sent as `Authorization: Bearer` to `/api/v1`. It is never accepted as a browser cookie, and a browser session is never accepted in its place. It lasts 30 days without use and 90 days at most, with up to 10 per person. App sessions are stored with browser sessions, so everything that signs someone out ends them too: a lockout, a password change or reset, MFA enrollment, **Sign out all others**, an administrator's sign-out or reset, and disabling the account.
+- **Scopes:** `read` (GET requests), `write` (changes), and `reveal` (the password and history reveal endpoints). Atlas for Windows asks for `read reveal`. Apps reach the same endpoints as API keys (documentation, the vault, search, and expirations) plus their own `GET` and `DELETE /api/v1/native/session`; account, people, settings, and log endpoints are closed to them.
+- **Records:** copying a password or code is a reveal, with the same access checks, required reasons, and access history as the browser, recorded as "*Name* (Atlas for Windows on *computer*)". Approving, signing in, and signing out an app go into the security log.
+- **Account page:** **Desktop apps** lists each signed-in app with its computer, address, and permissions, and **Sign out** ends it at once.
 
 ## Coming later
 

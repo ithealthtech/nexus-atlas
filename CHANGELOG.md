@@ -2,6 +2,22 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Atlas for Windows (preview):** a tray app for technicians. Ctrl+Shift+Space opens quick search over the clients, assets, documents, and passwords you can see; copy a username, password, or one-time code (recorded like a reveal, and cleared from the clipboard after 30 seconds, never kept in clipboard history), open the sign-in address, or open the record in Atlas. It signs in through your browser with your usual password and second step or passkey, keeps only a DPAPI-protected session token, and can start with Windows and remind you about items expiring in the next 14 days. Signed MSIX packages and automatic updates come next. (#23)
+- **Desktop app sign-in:** the authorization code flow with PKCE and a loopback redirect, issuing app sessions with `read`, `write`, and `reveal` scopes. Signed-in apps are listed on the Account page, where they can be signed out, and end with every other kind of sign-out. (#23)
+- **Quick search API:** `GET /api/v1/search` takes a `limit`, for as-you-type use. (#23)
+- **Vault policies:** a new Administration → Vault policies page. It shows that MFA is required for staff and lists anyone who can reach passwords without it. The owner can set the password generator's minimum length and required numbers or symbols (and turn off PINs), require a reason for every reveal in every client, stop read-only accounts from revealing passwords, and make restricted passwords available only to the people listed on them, administrators included. (#35)
+- **Emergency access:** the owner names trusted administrators, each with a waiting period. A trusted administrator can request access to every restricted password; the owner is emailed at once and can deny it during the wait or approve it sooner. Access lasts 24 hours, every step is in the security log, and each password used is marked "Emergency access" in its access history. (#35)
+- **SIEM streaming:** send the security log and the password access log to a SIEM as they happen, by HTTPS webhook (JSON, optionally HMAC-signed) or syslog (RFC 5424 over TLS, TCP, or UDP). Failed sends are retried from where they stopped. (#35)
+- **Browser extension for Edge and Chrome:** suggests the logins saved for the site you're on and fills them, with a quick search to copy a password, username, or one-time code for any login you can use. It signs in through Atlas: you approve the browser in Atlas after checking a code, and the extension gets a session tied to a key that never leaves the browser. It stores no passwords and asks Atlas each time. Fills and copies are recorded like reveals, and clients that require a reason ask for one. Signed-in browsers are listed on your account page, end after 7 days unused or 30 days in total, and are signed out with everything else when your password changes or an administrator signs you out. Build it with `npm run build:extension`. (#28)
+
+### Fixed
+
+- **Passwords:** changing only some details of a password (for example a bulk rotation change, or restricting it) no longer clears its website address. (#28)
+
 ## [1.6.0] - 2026-09-29
 
 ### Added

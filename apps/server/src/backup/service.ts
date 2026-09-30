@@ -18,6 +18,9 @@ export const SKIPPED_TABLES = new Set([
   'auth_challenges',
   'password_resets',
   'trusted_devices',
+  'native_auth_codes',
+  'device_sessions',
+  'device_pairings',
   'backup_runs',
   // One-time Sends: the files aren't backed up, and a restored Send shouldn't open again.
   'sends',

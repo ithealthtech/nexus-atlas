@@ -40,6 +40,7 @@ jobs:
       - run: npx prettier --check .
       - run: npm run lint
       - run: npm run build
+      - run: npm run build:extension
       - run: npm run typecheck
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
@@ -107,12 +108,27 @@ jobs:
       - run: npm run typecheck
       # Database-backed tests run on Linux; these cover crypto, key files, and configuration on Windows.
       - run: npx vitest run apps/server/test/keys.test.ts
-      - name: Installer script parses
+      - name: PowerShell scripts parse
         shell: pwsh
         run: |
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/deploy/windows/Install-Atlas.ps1", [ref]$null, [ref]$errors) | Out-Null
-          if ($errors) { $errors | ForEach-Object { Write-Error $_.ToString() }; exit 1 }
+          foreach ($script in 'deploy/windows/Install-Atlas.ps1', 'deploy/rmm/Invoke-AtlasPasswordRotation.ps1') {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile("$PWD/$script", [ref]$null, [ref]$errors) | Out-Null
+            if ($errors) { $errors | ForEach-Object { Write-Error "${script}: $_" }; exit 1 }
+          }
+
+  # Atlas for Windows (apps/windows): the core library's tests, then the WinUI app itself, which only builds on Windows.
+  windows-client:
+    name: Windows client
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test apps/windows/tests/Atlas.Windows.Core.Tests
+      - run: dotnet build apps/windows/src/Atlas.Windows -c Release -p:Platform=x64
 
   docker:
     name: Docker image

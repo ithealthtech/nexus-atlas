@@ -18,4 +18,4 @@ v1.0 is a production-ready, self-hosted documentation and password manager for a
 | **M4a Operations** | Encrypted nightly backups with retention, verified restore (including older versions), system status page, Windows service installer | ✅ Done |
 | **M4b Release** | Security review and hardening tests, performance pass on a 2,000-client MSP, accessibility sweep of every screen with a keyboard walkthrough, admin and user guides, release workflow, v1.0.0 | ✅ Done |
 
-**After v1:** Entra ID / Microsoft 365 SSO and tenant sync; PSA/RMM integrations (ConnectWise first, then Autotask, HaloPSA, NinjaOne, Datto); a browser autofill extension; the BitLocker RMM collector (from `integrations/bitlocker`); network discovery; IT Glue and ITBoost importers; mobile apps; and multi-tenant cloud hosting.
+**After v1:** Entra ID / Microsoft 365 SSO and tenant sync; PSA/RMM integrations (ConnectWise first, then Autotask, HaloPSA, NinjaOne, Datto); the BitLocker RMM collector (from `integrations/bitlocker`); network discovery; IT Glue and ITBoost importers; mobile apps; and multi-tenant cloud hosting.
