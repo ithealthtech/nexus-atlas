@@ -50,11 +50,16 @@ export function ticketTime(value: unknown, now = Date.now()): Date | null {
 }
 
 /** Ticket text is someone else's: control characters are dropped and the length capped. */
-// eslint-disable-next-line no-control-regex
-const clean = (s: string, max: number) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, max);
+const clean = (s: string, max: number) =>
+  s
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, max);
 
 const CLOSED_STATUS = /^(closed|completed?|resolved|cancell?ed|done|finished)\b/i;
-const numeric = (s: string) => /^\d{1,18}$/.test(s);
+/** The portal's ticket number is short (like 5535); ConnectWise's long alert IDs (202609080102782) are not it. */
+const numeric = (s: string) => /^\d{1,7}$/.test(s);
 
 /**
  * A browser link to a platform ticket, as the web app's own ticket links read (keyed by the plain ticket ID the
@@ -89,7 +94,7 @@ export function mapTicket(
     closedStatuses.has(text(t, 'status.id', 'statusId')) ||
     /^closed$/i.test(category) ||
     (typeof flag === 'boolean' ? flag : !!closedAt || CLOSED_STATUS.test(status));
-  // The portal's ticket ID is a plain number; prefer whichever field carries one.
+  // The portal's ticket number is short; prefer whichever field carries one. A long alert ID is never it.
   const numbers = ['number', 'nocTicketId', 'ticketNumber', 'displayId'].map((k) => text(t, k));
   const number = clean(numbers.find(numeric) ?? (numbers.find(Boolean) || id), 100);
   const given = text(t, 'url', 'link', 'webUrl', 'ticketUrl', '_links.self.href');
@@ -129,6 +134,10 @@ export class CwTicketReader {
   lastList = '';
   /** Something worth a job note once per sync. */
   note = '';
+  /** Tickets with no CW-System note naming their portal ticket number yet. */
+  noPortalId = 0;
+  /** Whether ConnectWise refused to show ticket notes, where the portal ticket number is. */
+  notesDenied = false;
   /** Companies with more tickets than one sync lists: their tickets not listed are kept, not deleted. */
   readonly partial = new Set<string>();
   private readonly web: string | undefined;
@@ -160,11 +169,41 @@ export class CwTicketReader {
     }
     const since = now - KEEP_CLOSED_DAYS * DAY;
     const seen = new Set<string>();
-    return records
+    const list = records
       .map((r) => mapTicket(r, now, new Set(), link))
       .filter((t): t is CwTicket => !!t)
       .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
+    await this.portalIds(list, link);
+    this.noPortalId += list.filter((t) => !numeric(t.number)).length;
+    return list;
+  }
+
+  /**
+   * A ticket the platform opened itself (numbered like 133023.1670) gets its portal ticket number from a CW-System
+   * note: "Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670". Shows and links that number.
+   * Read through the ticket notes API, as the notes panel is.
+   */
+  private async portalIds(list: CwTicket[], link: (number: string) => string | null) {
+    if (this.notesDenied) return;
+    for (const t of list.filter((k) => !numeric(k.number)).slice(0, MAX_PORTAL_LOOKUPS)) {
+      let notes: Json[];
+      try {
+        notes = listOf(await this.client.get(notesPath(t.id)));
+      } catch (error) {
+        // A key that can't read notes can't read any: stop asking.
+        if (error instanceof HttpError && error.code === ACCESS_DENIED) {
+          this.notesDenied = true;
+          return;
+        }
+        if (error instanceof HttpError) continue;
+        throw error;
+      }
+      const id = notes.map((n) => portalIdIn(text(n, 'detail', 'text', 'note'), t.number)).find(Boolean);
+      if (!id) continue;
+      t.number = id;
+      t.url = link(id) ?? t.url;
+    }
   }
 
   /** Every page of a ticket list, newest first. */
@@ -173,7 +212,9 @@ export class CwTicketReader {
     for (let page = 1; page <= MAX_PAGES; page++) {
       let body: unknown;
       try {
-        body = await this.client.get(`${TICKETS}?${filter}&pageSize=${PAGE}&pageNum=${page}&sortBy=createdAt&sortDir=desc`);
+        body = await this.client.get(
+          `${TICKETS}?${filter}&pageSize=${PAGE}&pageNum=${page}&sortBy=createdAt&sortDir=desc`,
+        );
       } catch (error) {
         // "Not found" is how ConnectWise answers a company with no tickets, or a page past the last.
         if (error instanceof HttpError && error.status === 404 && error.code !== ACCESS_DENIED) {
@@ -184,12 +225,28 @@ export class CwTicketReader {
       }
       const records = listOf(body);
       out.push(...records);
-      if (page === 1) this.lastList = `ticket list: response fields ${shapeOf(body)}; ${records.length} on the first page`;
+      if (page === 1)
+        this.lastList = `ticket list: response fields ${shapeOf(body)}; ${records.length} on the first page`;
       const total = Number(pick((body ?? {}) as Json, 'totalCount', 'total', 'count'));
       if (!records.length || (Number.isFinite(total) ? out.length >= total : records.length < PAGE)) break;
     }
     return out;
   }
+}
+
+/** Tickets per company whose notes are read for the portal ticket number, each sync. */
+const MAX_PORTAL_LOOKUPS = 200;
+
+/**
+ * The portal ticket number a CW-System note names for this very ticket: "Connectwise ticket id 5283 is created to
+ * match ASIO ticket id 133023.1670". A note naming another ticket's number gives nothing.
+ */
+export function portalIdIn(note: string, asioNumber: string): string | null {
+  const m =
+    /\bconnect\s*wise\s+ticket\s+id\s*#?\s*(\d{1,18})\s+is\s+created\s+to\s+match\s+asio\s+ticket\s+id\s*#?\s*([\d.]+?)\.?(?:\s|$)/i.exec(
+      note,
+    );
+  return m && m[2] === asioNumber ? (m[1] ?? null) : null;
 }
 
 const notesPath = (ticketId: string) =>
@@ -214,9 +271,7 @@ export async function ticketNotes(client: CwRmmClient, ticketId: string, now = D
   const notes = listOf(await client.get(notesPath(ticketId)))
     .map((n) => mapNote(n, now))
     .filter((n): n is TicketNoteView => !!n);
-  return notes
-    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
-    .slice(0, MAX_NOTES);
+  return notes.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, MAX_NOTES);
 }
 
 /**
@@ -271,7 +326,9 @@ export async function runTicketSync(
       list = await reader.tickets(companyId, now);
     } catch (error) {
       run.count('tickets', 'failed');
-      run.note(`Tickets for company ${companyId}: ${error instanceof HttpError ? error.message : 'could not be read.'}`);
+      run.note(
+        `Tickets for company ${companyId}: ${error instanceof HttpError ? error.message : 'could not be read.'}`,
+      );
       // The key can't read tickets at all: the other companies would only sign in and fail again, and ConnectWise
       // locks a key that signs in too often. Nothing is deleted, since nothing was read.
       if (error instanceof HttpError && error.code === ACCESS_DENIED) {
@@ -340,6 +397,14 @@ export async function runTicketSync(
     if (!reader.partial.has(companyId)) read.push(companyId);
   }
   if (reader.note) run.note(reader.note);
+  if (reader.notesDenied)
+    run.note(
+      "Some tickets show ConnectWise's own number: ConnectWise refused to show ticket notes, where the portal ticket number is. Check the key's ticket permissions in API Access.",
+    );
+  else if (reader.noPortalId)
+    run.note(
+      `${reader.noPortalId} ticket${reader.noPortalId === 1 ? ' has' : 's have'} no portal ticket number yet: ConnectWise hasn't added the CW-System note naming it.`,
+    );
   if (linked.length && !seen.length && reader.lastList) run.note(`No tickets listed (${reader.lastList}).`);
 
   // Tickets the companies that were read no longer return: deleted, or closed more than 90 days ago.
@@ -355,13 +420,18 @@ export async function runTicketSync(
         ),
       );
   // Companies unlinked (or set to not sync) since: their tickets go.
-  await db
-    .delete(t)
-    .where(
-      and(
-        eq(t.orgId, orgId),
-        eq(t.source, TICKET_SOURCE),
-        ...(linked.length ? [notInArray(t.companyId, linked.map(([c]) => c))] : []),
-      ),
-    );
+  await db.delete(t).where(
+    and(
+      eq(t.orgId, orgId),
+      eq(t.source, TICKET_SOURCE),
+      ...(linked.length
+        ? [
+            notInArray(
+              t.companyId,
+              linked.map(([c]) => c),
+            ),
+          ]
+        : []),
+    ),
+  );
 }

@@ -16,7 +16,6 @@ import { actorFor } from '../identity/service.js';
 import type { StoredCwRmm } from '../services/settings.js';
 import { ImportRun } from '../services/importers/common.js';
 import {
-  COMPANY_LINK_SCOPES,
   companiesWithMapping,
   CwRmmClient,
   deviceLayout,
@@ -73,7 +72,7 @@ async function startSync(
       if (options.atlasLinks && publicUrl) {
         const writer = (scopes: string) =>
           CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, scopes);
-        const links = new CwLinkWriter(writer(LINK_SCOPES), writer(COMPANY_LINK_SCOPES));
+        const links = new CwLinkWriter(writer(LINK_SCOPES));
         await runLinkWriteBack(db, actor.orgId, links, run, saved.map, publicUrl);
       }
       await run.flush('done');
