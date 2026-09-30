@@ -50,6 +50,8 @@ export const users = pgTable(
     recoveryCodes: jsonb('recovery_codes').$type<string[]>().notNull().default([]),
     passkeyCount: integer('passkey_count').notNull().default(0),
     notifyDigest: boolean('notify_digest').notNull().default(true),
+    // Personal dashboard cards and hidden client sections. Validated by the API; missing keys use the defaults.
+    workspace: jsonb('workspace').notNull().default({}),
     // Microsoft Entra ID: the account's object ID once linked, and a match waiting for an administrator to confirm.
     entraOid: text('entra_oid'),
     entraPendingOid: text('entra_pending_oid'),
@@ -86,6 +88,13 @@ export const clients = pgTable(
     type: text('type').notNull().default('Customer'),
     status: text('status').notNull().default('active'),
     notes: text('notes').notNull().default(''),
+    // Quick notes are versioned: each change is kept in revisions as 'client_notes'.
+    notesVersion: integer('notes_version').notNull().default(0),
+    notesUpdatedBy: uuid('notes_updated_by').references(() => users.id, { onDelete: 'set null' }),
+    notesUpdatedByName: text('notes_updated_by_name'),
+    notesUpdatedAt: timestamp('notes_updated_at', { withTimezone: true }),
+    hours: text('hours').notNull().default(''),
+    maintenanceWindow: text('maintenance_window').notNull().default(''),
     // When true, technicians must give a reason before revealing a password for this client.
     requireRevealReason: boolean('require_reveal_reason').notNull().default(false),
     createdAt: created(),
@@ -760,6 +769,24 @@ export const passwordFavorites = pgTable(
     createdAt: created(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.passwordId] })],
+);
+
+// Clients, documents, and assets a person starred for their dashboard (per person, not shared). Rows whose item is
+// gone or no longer visible are skipped when listed.
+export const favorites = pgTable(
+  'favorites',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdAt: created(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.entityType, t.entityId] }),
+    check('favorites_entity_type_check', sql`${t.entityType} in ('client','document','asset')`),
+  ],
 );
 
 // ---------------------------------------------------------------- M3b: API, imports

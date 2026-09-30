@@ -52,6 +52,8 @@ export const createClientSchema = z.object({
   type: z.string().trim().max(80).default('Customer'),
   status: clientStatusSchema.default('active'),
   notes: z.string().max(5000).default(''),
+  hours: z.string().trim().max(300).default(''),
+  maintenanceWindow: z.string().trim().max(300).default(''),
   requireRevealReason: z.boolean().default(false),
 });
 export const updateClientSchema = patchOf(createClientSchema);

@@ -109,6 +109,24 @@ export function ClientForm({ client, open, onClose }: { client?: ClientSummary; 
             )}
           </Field>
         </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Hours of operation" error={error?.fields?.hours}>
+            {(p) => (
+              <Input {...p} name="hours" defaultValue={client?.hours} maxLength={300} placeholder="Mon–Fri 8–5" />
+            )}
+          </Field>
+          <Field label="Maintenance window" error={error?.fields?.maintenanceWindow}>
+            {(p) => (
+              <Input
+                {...p}
+                name="maintenanceWindow"
+                defaultValue={client?.maintenanceWindow}
+                maxLength={300}
+                placeholder="Sundays 10 PM – 2 AM"
+              />
+            )}
+          </Field>
+        </div>
         <Field
           label="Quick notes"
           help="Shown at the top of the client. Don't put passwords here."

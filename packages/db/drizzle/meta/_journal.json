@@ -162,6 +162,13 @@
       "when": 1790731015460,
       "tag": "0022_device_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790731255952,
+      "tag": "0023_workspace",
+      "breakpoints": true
     }
   ]
 }

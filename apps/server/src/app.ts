@@ -56,6 +56,7 @@ import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
 import { StatusService } from './services/status.js';
 import { registerUpdateRoutes } from './routes/updates.js';
+import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
@@ -575,6 +576,7 @@ export async function buildApp({
     keys: new VaultKeys(db, keys),
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
+  registerWorkspaceRoutes(app, { db, authed, vault });
 
   await registerDeviceRoutes(app, {
     db,

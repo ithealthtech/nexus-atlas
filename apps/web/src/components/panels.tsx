@@ -9,7 +9,16 @@ import { api, getCsrf } from '@/lib/api';
 import { AppLink } from '@/components/AppLink';
 import { cn } from '@/lib/cn';
 import { formatDateTime, relativeTime } from '@/lib/format';
-import { uploadFile, useActivity, useAttachments, useRelations, useRevisions, useSearch } from '@/lib/queries';
+import {
+  uploadFile,
+  useActivity,
+  useAttachments,
+  useRelations,
+  useRevisions,
+  useSearch,
+  versionedPath,
+  type VersionedKind,
+} from '@/lib/queries';
 
 // ---------------------------------------------------------------- related items
 export function RelatedPanel({
@@ -290,7 +299,7 @@ export function RevisionsPanel({
   toText,
   onRestored,
 }: {
-  kind: 'assets' | 'documents';
+  kind: VersionedKind;
   id: string;
   currentVersion: number;
   canEdit: boolean;
@@ -348,7 +357,7 @@ function DiffDialog({
   onClose,
   onRestored,
 }: {
-  kind: 'assets' | 'documents';
+  kind: VersionedKind;
   id: string;
   revision: RevisionView;
   current: number;
@@ -362,12 +371,12 @@ function DiffDialog({
   const client = useQueryClient();
   const older = useQuery({
     queryKey: ['revision', kind, id, revision.version],
-    queryFn: () => api(`/${kind}/${id}/revisions/${revision.version}`),
+    queryFn: () => api(`${versionedPath(kind, id)}/revisions/${revision.version}`),
     staleTime: Infinity,
   });
   const latest = useQuery({
     queryKey: ['revision', kind, id, current],
-    queryFn: () => api(`/${kind}/${id}/revisions/${current}`),
+    queryFn: () => api(`${versionedPath(kind, id)}/revisions/${current}`),
     staleTime: Infinity,
   });
   const texts = older.data && latest.data ? ([toText(older.data), toText(latest.data)] as const) : null;
@@ -375,7 +384,7 @@ function DiffDialog({
   const restore = async () => {
     setBusy(true);
     try {
-      await api(`/${kind}/${id}/restore`, {
+      await api(`${versionedPath(kind, id)}/restore`, {
         method: 'POST',
         body: { version: revision.version, expectedVersion: current },
       });

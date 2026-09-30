@@ -8,5 +8,6 @@ export * from './admin.js';
 export * from './data.js';
 export * from './ops.js';
 export * from './checklists.js';
+export * from './workspace.js';
 export * from './devices.js';
 export * from './rotation.js';

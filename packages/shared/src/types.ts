@@ -24,7 +24,15 @@ export interface ClientSummary {
   name: string;
   type: string;
   status: 'active' | 'prospect' | 'inactive';
+  /** Quick notes, shown at the top of the client workspace. */
   notes: string;
+  /** Starts at 0 (never edited); each change to the notes adds one. */
+  notesVersion: number;
+  notesUpdatedAt: string | null;
+  notesUpdatedByName: string | null;
+  /** Hours of operation and maintenance window, as free text ("Mon–Fri 8–5", "Sundays 22:00–02:00"). */
+  hours: string;
+  maintenanceWindow: string;
   requireRevealReason: boolean;
   access: AccessLevel;
   createdAt: string;

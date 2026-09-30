@@ -17,10 +17,14 @@ import type {
   RevisionView,
   SearchResult,
 } from '@atlas/shared';
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AccountSecurityView,
+  ClientCounts,
   ClientSummary,
+  FavoriteItem,
+  WorkspacePrefs,
   ExpirationItem,
   GroupView,
   NotificationSettings,
@@ -60,6 +64,34 @@ export const useNotificationSettings = () =>
     queryKey: ['settings', 'notifications'],
     queryFn: () => api<NotificationSettings>('/settings/notifications'),
   });
+
+// ---------- personal workspace ----------
+export const useFavorites = (enabled = true) =>
+  useQuery({ queryKey: ['favorites'], queryFn: () => api<FavoriteItem[]>('/favorites'), enabled });
+export const useWorkspacePrefs = () =>
+  useQuery({ queryKey: ['workspace'], queryFn: () => api<WorkspacePrefs>('/account/workspace'), staleTime: 60_000 });
+// Lists whose changes move a client's section counts.
+const COUNTED = new Set(['assets', 'documents', 'passwords', 'contacts', 'locations', 'checklists']);
+export function useClientCounts(clientId: string) {
+  const client = useQueryClient();
+  // Pages refresh their own lists after a change; the counts follow whenever one of those lists is invalidated.
+  useEffect(
+    () =>
+      client.getQueryCache().subscribe((event) => {
+        if (
+          event.type === 'updated' &&
+          event.action.type === 'invalidate' &&
+          COUNTED.has(String(event.query.queryKey[0]))
+        )
+          void client.invalidateQueries({ queryKey: ['client-counts', clientId] });
+      }),
+    [client, clientId],
+  );
+  return useQuery({
+    queryKey: ['client-counts', clientId],
+    queryFn: () => api<ClientCounts>(`/workspace/clients/${clientId}/counts`),
+  });
+}
 
 /** A mutation that refreshes the listed queries when it succeeds. */
 export function useSave<TBody, TResult>(send: (body: TBody) => Promise<TResult>, invalidate: string[][]) {
@@ -147,10 +179,14 @@ export const useAttachments = (type: ItemType, id: string) =>
     queryKey: ['attachments', type, id],
     queryFn: () => api<AttachmentView[]>(`/items/${type}/${id}/attachments`),
   });
-export const useRevisions = (type: 'assets' | 'documents', id: string, enabled = true) =>
+/** Versioned content: assets, documents, and each client's quick notes. */
+export type VersionedKind = 'assets' | 'documents' | 'client-notes';
+export const versionedPath = (kind: VersionedKind, id: string) =>
+  kind === 'client-notes' ? `/clients/${id}/notes` : `/${kind}/${id}`;
+export const useRevisions = (type: VersionedKind, id: string, enabled = true) =>
   useQuery({
     queryKey: ['revisions', type, id],
-    queryFn: () => api<RevisionView[]>(`/${type}/${id}/revisions`),
+    queryFn: () => api<RevisionView[]>(`${versionedPath(type, id)}/revisions`),
     enabled,
   });
 export const useActivity = (filter: { client?: string; item?: string; limit?: string }) =>
