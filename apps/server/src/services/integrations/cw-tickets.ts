@@ -57,13 +57,14 @@ const clean = (s: string, max: number) => s.replace(/[\u0000-\u0008\u000b-\u001f
 
 const CLOSED_STATUS = /^(closed|completed?|resolved|cancell?ed)\b/i;
 const numeric = (s: string) => /^\d{1,18}$/.test(s);
-/** A ticket number as the web app's route takes it: digits, or two runs of digits with a dot ("133023.1533"). */
-const ticketNumber = (s: string) => /^\d{1,18}(\.\d{1,18})?$/.test(s);
 
-/** A browser link to a platform ticket, from the route the web app uses (keyed by ticket and company number). */
+/**
+ * A browser link to a platform ticket, as the web app's own ticket links read (keyed by the plain ticket ID the
+ * portal shows, like 5535, and the company number). Dotted numbers ("133023.1533") are not portal IDs: no link.
+ */
 export function ticketLink(web: string | undefined, number: string, companyNumber: string) {
-  if (!web || !ticketNumber(number) || !numeric(companyNumber)) return null;
-  return `${web}/#??asio_route=/service-tickets/bms-ticket-overview?ticketId=${number}&companyId=${companyNumber}&projectIssue=false&tabId=unified-ticket-detail-screen??`;
+  if (!web || !numeric(number) || !numeric(companyNumber)) return null;
+  return `${web}/QADashB/QuickAccess/NewDesktops/service-tickets?SSECTION=10020&STAB=10020#??asio_route=/service-tickets/bms-ticket-overview?ticketId=${number}&companyId=${companyNumber}&projectIssue=false&tabId=unified-ticket-detail-screen??`;
 }
 
 /**
@@ -89,7 +90,9 @@ export function mapTicket(
     closedStatuses.has(text(t, 'status.id', 'statusId')) ||
     /^closed$/i.test(category) ||
     (typeof flag === 'boolean' ? flag : !!closedAt || CLOSED_STATUS.test(status));
-  const number = clean(text(t, 'number', 'ticketNumber', 'displayId') || id, 100);
+  // The portal's ticket ID is a plain number; prefer whichever field carries one.
+  const numbers = ['number', 'nocTicketId', 'ticketNumber', 'displayId'].map((k) => text(t, k));
+  const number = clean(numbers.find(numeric) ?? (numbers.find(Boolean) || id), 100);
   const given = text(t, 'url', 'link', 'webUrl', 'ticketUrl', '_links.self.href');
   // Only a web address; anything else (a script URL, say) is dropped.
   const url = /^https:\/\/[^\s"'<>]+$/i.test(given) ? given : (link?.(number) ?? null);
