@@ -2,6 +2,9 @@
 // State lives in memory: reloading the page starts over with the sample data.
 import {
   DEFAULT_BRANDING,
+  DEFAULT_VAULT_POLICY,
+  type SiemSettingsView,
+  type VaultPolicy,
   LEVEL_INFO,
   ROLE_INFO,
   guessPasswordCategory,
@@ -563,6 +566,7 @@ const passwordView = (p: (typeof passwords)[0]) => ({
   updatedAt: p.updatedAt,
   updatedByName: p.updatedByName,
   requireReason: !!db.clients.find((c) => c.id === p.clientId)?.requireRevealReason,
+  canReveal: true,
   ...(() => {
     const chosen = (p as { category?: PasswordCategory | null }).category ?? null;
     return {
@@ -618,6 +622,21 @@ let smtp = {
   hasPassword: true,
   fromAddress: 'atlas@itdoneright.demo',
   fromName: 'IT Done Right',
+};
+let vaultPolicy: VaultPolicy = DEFAULT_VAULT_POLICY;
+let siem: SiemSettingsView = {
+  enabled: false,
+  method: 'webhook',
+  url: '',
+  hasSecret: false,
+  host: '',
+  port: 6514,
+  transport: 'tls',
+  security: true,
+  vault: true,
+  lastSentAt: null,
+  lastError: null,
+  pending: 0,
 };
 let notifications = { alertDays: [30, 14, 7], weeklyDigest: true, auditRetentionDays: 365 as number | null };
 const passkeys = [
@@ -1606,6 +1625,29 @@ on('PUT', '/settings/email', (_m, b) => {
 });
 on('POST', '/settings/email/test', () => notInDemo('Sending email'));
 on('POST', '/settings/email/permissions', () => notInDemo('Checking Microsoft 365 permissions'));
+on('GET', '/vault/policy', () => vaultPolicy);
+on('GET', '/settings/vault-policy', () => ({ ...vaultPolicy, mfa: { requiredForStaff: true, withoutMfa: [] } }));
+on('PUT', '/settings/vault-policy', (_m, b) => {
+  vaultPolicy = { ...vaultPolicy, ...(b as VaultPolicy) };
+  event('Vault policies changed');
+  return { ...vaultPolicy, mfa: { requiredForStaff: true, withoutMfa: [] } };
+});
+on('GET', '/emergency-access', () => ({
+  canManage: true,
+  me: { trusted: false, waitHours: null },
+  contacts: [],
+  requests: [],
+}));
+on('PUT', '/emergency-access/contacts', () => notInDemo('Emergency access'));
+on('GET', '/settings/siem', () => siem);
+on('PUT', '/settings/siem', (_m, b) => {
+  const { secret, ...rest } = b as Partial<SiemSettingsView> & { secret?: string };
+  siem = { ...siem, ...rest, hasSecret: siem.hasSecret || !!secret };
+  event('SIEM streaming changed', siem.enabled ? siem.method : 'Off');
+  return siem;
+});
+on('POST', '/settings/siem/test', () => notInDemo('Sending to a SIEM'));
+on('POST', '/settings/siem/send', () => notInDemo('Sending to a SIEM'));
 on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));

@@ -44,6 +44,7 @@ import {
   type PasswordView,
   type RelationView,
   type UserView,
+  type VaultPolicy,
 } from '@atlas/shared';
 import { PasswordIcon, hostOf } from '@/lib/password-categories';
 import {
@@ -70,15 +71,16 @@ import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
-import { useAssets, useClient, useClients, useUsers, useGroups } from '@/lib/queries';
+import { useAssets, useClient, useUsers, useGroups } from '@/lib/queries';
 import {
   DEFAULT_GENERATOR,
-  GENERATOR_PRESETS,
+  applyGeneratorPolicy,
   copySecret,
   createShareLink,
   generatePassword,
   loadGeneratorOptions,
   presetFor,
+  presetsFor,
   saveGeneratorOptions,
   useAskReason,
   usePassword,
@@ -88,6 +90,7 @@ import {
   usePasswords,
   useReveal,
   useShares,
+  useVaultPolicy,
   type GeneratorOptions,
 } from '@/lib/vault';
 
@@ -117,17 +120,29 @@ function StrengthMeter({ value }: { value: string }) {
 }
 
 function Generator({ onUse }: { onUse: (value: string) => void }) {
-  const [options, setOptions] = useState<GeneratorOptions>(loadGeneratorOptions);
+  const { data } = useVaultPolicy();
+  // Starts again if the policy changes while it's open.
+  return data ? (
+    <PolicyGenerator key={JSON.stringify(data.generator)} policy={data.generator} onUse={onUse} />
+  ) : (
+    <Skeleton className="h-36" />
+  );
+}
+
+function PolicyGenerator({ policy, onUse }: { policy: VaultPolicy['generator']; onUse: (value: string) => void }) {
+  const [options, setOptions] = useState<GeneratorOptions>(() => applyGeneratorPolicy(loadGeneratorOptions(), policy));
   const [value, setValue] = useState(() => generatePassword(options));
   const update = (patch: Partial<GeneratorOptions>) => {
     const next = { ...options, ...patch };
     // Switching into PIN mode starts from a PIN-sized length; leaving it restores a sensible one.
     if (patch.mode === 'pin' && options.mode !== 'pin') next.length = 6;
     if (patch.mode && patch.mode !== 'pin' && options.mode === 'pin') next.length = DEFAULT_GENERATOR.length;
-    setOptions(next);
-    setValue(generatePassword(next));
+    const allowed = applyGeneratorPolicy(next, policy);
+    setOptions(allowed);
+    setValue(generatePassword(allowed));
   };
-  const preset = presetFor(options);
+  const presets = presetsFor(policy);
+  const preset = presetFor(options, presets);
   return (
     <div className="space-y-3 rounded-xl border border-border bg-surface-2 p-4">
       <div className="flex items-center gap-2">
@@ -156,7 +171,7 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
         </Button>
       </div>
       <div role="group" aria-label="Presets" className="flex flex-wrap gap-1.5">
-        {GENERATOR_PRESETS.map((p) => (
+        {presets.map((p) => (
           <button
             key={p.id}
             type="button"
@@ -174,17 +189,19 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
         <div role="group" aria-label="Generator type" className="flex gap-1 rounded-lg bg-surface-3 p-1">
-          {(['characters', 'passphrase', 'pin'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={options.mode === mode}
-              onClick={() => update({ mode })}
-              className="rounded-md px-2.5 py-1 text-xs font-medium capitalize aria-pressed:bg-surface aria-pressed:shadow-sm"
-            >
-              {mode === 'pin' ? 'PIN' : mode}
-            </button>
-          ))}
+          {(['characters', 'passphrase', 'pin'] as const)
+            .filter((mode) => mode !== 'pin' || policy.allowPins)
+            .map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={options.mode === mode}
+                onClick={() => update({ mode })}
+                className="rounded-md px-2.5 py-1 text-xs font-medium capitalize aria-pressed:bg-surface aria-pressed:shadow-sm"
+              >
+                {mode === 'pin' ? 'PIN' : mode}
+              </button>
+            ))}
         </div>
         {options.mode === 'pin' ? (
           <label className="flex items-center gap-2">
@@ -205,7 +222,7 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
               Length
               <input
                 type="range"
-                min={12}
+                min={policy.minLength}
                 max={64}
                 value={options.length}
                 onChange={(e) => update({ length: Number(e.target.value) })}
@@ -213,10 +230,16 @@ function Generator({ onUse }: { onUse: (value: string) => void }) {
               />
               <span className="w-6 tabular-nums">{options.length}</span>
             </label>
-            <Checkbox label="Numbers" checked={options.digits} onChange={(e) => update({ digits: e.target.checked })} />
+            <Checkbox
+              label="Numbers"
+              checked={options.digits}
+              disabled={policy.requireDigits}
+              onChange={(e) => update({ digits: e.target.checked })}
+            />
             <Checkbox
               label="Symbols"
               checked={options.symbols}
+              disabled={policy.requireSymbols}
               onChange={(e) => update({ symbols: e.target.checked })}
             />
           </>
@@ -913,17 +936,21 @@ function QuickActions({ item }: { item: PasswordView }) {
       ) : (
         <Slot />
       )}
-      <QuickAction
-        label={`Copy ${bitlocker ? 'recovery key' : 'password'} for ${item.name}`}
-        icon={Copy}
-        action={async () => {
-          const result = await reveal(item, { copy: true });
-          if (!result) return null;
-          await copySecret(result.value);
-          return `${bitlocker ? 'Recovery key' : 'Password'} copied. The clipboard clears in 30 seconds.`;
-        }}
-      />
-      {item.hasTotp ? (
+      {item.canReveal ? (
+        <QuickAction
+          label={`Copy ${bitlocker ? 'recovery key' : 'password'} for ${item.name}`}
+          icon={Copy}
+          action={async () => {
+            const result = await reveal(item, { copy: true });
+            if (!result) return null;
+            await copySecret(result.value);
+            return `${bitlocker ? 'Recovery key' : 'Password'} copied. The clipboard clears in 30 seconds.`;
+          }}
+        />
+      ) : (
+        <Slot />
+      )}
+      {item.hasTotp && item.canReveal ? (
         <QuickAction
           label={`Copy one-time code for ${item.name}`}
           icon={Timer}
@@ -1699,15 +1726,17 @@ function SecretRow({
           {value ?? '••••••••••••'}
         </p>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={value ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-        onClick={() => (value ? setValue(null) : run(false))}
-      >
-        {value ? <EyeOff /> : <Eye />}
-      </Button>
-      {field !== 'notes' && (
+      {item.canReveal && (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={value ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          onClick={() => (value ? setValue(null) : run(false))}
+        >
+          {value ? <EyeOff /> : <Eye />}
+        </Button>
+      )}
+      {item.canReveal && field !== 'notes' && (
         <Button variant="ghost" size="icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => run(true)}>
           <Copy />
         </Button>
@@ -1759,11 +1788,11 @@ function TotpRow({ item }: { item: PasswordView }) {
         >
           <Copy />
         </Button>
-      ) : (
+      ) : item.canReveal ? (
         <Button variant="ghost" size="sm" onClick={show}>
           <Eye /> Show code
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -2107,7 +2136,6 @@ export function PasswordDetail() {
   const actor = useActor();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const clients = useClients();
   const [editing, setEditing] = useState(false);
   if (isLoading) return <Skeleton className="h-72" />;
   if (error || !item)
@@ -2125,7 +2153,6 @@ export function PasswordDetail() {
     await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ['passwords'] })]);
     toast(item.archived ? 'Restored.' : 'Archived. You can restore it from the archived list.');
   };
-  const requireReason = clients.data?.find((c) => c.id === item.clientId)?.requireRevealReason;
   return (
     <>
       <AppLink
@@ -2203,9 +2230,11 @@ export function PasswordDetail() {
             <CardHeader
               title="Credentials"
               description={
-                requireReason
-                  ? 'This client asks for a reason each time a secret is viewed.'
-                  : 'Views and copies are recorded in the access history.'
+                !item.canReveal
+                  ? 'Your organization doesn’t let read-only accounts reveal passwords.'
+                  : item.requireReason
+                    ? 'A reason is asked for each time a secret is viewed.'
+                    : 'Views and copies are recorded in the access history.'
               }
             />
             <div className="divide-y divide-border">

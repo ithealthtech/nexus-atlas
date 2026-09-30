@@ -12,6 +12,7 @@ import {
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import type { AuditService } from '../services/audit.js';
+import type { EmergencyAccessService } from '../services/emergency.js';
 import { ExpirationService } from '../services/expirations.js';
 import { GroupService } from '../services/groups.js';
 import { graphPermissions, type MailService } from '../services/mail.js';
@@ -37,6 +38,7 @@ export function registerAdminRoutes(
     mail: MailService;
     audit: AuditService;
     vault: VaultService;
+    emergency: EmergencyAccessService;
     publicOrigin: string;
     sendHour: number;
     /** Replaces the Microsoft 365 permission check (tests use a fake Microsoft). */
@@ -295,6 +297,7 @@ export function registerAdminRoutes(
     settings,
     expirations,
     audit,
+    emergency: deps.emergency,
     health: deps.health,
     publicOrigin: deps.publicOrigin,
     sendHour: deps.sendHour,

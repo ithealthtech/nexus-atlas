@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
   brandingSchema,
@@ -36,6 +36,11 @@ import {
   type SmtpPreset,
   type SmtpSecurity,
   type SmtpSettingsView,
+  siemSettingsSchema,
+  vaultPolicySchema,
+  type SiemMethod,
+  type SyslogTransport,
+  type VaultPolicy,
 } from '@atlas/shared';
 import { open, seal, type KeyProvider } from '../crypto/keys.js';
 import { HttpError } from '../errors.js';
@@ -79,6 +84,28 @@ interface StoredSettings {
   warranty?: WarrantySettings;
   assetStats?: AssetStatsSettings;
   m365?: StoredM365;
+  vaultPolicy?: VaultPolicy;
+  siem?: StoredSiem;
+}
+/** SIEM streaming as stored: the webhook signing secret is sealed with the master key. */
+export interface StoredSiem {
+  enabled: boolean;
+  method: SiemMethod;
+  url: string;
+  secretSealed: string | null;
+  host: string;
+  port: number;
+  transport: SyslogTransport;
+  security: boolean;
+  vault: boolean;
+  /** The last row of each log that was delivered; streaming continues after it. */
+  cursor: { security: number; vault: number };
+  lastSentAt: string | null;
+  lastError: string | null;
+}
+/** SIEM settings ready to send with (secret decrypted). */
+export interface SiemConfig extends Omit<StoredSiem, 'secretSealed'> {
+  secret: string;
 }
 export interface StoredEntra {
   tenantId: string;
@@ -139,6 +166,7 @@ const entraAad = (orgId: string) => `org|${orgId}|entra`;
 const cwAad = (orgId: string) => `org|${orgId}|cw-rmm`;
 const m365Aad = (orgId: string) => `org|${orgId}|m365`;
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
+const siemAad = (orgId: string) => `org|${orgId}|siem`;
 const graphAad = (orgId: string) => `org|${orgId}|graph`;
 const DEFAULT_SMTP: StoredSmtp = {
   enabled: false,
@@ -211,6 +239,8 @@ export class SettingsService {
         await this.put(id, 'm365', { ...stored.m365, secretSealed: reseal(stored.m365.secretSealed, m365Aad(id))! });
       if (stored.cwRmm)
         await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
+      if (stored.siem?.secretSealed)
+        await this.put(id, 'siem', { ...stored.siem, secretSealed: reseal(stored.siem.secretSealed, siemAad(id)) });
     }
     return count;
   }
@@ -563,6 +593,76 @@ export class SettingsService {
         .update(schema.orgs)
         .set({ settings: sql`${schema.orgs.settings} - 'erase'` })
         .where(eq(schema.orgs.id, orgId));
+  }
+
+  async vaultPolicy(orgId: string): Promise<VaultPolicy> {
+    return vaultPolicySchema.parse((await this.load(orgId)).vaultPolicy ?? {});
+  }
+
+  async saveVaultPolicy(orgId: string, input: unknown): Promise<VaultPolicy> {
+    const body = vaultPolicySchema.parse(input);
+    await this.put(orgId, 'vaultPolicy', body);
+    return body;
+  }
+
+  /** SIEM streaming as stored, or null when it was never set up. */
+  async siem(orgId: string): Promise<StoredSiem | null> {
+    return (await this.load(orgId)).siem ?? null;
+  }
+
+  async siemConfig(orgId: string): Promise<SiemConfig | null> {
+    const stored = await this.siem(orgId);
+    if (!stored) return null;
+    const { secretSealed, ...rest } = stored;
+    return { ...rest, secret: secretSealed ? open(this.keys, secretSealed, siemAad(orgId)) : '' };
+  }
+
+  /**
+   * Saves the SIEM settings. Streaming starts from the newest rows when it is first turned on (or a log is added), so
+   * a new SIEM gets what happens from now on rather than the whole history; `start` gives those rows.
+   */
+  async saveSiem(orgId: string, input: unknown, start: { security: number; vault: number }): Promise<StoredSiem> {
+    const body = siemSettingsSchema.parse(input);
+    const current = await this.siem(orgId);
+    const secretSealed =
+      body.secret === undefined || body.secret === null
+        ? (current?.secretSealed ?? null)
+        : body.secret === ''
+          ? null
+          : seal(this.keys, body.secret, siemAad(orgId));
+    const streaming = (log: 'security' | 'vault') => !!current?.enabled && current[log];
+    const { secret: _secret, ...rest } = body;
+    const saved: StoredSiem = {
+      ...rest,
+      secretSealed,
+      cursor: {
+        security: streaming('security') ? current!.cursor.security : start.security,
+        vault: streaming('vault') ? current!.cursor.vault : start.vault,
+      },
+      lastSentAt: current?.lastSentAt ?? null,
+      lastError: null,
+    };
+    await this.put(orgId, 'siem', saved);
+    return saved;
+  }
+
+  /**
+   * Records delivery progress without replacing the rest, so an administrator's save in the meantime isn't undone.
+   * A cursor only moves forward.
+   */
+  async patchSiem(orgId: string, patch: Partial<Pick<StoredSiem, 'cursor' | 'lastSentAt' | 'lastError'>>) {
+    const s = schema.orgs.settings;
+    const { cursor, ...rest } = patch;
+    let siem = sql`(${s} -> 'siem') || ${JSON.stringify(rest)}::jsonb`;
+    if (cursor) {
+      const ahead = (log: 'security' | 'vault') =>
+        sql`greatest(coalesce((${s} #>> ${`{siem,cursor,${log}}`})::bigint, 0), ${cursor[log]}::bigint)`;
+      siem = sql`${siem} || jsonb_build_object('cursor', jsonb_build_object('security', ${ahead('security')}, 'vault', ${ahead('vault')}))`;
+    }
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${s} || jsonb_build_object('siem', ${siem})` })
+      .where(and(eq(schema.orgs.id, orgId), sql`${s} ? 'siem'`));
   }
 
   async auditCheckpoint(orgId: string): Promise<AuditCheckpoint | undefined> {

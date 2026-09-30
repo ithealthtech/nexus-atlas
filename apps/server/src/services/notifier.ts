@@ -23,7 +23,7 @@ export function isoWeek(date: Date) {
 
 /**
  * Background work, run every few minutes: expiry alerts and the weekly digest by email, audit checkpoints,
- * log retention, and cleanup of expired sign-in records. A database lock keeps two servers from both sending.
+ * log retention, emergency access notices, and cleanup of expired sign-in records. A database lock keeps two servers from both sending.
  */
 export class Notifier {
   private timer?: NodeJS.Timeout;
@@ -38,6 +38,8 @@ export class Notifier {
       settings: SettingsService;
       expirations: ExpirationService;
       audit: AuditService;
+      /** Announces emergency access whose waiting period has ended. */
+      emergency?: { announceStarts(orgId: string, now?: Date): Promise<number> };
       /** Daily breach checks for stored passwords. */
       health?: { nightly(orgId: string): Promise<void> };
       publicOrigin: string;
@@ -66,6 +68,7 @@ export class Notifier {
         const orgs = await this.db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs);
         for (const org of orgs) {
           await this.deps.audit.applyRetention(org.id);
+          await this.deps.emergency?.announceStarts(org.id, now).catch(() => undefined);
           await this.deps.health?.nightly(org.id).catch(() => undefined);
           await this.deps.audit.checkpoint(org.id);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);

@@ -169,6 +169,13 @@
       "when": 1790731255952,
       "tag": "0023_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790731422876,
+      "tag": "0024_vault_policies",
+      "breakpoints": true
     }
   ]
 }

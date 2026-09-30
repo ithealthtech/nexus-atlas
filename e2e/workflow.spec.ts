@@ -828,6 +828,7 @@ test.describe.serial('accessibility sweep', () => {
       '/admin/groups',
       '/admin/layouts',
       '/admin/security',
+      '/admin/vault-policies',
       '/admin/data',
       '/admin/rotation',
       '/admin/status',
@@ -847,7 +848,14 @@ test.describe.serial('accessibility sweep', () => {
     }
     await page.evaluate(() => localStorage.removeItem('atlas-theme'));
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const path of ['/', client, `${client}/passwords`, '/admin/status', '/admin/settings']) {
+    for (const path of [
+      '/',
+      client,
+      `${client}/passwords`,
+      '/admin/status',
+      '/admin/settings',
+      '/admin/vault-policies',
+    ]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), path).toBeLessThanOrEqual(0);

@@ -221,6 +221,8 @@ export interface PasswordView {
   updatedAt: string;
   updatedByName: string | null;
   requireReason: boolean;
+  /** False when the organization's policy keeps the viewer from revealing or copying (read-only roles). */
+  canReveal: boolean;
   /** What the login is for: the one someone chose, or Atlas's guess (categoryGuessed). */
   category: PasswordCategory;
   categoryGuessed: boolean;

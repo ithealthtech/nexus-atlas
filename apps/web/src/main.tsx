@@ -36,6 +36,7 @@ import { Theme } from '@/pages/Theme';
 import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
+import { VaultPolicies } from '@/pages/VaultPolicies';
 import { Account } from '@/pages/Account';
 import { ConnectApp } from '@/pages/ConnectApp';
 import { NotFound } from '@/pages/NotFound';
@@ -235,6 +236,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/users', component: adminOnly(Users) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/layouts', component: adminOnly(Layouts) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/vault-policies', component: adminOnly(VaultPolicies) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/groups', component: adminOnly(Groups) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),

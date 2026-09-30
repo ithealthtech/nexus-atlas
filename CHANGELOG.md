@@ -6,6 +6,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Vault policies:** a new Administration → Vault policies page. It shows that MFA is required for staff and lists anyone who can reach passwords without it. The owner can set the password generator's minimum length and required numbers or symbols (and turn off PINs), require a reason for every reveal in every client, stop read-only accounts from revealing passwords, and make restricted passwords available only to the people listed on them, administrators included. (#35)
+- **Emergency access:** the owner names trusted administrators, each with a waiting period. A trusted administrator can request access to every restricted password; the owner is emailed at once and can deny it during the wait or approve it sooner. Access lasts 24 hours, every step is in the security log, and each password used is marked "Emergency access" in its access history. (#35)
+- **SIEM streaming:** send the security log and the password access log to a SIEM as they happen, by HTTPS webhook (JSON, optionally HMAC-signed) or syslog (RFC 5424 over TLS, TCP, or UDP). Failed sends are retried from where they stopped. (#35)
 - **Browser extension for Edge and Chrome:** suggests the logins saved for the site you're on and fills them, with a quick search to copy a password, username, or one-time code for any login you can use. It signs in through Atlas: you approve the browser in Atlas after checking a code, and the extension gets a session tied to a key that never leaves the browser. It stores no passwords and asks Atlas each time. Fills and copies are recorded like reveals, and clients that require a reason ask for one. Signed-in browsers are listed on your account page, end after 7 days unused or 30 days in total, and are signed out with everything else when your password changes or an administrator signs you out. Build it with `npm run build:extension`. (#28)
 
 ### Fixed

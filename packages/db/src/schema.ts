@@ -1147,3 +1147,48 @@ export const rotationRuns = pgTable(
     ),
   ],
 );
+
+// ---------------------------------------------------------------- vault policies: emergency access
+
+// Administrators the owner trusts to ask for emergency access to restricted passwords, and how long the owner has to
+// deny each one's request before access starts.
+export const emergencyContacts = pgTable(
+  'emergency_contacts',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    waitHours: integer('wait_hours').notNull(),
+    addedByName: text('added_by_name').notNull(),
+    createdAt: created(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.userId] }), check('emergency_contacts_wait', sql`${t.waitHours} > 0`)],
+);
+
+// Each request for emergency access. Its state follows from the timestamps: pending until available_at (or an early
+// approval), then active until ends_at, unless it was denied or ended first.
+export const emergencyRequests = pgTable(
+  'emergency_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    userName: text('user_name').notNull(),
+    reason: text('reason').notNull(),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    deniedAt: timestamp('denied_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    decidedByName: text('decided_by_name'),
+    // Set once the start of access has been logged and announced, so it happens once.
+    startNoticeAt: timestamp('start_notice_at', { withTimezone: true }),
+  },
+  (t) => [index('emergency_requests_org').on(t.orgId, t.requestedAt), index('emergency_requests_user').on(t.userId)],
+);
