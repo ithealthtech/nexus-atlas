@@ -242,13 +242,16 @@ export class CwTicketReader {
       try {
         notes = listOf(await this.client.get(notesPath(t.id)));
       } catch (error) {
+        // A key that can't read notes can't read any: stop asking, and keep the tickets as listed.
+        if (error instanceof HttpError && error.code === ACCESS_DENIED) return;
         if (error instanceof HttpError) continue;
         throw error;
       }
-      const id = notes.map((n) => portalIdIn(text(n, 'detail', 'text', 'note'))).find(Boolean);
+      const id = notes.map((n) => portalIdIn(text(n, 'detail', 'text', 'note'), t.number)).find(Boolean);
       if (!id) continue;
       t.number = id;
-      t.url ??= link(id);
+      // The portal's link, so the number and the link name the same ticket.
+      t.url = link(id) ?? t.url;
     }
   }
 
@@ -280,9 +283,16 @@ export class CwTicketReader {
 /** Dotted tickets per company whose notes are read for the portal's ID, each sync. */
 const MAX_PORTAL_LOOKUPS = 200;
 
-/** The portal ticket ID a CW-System note names: "Connectwise ticket id 5283 is created to match ASIO ticket id ...". */
-export function portalIdIn(note: string): string | null {
-  return /\bconnect\s*wise\s+ticket\s+id\s*#?\s*(\d{1,18})\s+is\s+created\s+to\s+match\b/i.exec(note)?.[1] ?? null;
+/**
+ * The portal ticket ID a CW-System note names for this very ticket: "Connectwise ticket id 5283 is created to match
+ * ASIO ticket id 133023.1670". A note naming another ticket's number gives nothing.
+ */
+export function portalIdIn(note: string, asioNumber: string): string | null {
+  const m =
+    /\bconnect\s*wise\s+ticket\s+id\s*#?\s*(\d{1,18})\s+is\s+created\s+to\s+match\s+asio\s+ticket\s+id\s*#?\s*([\d.]+?)\.?(?:\s|$)/i.exec(
+      note,
+    );
+  return m && m[2] === asioNumber ? (m[1] ?? null) : null;
 }
 
 const notesPath = (ticketId: string) =>

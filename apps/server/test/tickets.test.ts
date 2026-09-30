@@ -299,6 +299,13 @@ describe('ticket sync and dashboard', () => {
         status: { id: 's-new', name: 'New' },
         createdAt: ago(3),
       },
+      {
+        id: 't-a3',
+        number: '133023.1672',
+        summary: 'Mismatched note',
+        status: { id: 's-new', name: 'New' },
+        createdAt: ago(4),
+      },
     );
     await connect(tickets);
     platform.notes.set('t-a1', [
@@ -308,6 +315,10 @@ describe('ticket sync and dashboard', () => {
         createdBy: 'CW-System',
       },
     ]);
+    // A note naming another ticket's number (pasted in, say) is not this ticket's portal ID.
+    platform.notes.set('t-a3', [
+      { id: 'n-2', detail: 'Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670.' },
+    ]);
     expect((await link()).status).toBe(200);
     expect((await sync()).status).toBe('done');
     const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
@@ -316,6 +327,7 @@ describe('ticket sync and dashboard', () => {
       number: '5283',
       url: expect.stringContaining('ticketId=5283&companyId=19304'),
     });
+    expect(shown('Mismatched note')).toMatchObject({ number: '133023.1672', url: null });
     expect(shown('No note yet')).toMatchObject({ number: '133023.1671', url: null });
   });
 
