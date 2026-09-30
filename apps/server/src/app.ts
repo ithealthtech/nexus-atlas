@@ -808,9 +808,12 @@ export async function buildApp({
       immutable: false,
     });
     app.get('/assets/*', async (req, reply) => reply.callNotFound());
-    // Client-side routes all load index.html.
+    // Client-side routes all load index.html. Under /assets/ only a missing file (a name with an extension) is a
+    // 404: /assets/<id> is also the web app's asset page, and has to load when opened from a link or reloaded.
     app.setNotFoundHandler(async (req, reply) => {
-      if (req.method !== 'GET' || req.url.startsWith('/api/') || req.url.startsWith('/assets/'))
+      const path = req.url.split('?')[0]!;
+      const missingFile = path.startsWith('/assets/') && /\.[a-z0-9]+$/i.test(path);
+      if (req.method !== 'GET' || path.startsWith('/api/') || missingFile)
         return reply.status(404).send({ error: 'Not found.' });
       return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
     });
