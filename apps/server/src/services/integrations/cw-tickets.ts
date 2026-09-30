@@ -221,6 +221,12 @@ export class CwTicketReader {
     const path = `${COMPANIES}/${encodeURIComponent(companyId)}`;
     const record = await read(path);
     const own = record && typeof record === 'object' && !Array.isArray(record) ? companyIds(record as Json) : null;
+    // The company's own record wins; its sites are asked only when it gives no number.
+    const fromRecord = own ? companyNumber(own, this.portalProduct) : '';
+    if (fromRecord) {
+      this.externalIds.set(companyId, own!.ids);
+      return fromRecord;
+    }
     const sites = listOf(await read(`${path}/sites`));
     const fromSites = sites.flatMap((site) => {
       const parent = site.company && typeof site.company === 'object' ? companyIds(site.company as Json).ids : [];
