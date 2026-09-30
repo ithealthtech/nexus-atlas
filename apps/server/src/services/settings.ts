@@ -81,7 +81,7 @@ interface StoredSettings {
   trackers?: TrackerSettings;
   rmmHealth?: RmmHealthSettings;
   rotation?: RotationSettings;
-  warranty?: WarrantySettings;
+  warranty?: StoredWarranty;
   assetStats?: AssetStatsSettings;
   m365?: StoredM365;
   vaultPolicy?: VaultPolicy;
@@ -106,6 +106,10 @@ export interface StoredSiem {
 /** SIEM settings ready to send with (secret decrypted). */
 export interface SiemConfig extends Omit<StoredSiem, 'secretSealed'> {
   secret: string;
+}
+export interface StoredWarranty {
+  soonDays: number;
+  autoLookup?: boolean;
 }
 export interface StoredEntra {
   tenantId: string;
@@ -313,13 +317,21 @@ export class SettingsService {
   }
 
   async warranty(orgId: string): Promise<WarrantySettings> {
-    return warrantySettingsSchema.parse((await this.load(orgId)).warranty ?? {});
+    const stored = (await this.load(orgId)).warranty;
+    return {
+      soonDays: warrantySettingsSchema.parse({ soonDays: stored?.soonDays }).soonDays,
+      autoLookup: stored?.autoLookup ?? true,
+    };
   }
 
   async saveWarranty(orgId: string, input: unknown): Promise<WarrantySettings> {
     const body = warrantySettingsSchema.parse(input);
-    await this.put(orgId, 'warranty', body);
-    return body;
+    const current = (await this.load(orgId)).warranty;
+    await this.put(orgId, 'warranty', {
+      soonDays: body.soonDays,
+      autoLookup: body.autoLookup ?? current?.autoLookup ?? true,
+    });
+    return this.warranty(orgId);
   }
 
   async assetStats(orgId: string): Promise<AssetStatsSettings> {

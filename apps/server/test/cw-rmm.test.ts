@@ -697,3 +697,47 @@ describe('ConnectWise RMM real response shapes', () => {
     ]);
   });
 });
+
+describe('ConnectWise RMM sync with warranty lookup', () => {
+  let t: TestApp;
+  let owner: Browser;
+  let asio: ReturnType<typeof fakeAsio>;
+  const dell = (async () =>
+    new Response('<div>Expires</div><div>31 May 2029</div>', { status: 200 })) as unknown as typeof fetch;
+
+  beforeEach(async () => {
+    asio = fakeAsio();
+    t = await startApp({}, { cwRmmFetch: asio.fetcher, warrantyFetch: dell });
+    owner = (await setupOwner(t.app)).b;
+  });
+  afterEach(async () => {
+    await t.close();
+  });
+
+  it('fills a blank warranty date from the vendor, and keeps one someone typed in', async () => {
+    asio.state.devices.set('c1', [
+      { endpointId: 'd1', siteId: 's1', friendlyName: 'HDG-WS-01', manufacturer: 'Dell Inc.', serialNumber: 'ABC1234' },
+      { endpointId: 'd2', siteId: 's1', friendlyName: 'HDG-WS-02', manufacturer: 'Dell Inc.', serialNumber: 'ABC5678' },
+    ]);
+    await owner.call('PUT', '/api/integrations/cw-rmm', { clientId: CLIENT_ID, clientSecret: SECRET });
+    const harbor = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental Group' })).data.id;
+    await owner.call('PUT', '/api/integrations/cw-rmm/companies', {
+      mappings: [{ companyId: 'c1', action: 'link', clientId: harbor }],
+    });
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect(job.messages.join(' ')).toContain('Warranty end dates looked up from the vendor for 2 devices');
+    type A = { id: string; name: string; version: number; fields: Record<string, string> };
+    const list = async () => (await owner.call('GET', `/api/assets?client=${harbor}`)).data as A[];
+    const first = await list();
+    expect(first.map((a) => a.fields.warranty_expires)).toEqual(['2029-05-31', '2029-05-31']);
+
+    const typed = first.find((a) => a.name === 'HDG-WS-01')!;
+    const edited = await owner.call('PATCH', `/api/assets/${typed.id}`, {
+      fields: { ...typed.fields, warranty_expires: '2031-01-01' },
+      version: typed.version,
+    });
+    expect(edited.status, JSON.stringify(edited.data)).toBe(200);
+    await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
+    expect((await list()).find((a) => a.name === 'HDG-WS-01')!.fields.warranty_expires).toBe('2031-01-01');
+  });
+});

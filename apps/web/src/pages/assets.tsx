@@ -1,8 +1,15 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, ArrowLeft, Pencil, Plus, RefreshCw, Search, Server } from 'lucide-react';
-import { ASSET_STATUSES, atLeast, type AssetView, type LayoutField, type LayoutView } from '@atlas/shared';
+import { Archive, ArchiveRestore, ArrowLeft, Pencil, Plus, RefreshCw, Search, Server, ShieldCheck } from 'lucide-react';
+import {
+  ASSET_STATUSES,
+  atLeast,
+  type AssetView,
+  type LayoutField,
+  type LayoutView,
+  type WarrantyCheckResult,
+} from '@atlas/shared';
 import {
   Badge,
   Button,
@@ -422,6 +429,7 @@ export function AssetDetail() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [checking, setChecking] = useState(false);
   if (isLoading) return <Skeleton className="h-64" />;
   if (error || !asset)
     return (
@@ -440,6 +448,23 @@ export function AssetDetail() {
     await api(`/assets/${asset.id}/archive`, { method: 'POST', body: { archived: !asset.archived } });
     await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ['assets'] })]);
     toast(asset.archived ? 'Asset restored.' : 'Asset archived. You can restore it from the archived list.');
+  };
+  // Devices: a layout with a serial number and a warranty date can have its warranty looked up.
+  const canCheckWarranty =
+    !!layout?.fields.some(
+      (f) => f.type === 'text' && (f.key === 'serial_number' || /serial|service tag/i.test(f.label)),
+    ) && !!layout?.fields.some((f) => f.type === 'date' && /warrant/i.test(`${f.key} ${f.label}`));
+  const checkWarranty = async () => {
+    setChecking(true);
+    try {
+      const result = await api<WarrantyCheckResult>(`/assets/${asset.id}/warranty-check`, { method: 'POST' });
+      await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ['warranty'] })]);
+      toast(result.message, result.expires ? 'success' : 'error');
+    } catch (err) {
+      toast((err as ApiError).message, 'error');
+    } finally {
+      setChecking(false);
+    }
   };
   const known = new Set(layout?.fields.map((f) => f.key));
   return (
@@ -473,6 +498,11 @@ export function AssetDetail() {
         </div>
         {canEdit && (
           <div className="flex gap-2">
+            {canCheckWarranty && !asset.archived && (
+              <Button variant="secondary" loading={checking} onClick={() => void checkWarranty()}>
+                <ShieldCheck /> Check warranty
+              </Button>
+            )}
             <Button variant="secondary" onClick={archive}>
               {asset.archived ? <ArchiveRestore /> : <Archive />} {asset.archived ? 'Restore' : 'Archive'}
             </Button>

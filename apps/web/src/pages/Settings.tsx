@@ -573,6 +573,7 @@ function RmmHealthSettingsCard({ current }: { current: RmmHealthSettings }) {
 function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
   const toast = useToast();
   const [soonDays, setSoonDays] = useState(String(current.soonDays));
+  const [autoLookup, setAutoLookup] = useState(current.autoLookup);
   const [error, setError] = useState<string | null>(null);
   const save = useSave(
     (body: object) => api<WarrantySettings>('/settings/warranty', { method: 'PUT', body }),
@@ -582,7 +583,7 @@ function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
     e.preventDefault();
     setError(null);
     try {
-      await save.mutateAsync({ soonDays: Number(soonDays) });
+      await save.mutateAsync({ soonDays: Number(soonDays), autoLookup });
       toast('Warranty settings saved.');
     } catch (err) {
       setError((err as Error).message);
@@ -590,7 +591,10 @@ function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
   };
   return (
     <Card>
-      <CardHeader title="Asset warranty" description="When a warranty counts as expiring soon on the warranty chart." />
+      <CardHeader
+        title="Asset warranty"
+        description="When a warranty counts as expiring soon on the warranty chart, and whether warranties are looked up."
+      />
       <form onSubmit={submit} className="space-y-5 p-5" noValidate>
         <Field label="Expiring soon within (days)" help="Between 1 and 365.">
           {(p) => (
@@ -606,6 +610,12 @@ function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
             />
           )}
         </Field>
+        <Checkbox
+          checked={autoLookup}
+          onChange={(e) => setAutoLookup(e.target.checked)}
+          label="Look up warranties automatically"
+          description="When a Dell, Lenovo, or HP device is saved or synced from the RMM with a serial number and no warranty date, get it from the vendor's warranty check. No API keys needed. Check warranty on an asset works either way."
+        />
         <FormError message={error} />
         <div className="flex justify-end">
           <Button type="submit" loading={save.isPending}>

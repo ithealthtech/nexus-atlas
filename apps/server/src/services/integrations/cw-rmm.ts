@@ -10,7 +10,8 @@ import { locations } from '../people.js';
 import { Scope } from '../scope.js';
 import type { SettingsService, StoredCwRmm } from '../settings.js';
 import { ImportRun } from '../importers/common.js';
-import { normalizeManufacturer } from '../manufacturer.js';
+import { detectManufacturer, normalizeManufacturer } from '../manufacturer.js';
+import type { WarrantyLookup } from '../warranty-lookup.js';
 import { readableLabel } from '../importers/hudu.js';
 
 export const CW_RMM_BASE: Record<CwRmmRegion, string> = {
@@ -1204,6 +1205,7 @@ export async function runCwRmmSync(
   run: ImportRun,
   map: StoredCwRmm['map'],
   options: CwRmmSyncOptions = cwRmmSyncOptionsSchema.parse({}),
+  warranty?: WarrantyLookup,
 ) {
   const scope = new Scope(db, actor);
   const layoutService = new LayoutService(db);
@@ -1231,6 +1233,7 @@ export async function runCwRmmSync(
   const claimed = await claimedByRmm(db, actor.orgId);
   let matched = 0;
   let folded = 0;
+  let warranties = 0;
   for (const [companyId, clientId] of linked) {
     let sites: RmmSite[];
     let devices: RmmDevice[];
@@ -1284,6 +1287,20 @@ export async function runCwRmmSync(
         .sort((a, b) => b.fit - a.fit || a.createdAt.getTime() - b.createdAt.getTime())[0];
     for (const d of devices) {
       seen.add(d.id);
+      // A warranty date the RMM doesn't report is asked of the device's vendor, by serial number. It only fills a
+      // blank warranty field (see withLookedUp), so a date someone typed in stays.
+      let lookedUp = '';
+      if (!d.warrantyExpires && warranty) {
+        const maker = d.manufacturer || detectManufacturer({ model: d.model, name: d.name, hostname: d.hostname });
+        lookedUp = (await warranty.find(actor.orgId, maker, d.serial))?.expires ?? '';
+      }
+      const withLookedUp = (layoutId: string, values: Record<string, unknown>) => {
+        if (!lookedUp) return values;
+        const fitted = fitFields(existing.layoutFields.get(layoutId) ?? [], { warranty_expires: lookedUp });
+        const blank = Object.entries(fitted).filter(([key]) => !values[key]);
+        if (blank.length) warranties++;
+        return { ...values, ...Object.fromEntries(blank) };
+      };
       const fields = {
         type: deviceType(d),
         hostname: d.hostname.slice(0, 500),
@@ -1330,7 +1347,11 @@ export async function runCwRmmSync(
         );
         const fitted = fitFields(layoutFields, fields);
         // The named mapping wins over the extras where both carry a field.
-        const merged = { ...current.fields, ...(await extras(current.layoutId)), ...fitted };
+        const merged = withLookedUp(current.layoutId, {
+          ...current.fields,
+          ...(await extras(current.layoutId)),
+          ...fitted,
+        });
         if (current.archived) await assets.setArchived(scope, id, false);
         if (JSON.stringify(merged) !== JSON.stringify(current.fields))
           await assets.update(scope, id, { fields: merged, version: current.version }, 'Synced from ConnectWise RMM');
@@ -1373,7 +1394,7 @@ export async function runCwRmmSync(
           const created = await assets.create(scope, clientId, {
             layoutId: layout.id,
             name,
-            fields: { ...(await extras(layout.id)), ...(await deviceFields()) },
+            fields: withLookedUp(layout.id, { ...(await extras(layout.id)), ...(await deviceFields()) }),
             notes: 'Synced from ConnectWise RMM.',
           });
           await markOwned(db, actor.orgId, owned, created.id);
@@ -1400,11 +1421,11 @@ export async function runCwRmmSync(
             moved++;
           }
           // Fields Atlas users added stay; the RMM's own values are refreshed.
-          const merged = {
+          const merged = withLookedUp(layout.id, {
             ...current.fields,
             ...(await extras(layout.id)),
             ...(await deviceFields()),
-          };
+          });
           if (current.archived) await assets.setArchived(scope, existingId, false);
           if (current.name !== name || JSON.stringify(merged) !== JSON.stringify(current.fields))
             await assets.update(
@@ -1423,6 +1444,8 @@ export async function runCwRmmSync(
     if (options.devices) readInFull.add(clientId);
   }
 
+  if (warranties)
+    run.note(`Warranty end dates looked up from the vendor for ${warranties} device${warranties === 1 ? '' : 's'}.`);
   if (moved)
     run.note(`${moved} device${moved === 1 ? '' : 's'} moved into the device layout from where earlier syncs put them.`);
   if (matched)

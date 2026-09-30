@@ -4,6 +4,7 @@ import { schema } from '@atlas/db';
 import { assetSchema, updateAssetSchema, type AssetView, type LayoutField, type RevisionView } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import type { DomainLookup } from './domain-lookup.js';
+import type { WarrantyLookup } from './warranty-lookup.js';
 import { recordActivity } from './activity.js';
 import { validateFields, type LayoutService } from './layouts.js';
 import { detectManufacturer } from './manufacturer.js';
@@ -53,15 +54,23 @@ export class AssetService {
   constructor(
     private readonly layouts: LayoutService,
     private readonly domains?: DomainLookup,
+    private readonly warranty?: WarrantyLookup,
   ) {}
 
   /**
    * Fills a blank manufacturer from what else is known about the device. For the built-in Domains layout, fills
    * blank fields (registrar, expiry, name servers, DNS host)
-   * from the asset's name. Never overwrites what someone entered, and never blocks a save.
+   * from the asset's name. Fills a blank warranty date from the vendor, by serial number.
+   * Never overwrites what someone entered, and never blocks a save.
    */
-  private async detect(layout: { key: string; fields: unknown }, name: string, given: Record<string, unknown>) {
-    const fields = withManufacturer(layout.fields as LayoutField[], name, given);
+  private async detect(
+    orgId: string,
+    layout: { key: string; fields: unknown },
+    name: string,
+    given: Record<string, unknown>,
+  ) {
+    let fields = withManufacturer(layout.fields as LayoutField[], name, given);
+    if (this.warranty) fields = await this.warranty.fill(orgId, layout.fields as LayoutField[], name, fields);
     if (!this.domains || layout.key !== 'domain') return fields;
     const layoutFields = layout.fields as LayoutField[];
     const targets = layoutFields.filter((f) => DETECTED[f.key]?.includes(f.type) && blank(fields[f.key]));
@@ -157,7 +166,12 @@ export class AssetService {
     const body = assetSchema.parse(input);
     const layout = await this.layouts.get(scope.actor, body.layoutId);
     if (layout.archived) throw new HttpError(400, 'That asset layout is archived.');
-    const fields = await this.detect(layout, body.name, validateFields(layout.fields as LayoutField[], body.fields));
+    const fields = await this.detect(
+      scope.actor.orgId,
+      layout,
+      body.name,
+      validateFields(layout.fields as LayoutField[], body.fields),
+    );
     const id = await scope.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(schema.assets)
@@ -207,6 +221,7 @@ export class AssetService {
       name,
       status: body.status ?? current.status,
       fields: await this.detect(
+        scope.actor.orgId,
         layout,
         name,
         body.fields ? validateFields(layout.fields as LayoutField[], body.fields) : current.fields,
@@ -268,7 +283,12 @@ export class AssetService {
     const next: Snapshot = {
       name,
       status: input.status ?? current.status,
-      fields: await this.detect(layout, name, validateFields(layout.fields as LayoutField[], input.fields)),
+      fields: await this.detect(
+        scope.actor.orgId,
+        layout,
+        name,
+        validateFields(layout.fields as LayoutField[], input.fields),
+      ),
       notes: input.notes ?? current.notes,
       layoutId: layout.id,
       fromLayoutId: current.layoutId,
