@@ -130,8 +130,12 @@ export class CwTicketReader {
   lastList = '';
   /** Something worth a job note once per sync, such as closed tickets that couldn't be listed. */
   note = '';
-  /** Companies with tickets that got no ConnectWise link, for a job note saying why. */
+  /** Companies with tickets that got no ConnectWise link because ConnectWise gives no company number to link by. */
   readonly unlinked = new Set<string>();
+  /** Automation tickets (dotted numbers) with no CW-System note naming their portal ID yet. */
+  noPortalId = 0;
+  /** Whether ConnectWise refused to show ticket notes, so no automation ticket could get its portal ID. */
+  notesDenied = false;
   /** Companies whose closed tickets couldn't be listed: only their open tickets were read. */
   readonly openOnly = new Set<string>();
   private statuses: Promise<Set<string>> | null = null;
@@ -168,16 +172,36 @@ export class CwTicketReader {
   private numbers() {
     this.companyNumbers ??= this.web
       ? this.client.get(COMPANIES).then(
-          (body) =>
-            new Map(
-              listOf(body).flatMap((c) => {
-                const external = Array.isArray(c.externalIds) ? (c.externalIds as Json[]) : [];
-                const ids = [...new Set(external.map((e) => text(e, 'externalId')))].filter(numeric);
-                const own = text(c, 'number', 'companyNumber');
-                const number = numeric(own) ? own : ids.length === 1 ? ids[0] : '';
-                return number ? [[text(c, 'id'), number] as const] : [];
+          (body) => {
+            const companies = listOf(body).map((c) => ({
+              id: text(c, 'id'),
+              own: text(c, 'number', 'companyNumber'),
+              ids: (Array.isArray(c.externalIds) ? (c.externalIds as Json[]) : [])
+                .map((e) => ({ id: text(e, 'externalId'), product: text(e, 'productId') }))
+                .filter((e) => numeric(e.id)),
+            }));
+            // A company with numeric IDs from several products: take the one from the product most companies'
+            // single numeric ID comes from, which is the portal's company number.
+            const products = new Map<string, number>();
+            for (const c of companies)
+              if (new Set(c.ids.map((e) => e.id)).size === 1 && c.ids[0]!.product)
+                products.set(c.ids[0]!.product, (products.get(c.ids[0]!.product) ?? 0) + 1);
+            const portal = [...products].sort((a, b) => b[1] - a[1])[0]?.[0];
+            return new Map(
+              companies.flatMap((c) => {
+                const unique = [...new Set(c.ids.map((e) => e.id))];
+                const fromPortal = [...new Set(c.ids.filter((e) => portal && e.product === portal).map((e) => e.id))];
+                const number = numeric(c.own)
+                  ? c.own
+                  : unique.length === 1
+                    ? unique[0]!
+                    : fromPortal.length === 1
+                      ? fromPortal[0]!
+                      : '';
+                return number ? [[c.id, number] as const] : [];
               }),
-            ),
+            );
+          },
           () => new Map<string, string>(),
         )
       : Promise.resolve(new Map<string, string>());
@@ -226,7 +250,8 @@ export class CwTicketReader {
       .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
     await this.portalIds(list, link);
-    if (list.some((t) => !t.url)) this.unlinked.add(companyId);
+    if (!companyNumber && list.some((t) => !t.url)) this.unlinked.add(companyId);
+    else this.noPortalId += list.filter((t) => !t.url && !numeric(t.number)).length;
     return list;
   }
 
@@ -236,6 +261,7 @@ export class CwTicketReader {
    * Shows and links that ID. A ticket whose notes can't be read keeps its dotted number and no link.
    */
   private async portalIds(list: CwTicket[], link: (number: string) => string | null) {
+    if (this.notesDenied) return;
     const dotted = list.filter((t) => !numeric(t.number)).slice(0, MAX_PORTAL_LOOKUPS);
     for (const t of dotted) {
       let notes: Json[];
@@ -243,7 +269,10 @@ export class CwTicketReader {
         notes = listOf(await this.client.get(notesPath(t.id)));
       } catch (error) {
         // A key that can't read notes can't read any: stop asking, and keep the tickets as listed.
-        if (error instanceof HttpError && error.code === ACCESS_DENIED) return;
+        if (error instanceof HttpError && error.code === ACCESS_DENIED) {
+          this.notesDenied = true;
+          return;
+        }
         if (error instanceof HttpError) continue;
         throw error;
       }
@@ -442,11 +471,31 @@ export async function runTicketSync(
     read.push(companyId);
   }
   if (reader.note) run.note(reader.note);
-  if (reader.unlinked.size)
+  if (reader.unlinked.size) {
+    const byCompany = new Map(linked);
+    const ids = [...reader.unlinked].map((c) => byCompany.get(c) ?? c);
+    const names = new Map(
+      (
+        await db
+          .select({ id: schema.clients.id, name: schema.clients.name })
+          .from(schema.clients)
+          .where(inArray(schema.clients.id, ids))
+      ).map((r) => [r.id, r.name]),
+    );
+    const shown = ids.slice(0, 5).map((id) => names.get(id) ?? id);
     run.note(
-      `Tickets for ${[...reader.unlinked].slice(0, 5).join(', ')}${reader.unlinked.size > 5 ? ` and ${reader.unlinked.size - 5} more` : ''} ` +
-        "have no ConnectWise link: a link needs the company's numeric company ID (one external ID in ConnectWise) " +
-        'and a North America account.',
+      `Tickets for ${shown.join(', ')}${ids.length > 5 ? ` and ${ids.length - 5} more` : ''} have no ConnectWise ` +
+        "link: ConnectWise gives these companies no single numeric company ID (an external ID) to link by, or the " +
+        'account is outside North America.',
+    );
+  }
+  if (reader.notesDenied)
+    run.note(
+      "Automation tickets keep their dotted numbers and have no link: ConnectWise refused to show ticket notes, where the portal's ticket ID is. Check the key's ticket permissions in API Access.",
+    );
+  else if (reader.noPortalId)
+    run.note(
+      `${reader.noPortalId} automation ticket${reader.noPortalId === 1 ? ' has' : 's have'} no link yet: ConnectWise hasn't added the CW-System note naming ${reader.noPortalId === 1 ? 'its' : 'their'} portal ticket ID.`,
     );
   if (linked.length && !seen.length && reader.lastList) run.note(`No tickets listed (${reader.lastList}).`);
 

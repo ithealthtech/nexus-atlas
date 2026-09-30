@@ -320,7 +320,11 @@ describe('ticket sync and dashboard', () => {
       { id: 'n-2', detail: 'Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670.' },
     ]);
     expect((await link()).status).toBe(200);
-    expect((await sync()).status).toBe('done');
+    const job = await sync();
+    expect(job.status).toBe('done');
+    // The two without a portal ID are named as such, not blamed on the company's number.
+    expect(job.messages.join(' ')).toContain('2 automation tickets have no link yet');
+    expect(job.messages.join(' ')).not.toContain('Harbor Dental Group have no ConnectWise link');
     const list = (await owner.call('GET', `/api/tickets/list?client=${harbor}`)).data;
     const shown = (s: string) => list.find((k: { summary: string }) => k.summary === s);
     expect(shown('Network attack')).toMatchObject({
