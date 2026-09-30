@@ -225,8 +225,31 @@ export class CwTicketReader {
     const list = [...open, ...recent]
       .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));
+    await this.portalIds(list, link);
     if (list.some((t) => !t.url)) this.unlinked.add(companyId);
     return list;
+  }
+
+  /**
+   * A ticket the platform opened itself (a dotted number, "133023.1670") is copied into the portal under another
+   * ID, which only a CW-System note names ("Connectwise ticket id 5283 is created to match ASIO ticket id ...").
+   * Shows and links that ID. A ticket whose notes can't be read keeps its dotted number and no link.
+   */
+  private async portalIds(list: CwTicket[], link: (number: string) => string | null) {
+    const dotted = list.filter((t) => !numeric(t.number)).slice(0, MAX_PORTAL_LOOKUPS);
+    for (const t of dotted) {
+      let notes: Json[];
+      try {
+        notes = listOf(await this.client.get(notesPath(t.id)));
+      } catch (error) {
+        if (error instanceof HttpError) continue;
+        throw error;
+      }
+      const id = notes.map((n) => portalIdIn(text(n, 'detail', 'text', 'note'))).find(Boolean);
+      if (!id) continue;
+      t.number = id;
+      t.url ??= link(id);
+    }
   }
 
   /** Every page of a ticket list, newest first. */
@@ -252,6 +275,14 @@ export class CwTicketReader {
     }
     return out;
   }
+}
+
+/** Dotted tickets per company whose notes are read for the portal's ID, each sync. */
+const MAX_PORTAL_LOOKUPS = 200;
+
+/** The portal ticket ID a CW-System note names: "Connectwise ticket id 5283 is created to match ASIO ticket id ...". */
+export function portalIdIn(note: string): string | null {
+  return /\bconnect\s*wise\s+ticket\s+id\s*#?\s*(\d{1,18})\s+is\s+created\s+to\s+match\b/i.exec(note)?.[1] ?? null;
 }
 
 const notesPath = (ticketId: string) =>
