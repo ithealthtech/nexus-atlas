@@ -2,10 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { Info, Mail, Send, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
+  ASSET_KINDS,
+  ASSET_KIND_LABELS,
   SMTP_PRESETS,
+  type AssetStatsSettings,
   type NotificationSettings,
   type RmmHealthSettings,
   type WarrantySettings,
+  type TrackerSettings,
   type SmtpPreset,
   type SmtpSecurity,
   type SmtpSettingsView,
@@ -26,11 +30,14 @@ import {
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import {
+  useAssetStatsSettings,
   useEmailSettings,
+  useLayouts,
   useNotificationSettings,
   useRmmHealthSettings,
   useSave,
   useWarrantySettings,
+  useTrackerSettings,
 } from '@/lib/queries';
 import { ApiKeysCard } from './SettingsExtra';
 import { DangerZone } from './DangerZone';
@@ -610,18 +617,136 @@ function WarrantySettingsCard({ current }: { current: WarrantySettings }) {
   );
 }
 
+type LayoutChoice = AssetStatsSettings['layouts'][string];
+
+function AssetStatsSettingsCard({ current }: { current: AssetStatsSettings }) {
+  const toast = useToast();
+  const layouts = (useLayouts().data ?? []).filter((l) => !l.archived);
+  const [choices, setChoices] = useState<Record<string, LayoutChoice>>(current.layouts);
+  const [error, setError] = useState<string | null>(null);
+  const save = useSave(
+    (body: object) => api<AssetStatsSettings>('/settings/asset-stats', { method: 'PUT', body }),
+    [['settings', 'asset-stats'], ['asset-stats']],
+  );
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await save.mutateAsync({ layouts: choices });
+      toast('Asset statistics settings saved.');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader
+        title="Asset statistics"
+        description="Which asset layouts count as servers, workstations, and other devices on the asset statistics card."
+      />
+      <form onSubmit={submit} className="space-y-5 p-5" noValidate>
+        <p className="text-sm text-text-2">
+          Automatic reads each asset's Type field and operating system, counts a layout named for one kind of device
+          (like Printers) as that kind, and leaves out layouts that aren't devices (like Domains).
+        </p>
+        {layouts.length ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {layouts.map((l) => (
+              <Field key={l.id} label={l.name}>
+                {(p) => (
+                  <Select
+                    {...p}
+                    value={choices[l.id] ?? 'auto'}
+                    onChange={(e) => setChoices((c) => ({ ...c, [l.id]: e.target.value as LayoutChoice }))}
+                  >
+                    <option value="auto">Automatic</option>
+                    {ASSET_KINDS.map((k) => (
+                      <option key={k} value={k}>
+                        {ASSET_KIND_LABELS[k]}
+                      </option>
+                    ))}
+                    <option value="none">Not counted</option>
+                  </Select>
+                )}
+              </Field>
+            ))}
+          </div>
+        ) : (
+          <Skeleton className="h-20" />
+        )}
+        <FormError message={error} />
+        <div className="flex justify-end">
+          <Button type="submit" loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function TrackerSettingsCard({ current }: { current: TrackerSettings }) {
+  const toast = useToast();
+  const [form, setForm] = useState(current);
+  const [error, setError] = useState<string | null>(null);
+  const save = useSave(
+    (body: object) => api<TrackerSettings>('/settings/trackers', { method: 'PUT', body }),
+    [['settings', 'trackers']],
+  );
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await save.mutateAsync(form);
+      toast('Domain and SSL tracker settings saved.');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader
+        title="Domain and SSL trackers"
+        description="Keeps domain and certificate expiry dates current. Alerts go out on the alert days above."
+      />
+      <form onSubmit={submit} className="space-y-5 p-5" noValidate>
+        <Checkbox
+          checked={form.enabled}
+          onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
+          label="Check on a schedule"
+          description="Re-checks each domain with its registry (weekly, daily when it expires within 60 days) and reads each certificate daily. Off leaves only Check now."
+        />
+        <Checkbox
+          checked={form.createCertificates}
+          onChange={(e) => setForm((f) => ({ ...f, createCertificates: e.target.checked }))}
+          label="Add SSL certificates for domains"
+          description="When a domain's website serves a certificate and the client has no SSL certificates asset for it, add one."
+        />
+        <FormError message={error} />
+        <div className="flex justify-end">
+          <Button type="submit" loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 export function Settings() {
   const actor = useActor();
   const email = useEmailSettings();
   const notifications = useNotificationSettings();
   const rmmHealth = useRmmHealthSettings();
   const warranty = useWarrantySettings();
+  const assetStats = useAssetStatsSettings();
+  const trackers = useTrackerSettings();
   return (
     <>
       <PageHeader
         eyebrow="Administration"
         title="Settings"
-        description="Email, alerts, log retention, RMM health, warranty, branding, and API keys."
+        description="Email, alerts, log retention, RMM health, warranty, asset statistics, domain and SSL trackers, branding, and API keys."
       />
       <div className="grid max-w-3xl gap-6">
         {email.data ? (
@@ -646,6 +771,16 @@ export function Settings() {
           <WarrantySettingsCard key={JSON.stringify(warranty.data)} current={warranty.data} />
         ) : (
           <Skeleton className="h-32" />
+        )}
+        {assetStats.data ? (
+          <AssetStatsSettingsCard key={JSON.stringify(assetStats.data)} current={assetStats.data} />
+        ) : (
+          <Skeleton className="h-48" />
+        )}
+        {trackers.data ? (
+          <TrackerSettingsCard key={JSON.stringify(trackers.data)} current={trackers.data} />
+        ) : (
+          <Skeleton className="h-40" />
         )}
 
         <EntraSettings />

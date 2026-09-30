@@ -12,6 +12,7 @@ import {
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
 import { AssetService } from './assets.js';
+import { saveNotesRevision } from './clients.js';
 import { LayoutService } from './layouts.js';
 import { Scope } from './scope.js';
 
@@ -410,13 +411,14 @@ async function mergeClients(db: Database, actor: Actor, keepId: string, mergeIds
           inArray(schema.externalRefs.entityId, mergeIds),
         ),
       );
+    const notes = joinNotes(
+      keep.notes,
+      others.map((o) => o.notes),
+    ).slice(0, 5000);
     await tx
       .update(schema.clients)
       .set({
-        notes: joinNotes(
-          keep.notes,
-          others.map((o) => o.notes),
-        ).slice(0, 5000),
+        ...(notes !== keep.notes ? await saveNotesRevision(tx, actor, keepId, keep.notesVersion + 1, notes) : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.clients.id, keepId));

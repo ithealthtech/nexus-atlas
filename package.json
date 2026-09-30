@@ -16,8 +16,9 @@
   "scripts": {
     "dev": "npm run dev -w @atlas/server & npm run dev -w @atlas/web",
     "build": "npm run build -w @atlas/shared -w @atlas/db && npm run build -w @atlas/web && npm run build -w @atlas/server",
+    "build:extension": "node apps/extension/build.mjs",
     "start": "node apps/server/dist/index.js",
-    "typecheck": "tsc -b packages/shared packages/db apps/server && npm run typecheck -w @atlas/web",
+    "typecheck": "tsc -b packages/shared packages/db apps/server && npm run typecheck -w @atlas/web && tsc -p apps/extension --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
@@ -27,9 +28,10 @@
     "legacy:test": "cd legacy && node --test tests/*.test.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "1.56.1",
-    "@axe-core/playwright": "^4.13.0",
+    "@types/chrome": "^0.3.4",
     "@types/node": "^22.19.0",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",

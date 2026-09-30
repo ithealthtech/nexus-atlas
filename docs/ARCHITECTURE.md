@@ -7,6 +7,7 @@
   - The server also serves the built web app, with client-side routes falling back to `index.html`.
 - **Web app (`apps/web`):** React 19, TanStack Router and Query, and Tailwind 4. It is built into static files, with no inline scripts or styles, so the CSP stays at `script-src 'self'; style-src 'self'`. Dialogs are native `<dialog>` elements rather than libraries that inject style tags.
 - **Database (`packages/db`):** PostgreSQL 16 through Drizzle ORM. SQL migrations live in `packages/db/drizzle` and are generated with `npm run db:generate`. On start, migrations run under an advisory lock.
+- **Browser extension (`apps/extension`):** a Manifest V3 extension for Edge and Chrome with no dependencies, compiled by `tsc`. Its service worker holds the device key and talks to Atlas; the popup asks it for logins; a small function is run in the page only when someone chooses Fill. See [device sign-in](IDENTITY.md#api-keys-and-client-accounts).
 - **Shared code (`packages/shared`):** zod schemas, roles and access levels, and API types. The same validation runs in the browser (for messages) and on the server (for enforcement).
 
 ## Documentation model
@@ -73,5 +74,6 @@ The code is in `apps/server/src/crypto/keys.ts`.
 - **Cookies:** `__Host-atlas_session`, set as `HttpOnly; Secure; SameSite=Strict` when served over https. The database stores only a SHA-256 of the session token.
 - **CSRF:** each session has its own token, sent in the `X-CSRF-Token` header on every state-changing request.
 - **Headers:** CSP, HSTS (over https), `X-Frame-Options: DENY`, COOP/CORP, `nosniff`, `no-referrer`, and `Cache-Control: no-store` on API responses.
+- **Device routes:** `/api/device/…` (the browser extension) skip the Origin and `Sec-Fetch-Site` checks, because they never read cookies: each request carries a device token and a signature from the device's key instead.
 - **Rate limits:** each client address gets 10 failed sign-in, setup, or MFA attempts per 15 minutes, on top of the per-account lockout.
 - **Error handling:** validation errors return field-level messages, and unexpected errors are logged and returned as a generic 500.

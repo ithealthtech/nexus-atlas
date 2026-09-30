@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ACCESS_LEVELS, type AccessLevel } from './access.js';
 import { emailSchema, passwordSchema } from './schemas.js';
+import type { ConnectedAppView } from './devices.js';
 
 // ---------- account security ----------
 export const recoveryCodeSchema = z.object({
@@ -48,6 +49,8 @@ export interface AccountSecurityView {
   passkeys: PasskeyView[];
   sessions: SessionListItem[];
   devices: TrustedDeviceView[];
+  /** Apps signed in through Atlas, like the browser extension. */
+  apps: ConnectedAppView[];
   notifyDigest: boolean;
 }
 
@@ -175,6 +178,8 @@ export interface ExpirationItem {
   title: string;
   /** What expires, for example "SSL certificate · Expires" or "Password rotation". */
   label: string;
+  /** For assets, the layout's key (for example "domain" or "ssl_certificate"). */
+  layoutKey?: string;
   clientId: string | null;
   clientName: string | null;
   date: string;

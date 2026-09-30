@@ -29,6 +29,7 @@ Do not disclose a suspected vulnerability in a public issue. Use GitHub's privat
 | Malicious uploads | Files are stored outside the web root under random names. Only images that pass a content check display inline; everything else downloads with a sandboxing CSP. |
 | Tampering with the audit trail | Security events are hash-chained by database triggers that refuse edits, with a checkpoint signed by a key derived from the master key. Verification detects edited, reordered, and deleted events. |
 | Leaked API key | Keys are stored as hashes. Scopes limit what a key can do, and passwords need their own scope. A key can't reach account, people, settings, backup, or log endpoints, and can expire. Every use is recorded. |
+| Stolen browser extension session | The extension holds no passwords. Its session token is stored as a hash on the server and only works with a signature from a key the browser won't export. Requests expire after 2 minutes and can't be replayed. Sign-in needs approval in Atlas with a recent password, sessions end after 7 days unused or 30 days, and a login is filled only into a page on the site it's saved for (never an `https://` login into an `http://` page). |
 | One-time share links | The password is encrypted in the browser. The key lives only in the link's `#fragment`, which the server never receives. |
 
 ## What Atlas does not protect against

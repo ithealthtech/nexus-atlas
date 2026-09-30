@@ -1,7 +1,8 @@
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, lt, or, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { ROLE_INFO, type ExpirationItem, type Role } from '@atlas/shared';
 import { actorFor } from '../identity/service.js';
+import { DEVICE_LIMITS } from '../identity/devices.js';
 import type { AuditService } from './audit.js';
 import type { ExpirationService } from './expirations.js';
 import type { MailService } from './mail.js';
@@ -86,6 +87,15 @@ export class Notifier {
     await this.db.delete(schema.passwordResets).where(lt(schema.passwordResets.expiresAt, now));
     await this.db.delete(schema.authChallenges).where(lt(schema.authChallenges.expiresAt, now));
     await this.db.delete(schema.trustedDevices).where(lt(schema.trustedDevices.expiresAt, now));
+    await this.db.delete(schema.devicePairings).where(lt(schema.devicePairings.expiresAt, now));
+    await this.db
+      .delete(schema.deviceSessions)
+      .where(
+        or(
+          lt(schema.deviceSessions.expiresAt, now),
+          lt(schema.deviceSessions.lastSeenAt, new Date(now.getTime() - DEVICE_LIMITS.idleMs)),
+        ),
+      );
     await this.db
       .delete(schema.notificationLog)
       .where(lt(schema.notificationLog.sentAt, new Date(now.getTime() - 120 * 86_400_000)));

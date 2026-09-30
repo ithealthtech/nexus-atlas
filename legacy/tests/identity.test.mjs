@@ -30,20 +30,22 @@ function browser(base) {
   return agent;
 }
 async function signIn(base, email, password) { const b = browser(base); const r = await b.call('/api/session', { method: 'POST', body: { email, password } }); return { b, r }; }
-// Completes the required MFA enrollment and returns the secret, as an authenticator app would store it.
+// Completes the required MFA enrollment and returns the secret, as an authenticator app would store it, and the
+// time step whose code it used (so a test can replay exactly that code, even if the clock has moved on since).
 async function enroll(b) {
   const setup = await b.call('/api/account/mfa/setup', { method: 'POST', body: {} });
   assert.equal(setup.status, 200); assert.match(setup.data.uri, /^otpauth:\/\/totp\//);
-  const done = await b.call('/api/account/mfa/confirm', { method: 'POST', body: { code: totp(setup.data.secret) } });
+  const step = totpStep();
+  const done = await b.call('/api/account/mfa/confirm', { method: 'POST', body: { code: totp(setup.data.secret, step) } });
   assert.equal(done.status, 200); assert.equal(done.data.stage, 'active');
-  return setup.data.secret;
+  return { secret: setup.data.secret, step };
 }
 async function setupAdmin(base) {
   const b = browser(base);
   const r = await b.call('/api/setup', { method: 'POST', body: { ...ADMIN, setupCode: SETUP } });
   assert.equal(r.status, 201); assert.equal(r.data.stage, 'mfa-setup');
-  const secret = await enroll(b);
-  return { b, secret };
+  const { secret, step } = await enroll(b);
+  return { b, secret, step };
 }
 
 test('passwords use salted scrypt and TOTP matches the RFC 6238 test vector', async () => {
@@ -81,15 +83,15 @@ test('first-run setup requires the console code, runs once, and forces MFA enrol
 test('sign-in requires the password and a fresh MFA code; codes cannot be replayed', async () => {
   const app = await start();
   try {
-    const { secret } = await setupAdmin(app.base);
+    const { secret, step } = await setupAdmin(app.base);
     assert.equal((await signIn(app.base, ADMIN.email, 'wrong password here')).r.status, 401);
     assert.equal((await signIn(app.base, 'nobody@atlas.test', ADMIN.password)).r.status, 401);
     const { b, r } = await signIn(app.base, ADMIN.email.toUpperCase(), ADMIN.password);
     assert.equal(r.status, 200); assert.equal(r.data.stage, 'mfa');
     assert.equal((await b.call('/api/records')).status, 403);
     // The enrollment code's time step has been used; only a later step is accepted.
-    assert.equal((await b.call('/api/session/mfa', { method: 'POST', body: { code: totp(secret) } })).status, 401);
-    const verified = await b.call('/api/session/mfa', { method: 'POST', body: { code: totp(secret, totpStep() + 1) } });
+    assert.equal((await b.call('/api/session/mfa', { method: 'POST', body: { code: totp(secret, step) } })).status, 401);
+    const verified = await b.call('/api/session/mfa', { method: 'POST', body: { code: totp(secret, Math.max(totpStep(), step) + 1) } });
     assert.equal(verified.status, 200); assert.equal(verified.data.stage, 'active');
     assert.equal((await b.call('/api/records')).status, 200);
     assert.equal((await b.call('/api/session', { method: 'DELETE' })).status, 200);

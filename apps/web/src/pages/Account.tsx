@@ -7,12 +7,13 @@ import {
   Laptop,
   LogOut,
   MonitorSmartphone,
+  Puzzle,
   ShieldAlert,
   ShieldCheck,
   Smartphone,
   Trash2,
 } from 'lucide-react';
-import type { SessionView } from '@atlas/shared';
+import { DEVICE_KIND_LABELS, type SessionView } from '@atlas/shared';
 import {
   Avatar,
   Badge,
@@ -397,6 +398,34 @@ export function Account() {
             ))}
           </ul>
         </Card>
+
+        {!!data?.apps?.length && (
+          <Card>
+            <CardHeader
+              title="Signed-in apps"
+              description="The browser extension, signed in through Atlas. Each stays signed in for up to 30 days, or 7 days unused."
+            />
+            <ul className="divide-y divide-border">
+              {data.apps.map((a) => (
+                <li key={a.id}>
+                  <Row
+                    icon={<Puzzle className="size-5" aria-hidden />}
+                    title={`${DEVICE_KIND_LABELS[a.kind]} · ${a.name}`}
+                    detail={`${a.ip || 'Unknown address'} · signed in ${formatDate(a.createdAt)} · active ${relativeTime(a.lastSeenAt)}`}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => run({ path: `/account/apps/${a.id}`, method: 'DELETE' }, 'App signed out.')}
+                    >
+                      Sign out
+                    </Button>
+                  </Row>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         {!!data?.devices.length && (
           <Card>

@@ -28,7 +28,12 @@ import { ensureDefaultLayouts } from './services/layouts.js';
 import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
 import { DomainLookup } from './services/domain-lookup.js';
+import { certProbe as realCertProbe, type CertProbe } from './services/cert-probe.js';
+import { TrackerScheduler, TrackerService } from './services/trackers.js';
+import { registerTrackerRoutes } from './routes/trackers.js';
 import { registerVaultRoutes } from './routes/vault.js';
+import { registerDeviceRoutes } from './routes/devices.js';
+import { DeviceService } from './identity/devices.js';
 import { VaultKeys } from './crypto/vault-keys.js';
 import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
 import { MailService, defaultTransport, type MailTransport } from './services/mail.js';
@@ -46,12 +51,15 @@ import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
 import { M365Scheduler, registerM365Routes } from './routes/m365.js';
+import { RotationScheduler, registerRotationRoutes } from './routes/rotation.js';
+import { RotationService } from './services/rotation.js';
 import { failInterruptedJobs } from './services/importers/common.js';
 import { ApiKeyService } from './services/api-keys.js';
 import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
 import { StatusService } from './services/status.js';
 import { registerUpdateRoutes } from './routes/updates.js';
+import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
@@ -82,6 +90,8 @@ export interface AppOptions {
   m365Fetch?: typeof fetch;
   /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
   domainLookup?: DomainLookup;
+  /** Replaces reading served certificates for the SSL tracker. Tests leave it out, so nothing is connected to. */
+  certProbe?: CertProbe;
   /** Replaces fetch for the GitHub release check (tests use fake releases). */
   updateFetch?: typeof fetch;
   /** Replaces SIEM delivery (tests capture events instead of sending them). */
@@ -142,6 +152,7 @@ export async function buildApp({
   breachFetch,
   entraFetch,
   domainLookup,
+  certProbe,
   updateFetch,
   siemSender,
 }: AppOptions): Promise<FastifyInstance> {
@@ -196,6 +207,9 @@ export async function buildApp({
     if (req.url !== '/healthz' && host !== config.publicHost && !devHosts.includes(hostname))
       throw new HttpError(403, 'Unknown host.');
     const origin = req.headers.origin;
+    // Device routes (the browser extension) never use cookies: each request is signed with the device's own key,
+    // so a request from another origin can't borrow a session. The extension's origin is its own.
+    if (req.url.startsWith('/api/device/')) return;
     if (origin && origin !== config.publicOrigin && !(devHosts.length && origin === `${req.protocol}://${host}`))
       throw new HttpError(403, 'Origin is not allowed.');
     // Microsoft's redirect back to the sign-in callback is a cross-site navigation by nature, and browsers keep
@@ -547,20 +561,35 @@ export async function buildApp({
     clients.update(actorOf(req), req.params.id, req.body),
   );
 
+  const domains = domainLookup ?? (config.NODE_ENV === 'test' ? undefined : new DomainLookup());
   const files = storage ?? new LocalStorage(join(resolve(config.ATLAS_DATA_DIR), 'attachments'));
   registerDocumentationRoutes(app, {
     db,
     authed,
     storage: files,
     maxUploadBytes,
-    domains: domainLookup ?? (config.NODE_ENV === 'test' ? undefined : new DomainLookup()),
+    domains,
   });
+  const trackers = new TrackerService(db, settings, {
+    domains,
+    probe: certProbe ?? (config.NODE_ENV === 'test' ? undefined : realCertProbe()),
+  });
+  registerTrackerRoutes(app, { db, authed, recent, settings, trackers });
 
   const vault = registerVaultRoutes(app, {
     db,
     authed,
     keys: new VaultKeys(db, keys),
     shareLimiter: failureLimiter(30, 15 * 60_000),
+  });
+  registerWorkspaceRoutes(app, { db, authed, vault });
+
+  await registerDeviceRoutes(app, {
+    db,
+    authed,
+    devices: new DeviceService(db, identity),
+    vault,
+    limiter: failureLimiter(20, 15 * 60_000),
   });
 
   const health = new PasswordHealthService(db, vault, settings, breachFetch);
@@ -593,6 +622,13 @@ export async function buildApp({
     vault,
     publicOrigin: config.publicOrigin,
     sendHour: config.ATLAS_DIGEST_HOUR,
+  });
+  const rotation = new RotationService(db, {
+    vault,
+    settings,
+    mail,
+    publicOrigin: config.publicOrigin,
+    fetcher: cwRmmFetch,
   });
   const backups = new BackupService(database, keys, files, {
     dir: config.ATLAS_BACKUP_DIR ?? join(resolve(config.ATLAS_DATA_DIR), 'backups'),
@@ -645,12 +681,20 @@ export async function buildApp({
     cwRmm.start();
     const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
     m365.start();
+    const rotations = new RotationScheduler(db, rotation, (err) => app.log.error({ err }, 'Password rotation'));
+    rotations.start();
+    const trackerSchedule = new TrackerScheduler(database, settings, trackers, (err) =>
+      app.log.error({ err }, 'Domain and SSL tracker'),
+    );
+    trackerSchedule.start();
     app.addHook('onClose', async () => {
+      trackerSchedule.stop();
       notifier.stop();
       siem.stop();
       backups.stop();
       cwRmm.stop();
       m365.stop();
+      rotations.stop();
     });
   }
 
@@ -688,6 +732,7 @@ export async function buildApp({
   });
   registerDataRoutes(app, { db, authed, recent, settings, keys, vault, storage: files, huduFetch });
   registerIntegrationRoutes(app, { db, authed, recent, settings, cwRmmFetch });
+  registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
   registerM365Routes(app, { db, authed, recent, settings, publicOrigin: config.publicOrigin, fetcher: m365Fetch });
 
   app.all('/api/*', async () => {
