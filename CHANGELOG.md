@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.3] - 2026-09-30
+
+### Fixed
+
+- **Hudu imports no longer duplicate clients.** A Hudu company imported for the first time now links to the Atlas client with the same name (ignoring case, spacing and punctuation) and updates it, instead of adding a second client. Clients added by hand or from ConnectWise RMM are matched this way. Duplicates made by earlier imports can be merged on the Duplicates page. (#118)
+
 ## [1.7.2] - 2026-09-30
 
 ### Fixed
