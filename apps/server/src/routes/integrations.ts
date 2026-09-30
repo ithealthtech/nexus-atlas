@@ -9,6 +9,7 @@ import { ImportRun } from '../services/importers/common.js';
 import {
   companiesWithMapping,
   CwRmmClient,
+  deviceLayout,
   runCwRmmSync,
   saveMapping,
   TICKET_SCOPES,
@@ -120,6 +121,8 @@ export function registerIntegrationRoutes(
   app.put('/api/integrations/cw-rmm/options', authed, async (req) => {
     const actor = admin(req);
     const options = cwRmmSyncOptionsSchema.parse(req.body);
+    // A chosen layout must be one of this organization's, and not archived.
+    if (options.layoutId) await deviceLayout(db, actor.orgId, options.layoutId);
     await settings.patchCwRmm(actor.orgId, { options });
     // Tickets switched off leave the dashboard at once, rather than staying frozen at the last sync.
     if (!options.tickets) await clearTickets(db, actor.orgId);

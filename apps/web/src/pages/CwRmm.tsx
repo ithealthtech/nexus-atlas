@@ -24,7 +24,7 @@ import {
 } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import { useClients } from '@/lib/queries';
+import { useClients, useLayouts } from '@/lib/queries';
 import { JobSummary } from './DataTools';
 
 /** What the admin picked for one company in the mapping table. '' leaves it undecided. */
@@ -162,6 +162,7 @@ export function CwRmmSync() {
     queryFn: () => api<CwRmmView | null>('/integrations/cw-rmm'),
   });
   const refetchConnection = connection.refetch;
+  const layouts = useLayouts();
   const [jobId, setJobId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -213,7 +214,7 @@ export function CwRmmSync() {
     <Card>
       <CardHeader
         title="ConnectWise RMM"
-        description="Sync devices from the ConnectWise platform (Asio) into each client's Configurations, sites into Locations, and tickets into the ticket dashboard (read-only). Runs hourly; devices removed from the RMM are archived."
+        description="Sync devices from the ConnectWise platform (Asio) into each client's device assets, sites into Locations, and tickets into the ticket dashboard (read-only). Runs hourly; devices removed from the RMM are archived."
       />
       <div className="space-y-5 p-5">
         {connection.isLoading ? (
@@ -302,7 +303,7 @@ export function CwRmmSync() {
                 {(
                   [
                     ['locations', 'Sites', 'Each linked company’s sites, as locations.'],
-                    ['devices', 'Devices', 'As assets: updating same-named ones, or in Configurations.'],
+                    ['devices', 'Devices', 'As assets: updating same-named ones, or in the layout chosen below.'],
                     ['tickets', 'Tickets', 'Read-only, for the ticket dashboard. Needs the tickets read permission.'],
                   ] as const
                 ).map(([key, label, help]) => (
@@ -324,6 +325,36 @@ export function CwRmmSync() {
                   />
                 ))}
               </div>
+              <Field
+                label="Save devices in"
+                help="Automatic uses a layout named Devices or Device assets when there is one, otherwise Configurations. Devices an earlier sync put in Configurations move on the next sync."
+              >
+                {(p) => (
+                  <Select
+                    {...p}
+                    value={data.options.layoutId ?? ''}
+                    disabled={busy === 'options' || !data.options.devices}
+                    onChange={(e) =>
+                      act('options', async () => {
+                        await api('/integrations/cw-rmm/options', {
+                          method: 'PUT',
+                          body: { ...data.options, layoutId: e.target.value || null },
+                        });
+                        await connection.refetch();
+                      })
+                    }
+                  >
+                    <option value="">Automatic</option>
+                    {(layouts.data ?? [])
+                      .filter((l) => !l.archived || l.id === data.options.layoutId)
+                      .map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name}
+                        </option>
+                      ))}
+                  </Select>
+                )}
+              </Field>
             </fieldset>
             <CompanyMapping />
           </>
