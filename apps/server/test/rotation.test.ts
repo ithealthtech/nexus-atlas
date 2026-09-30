@@ -34,16 +34,19 @@ function fakeAsio() {
     }
     const auth = (init?.headers as Record<string, string>).Authorization ?? '';
     if (url.pathname === '/api/platform/v1/company/companies') return json([{ id: 'c1', name: 'Harbor Dental Group' }]);
-    if (url.pathname === '/api/platform/v1/automation/tasks') {
+    // As the platform API spec defines it: the script as the template, endpoint IDs as targets, parameters as JSON.
+    if (url.pathname === '/api/platform/v2/automation/endpoints/schedule-tasks' && init?.method === 'POST') {
       if (!auth.includes('platform.automation.create')) return json({ message: 'missing scope' }, 403);
       if (state.refuse) return json({ message: 'script not found' }, 404);
       const body = JSON.parse(String(init?.body));
-      state.tasks.push({
-        scriptId: body.scriptId,
-        targets: body.targets,
-        parameters: Object.fromEntries(body.parameters.map((p: { name: string; value: string }) => [p.name, p.value])),
-      });
-      return json({ id: `task-${state.tasks.length}` }, 201);
+      if (
+        body.templateType !== 'script' ||
+        body.targetType !== 'MANAGED_ENDPOINT' ||
+        typeof body.parameters !== 'string'
+      )
+        return json({ message: 'bad task' }, 400);
+      state.tasks.push({ scriptId: body.templateID, targets: body.targets, parameters: JSON.parse(body.parameters) });
+      return json({ taskId: `task-${state.tasks.length}` }, 201);
     }
     return json({}, 404);
   }) as typeof fetch;
@@ -165,7 +168,7 @@ describe('automated password rotation', () => {
     expect(run).toMatchObject({ status: 'dispatched', passwordName: 'HDG-WS-07 local admin', assetName: 'HDG-WS-07' });
     const task = asio.state.tasks[0]!;
     expect(task.scriptId).toBe('script-42');
-    expect(task.targets).toEqual([{ type: 'endpoint', id: 'e7' }]);
+    expect(task.targets).toEqual(['e7']);
     expect(task.parameters).toMatchObject({
       AccountType: 'local_admin',
       Account: 'HDG-WS-07\\Administrator',

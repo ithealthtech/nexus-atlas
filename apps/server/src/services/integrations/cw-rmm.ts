@@ -712,8 +712,10 @@ export class CwRmmClient {
    * Runs a script from the ConnectWise RMM script library on one device, now, with these parameters. Returns the
    * task ID ConnectWise gives back ('' when it gives none).
    *
-   * This follows ConnectWise's automation task shape (a script task targeting one endpoint, run once); it has not
-   * been checked against a live tenant, so ConnectWise's own answer is passed on whole when it refuses.
+   * The platform API spec schedules a script with POST /v2/automation/endpoints/schedule-tasks: the script as the
+   * template, the endpoint IDs as targets, and the parameters as one JSON string. The spec doesn't list the schedule
+   * values; RunNow is ConnectWise's tasking name for "run once, now". ConnectWise's own answer is passed on whole
+   * when it refuses.
    */
   async runScript(input: {
     companyId: string;
@@ -722,15 +724,17 @@ export class CwRmmClient {
     name: string;
     parameters: Record<string, string>;
   }): Promise<string> {
-    const body = await this.call('POST', '/api/platform/v1/automation/tasks', {
+    const body = await this.call('POST', '/api/platform/v2/automation/endpoints/schedule-tasks', {
+      templateID: input.scriptId,
+      templateType: 'script',
       name: input.name.slice(0, 100),
-      scriptId: input.scriptId,
-      companyId: input.companyId,
-      targets: [{ type: 'endpoint', id: input.endpointId }],
-      parameters: Object.entries(input.parameters).map(([name, value]) => ({ name, value })),
-      schedule: { type: 'runOnce', runNow: true },
+      description: input.name.slice(0, 100),
+      parameters: JSON.stringify(input.parameters),
+      targets: [input.endpointId],
+      targetType: 'MANAGED_ENDPOINT',
+      schedule: { regularity: 'RunNow' },
     });
-    return text((body ?? {}) as Json, 'id', 'taskId', 'data.id', 'data.taskId');
+    return text((body ?? {}) as Json, 'taskId', 'taskID', 'id', 'data.taskId');
   }
 
   async companies(): Promise<RmmCompany[]> {
