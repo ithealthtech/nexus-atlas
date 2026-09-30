@@ -37,6 +37,7 @@ import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
 import { Security } from '@/pages/Security';
 import { Account } from '@/pages/Account';
+import { ConnectApp } from '@/pages/ConnectApp';
 import { NotFound } from '@/pages/NotFound';
 import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
@@ -247,6 +248,14 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/checklists', component: ChecklistsPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklist-runs/$runId', component: RunPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/apps/connect',
+    component: ConnectApp,
+    validateSearch: (search: Record<string, unknown>) => ({
+      code: typeof search.code === 'string' ? search.code : undefined,
+    }),
+  }),
 ];
 const router = createRouter({
   routeTree: rootRoute.addChildren([

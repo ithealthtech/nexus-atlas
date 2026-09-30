@@ -18,3 +18,4 @@ playwright-report/
 *.sqlite-wal
 atlas.key
 apps/web/dist-demo
+apps/extension/package/

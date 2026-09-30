@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { totp, totpStep } from '../apps/server/src/identity/totp';
+import { base64url, signRequest } from '../apps/extension/src/protocol';
+import { fillLogin } from '../apps/extension/src/fill';
 import { E2E } from '../playwright.config';
 
 const OWNER = { name: 'Avery Owner', email: 'owner@atlas.test', password: 'correct horse battery 1' };
@@ -301,6 +303,84 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(again.getByRole('alert')).toContainText('already been used');
     await outsider.close();
     await page.screenshot({ path: 'test-results/screens/password.png', fullPage: true });
+  });
+
+  test('owner signs the browser extension in through Atlas, and it fills the firewall login', async ({ page }) => {
+    watch(page);
+    // The extension's side, from its service worker: a device key and signed requests to Atlas.
+    const key = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+    let token = '';
+    const device = async (method: string, path: string, body?: unknown, signed = true) => {
+      const text = body === undefined ? '' : JSON.stringify(body);
+      const response = await fetch(`${E2E.baseURL}${path}`, {
+        method,
+        body: text || undefined,
+        headers: {
+          origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
+          ...(text ? { 'content-type': 'application/json' } : {}),
+          ...(token ? { authorization: `AtlasDevice ${token}` } : {}),
+          ...(signed ? await signRequest(key.privateKey, { method, path, body: text, now: Date.now() }) : {}),
+        },
+      });
+      return { status: response.status, data: await response.json() };
+    };
+    const publicKey = base64url(await crypto.subtle.exportKey('spki', key.publicKey));
+    const pairing = (
+      await device('POST', '/api/device/pair', { kind: 'browser_extension', name: 'Edge on Windows', publicKey }, false)
+    ).data;
+
+    // The extension opens this page; the owner checks the code and allows it.
+    await signIn(page, OWNER.email, OWNER.password, ownerSecret);
+    await page.goto(`/apps/connect?code=${pairing.code}`);
+    await expect(page.getByRole('heading', { name: 'Sign in an app' })).toBeVisible();
+    await expect(page.getByText(pairing.code)).toBeVisible();
+    await expect(page.getByText('Edge on Windows')).toBeVisible();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Allow', exact: true }).click();
+    const reauth = page.getByRole('dialog', { name: "Confirm it's you" });
+    const allowed = page.getByText('Browser signed in');
+    await expect(reauth.or(allowed)).toBeVisible();
+    if (await reauth.isVisible()) {
+      await reauth.getByLabel('Your password').fill(OWNER.password);
+      await reauth.getByRole('button', { name: 'Confirm' }).click();
+    }
+    await expect(allowed).toBeVisible();
+
+    const collected = await device('POST', `/api/device/pair/${pairing.id}/session`, {});
+    expect(collected.status).toBe(200);
+    token = collected.data.token;
+    const matches = await device('GET', `/api/device/logins?url=${encodeURIComponent('https://10.20.0.1/login')}`);
+    expect(matches.data.map((m: { name: string }) => m.name)).toEqual(['HDG-FW-01 admin']);
+    const creds = await device('POST', `/api/device/logins/${matches.data[0].id}/fill`, {
+      url: 'https://10.20.0.1/login',
+    });
+    expect(creds.data).toEqual({ username: 'fwadmin', password: 'Replaced-Firewall-Passphrase-2026!' });
+
+    // The fill itself, on a stand-in for the firewall's sign-in page.
+    const site = await page.context().newPage();
+    await site.route('https://10.20.0.1/**', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<form><label>User <input name="u"></label><label>Password <input name="p" type="password"></label></form>',
+      }),
+    );
+    await site.goto('https://10.20.0.1/login');
+    const result = await site.evaluate(
+      ({ source, args }) => (new Function(`return (${source})`)() as (...a: string[]) => string)(...args),
+      { source: fillLogin.toString(), args: ['https://10.20.0.1', creds.data.username, creds.data.password] },
+    );
+    expect(result).toBe('filled');
+    await expect(site.getByLabel('Password')).toHaveValue('Replaced-Firewall-Passphrase-2026!');
+    await site.close();
+
+    // The account page lists it, and signing it out ends it.
+    await page.goto('/account');
+    const apps = page.getByRole('listitem').filter({ hasText: 'Browser extension · Edge on Windows' });
+    await expect(apps).toBeVisible();
+    await accessible(page);
+    await apps.getByRole('button', { name: 'Sign out' }).click();
+    await expect(apps).toBeHidden();
+    expect((await device('GET', '/api/device/session')).data.code).toBe('device_session');
   });
 
   test('a client can require reasons, and BitLocker keys are validated', async ({ page }) => {

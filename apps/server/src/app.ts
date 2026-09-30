@@ -32,6 +32,8 @@ import { certProbe as realCertProbe, type CertProbe } from './services/cert-prob
 import { TrackerScheduler, TrackerService } from './services/trackers.js';
 import { registerTrackerRoutes } from './routes/trackers.js';
 import { registerVaultRoutes } from './routes/vault.js';
+import { registerDeviceRoutes } from './routes/devices.js';
+import { DeviceService } from './identity/devices.js';
 import { VaultKeys } from './crypto/vault-keys.js';
 import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
 import { MailService, defaultTransport, type MailTransport } from './services/mail.js';
@@ -198,6 +200,9 @@ export async function buildApp({
     if (req.url !== '/healthz' && host !== config.publicHost && !devHosts.includes(hostname))
       throw new HttpError(403, 'Unknown host.');
     const origin = req.headers.origin;
+    // Device routes (the browser extension) never use cookies: each request is signed with the device's own key,
+    // so a request from another origin can't borrow a session. The extension's origin is its own.
+    if (req.url.startsWith('/api/device/')) return;
     if (origin && origin !== config.publicOrigin && !(devHosts.length && origin === `${req.protocol}://${host}`))
       throw new HttpError(403, 'Origin is not allowed.');
     // Microsoft's redirect back to the sign-in callback is a cross-site navigation by nature, and browsers keep
@@ -569,6 +574,14 @@ export async function buildApp({
     authed,
     keys: new VaultKeys(db, keys),
     shareLimiter: failureLimiter(30, 15 * 60_000),
+  });
+
+  await registerDeviceRoutes(app, {
+    db,
+    authed,
+    devices: new DeviceService(db, identity),
+    vault,
+    limiter: failureLimiter(20, 15 * 60_000),
   });
 
   const health = new PasswordHealthService(db, vault, settings, breachFetch);

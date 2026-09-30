@@ -7,6 +7,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      'apps/extension/package/**',
       '**/dist-demo/**',
       'legacy/**',
       'integrations/**',
@@ -30,6 +31,11 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser } },
     plugins: { 'react-hooks': reactHooks },
     rules: { ...reactHooks.configs.recommended.rules },
+  },
+  {
+    // The browser extension runs in the browser: its popup, its service worker, and a function it runs in pages.
+    files: ['apps/extension/src/**/*.ts'],
+    languageOptions: { globals: { ...globals.browser, ...globals.webextensions } },
   },
   {
     // The product site's small script runs in the browser as a classic script.

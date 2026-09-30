@@ -155,6 +155,13 @@
       "when": 1790730868400,
       "tag": "0021_password_rotation",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790731015460,
+      "tag": "0022_device_sessions",
+      "breakpoints": true
     }
   ]
 }

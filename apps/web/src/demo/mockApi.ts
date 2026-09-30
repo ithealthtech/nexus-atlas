@@ -651,6 +651,17 @@ const devices = [
     expiresAt: new Date(Date.now() + 26 * 86_400_000).toISOString(),
   },
 ];
+const apps = [
+  {
+    id: uuid(),
+    kind: 'browser_extension' as const,
+    name: 'Microsoft Edge on Windows',
+    ip: '203.0.113.24',
+    createdAt: ago(60 * 24 * 6),
+    lastSeenAt: ago(12),
+    expiresAt: new Date(Date.now() + 24 * 86_400_000).toISOString(),
+  },
+];
 const codes = () =>
   Array.from({ length: 10 }, () => {
     const raw = Array.from(
@@ -835,11 +846,12 @@ on('GET', '/account/security', () => ({
   passkeys,
   sessions,
   devices,
+  apps,
   notifyDigest,
 }));
 on('PATCH', '/account/preferences', (_m, b) => {
   notifyDigest = !!b.notifyDigest;
-  return { totp: true, recoveryCodesLeft: recoveryLeft, passkeys, sessions, devices, notifyDigest };
+  return { totp: true, recoveryCodesLeft: recoveryLeft, passkeys, sessions, devices, apps, notifyDigest };
 });
 on('POST', '/account/recovery-codes', () => {
   recoveryLeft = 10;
@@ -876,6 +888,13 @@ on('POST', '/account/sessions/end-others', () => {
   const ended = sessions.filter((s) => !s.current).length;
   sessions.splice(0, sessions.length, ...sessions.filter((s) => s.current));
   return { ended };
+});
+on('DELETE', '/account/apps/:id', (m) => {
+  apps.splice(
+    apps.findIndex((a) => a.id === m[1]),
+    1,
+  );
+  return { ok: true };
 });
 on('DELETE', '/account/devices/:id', (m) => {
   devices.splice(

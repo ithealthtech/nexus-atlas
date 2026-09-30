@@ -81,6 +81,17 @@ Check **System status** every week or so. It shows:
 - **Revoke keys** you no longer use.
 - The API is documented at `/api/openapi.json`. See [Data in and out](DATA.md#rest-api).
 
+## Browser extension
+
+The extension for Edge and Chrome (Manifest V3) fills logins from the vault for staff. Client accounts can't use it.
+
+- **Building it:** `npm run build:extension` writes the unpacked extension to `apps/extension/dist` and a zip to `apps/extension/package`. The extension's version follows Atlas's.
+- **Installing it:** for a trial, open `edge://extensions` or `chrome://extensions`, turn on developer mode, and choose **Load unpacked** with the `dist` folder. For your team, publish the zip privately to the Edge Add-ons or Chrome Web Store dashboard, or host it and force-install it with the `ExtensionInstallForcelist` group policy.
+- **Permissions:** it can only read and fill the tab you open it on (`activeTab`), and it asks to reach one address: your Atlas. It has no access to other sites and runs nothing on pages until you choose **Fill**.
+- **What it stores:** the Atlas address, a session token, and a signing key the browser won't let it export. No passwords, codes, or lists of logins.
+- **Sign-ins:** approvals and sign-ins appear in the security log as *Device sign-in approved* and *Signed in* (naming the browser). Each fill and copy is in the vault access history, and the person's name there includes the browser.
+- **Taking it away:** **Sign out everywhere** on the Users page, disabling the account, or resetting its sign-in also signs out the extension.
+
 ## If something goes wrong
 
 | Problem | What to do |
