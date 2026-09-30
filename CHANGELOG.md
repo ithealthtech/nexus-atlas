@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.5] - 2026-09-30
+
+### Fixed
+
+- **ConnectWise RMM sync fills the right device fields.** The manufacturer now comes from the device's baseboard maker (Dell, Lenovo, HP) and goes into the Manufacturer field, instead of the BIOS vendor or an extra field. Last check-in comes from ConnectWise's heartbeat, and endpoint protection from the device's antivirus list and antivirus services, so both now show on assets and the RMM health charts. The device list follows ConnectWise's paging, asks 500 devices at a time, and reads each device from its own site. Field names follow ConnectWise's published platform API spec. (#124)
+
 ## [1.7.4] - 2026-09-30
 
 ### Added
