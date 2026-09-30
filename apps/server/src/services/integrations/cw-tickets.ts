@@ -53,7 +53,7 @@ export function ticketTime(value: unknown, now = Date.now()): Date | null {
 // eslint-disable-next-line no-control-regex
 const clean = (s: string, max: number) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, max);
 
-const CLOSED_STATUS = /^(closed|completed?|resolved|cancell?ed)\b/i;
+const CLOSED_STATUS = /^(closed|completed?|resolved|cancell?ed|done|finished)\b/i;
 const numeric = (s: string) => /^\d{1,18}$/.test(s);
 
 /**
@@ -129,6 +129,8 @@ export class CwTicketReader {
   lastList = '';
   /** Something worth a job note once per sync. */
   note = '';
+  /** Companies with more tickets than one sync lists: their tickets not listed are kept, not deleted. */
+  readonly partial = new Set<string>();
   private readonly web: string | undefined;
 
   constructor(
@@ -145,6 +147,7 @@ export class CwTicketReader {
     let records: Json[];
     try {
       records = await this.pages(`companyIds=${encodeURIComponent(companyId)}`);
+      if (records.length >= MAX_PAGES * PAGE) this.partial.add(companyId);
     } catch (error) {
       if (!(error instanceof HttpError) || error.status !== 400 || error.code === ACCESS_DENIED) throw error;
       throw new HttpError(
@@ -333,7 +336,8 @@ export async function runTicketSync(
       run.count('tickets', known.has(k.id) ? 'updated' : 'created');
       seen.push(k.id);
     }
-    read.push(companyId);
+    // A company listed only in part keeps the tickets it didn't list.
+    if (!reader.partial.has(companyId)) read.push(companyId);
   }
   if (reader.note) run.note(reader.note);
   if (linked.length && !seen.length && reader.lastList) run.note(`No tickets listed (${reader.lastList}).`);
