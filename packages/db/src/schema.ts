@@ -1018,10 +1018,12 @@ export const rmmDeviceStatus = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     protection: text('protection'),
     protectionProduct: text('protection_product').notNull().default(''),
-    /** Installed applications ({name, version, publisher, installedAt}), as the RMM last reported them. */
-    software: jsonb('software').notNull().default([]),
-    /** Accounts that sign in to the device ({username, domain, lastLogonAt, contactId}), most recent first. */
-    signIns: jsonb('sign_ins').notNull().default([]),
+    /** Installed applications ({name, version, publisher, installedAt}); null until the RMM has reported them. */
+    software: jsonb('software'),
+    /** Accounts that sign in ({username, domain, lastLogonAt, contactId}), most recent first; null until reported. */
+    signIns: jsonb('sign_ins'),
+    /** When the software or sign-ins were last read from the RMM (not just the device's health). */
+    inventoryAt: timestamp('inventory_at', { withTimezone: true }),
     updatedAt: updated(),
   },
   (t) => [

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, like, or } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type AssetView, type CwRmmCompany, type CwRmmRegion, type LayoutField, type RmmDeviceKind, type RmmProtection, MAX_LAYOUT_FIELDS } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
@@ -943,8 +943,8 @@ export class CwRmmClient {
         cursor = nextCursor !== null && nextCursor > cursor ? nextCursor : null;
       }
     } catch (error) {
-      // A company with no devices is "not found"; anything else (no permission, not supported) leaves it unknown.
-      if (error instanceof HttpError && error.status === 404) return out;
+      // No permission, not supported, or "not found": unknown, so what an earlier sync saved stays. (A company with
+      // no devices has nothing to save either way.)
       if (error instanceof HttpError) return null;
       throw error;
     }
@@ -1451,6 +1451,39 @@ export function contactFor(username: string, contacts: ContactRow[]): string | n
   return ids.size === 1 ? [...ids][0]! : null;
 }
 
+// Links the sync makes end their note with this, so it can tell them from links people made and remove its own when
+// ConnectWise stops reporting them.
+const SYNCED = ' (ConnectWise RMM)';
+const SIGN_IN_LINK = `Signs in as %${SYNCED}`;
+const VM_LINK = `% hosts virtual machine %${SYNCED}`;
+
+/** Removes the sync's own links (notes matching `pattern`) from an asset to items of `type` not in `keep`. */
+async function dropSyncedLinks(
+  db: Database,
+  orgId: string,
+  assetId: string,
+  type: 'asset' | 'contact',
+  pattern: string,
+  keep: Set<string>,
+) {
+  const r = schema.relations;
+  const rows = await db
+    .select({ id: r.id, aId: r.aId, bId: r.bId })
+    .from(r)
+    .where(
+      and(
+        eq(r.orgId, orgId),
+        like(r.note, pattern),
+        or(
+          and(eq(r.aType, 'asset'), eq(r.aId, assetId), eq(r.bType, type)),
+          and(eq(r.bType, 'asset'), eq(r.bId, assetId), eq(r.aType, type)),
+        ),
+      ),
+    );
+  const stale = rows.filter((row) => !keep.has(row.aId === assetId ? row.bId : row.aId)).map((row) => row.id);
+  if (stale.length) await db.delete(r).where(inArray(r.id, stale));
+}
+
 /** Links two items (undirected, stored once in a stable order), unless they already are; whether a link was made. */
 async function linkItems(
   db: Database,
@@ -1488,6 +1521,8 @@ async function saveStatus(
     // Software and sign-ins ConnectWise didn't give this time keep what an earlier sync saved.
     ...(d.software ? { software: d.software } : {}),
     ...(d.signIns ? { signIns: d.signIns.map((u) => ({ ...u, contactId: contactFor(u.username, contacts) })) } : {}),
+    // Only a read that brought software or sign-ins makes them current.
+    ...(d.software || d.signIns ? { inventoryAt: new Date() } : {}),
     updatedAt: new Date(),
   };
   await db
@@ -1853,15 +1888,19 @@ export async function runCwRmmSync(
       if (!assetId) continue;
       assetOf.set(d.id, assetId);
       await saveStatus(db, actor.orgId, clientId, assetId, d, contacts);
-      // "Jane's laptop": the device is linked to the contact of each account that signs in to it.
-      for (const u of d.signIns ?? []) {
+      // "Jane's laptop": the device is linked to the contact of each account that signs in to it, and no longer to
+      // one whose account has stopped signing in.
+      if (!d.signIns) continue;
+      const signedIn = new Set<string>();
+      for (const u of d.signIns) {
         const contactId = contactFor(u.username, contacts);
-        if (
-          contactId &&
-          (await linkItems(db, actor.orgId, { type: 'asset', id: assetId }, { type: 'contact', id: contactId }, `Signs in as ${u.username} (ConnectWise RMM)`))
-        )
+        if (!contactId) continue;
+        signedIn.add(contactId);
+        const note = `Signs in as ${u.username}${SYNCED}`;
+        if (await linkItems(db, actor.orgId, { type: 'asset', id: assetId }, { type: 'contact', id: contactId }, note))
           signInLinks++;
       }
+      await dropSyncedLinks(db, actor.orgId, assetId, 'contact', SIGN_IN_LINK, signedIn);
     }
     // Virtual machines and their hosts, as ConnectWise relates them. Workstations host nothing, so they're skipped.
     const names = new Map(devices.map((d) => [d.id, d.name]));
@@ -1873,11 +1912,12 @@ export async function runCwRmmSync(
         related = await client.relations(companyId, d.siteId, d.id);
       } catch (error) {
         if (!(error instanceof HttpError)) throw error;
-        if (error.status === 404) continue;
-        relationsApi = false;
+        relationsApi = error.status === 404;
+        if (relationsApi) continue;
         run.note(`Virtual machine hosts not linked: ${error.message}`);
         break;
       }
+      const current = new Set<string>();
       for (const r of related) {
         const other = assetOf.get(r.endpointId);
         if (!other) continue;
@@ -1886,9 +1926,13 @@ export async function runCwRmmSync(
         const isGuest = guest.test(r.role) || /host/i.test(r.relatedRole);
         if (isHost === isGuest) continue;
         const [host, vm] = isHost ? [d.name, names.get(r.endpointId)] : [names.get(r.endpointId), d.name];
-        if (await linkItems(db, actor.orgId, { type: 'asset', id: assetId }, { type: 'asset', id: other }, `${host} hosts virtual machine ${vm}`))
+        current.add(other);
+        const note = `${host} hosts virtual machine ${vm}${SYNCED}`;
+        if (await linkItems(db, actor.orgId, { type: 'asset', id: assetId }, { type: 'asset', id: other }, note))
           vmLinks++;
       }
+      // A VM that moved to another host keeps no link to the old one.
+      await dropSyncedLinks(db, actor.orgId, assetId, 'asset', VM_LINK, current);
     }
     // Only a company whose devices were read counts toward archiving devices the RMM dropped.
     if (options.devices) readInFull.add(clientId);

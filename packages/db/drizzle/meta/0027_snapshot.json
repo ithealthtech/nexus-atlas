@@ -1,5 +1,5 @@
 {
-  "id": "5372e501-8050-42df-8a27-06e322c583b8",
+  "id": "217029a3-e90a-4e1d-ab91-f47fcb961e95",
   "prevId": "20acf99b-19c3-4cc1-aaae-41104531eb8a",
   "version": "7",
   "dialect": "postgresql",
@@ -4713,15 +4713,19 @@
           "name": "software",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
+          "notNull": false
         },
         "sign_ins": {
           "name": "sign_ins",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
+          "notNull": false
+        },
+        "inventory_at": {
+          "name": "inventory_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "updated_at": {
           "name": "updated_at",

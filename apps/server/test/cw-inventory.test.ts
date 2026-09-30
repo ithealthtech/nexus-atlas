@@ -11,6 +11,8 @@ const SIGNED_IN = 1789900000;
 /** A fake platform API with three devices (a host, its VM, and a laptop), their software, users, and relations. */
 function fakeAsio() {
   const calls: string[] = [];
+  // Switches for later syncs: the applications API down, Jane gone from the laptop, the VM moved off its host.
+  const change = { appsDown: false, janeGone: false, vmMoved: false };
   const devices = [
     { endpointId: 'e1', siteId: 's1', friendlyName: 'HDG-HV-01', endpointType: 'Server' },
     { endpointId: 'e2', siteId: 's1', friendlyName: 'HDG-APP-01', endpointType: 'Server' },
@@ -37,25 +39,28 @@ function fakeAsio() {
       return json([{ id: 's1', name: 'Main office' }]);
     if (url.pathname === '/api/platform/v2/device/categories/all/endpoints') return json({ endpoints: devices });
     if (url.pathname === '/api/platform/v2/device/endpoints/applications')
-      return json(
-        Object.entries(apps).map(([endpointID, applications]) => ({
-          companyID: 'c1',
-          siteID: 's1',
-          endpointID,
-          applications,
-        })),
-      );
+      return change.appsDown
+        ? json({ message: 'resource not found' }, 404)
+        : json(
+            Object.entries(apps).map(([endpointID, applications]) => ({
+              companyID: 'c1',
+              siteID: 's1',
+              endpointID,
+              applications,
+            })),
+          );
     if (url.pathname === '/api/platform/v2/device/endpoints/users')
       return json([
         {
           endpointID: 'e3',
           users: [
-            { username: 'jane.doe', domainName: 'HARBOR', lastLogonTimestamp: SIGNED_IN },
+            ...(change.janeGone ? [] : [{ username: 'jane.doe', domainName: 'HARBOR', lastLogonTimestamp: SIGNED_IN }]),
             { username: 'Administrator', lastLogonTimestamp: SIGNED_IN },
             { username: 'olduser', userDisabled: true, lastLogonTimestamp: SIGNED_IN },
           ],
         },
       ]);
+    if (change.vmMoved && url.pathname.endsWith('/relations')) return json({ relations: [] });
     if (url.pathname === '/api/platform/v2/device/companies/c1/sites/s1/endpoints/e1/relations')
       return json({
         endpointID: 'e1',
@@ -68,7 +73,7 @@ function fakeAsio() {
       });
     return json({ message: 'resource not found' }, 404);
   }) as typeof fetch;
-  return { calls, apps, fetcher };
+  return { calls, apps, change, fetcher };
 }
 
 async function sync(b: Browser) {
@@ -153,15 +158,27 @@ describe('ConnectWise RMM device inventory', () => {
     ]);
 
     const related = (await owner.call('GET', `/api/items/asset/${id('HDG-HV-01')}/relations`)).data;
-    expect(related).toMatchObject([{ title: 'HDG-APP-01', note: 'HDG-HV-01 hosts virtual machine HDG-APP-01' }]);
+    expect(related).toMatchObject([
+      { title: 'HDG-APP-01', note: 'HDG-HV-01 hosts virtual machine HDG-APP-01 (ConnectWise RMM)' },
+    ]);
     const janeLinks = (await owner.call('GET', `/api/items/contact/${jane.id}/relations`)).data;
     expect(janeLinks).toMatchObject([{ title: 'HDG-LT-07' }]);
 
-    // A later sync refreshes the software list and makes no second links.
-    asio.apps.e3 = [];
+    // A later sync where the applications API answers "not found" keeps the saved list and makes no second links.
+    asio.change.appsDown = true;
     const again = await sync(owner);
     expect(again.messages.join(' ')).not.toContain('new link');
-    expect((await owner.call('GET', `/api/assets/${id('HDG-LT-07')}/inventory`)).data.software).toEqual([]);
+    expect((await owner.call('GET', `/api/assets/${id('HDG-LT-07')}/inventory`)).data.software).toHaveLength(3);
+
+    // Links ConnectWise stops reporting go; one someone made by hand stays.
+    await owner.call('POST', `/api/items/asset/${id('HDG-HV-01')}/relations`, { type: 'asset', id: id('HDG-LT-07') });
+    asio.change.janeGone = true;
+    asio.change.vmMoved = true;
+    await sync(owner);
+    expect((await owner.call('GET', `/api/items/contact/${jane.id}/relations`)).data).toEqual([]);
+    expect((await owner.call('GET', `/api/items/asset/${id('HDG-HV-01')}/relations`)).data).toMatchObject([
+      { title: 'HDG-LT-07' },
+    ]);
   });
 
   it('skips software and sign-ins when switched off', async () => {
@@ -176,6 +193,9 @@ describe('ConnectWise RMM device inventory', () => {
     expect((await sync(owner)).status).toBe('done');
     expect(asio.calls.some((c) => /applications|users|relations/.test(c))).toBe(false);
     expect((await owner.call('GET', `/api/clients/${harbor}/software`)).data).toEqual([]);
+    // Never read is unknown, not "nothing installed".
+    const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as { id: string }[];
+    expect((await owner.call('GET', `/api/assets/${assets[0]!.id}/inventory`)).data).toBeNull();
   });
 });
 

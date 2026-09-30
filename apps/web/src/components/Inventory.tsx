@@ -122,11 +122,13 @@ export function DeviceInventoryCards({ assetId }: { assetId: string }) {
   const data = inventory.data;
   if (inventory.isLoading) return <Skeleton className="h-40" />;
   if (!data) return null;
-  const software = [...data.software].sort((a, b) => Number(!a.flag) - Number(!b.flag) || a.name.localeCompare(b.name));
+  const software = [...(data.software ?? [])].sort(
+    (a, b) => Number(!a.flag) - Number(!b.flag) || a.name.localeCompare(b.name),
+  );
   const flagged = software.filter((a) => a.flag).length;
   return (
     <>
-      {data.signIns.length > 0 && (
+      {!!data.signIns?.length && (
         <Card>
           <CardHeader title="Who signs in" description={`From ConnectWise RMM, ${relativeTime(data.updatedAt)}.`} />
           <ul className="divide-y divide-border">
@@ -144,32 +146,34 @@ export function DeviceInventoryCards({ assetId }: { assetId: string }) {
           </ul>
         </Card>
       )}
-      <Card>
-        <CardHeader
-          title="Installed software"
-          description={
-            software.length
-              ? `${software.length} applications${flagged ? `, ${flagged} flagged` : ''}. From ConnectWise RMM, ${relativeTime(data.updatedAt)}.`
-              : 'ConnectWise RMM reported no applications.'
-          }
-          actions={
-            software.length > SHORT ? (
-              <button
-                type="button"
-                onClick={() => setAll(true)}
-                className="text-sm font-semibold text-primary hover:underline"
-              >
-                View all
-              </button>
-            ) : undefined
-          }
-        />
-        {software.length > 0 && (
-          <div className="px-5 py-3">
-            <SoftwareTable rows={appRows(software.slice(0, SHORT))} columns={['Application', 'Version']} />
-          </div>
-        )}
-      </Card>
+      {data.software && (
+        <Card>
+          <CardHeader
+            title="Installed software"
+            description={
+              software.length
+                ? `${software.length} applications${flagged ? `, ${flagged} flagged` : ''}. From ConnectWise RMM, ${relativeTime(data.updatedAt)}.`
+                : 'ConnectWise RMM reported no applications.'
+            }
+            actions={
+              software.length > SHORT ? (
+                <button
+                  type="button"
+                  onClick={() => setAll(true)}
+                  className="text-sm font-semibold text-primary hover:underline"
+                >
+                  View all
+                </button>
+              ) : undefined
+            }
+          />
+          {software.length > 0 && (
+            <div className="px-5 py-3">
+              <SoftwareTable rows={appRows(software.slice(0, SHORT))} columns={['Application', 'Version']} />
+            </div>
+          )}
+        </Card>
+      )}
       <AllDialog
         open={all}
         onClose={() => setAll(false)}

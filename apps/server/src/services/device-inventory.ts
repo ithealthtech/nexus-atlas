@@ -17,13 +17,14 @@ export class DeviceInventoryService {
       .select({
         software: schema.rmmDeviceStatus.software,
         signIns: schema.rmmDeviceStatus.signIns,
-        updatedAt: schema.rmmDeviceStatus.updatedAt,
+        inventoryAt: schema.rmmDeviceStatus.inventoryAt,
       })
       .from(schema.rmmDeviceStatus)
       .where(and(eq(schema.rmmDeviceStatus.orgId, scope.actor.orgId), eq(schema.rmmDeviceStatus.assetId, assetId)));
-    if (!row) return null;
+    // Never read (switched off, or ConnectWise wouldn't say) is not the same as nothing installed.
+    if (!row?.inventoryAt) return null;
     const flag = await this.flagger(scope, asset.clientId!);
-    const signIns = row.signIns as StoredSignIn[];
+    const signIns = (row.signIns ?? []) as StoredSignIn[];
     const ids = signIns.flatMap((u) => (u.contactId ? [u.contactId] : []));
     const names = new Map(
       ids.length
@@ -36,13 +37,15 @@ export class DeviceInventoryService {
         : [],
     );
     return {
-      software: (row.software as StoredApp[]).map((a) => ({ ...a, ...flag(a.name) })),
-      signIns: signIns.map((u) => {
-        // A contact deleted since the sync is no longer named.
-        const contactName = (u.contactId && names.get(u.contactId)) || null;
-        return { ...u, contactId: contactName ? u.contactId : null, contactName };
-      }),
-      updatedAt: row.updatedAt.toISOString(),
+      software: row.software ? (row.software as StoredApp[]).map((a) => ({ ...a, ...flag(a.name) })) : null,
+      signIns: row.signIns
+        ? signIns.map((u) => {
+            // A contact deleted since the sync is no longer named.
+            const contactName = (u.contactId && names.get(u.contactId)) || null;
+            return { ...u, contactId: contactName ? u.contactId : null, contactName };
+          })
+        : null,
+      updatedAt: row.inventoryAt.toISOString(),
     };
   }
 
@@ -52,7 +55,7 @@ export class DeviceInventoryService {
     const flag = await this.flagger(scope, clientId);
     const byName = new Map<string, ClientSoftware & { seen: Set<string> }>();
     for (const row of await this.softwareRows(scope, clientId)) {
-      for (const a of row.software as StoredApp[]) {
+      for (const a of (row.software ?? []) as StoredApp[]) {
         const key = a.name.toLowerCase();
         let entry = byName.get(key);
         if (!entry)
@@ -120,7 +123,9 @@ export class DeviceInventoryService {
     });
     const installs = new Map<string, number>();
     for (const row of await this.softwareRows(scope, clientId)) {
-      const families = new Set((row.software as StoredApp[]).flatMap((a) => licensedFamily(a.name)?.family ?? []));
+      const families = new Set(
+        ((row.software ?? []) as StoredApp[]).flatMap((a) => licensedFamily(a.name)?.family ?? []),
+      );
       for (const family of families) installs.set(family, (installs.get(family) ?? 0) + 1);
     }
     return softwareFlagger(licenses, installs);

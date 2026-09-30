@@ -190,10 +190,11 @@ export interface DeviceSignIn {
   contactId: string | null;
   contactName: string | null;
 }
-/** What the RMM knows about one device beyond its fields: software and sign-ins. */
+/** What the RMM knows about one device beyond its fields: software and sign-ins, each null when never reported. */
 export interface DeviceInventory {
-  software: DeviceSoftware[];
-  signIns: DeviceSignIn[];
+  software: DeviceSoftware[] | null;
+  signIns: DeviceSignIn[] | null;
+  /** When they were last read from the RMM. */
   updatedAt: string;
 }
 /** One application across a client's devices. */
