@@ -1052,6 +1052,12 @@ figure.panel img {
   background: var(--surface-raised);
 }
 
+figure.panel-phone img {
+  width: auto;
+  max-width: min(100%, 360px);
+  margin: 0 auto;
+}
+
 figure.panel figcaption {
   margin-top: 14px;
   color: var(--muted);

@@ -92,7 +92,8 @@
             </ol>
             <p>
               API keys replace the session steps with a hashed bearer key limited to its scopes and to the documentation
-              and vault endpoints.
+              and vault endpoints. The browser extension and Atlas for Windows sign in through the browser and get their
+              own sessions, listed on the Account page and ended with every other sign-out.
             </p>
 
             <h2 id="threats">Threats and protections</h2>
@@ -108,9 +109,9 @@
                   <tr>
                     <td>Stolen database or backup</td>
                     <td>
-                      Passwords, notes, one-time code keys, MFA secrets, and the SMTP and Hudu credentials are encrypted
-                      with AES-256-GCM, bound to their row and field. Keys are wrapped by a master key that is never
-                      stored in the database. Backups are encrypted with a key derived from it.
+                      Passwords, notes, one-time code keys, MFA secrets, and the SMTP, Hudu, ConnectWise, and SIEM
+                      credentials are encrypted with AES-256-GCM, bound to their row and field. Keys are wrapped by a
+                      master key that is never stored in the database. Backups are encrypted with a key derived from it.
                     </td>
                   </tr>
                   <tr>
@@ -163,10 +164,35 @@
                     </td>
                   </tr>
                   <tr>
-                    <td>One-time share links</td>
+                    <td>One-time share links and Send</td>
                     <td>
-                      The password is encrypted in the browser; the key lives only in the link's <code>#fragment</code>,
-                      which the server never receives.
+                      The password, text, or file is encrypted in the browser; the key lives only in the link's
+                      <code>#fragment</code>, which the server never receives.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Browser extension or Windows app on a lost device</td>
+                    <td>
+                      Neither stores passwords. The extension's session is tied to a key the browser won't export and
+                      ends after 7 days unused or 30 days in total; the Windows app keeps only a DPAPI-protected token.
+                      Both are signed out with a password change or an administrator's sign-out, and every fill or copy
+                      is recorded like a reveal.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>An administrator reading restricted passwords</td>
+                    <td>
+                      Vault policies can make restricted entries available only to the people listed on them,
+                      administrators included. Emergency access is time-limited, emails the owner at once, and marks
+                      every password used. The security and access logs can stream to a SIEM as they happen.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>A rotated password that didn't take</td>
+                    <td>
+                      Automated rotation changes the vault only after the device confirms the new password. Each run
+                      uses a token good for that rotation only, for two hours; failures keep the old password and alert
+                      administrators.
                     </td>
                   </tr>
                 </tbody>
@@ -187,6 +213,10 @@
               <li>
                 Server-side requests an administrator configures: the Hudu importer connects to any
                 <code>https://</code> address, including internal ones.
+              </li>
+              <li>
+                A compromised ConnectWise account. Password rotation runs scripts on client devices through ConnectWise
+                RMM, so anyone who controls that RMM already controls those devices.
               </li>
               <li>
                 Rate limits across several servers: failed-attempt counters are per server, though account lockout
