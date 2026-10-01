@@ -4,6 +4,7 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Download, ListChecks, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
 import type { ChecklistView, RunView } from '@atlas/shared';
 import { AppLink } from '@/components/AppLink';
+import { TemplateLibrary } from '@/components/TemplateLibrary';
 import {
   Badge,
   Button,
@@ -354,9 +355,12 @@ function TemplateList({
           </p>
         </div>
         {canCreate && (
-          <Button size="sm" onClick={() => setEditing('new')}>
-            <Plus /> New checklist
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {!clientId && <TemplateLibrary kind="checklist" />}
+            <Button size="sm" onClick={() => setEditing('new')}>
+              <Plus /> New checklist
+            </Button>
+          </div>
         )}
       </div>
       {!templates ? (

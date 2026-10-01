@@ -45,6 +45,7 @@ import { useClient, useDocument, useDocuments, useFolders } from '@/lib/queries'
 import { formatDate, relativeTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { FavoriteStar } from '@/components/Favorites';
+import { TemplateLibrary } from '@/components/TemplateLibrary';
 
 export const docTone: Record<DocumentStatus, Tone> = { current: 'success', needs_review: 'warning', draft: 'neutral' };
 const EMPTY: RichText = { type: 'doc', content: [{ type: 'paragraph' }] };
@@ -166,9 +167,12 @@ export function DocumentsView({ clientId }: { clientId: string | null }) {
           description="Internal standards, procedures, and references for your team. Client contacts never see these."
           actions={
             canEdit && (
-              <Button onClick={newDoc}>
-                <Plus /> New document
-              </Button>
+              <>
+                <TemplateLibrary kind="runbook" />
+                <Button onClick={newDoc}>
+                  <Plus /> New document
+                </Button>
+              </>
             )
           }
         />

@@ -15,6 +15,7 @@ import { contacts, locations } from '../services/people.js';
 import { RelationService } from '../services/relations.js';
 import { Scope, isUuid } from '../services/scope.js';
 import { search } from '../services/search.js';
+import { TemplateService } from '../services/templates.js';
 import type { FileStorage } from '../services/storage.js';
 
 type Params = { id: string };
@@ -45,6 +46,7 @@ export function registerDocumentationRoutes(
   const documents = new DocumentService();
   const relations = new RelationService();
   const checklists = new ChecklistService();
+  const templates = new TemplateService(checklists, documents);
   const attachments = new AttachmentService(deps.storage, deps.maxUploadBytes);
   const scopeOf = (req: FastifyRequest) => new Scope(db, req.session!.actor);
 
@@ -218,6 +220,10 @@ export function registerDocumentationRoutes(
     await attachments.remove(scopeOf(req), req.params.id);
     return { ok: true };
   });
+
+  // ---- built-in checklist and runbook templates ----
+  app.get('/api/templates', authed, async (req) => templates.list(scopeOf(req)));
+  app.post('/api/templates', authed, async (req) => templates.add(scopeOf(req), req.body));
 
   // ---- checklists and their runs ----
   app.get<{ Querystring: { client?: string; archived?: string } }>('/api/checklists', authed, async (req) =>

@@ -231,4 +231,47 @@ describe('checklists', () => {
     expect(after.done).toBe(8);
     expect(after.completedAt).not.toBeNull();
   });
+  it('adds the built-in checklists and runbooks once, as editable copies', async () => {
+    type Template = { key: string; kind: string; title: string; addedId: string | null };
+    const library = (await owner.call('GET', '/api/templates')).data as Template[];
+    expect(library.some((t) => t.kind === 'checklist')).toBe(true);
+    expect(library.some((t) => t.kind === 'runbook')).toBe(true);
+    expect(library.every((t) => t.addedId === null)).toBe(true);
+
+    const one = await owner.call('POST', '/api/templates', { keys: ['user-offboarding'] });
+    expect(one.status).toBe(200);
+    const offboarding = (one.data as Template[]).find((t) => t.key === 'user-offboarding')!;
+    expect(offboarding.addedId).not.toBeNull();
+    // A renamed copy still counts as added, so adding everything doesn't bring it back.
+    await owner.call('PATCH', `/api/checklists/${offboarding.addedId}`, { title: 'Leaver' });
+
+    const all = (await owner.call('POST', '/api/templates', {})).data as Template[];
+    expect(all.every((t) => t.addedId)).toBe(true);
+    expect((await owner.call('POST', '/api/templates', {})).status).toBe(200);
+    const checklists = (await owner.call('GET', '/api/checklists?client=global')).data as { title: string }[];
+    expect(checklists).toHaveLength(library.filter((t) => t.kind === 'checklist').length);
+    expect(checklists.some((c) => c.title === 'Leaver')).toBe(true);
+
+    const folders = (await owner.call('GET', '/api/folders')).data as { name: string; documentCount: number }[];
+    expect(folders).toEqual([
+      expect.objectContaining({ name: 'Runbooks', documentCount: library.filter((t) => t.kind === 'runbook').length }),
+    ]);
+    const runbook = all.find((t) => t.kind === 'runbook')!;
+    const doc = (await owner.call('GET', `/api/documents/${runbook.addedId}`)).data;
+    expect(doc.title).toBe(runbook.title);
+    expect(doc.content.content.length).toBeGreaterThan(2);
+
+    // A run started from a library checklist works like any other.
+    const run = await owner.call('POST', `/api/clients/${harbor}/checklist-runs`, { checklistId: offboarding.addedId });
+    expect(run.status).toBe(201);
+  });
+
+  it('keeps the template library to staff who can edit the knowledge base', async () => {
+    const contact = await person('front@harbor.test', 'quiet orchard lantern 7', {
+      role: 'client_viewer',
+      grants: [{ clientId: harbor, level: 'read' }],
+    });
+    expect((await contact.b.call('GET', '/api/templates')).status).toBe(403);
+    expect((await contact.b.call('POST', '/api/templates', {})).status).toBe(404);
+  });
 });

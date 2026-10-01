@@ -13,3 +13,4 @@ export * from './policies.js';
 export * from './workspace.js';
 export * from './devices.js';
 export * from './rotation.js';
+export * from './templates.js';
