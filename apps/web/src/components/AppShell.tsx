@@ -248,13 +248,13 @@ function NavSection({ section, onNavigate }: { section: NavSectionDef; onNavigat
   };
   const listId = `nav-section-${section.id}`;
   return (
-    <div className="pt-4">
+    <div className="pt-3">
       <button
         type="button"
         onClick={toggle}
         aria-expanded={open}
         aria-controls={listId}
-        className="flex w-full items-center gap-1 rounded-md px-3 pb-2 text-left text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase hover:text-sidebar-active"
+        className="mb-1 flex min-h-8 w-full items-center gap-1 rounded-md px-3 text-left text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase hover:text-sidebar-active"
       >
         <span className="flex-1">{section.title}</span>
         <ChevronDown className={cn('size-3.5 transition-transform', !open && '-rotate-90')} aria-hidden />
