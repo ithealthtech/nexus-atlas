@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { Link } from '@tanstack/react-router';
+import { useId, useState, type ReactNode } from 'react';
+import { Link, useRouterState } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
   ArrowDownUp,
@@ -12,6 +12,7 @@ import {
   KeyRound,
   LockKeyhole,
   Building2,
+  ChevronDown,
   ChevronsUpDown,
   LayoutDashboard,
   LayoutTemplate,
@@ -151,7 +152,149 @@ function UserMenu() {
   );
 }
 
-function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: () => void }) {
+type NavItem = { to: string; icon: LucideIcon; label: string };
+type NavSectionDef = { id: string; title: string; items: NavItem[] };
+
+// Pages beyond the top three are grouped by purpose; each group collapses and remembers that per browser.
+function navSections(actor: { isStaff: boolean; isAdmin: boolean }): NavSectionDef[] {
+  const sections: NavSectionDef[] = [
+    {
+      id: 'documentation',
+      title: 'Documentation',
+      items: [
+        { to: '/assets', icon: Server, label: 'Assets' },
+        ...(actor.isStaff
+          ? [
+              { to: '/documents', icon: BookOpen, label: 'Knowledge base' },
+              { to: '/checklists', icon: ListChecks, label: 'Checklists' },
+            ]
+          : []),
+      ],
+    },
+  ];
+  if (actor.isStaff)
+    sections.push({
+      id: 'passwords',
+      title: 'Passwords',
+      items: [
+        { to: '/passwords', icon: KeyRound, label: 'Passwords' },
+        { to: '/password-health', icon: ShieldCheck, label: 'Password health' },
+        { to: '/sends', icon: Send, label: 'Send' },
+        ...(actor.isAdmin ? [{ to: '/admin/rotation', icon: RotateCw, label: 'Password rotation' }] : []),
+      ],
+    });
+  if (actor.isAdmin)
+    sections.push(
+      {
+        id: 'access',
+        title: 'People & security',
+        items: [
+          { to: '/admin/users', icon: Users, label: 'People & access' },
+          { to: '/admin/groups', icon: UsersRound, label: 'Groups' },
+          { to: '/admin/vault-policies', icon: LockKeyhole, label: 'Vault policies' },
+          { to: '/admin/security', icon: ScrollText, label: 'Security log' },
+        ],
+      },
+      {
+        id: 'data',
+        title: 'Data',
+        items: [
+          { to: '/admin/layouts', icon: LayoutTemplate, label: 'Asset layouts' },
+          { to: '/admin/data', icon: ArrowDownUp, label: 'Import & export' },
+          { to: '/admin/duplicates', icon: CopyCheck, label: 'Duplicates' },
+        ],
+      },
+      {
+        id: 'system',
+        title: 'System',
+        items: [
+          { to: '/admin/status', icon: Gauge, label: 'System status' },
+          { to: '/admin/request-log', icon: Waypoints, label: 'Request log' },
+          { to: '/admin/updates', icon: ArrowUpCircle, label: 'Updates' },
+          { to: '/admin/theme', icon: Palette, label: 'Theme' },
+          { to: '/admin/settings', icon: Settings2, label: 'Settings' },
+        ],
+      },
+    );
+  return sections;
+}
+
+const collapsedKey = 'atlas.nav.collapsed';
+
+function readCollapsed(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(collapsedKey) ?? '[]');
+    return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+// Shared by the desktop sidebar and the phone drawer so both always show the same open sections.
+function useCollapsedSections() {
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggle = (id: string) => {
+    const next = collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id];
+    setCollapsed(next);
+    try {
+      localStorage.setItem(collapsedKey, JSON.stringify(next));
+    } catch {
+      // Storage can be unavailable (private mode); the toggle still works for this page view.
+    }
+  };
+  return { collapsed, toggle };
+}
+
+type CollapsedSections = ReturnType<typeof useCollapsedSections>;
+
+function NavSection({
+  section,
+  sections,
+  onNavigate,
+}: {
+  section: NavSectionDef;
+  sections: CollapsedSections;
+  onNavigate?: () => void;
+}) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const collapsed = sections.collapsed.includes(section.id);
+  // The section holding the current page always stays open, so the active link is never hidden.
+  const holdsActive = section.items.some((i) => pathname === i.to || pathname.startsWith(`${i.to}/`));
+  const open = !collapsed || holdsActive;
+  // The desktop sidebar and the phone drawer can both be mounted, so ids must be unique per instance.
+  const listId = `nav-section-${section.id}-${useId()}`;
+  return (
+    <div className="pt-3">
+      <button
+        type="button"
+        onClick={() => sections.toggle(section.id)}
+        aria-expanded={open}
+        aria-controls={listId}
+        className="mb-1 flex min-h-8 w-full items-center gap-1 rounded-md px-3 text-left text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase hover:text-sidebar-active"
+      >
+        <span className="flex-1">{section.title}</span>
+        <ChevronDown className={cn('size-3.5 transition-transform', !open && '-rotate-90')} aria-hidden />
+      </button>
+      {open && (
+        <div id={listId} className="space-y-1">
+          {section.items.map((item) => (
+            <NavLink key={item.to} {...item} onNavigate={onNavigate} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Sidebar({
+  onNavigate,
+  onSearch,
+  sections,
+}: {
+  onNavigate?: () => void;
+  onSearch: () => void;
+  sections: CollapsedSections;
+}) {
   const actor = useActor();
   return (
     <div className="flex h-full flex-col bg-sidebar px-3 pt-5 pb-3">
@@ -168,40 +311,12 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         <kbd className="rounded border border-white/10 px-1.5 text-[10px]">Ctrl K</kbd>
       </button>
       <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto">
-        <p className="px-3 pt-1 pb-2 text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase">
-          Workspace
-        </p>
         <NavLink to="/" exact icon={LayoutDashboard} label="Dashboard" onNavigate={onNavigate} />
         <NavLink to="/clients" icon={Building2} label="Clients" onNavigate={onNavigate} />
-        <NavLink to="/assets" icon={Server} label="Assets" onNavigate={onNavigate} />
-        {actor.isStaff && <NavLink to="/documents" icon={BookOpen} label="Knowledge base" onNavigate={onNavigate} />}
-        {actor.isStaff && <NavLink to="/passwords" icon={KeyRound} label="Passwords" onNavigate={onNavigate} />}
-        {actor.isStaff && (
-          <NavLink to="/password-health" icon={ShieldCheck} label="Password health" onNavigate={onNavigate} />
-        )}
-        {actor.isStaff && <NavLink to="/sends" icon={Send} label="Send" onNavigate={onNavigate} />}
-        {actor.isStaff && <NavLink to="/checklists" icon={ListChecks} label="Checklists" onNavigate={onNavigate} />}
         <NavLink to="/expirations" icon={CalendarClock} label="Expirations" onNavigate={onNavigate} />
-        {actor.isAdmin && (
-          <>
-            <p className="px-3 pt-5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase">
-              Administration
-            </p>
-            <NavLink to="/admin/users" icon={Users} label="People & access" onNavigate={onNavigate} />
-            <NavLink to="/admin/groups" icon={UsersRound} label="Groups" onNavigate={onNavigate} />
-            <NavLink to="/admin/layouts" icon={LayoutTemplate} label="Asset layouts" onNavigate={onNavigate} />
-            <NavLink to="/admin/security" icon={ScrollText} label="Security log" onNavigate={onNavigate} />
-            <NavLink to="/admin/vault-policies" icon={LockKeyhole} label="Vault policies" onNavigate={onNavigate} />
-            <NavLink to="/admin/data" icon={ArrowDownUp} label="Import & export" onNavigate={onNavigate} />
-            <NavLink to="/admin/rotation" icon={RotateCw} label="Password rotation" onNavigate={onNavigate} />
-            <NavLink to="/admin/duplicates" icon={CopyCheck} label="Duplicates" onNavigate={onNavigate} />
-            <NavLink to="/admin/status" icon={Gauge} label="System status" onNavigate={onNavigate} />
-            <NavLink to="/admin/request-log" icon={Waypoints} label="Request log" onNavigate={onNavigate} />
-            <NavLink to="/admin/updates" icon={ArrowUpCircle} label="Updates" onNavigate={onNavigate} />
-            <NavLink to="/admin/theme" icon={Palette} label="Theme" onNavigate={onNavigate} />
-            <NavLink to="/admin/settings" icon={Settings2} label="Settings" onNavigate={onNavigate} />
-          </>
-        )}
+        {navSections(actor).map((section) => (
+          <NavSection key={section.id} section={section} sections={sections} onNavigate={onNavigate} />
+        ))}
       </nav>
       <div className="border-t border-sidebar-2 pt-3">
         <UserMenu />
@@ -213,6 +328,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
+  const sections = useCollapsedSections();
   return (
     <div className="min-h-screen lg:pl-(--sidebar-width) print:pl-0">
       <a
@@ -222,7 +338,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--sidebar-width) lg:block print:hidden">
-        <Sidebar onSearch={() => setSearching(true)} />
+        <Sidebar onSearch={() => setSearching(true)} sections={sections} />
       </aside>
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden print:hidden">
         <button
@@ -251,6 +367,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="relative h-full w-72 max-w-[85vw]">
             <Sidebar
               onNavigate={() => setOpen(false)}
+              sections={sections}
               onSearch={() => {
                 setOpen(false);
                 setSearching(true);
