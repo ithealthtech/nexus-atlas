@@ -654,6 +654,12 @@ export async function buildApp({
   const warranty =
     warrantyFetch || config.NODE_ENV !== 'test' ? new WarrantyLookup(settings, warrantyFetch ?? fetch) : undefined;
   const files = storage ?? new LocalStorage(join(resolve(config.ATLAS_DATA_DIR), 'attachments'));
+  app.delete<{ Params: { id: string } }>('/api/clients/:id', authed, async (req) => {
+    requireAdmin(actorOf(req));
+    recent(req);
+    await clients.remove(actorOf(req), req.params.id, req.body, files, req.ip);
+    return { ok: true };
+  });
   registerDocumentationRoutes(app, {
     db,
     authed,

@@ -131,6 +131,34 @@ describe('duplicates', () => {
     expect(contacts[0]).toMatchObject({ email: 'dana@harbor.test', phone: '919-555-0142' });
   });
 
+  it('deletes a client and everything in it when its name is typed', async () => {
+    const copy = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental' })).data.id;
+    const pw = (
+      await owner.call('POST', `/api/clients/${copy}/passwords`, { name: 'Wi-Fi', secret: 'Tr0ub4dor&3-Harbor!' })
+    ).data;
+    const contact = (await owner.call('POST', `/api/clients/${copy}/contacts`, { name: 'Dana Reyes' })).data;
+    const kept = (await owner.call('POST', `/api/clients/${harbor}/contacts`, { name: 'Sam Lee' })).data;
+    await owner.call('POST', `/api/items/contact/${kept.id}/relations`, { type: 'contact', id: contact.id });
+    await t.handle.db.execute(
+      sql`insert into external_refs (org_id, source, kind, external_id, entity_id) select org_id, 'hudu', 'clients', '7', id from clients where id = ${copy}`,
+    );
+
+    const wrong = await owner.call('DELETE', `/api/clients/${copy}`, { confirmName: 'Harbor' });
+    expect(wrong.status).toBe(400);
+    expect((await owner.call('DELETE', `/api/clients/${copy}`, { confirmName: 'Harbor Dental' })).status).toBe(200);
+
+    expect((await owner.call('GET', '/api/clients')).data.map((c: { id: string }) => c.id)).toEqual([harbor]);
+    expect((await owner.call('GET', `/api/clients/${copy}`)).status).toBe(404);
+    const left = await t.handle.db.execute(
+      sql`select (select count(*) from passwords where id = ${pw.id})::int as passwords,
+        (select count(*) from relations where a_id = ${contact.id} or b_id = ${contact.id})::int as links,
+        (select count(*) from external_refs where external_id = '7')::int as refs`,
+    );
+    expect(left.rows[0]).toEqual({ passwords: 0, links: 0, refs: 0 });
+    const events = (await owner.call('GET', '/api/security-events')).data as { action: string; detail: string }[];
+    expect(events.some((e) => e.action === 'Deleted a client' && e.detail === 'Harbor Dental')).toBe(true);
+  });
+
   it('is for administrators only', async () => {
     await owner.call('POST', '/api/users', {
       email: 'tess@atlas.test',
@@ -147,5 +175,8 @@ describe('duplicates', () => {
       (await tech.call('POST', '/api/duplicates/merge', { type: 'clients', keepId: harbor, mergeIds: [harbor] }))
         .status,
     ).toBe(403);
+    expect((await tech.call('DELETE', `/api/clients/${harbor}`, { confirmName: 'Harbor Dental Group' })).status).toBe(
+      403,
+    );
   });
 });

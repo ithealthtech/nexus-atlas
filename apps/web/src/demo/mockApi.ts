@@ -965,6 +965,7 @@ on('POST', '/clients', (_m, b) => {
   return clientSummary(c);
 });
 on('GET', '/clients/:id', (m) => clientSummary(find(db.clients, m[1]!, 'Client')));
+on('DELETE', '/clients/:id', () => notInDemo('Deleting clients'));
 on('PATCH', '/clients/:id', (m, b) => {
   const c = find(db.clients, m[1]!, 'Client');
   const { notesVersion, ...rest } = b;
