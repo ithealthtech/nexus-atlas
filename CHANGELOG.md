@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.20] - 2026-10-01
+
+### Added
+
+- **Checklist and runbook templates.** A Template library button on Checklists and the MSP knowledge base offers 13 ready-made checklists (client and user onboarding and offboarding, endpoint setup and decommission, server patching, backup verification, Microsoft 365 setup, firewall change, password rotation, incident response, SSL and domain renewal) and 6 runbooks, which go in a Runbooks folder. Added templates are ordinary checklists and documents to edit and run, and adding again never duplicates one.
+
 ## [1.7.19] - 2026-10-01
 
 ### Added
