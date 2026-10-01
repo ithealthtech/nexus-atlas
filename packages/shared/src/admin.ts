@@ -183,6 +183,8 @@ export interface ExpirationItem {
   label: string;
   /** For assets, the layout's key (for example "domain" or "ssl_certificate"). */
   layoutKey?: string;
+  /** For assets, the date field's key, which stays the same when the field or layout is renamed. */
+  fieldKey?: string;
   clientId: string | null;
   clientName: string | null;
   date: string;

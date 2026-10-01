@@ -349,6 +349,11 @@ export function CwRmmSync() {
                         'Ticket notes',
                         'Lets techs add internal notes to tickets from Atlas, and notes a password reveal on the ticket whose number is in the reason (never the password). Needs the tickets create permission.',
                       ],
+                      [
+                        'expiryTickets',
+                        'Expiry tickets',
+                        'Opens one ticket for each domain, certificate, license, or warranty of a linked client coming due, on every sync. Needs the tickets create permission.',
+                      ],
                     ] as const
                   ).map(([key, label, help]) => (
                     <Checkbox
@@ -369,6 +374,56 @@ export function CwRmmSync() {
                     />
                   ))}
                 </div>
+                {data.options.expiryTickets && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Field label="Days before it expires" help="Tickets open this many days ahead (1 to 180).">
+                      {(p) => (
+                        <Input
+                          {...p}
+                          type="number"
+                          min={1}
+                          max={180}
+                          key={`days-${data.options.expiryTicketDays}`}
+                          defaultValue={data.options.expiryTicketDays}
+                          disabled={busy === 'options'}
+                          onBlur={(e) => {
+                            const days = Math.round(Number(e.target.value));
+                            if (days === data.options.expiryTicketDays || !(days >= 1 && days <= 180)) return;
+                            void act('options', async () => {
+                              await api('/integrations/cw-rmm/options', {
+                                method: 'PUT',
+                                body: { ...data.options, expiryTicketDays: days },
+                              });
+                              await connection.refetch();
+                            });
+                          }}
+                        />
+                      )}
+                    </Field>
+                    <Field label="Service board" help="The board's name in ConnectWise. Empty uses the first board.">
+                      {(p) => (
+                        <Input
+                          {...p}
+                          key={`board-${data.options.expiryTicketBoard}`}
+                          defaultValue={data.options.expiryTicketBoard}
+                          maxLength={100}
+                          disabled={busy === 'options'}
+                          onBlur={(e) => {
+                            const board = e.target.value.trim();
+                            if (board === data.options.expiryTicketBoard) return;
+                            void act('options', async () => {
+                              await api('/integrations/cw-rmm/options', {
+                                method: 'PUT',
+                                body: { ...data.options, expiryTicketBoard: board },
+                              });
+                              await connection.refetch();
+                            });
+                          }}
+                        />
+                      )}
+                    </Field>
+                  </div>
+                )}
               </fieldset>
               <Field
                 label="Save devices in"

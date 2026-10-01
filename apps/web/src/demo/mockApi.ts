@@ -1805,6 +1805,8 @@ const ALL_HUDU = {
   documents: true,
   passwords: true,
   domains: true,
+  procedures: true,
+  networks: true,
   companyIds: null as number[] | null,
   layoutIds: null as number[] | null,
 };
@@ -1889,6 +1891,9 @@ let cwRmm: {
     inventory: boolean;
     atlasLinks: boolean;
     ticketNotes: boolean;
+    expiryTickets: boolean;
+    expiryTicketDays: number;
+    expiryTicketBoard: string;
     layoutId: string | null;
   };
 } | null = null;
@@ -1928,6 +1933,9 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
       inventory: true,
       atlasLinks: false,
       ticketNotes: false,
+      expiryTickets: false,
+      expiryTicketDays: 30,
+      expiryTicketBoard: '',
       layoutId: null,
     },
   };
@@ -1944,6 +1952,9 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
     inventory: b.inventory !== false,
     atlasLinks: b.atlasLinks === true,
     ticketNotes: b.ticketNotes === true,
+    expiryTickets: b.expiryTickets === true,
+    expiryTicketDays: typeof b.expiryTicketDays === 'number' ? b.expiryTicketDays : 30,
+    expiryTicketBoard: typeof b.expiryTicketBoard === 'string' ? b.expiryTicketBoard : '',
     layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,
   };
   return cwRmm;
