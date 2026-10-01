@@ -671,7 +671,18 @@ describe('Hudu import', () => {
     const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
     expect(again.counts.procedures).toMatchObject({ created: 0, updated: 2 });
     expect(again.counts.networks).toMatchObject({ created: 0, updated: 1 });
-    expect(again.counts.relations).toMatchObject({ created: 0, skipped: 2 });
+    expect(again.counts.relations).toMatchObject({ created: 0, updated: 2 });
+    expect((await owner.call('GET', `/api/items/asset/${firewall.id}/relations`)).data).toHaveLength(3);
+    // A link deleted in Atlas comes back on the next run, as other imported items do.
+    const runbook = (
+      (await owner.call('GET', `/api/items/asset/${firewall.id}/relations`)).data as {
+        title: string;
+        relationId: string;
+      }[]
+    ).find((r) => r.title === 'Firewall reboot')!;
+    await owner.call('DELETE', `/api/items/asset/${firewall.id}/relations/${runbook.relationId}`);
+    const third = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(third.counts.relations).toMatchObject({ created: 1, updated: 1 });
     expect((await owner.call('GET', `/api/items/asset/${firewall.id}/relations`)).data).toHaveLength(3);
   });
 

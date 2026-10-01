@@ -534,7 +534,8 @@ describe('ticket sync and dashboard', () => {
     });
     expect(job.messages.join(' ')).toContain('"Renewals" board with source "Internal"');
 
-    // Not again on the next sync; a renewed date that comes due gets its own.
+    // Not again on the next sync, even with the layout renamed; a renewed date that comes due gets its own.
+    expect((await owner.call('PATCH', `/api/layouts/${domains.id}`, { name: 'Web domains' })).status).toBe(200);
     await sync();
     expect(platform.opened).toHaveLength(1);
     const renewed = new Date(Date.now() + 20 * DAY).toISOString().slice(0, 10);

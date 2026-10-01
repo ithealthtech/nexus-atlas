@@ -17,7 +17,7 @@ const KINDS: [
   ['passwords', 'Passwords', "Into each client's password list, in folders like Hudu's."],
   ['domains', 'Domains', "Hudu's websites, as Domains with automatic expiry and SSL certificate checks."],
   ['procedures', 'Processes', "Hudu's processes, as checklists: company ones in each client, the rest shared."],
-  ['networks', 'Networks', "Each company's networks, as Networks assets with their subnet and VLAN."],
+  ['networks', 'Networks', "Each company's networks, as Networks assets with their subnet."],
 ];
 
 /** A tick list with "all" and "none", used for companies and asset layouts. */

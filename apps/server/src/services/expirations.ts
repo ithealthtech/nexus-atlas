@@ -75,6 +75,7 @@ export class ExpirationService {
             title: row.name,
             label: `${row.layoutName} · ${field.label}`,
             layoutKey: row.layoutKey,
+            fieldKey: field.key,
             clientId: row.clientId,
             clientName: row.clientName,
             date,

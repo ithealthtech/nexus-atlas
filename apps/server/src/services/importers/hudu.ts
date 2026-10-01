@@ -1082,7 +1082,7 @@ export async function runHuduImport(
     return atlasId ? { type: kind[1], id: atlasId } : null;
   };
   const huduRelations =
-    options.assets || options.documents || options.passwords
+    options.assets || options.documents || options.passwords || options.domains || options.networks
       ? await optional('Links between items', client.relations)
       : [];
   for (const r of huduRelations) {
@@ -1090,11 +1090,24 @@ export async function runHuduImport(
     const to = await endOf(r.toable_type, r.toable_id);
     if (!from || !to || from.id === to.id) continue;
     const note = htmlToText(r.description ?? '').slice(0, 200);
-    await run.upsert('relations', r.id, `${r.fromable_type} ↔ ${r.toable_type}`, async () => {
-      const list = await relations.add(scope, from.type, from.id, { type: to.type, id: to.id, note });
-      const added = list.find((x) => x.type === to.type && x.id === to.id);
-      if (!added) throw new HttpError(400, "The link couldn't be added.");
-      return added.relationId;
-    });
+    await run.upsert(
+      'relations',
+      r.id,
+      `${r.fromable_type} ↔ ${r.toable_type}`,
+      async () => {
+        const list = await relations.add(scope, from.type, from.id, { type: to.type, id: to.id, note });
+        const added = list.find((x) => x.type === to.type && x.id === to.id);
+        if (!added) throw new HttpError(400, "The link couldn't be added.");
+        return added.relationId;
+      },
+      async (existing) => {
+        // A link deleted in Atlas since is made again, as other imported items are.
+        const [row] = await db
+          .select({ id: schema.relations.id })
+          .from(schema.relations)
+          .where(and(eq(schema.relations.orgId, actor.orgId), eq(schema.relations.id, existing)));
+        if (!row) throw new HttpError(404, 'Link not found.');
+      },
+    );
   }
 }

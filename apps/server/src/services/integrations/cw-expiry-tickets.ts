@@ -71,7 +71,8 @@ export async function runExpiryTickets(
         )
     ).map((r) => r.id),
   );
-  const key = (e: (typeof due)[number]) => `${e.id}|${e.label}|${e.date}`.slice(0, 500);
+  // By the field's key, not its label, so renaming the field or its layout doesn't open the ticket again.
+  const key = (e: (typeof due)[number]) => `${e.id}|${e.fieldKey ?? e.label}|${e.date}`.slice(0, 500);
   const todo = due.filter((e) => !opened.has(key(e)));
   if (!todo.length) return;
 
