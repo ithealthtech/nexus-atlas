@@ -1,6 +1,9 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  CHECKLIST_TEMPLATES,
+  RUNBOOK_TEMPLATES,
+  runbookContent,
   DEFAULT_BRANDING,
   DEFAULT_VAULT_POLICY,
   type SiemSettingsView,
@@ -2365,6 +2368,59 @@ on('POST', '/checklists/:id/archive', (m, b) => {
   const c = find(checklists, m[1]!, 'Checklist');
   c.archived = !!b.archived;
   return checklistView(c);
+});
+// built-in template library: each added template's copy, by key
+const addedTemplates = new Map<string, string>();
+const templateViews = () =>
+  [
+    ...CHECKLIST_TEMPLATES.map((t) => ({ ...t, kind: 'checklist' as const, size: t.steps.length })),
+    ...RUNBOOK_TEMPLATES.map((t) => ({ ...t, kind: 'runbook' as const, size: t.body.filter((x) => 'h' in x).length })),
+  ].map(({ key, kind, title, description, size }) => ({
+    key,
+    kind,
+    title,
+    description,
+    size,
+    addedId: [...checklists, ...documents].some((x) => x.id === addedTemplates.get(key))
+      ? addedTemplates.get(key)!
+      : null,
+  }));
+on('GET', '/templates', () => templateViews());
+on('POST', '/templates', (_m, b) => {
+  const keys = b.keys as string[] | undefined;
+  const wanted = (key: string) => (!keys || keys.includes(key)) && !templateViews().find((t) => t.key === key)?.addedId;
+  for (const t of CHECKLIST_TEMPLATES.filter((x) => wanted(x.key))) {
+    const c = {
+      id: uuid(),
+      clientId: null as string | null,
+      title: t.title,
+      description: t.description,
+      steps: t.steps.map((text) => ({ id: uuid(), text })),
+      archived: false,
+      updatedAt: now(),
+    };
+    checklists.push(c);
+    addedTemplates.set(t.key, c.id);
+  }
+  for (const t of RUNBOOK_TEMPLATES.filter((x) => wanted(x.key))) {
+    let folder = folders.find((f) => !f.clientId && f.name === 'Runbooks');
+    if (!folder) folders.push((folder = { id: uuid(), clientId: null, name: 'Runbooks' }));
+    const d = {
+      id: uuid(),
+      clientId: null,
+      folderId: folder.id,
+      title: t.title,
+      status: 'current' as const,
+      reviewDate: null,
+      content: runbookContent(t.body),
+      ...meta(),
+      updatedAt: now(),
+    };
+    documents.push(d);
+    snapshot(d.id, 1, d as unknown as Json);
+    addedTemplates.set(t.key, d.id);
+  }
+  return templateViews();
 });
 on('GET', '/checklist-runs', (_m, _b, q) =>
   runs
