@@ -22,6 +22,7 @@ import { Dashboard } from '@/pages/Dashboard';
 import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientOverview } from '@/pages/client/ClientOverview';
+import { ClientReport } from '@/pages/client/ClientReport';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
 import { DomainTracker, SslTracker } from '@/components/Trackers';
@@ -206,6 +207,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
   clientRoute.addChildren(clientRoutes),
+  createRoute({ getParentRoute: () => appRoute, path: '/client-report/$clientId', component: ClientReport }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets/$assetId', component: AssetDetail }),
   createRoute({
