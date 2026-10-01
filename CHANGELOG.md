@@ -2,6 +2,16 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.19] - 2026-10-01
+
+### Added
+
+- **Delete a client.** Administrators see a Delete button on the client page. Typing the client's name exactly deletes the client and everything in it, and the deletion shows in the security log.
+
+### Changed
+
+- **Sidebar sections.** Dashboard, Clients and Expirations stay pinned at the top, and everything else sits in collapsible sections (Documentation, Passwords, and for admins People & security, Data, and System). A collapsed section is remembered per browser.
+
 ## [1.7.18] - 2026-10-01
 
 ### Added
