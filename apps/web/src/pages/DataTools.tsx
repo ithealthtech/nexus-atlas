@@ -48,6 +48,7 @@ const KIND_LABELS: Record<string, string> = {
   relations: 'Links between items',
   tickets: 'Tickets',
   atlasLinks: 'Atlas links in ConnectWise',
+  expiryTickets: 'Expiry tickets in ConnectWise',
 };
 
 export function JobSummary({ job }: { job: ImportJobView }) {
