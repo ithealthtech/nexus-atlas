@@ -101,6 +101,14 @@ export const cwRmmSyncOptionsSchema = z.object({
    */
   ticketNotes: z.boolean().default(false),
   /**
+   * Opens a ConnectWise ticket, once, for each domain, certificate, license, or warranty of a linked client that
+   * expires within `expiryTicketDays`. Changes the ConnectWise tenant, so off by default.
+   */
+  expiryTickets: z.boolean().default(false),
+  expiryTicketDays: z.number().int().min(1).max(180).default(30),
+  /** The service board those tickets go on, by name; empty picks the first board ConnectWise lists. */
+  expiryTicketBoard: z.string().trim().max(100).default(''),
+  /**
    * The asset layout new devices are saved in. Null picks the Endpoints layout (one named "Endpoints", "Devices"
    * or "Computer Assets", renamed to Endpoints) when there is one, otherwise Configurations.
    */
@@ -646,6 +654,10 @@ export const huduImportOptionsSchema = z.object({
   passwords: z.boolean().default(true),
   /** Hudu's websites, as Domains assets the domain and SSL trackers check. */
   domains: z.boolean().default(true),
+  /** Hudu's processes, as checklists. */
+  procedures: z.boolean().default(true),
+  /** Hudu's networks, as Networks assets. */
+  networks: z.boolean().default(true),
   companyIds: z.array(z.number().int()).max(5000).nullable().default(null),
   layoutIds: z.array(z.number().int()).max(1000).nullable().default(null),
 });

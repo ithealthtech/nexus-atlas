@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { mapNote, mapTicket, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
+import { mapNote, mapTicket, portalIdIn, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
+import { CwLinkWriter } from '../src/services/integrations/cw-writeback.js';
+import type { CwRmmClient } from '../src/services/integrations/cw-rmm.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const CLIENT_ID = 'asio-client-id-123';
@@ -31,6 +33,8 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
   /** Company records by ID, as their own endpoint returns them (the list carries less). */
   const companies = new Map<string, Ticket>();
   const sites = new Map<string, Ticket[]>();
+  /** Tickets Atlas opened. */
+  const opened: Ticket[] = [];
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
@@ -56,6 +60,16 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     if (url.pathname.includes('/ticketing/') && auth !== 'Bearer ticket-tok')
       return json({ message: 'missing scope' }, 403);
     if (url.pathname === '/api/platform/v1/service/ticketing/statuses') return json(STATUSES);
+    if (url.pathname === '/api/platform/v1/service/ticketing/service-boards')
+      return json([
+        { id: 'b-help', name: 'Help Desk' },
+        { id: 'b-renew', name: 'Renewals' },
+      ]);
+    if (url.pathname === '/api/platform/v1/service/ticketing/sources')
+      return json([
+        { id: 'src-phone', name: 'Phone' },
+        { id: 'src-int', name: 'Internal' },
+      ]);
     const noteOf = /^\/api\/platform\/v1\/service\/ticketing\/tickets\/([^/]+)\/notes$/.exec(url.pathname);
     if (noteOf) {
       const list = notes.get(noteOf[1]) ?? [];
@@ -79,6 +93,10 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
       fields.set(url.pathname, JSON.parse(String(init.body)));
       return new Response(null, { status: 204 });
     }
+    if (url.pathname === '/api/platform/v2/service/ticketing/tickets' && init?.method === 'POST') {
+      opened.push(JSON.parse(String(init.body)));
+      return json({ id: `new-${opened.length}`, number: String(9000 + opened.length) }, 201);
+    }
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets') {
       // As the spec defines it: "id1,id2" is in, "[notIn],id1,id2" is not in; anything else in brackets is refused,
       // as a real tenant did with "[in]".
@@ -98,7 +116,7 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     }
     return json({}, 404);
   }) as typeof fetch;
-  return { fetcher, calls, notes, fields, definitions, companies, sites };
+  return { fetcher, calls, notes, fields, definitions, companies, sites, opened };
 }
 
 async function waitForJob(b: Browser, id: string) {
@@ -168,6 +186,15 @@ describe('ticket values', () => {
       'ticketId=5535&companyId=72f2b461-1e35-4df0-be5c-d55f10b6052f',
     );
     expect(ticketLink('https://control.itsupport247.net', '5535', 'not an id')).toBeNull();
+    // ConnectWise's long alert ID is never shown as the ticket number, or linked.
+    expect(mapTicket({ id: 'u-9', number: '133023.1670', nocTicketId: '202609080102782' })?.number).toBe('133023.1670');
+    expect(ticketLink('https://control.itsupport247.net', '202609080102782', 'c1')).toBeNull();
+    expect(portalIdIn('Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670', '133023.1670')).toBe(
+      '5283',
+    );
+    expect(
+      portalIdIn('Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670', '133023.1671'),
+    ).toBeNull();
     // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),
@@ -460,7 +487,7 @@ describe('ticket sync and dashboard', () => {
     expect(platform.notes.get('t-101')).toHaveLength(3);
   });
 
-  it('writes Atlas links into ConnectWise custom fields only when switched on, and only when changed', async () => {
+  it('writes Atlas links only when switched on, never through the legacy v1 custom field API', async () => {
     await connect(tickets);
     await link();
     await sync();
@@ -468,23 +495,85 @@ describe('ticket sync and dashboard', () => {
 
     await allOptions({ atlasLinks: true });
     const job = await sync();
-    expect(job.counts.atlasLinks).toMatchObject({ created: 2, failed: 0 });
-    // The field is made once, for companies.
-    expect(platform.definitions).toEqual([
-      expect.objectContaining({ entityType: 'client', name: 'Atlas link', attributeType: 'string' }),
-    ]);
-    expect(platform.fields.get('/api/platform/v1/company/companies/c1/custom-fields')).toEqual([
-      { entityId: 'c1', attributeId: 'def-1', value: expect.stringMatching(new RegExp(`/clients/${harbor}$`)) },
-    ]);
+    expect(job.status).toBe('done');
+    // Companies have no v2 custom field API, so only devices are written, and nothing touches v1.
+    expect(platform.calls.filter((c) => c.includes('/v1/') && c.includes('custom-field'))).toEqual([]);
+    expect(platform.calls.filter((c) => c.startsWith('PUT'))).toEqual([]);
+  });
 
-    // Unchanged links aren't written again.
-    const before = platform.calls.length;
-    expect((await sync()).counts.atlasLinks).toMatchObject({ created: 0, skipped: 2 });
-    expect(platform.calls.slice(before).filter((c) => c.startsWith('PUT'))).toEqual([]);
+  it('opens one ConnectWise ticket per expiry coming due, only when switched on', async () => {
+    await connect(tickets);
+    await link();
+    const domains = (await owner.call('GET', '/api/layouts')).data.find((l: { key: string }) => l.key === 'domain');
+    const soon = new Date(Date.now() + 10 * DAY).toISOString().slice(0, 10);
+    const later = new Date(Date.now() + 120 * DAY).toISOString().slice(0, 10);
+    const domain = (
+      await owner.call('POST', `/api/clients/${harbor}/assets`, {
+        layoutId: domains.id,
+        name: 'harbordental.test',
+        fields: { expires: soon },
+      })
+    ).data;
+    await owner.call('POST', `/api/clients/${northline}/assets`, {
+      layoutId: domains.id,
+      name: 'northline.test',
+      fields: { expires: later },
+    });
+    await sync();
+    expect(platform.opened).toEqual([]);
 
-    // Switched off and on again, they're all written again.
-    await allOptions({ atlasLinks: false });
-    await allOptions({ atlasLinks: true });
-    expect((await sync()).counts.atlasLinks).toMatchObject({ created: 2 });
+    await allOptions({ expiryTickets: true, expiryTicketBoard: 'renewals' });
+    const job = await sync();
+    expect(job.counts.expiryTickets, JSON.stringify(job.messages)).toMatchObject({ created: 1 });
+    expect(platform.opened).toHaveLength(1);
+    expect(platform.opened[0]).toMatchObject({
+      summary: `Domains: harbordental.test expires on ${soon}`,
+      company: { id: 'c1' },
+      serviceBoard: { id: 'b-renew' },
+      source: { id: 'src-int' },
+    });
+    expect(job.messages.join(' ')).toContain('"Renewals" board with source "Internal"');
+
+    // Not again on the next sync, even with the layout renamed; a renewed date that comes due gets its own.
+    expect((await owner.call('PATCH', `/api/layouts/${domains.id}`, { name: 'Web domains' })).status).toBe(200);
+    await sync();
+    expect(platform.opened).toHaveLength(1);
+    const renewed = new Date(Date.now() + 20 * DAY).toISOString().slice(0, 10);
+    await owner.call('PATCH', `/api/assets/${domain.id}`, {
+      name: domain.name,
+      fields: { expires: renewed },
+      version: domain.version,
+    });
+    await sync();
+    expect(platform.opened).toHaveLength(2);
+
+    // A board that doesn't exist opens nothing and says so.
+    await allOptions({ expiryTickets: true, expiryTicketBoard: 'Nope', expiryTicketDays: 180 });
+    const none = await sync();
+    expect(platform.opened).toHaveLength(2);
+    expect(none.messages.join(' ')).toContain('no service board named "Nope"');
+  });
+});
+
+describe('Atlas link writer', () => {
+  it('finds the "Atlas link" device field through v2 and writes to it, never calling v1', async () => {
+    const calls: string[] = [];
+    const fields = [{ attributeId: 'attr-1', name: 'Atlas link', value: null }];
+    const client = {
+      get: async (path: string) => (calls.push(`GET ${path}`), fields),
+      put: async (path: string, body: unknown) => (calls.push(`PUT ${path} ${JSON.stringify(body)}`), []),
+    } as unknown as CwRmmClient;
+    const writer = new CwLinkWriter(client);
+    await writer.write('e-1', 'https://atlas.test/assets/a1');
+    await writer.write('e-2', 'https://atlas.test/assets/a2');
+    expect(calls).toEqual([
+      'GET /api/platform/v2/device/endpoints/e-1/custom-fields?withDefaults=true',
+      'PUT /api/platform/v2/device/endpoints/e-1/custom-fields [{"entityId":"e-1","attributeId":"attr-1","value":"https://atlas.test/assets/a1"}]',
+      'PUT /api/platform/v2/device/endpoints/e-2/custom-fields [{"entityId":"e-2","attributeId":"attr-1","value":"https://atlas.test/assets/a2"}]',
+    ]);
+    fields.length = 0;
+    await expect(new CwLinkWriter(client).write('e-3', 'x')).rejects.toThrow(
+      /no device custom field named "Atlas link"/,
+    );
   });
 });

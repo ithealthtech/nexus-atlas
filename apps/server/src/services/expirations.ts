@@ -15,7 +15,8 @@ const isDate = (value: unknown): value is string => typeof value === 'string' &&
  * password rotations, and document reviews. Only items the actor can see are included.
  */
 export class ExpirationService {
-  constructor(private readonly vault: VaultService) {}
+  /** Without a vault, passwords are left out (the ConnectWise expiry tickets need only assets). */
+  constructor(private readonly vault?: VaultService) {}
 
   async list(scope: Scope, withinDays = 90): Promise<ExpirationItem[]> {
     const cutoff = new Date(Date.now() + withinDays * DAY).toISOString().slice(0, 10);
@@ -74,6 +75,7 @@ export class ExpirationService {
             title: row.name,
             label: `${row.layoutName} · ${field.label}`,
             layoutKey: row.layoutKey,
+            fieldKey: field.key,
             clientId: row.clientId,
             clientName: row.clientName,
             date,
@@ -84,7 +86,7 @@ export class ExpirationService {
     }
 
     // Passwords: VaultService applies vault access and restriction lists.
-    if (clientIds.length)
+    if (clientIds.length && this.vault)
       for (const p of await this.vault.rotationDue(scope, withinDays))
         items.push({
           kind: 'password',
@@ -97,7 +99,7 @@ export class ExpirationService {
           daysLeft: daysUntil(p.rotationDue!),
         });
 
-    if (clientIds.length)
+    if (clientIds.length && this.vault)
       for (const p of await this.vault.expiring(scope, withinDays))
         items.push({
           kind: 'password',

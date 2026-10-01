@@ -1,6 +1,6 @@
 {
   "name": "@atlas/shared",
-  "version": "1.7.15",
+  "version": "1.7.17",
   "private": true,
   "type": "module",
   "exports": {

@@ -16,7 +16,6 @@ import { actorFor } from '../identity/service.js';
 import type { StoredCwRmm } from '../services/settings.js';
 import { ImportRun } from '../services/importers/common.js';
 import {
-  COMPANY_LINK_SCOPES,
   companiesWithMapping,
   CwRmmClient,
   deviceLayout,
@@ -26,6 +25,7 @@ import {
   TICKET_NOTE_SCOPES,
   TICKET_SCOPES,
 } from '../services/integrations/cw-rmm.js';
+import { runExpiryTickets } from '../services/integrations/cw-expiry-tickets.js';
 import { CwDeviceInsight } from '../services/integrations/cw-device-insight.js';
 import { CwSecurityService } from '../services/integrations/cw-security.js';
 import {
@@ -73,8 +73,12 @@ async function startSync(
       if (options.atlasLinks && publicUrl) {
         const writer = (scopes: string) =>
           CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, scopes);
-        const links = new CwLinkWriter(writer(LINK_SCOPES), writer(COMPANY_LINK_SCOPES));
+        const links = new CwLinkWriter(writer(LINK_SCOPES));
         await runLinkWriteBack(db, actor.orgId, links, run, saved.map, publicUrl);
+      }
+      if (options.expiryTickets) {
+        const writer = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, TICKET_NOTE_SCOPES);
+        await runExpiryTickets(db, actor, writer, run, saved.map, options, publicUrl);
       }
       await run.flush('done');
       await settings.patchCwRmm(actor.orgId, { lastSyncAt: new Date().toISOString() });

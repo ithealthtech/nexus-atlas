@@ -2,7 +2,14 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.7.17] - 2026-09-30
+
+### Fixed
+
+- **Tickets show the portal's 4-digit ticket number, never ConnectWise's long alert ID.** A ticket the platform opened itself gets its portal number from ConnectWise's CW-System note, read through the ticket notes API as the notes panel is.
+- **Atlas links are written through the v2 API only.** The device "Atlas link" custom field is found through v2, so the v1 custom field definitions that refused the key are no longer called. Companies have no v2 custom field API, so company links are no longer written. Add a text custom field named "Atlas link" for devices in ConnectWise if there isn't one.
+
+## [1.7.16] - 2026-09-30
 
 ### Changed
 

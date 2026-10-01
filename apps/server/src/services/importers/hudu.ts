@@ -12,6 +12,7 @@ import {
 } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
+import { ChecklistService } from '../checklists.js';
 import { ClientService } from '../clients.js';
 import { DocumentService } from '../documents.js';
 import {
@@ -111,6 +112,38 @@ type HuduWebsite = {
   discarded_at?: string | null;
 };
 
+// A process (a reusable list of tasks); runs are its copies being worked through, and aren't imported.
+type HuduProcedureTask = { id: number; name?: string | null; position?: number | null; parent_task_id?: number | null };
+type HuduProcedure = {
+  id: number;
+  name: string;
+  description?: string | null;
+  company_id?: number | null;
+  run?: boolean;
+  archived?: boolean;
+  procedure_tasks_attributes?: HuduProcedureTask[] | null;
+};
+type HuduNetwork = {
+  id: number;
+  name?: string | null;
+  // Usually CIDR, such as 10.20.0.0/24.
+  address?: string | null;
+  company_id?: number | null;
+  description?: string | null;
+  notes?: string | null;
+  vlan_id?: number | null;
+  archived_at?: string | null;
+};
+// A link between two Hudu items, by their types ("Asset", "Article", "AssetPassword", ...) and IDs.
+type HuduRelation = {
+  id: number;
+  description?: string | null;
+  fromable_type?: string | null;
+  fromable_id?: number | null;
+  toable_type?: string | null;
+  toable_id?: number | null;
+};
+
 const PAGE_SIZE = 25;
 const MAX_PAGES = 4000;
 
@@ -121,10 +154,10 @@ export class HuduClient {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  private async page<T>(path: string, key: string, page: number, sized: boolean): Promise<T[]> {
+  private async page<T>(path: string, key: string, page: number, sized: boolean, filter = ''): Promise<T[]> {
     let response: Response;
     // page_size is asked for explicitly where Hudu takes it (asset_layouts doesn't), so the last-page check holds.
-    const query = sized ? `page=${page}&page_size=${PAGE_SIZE}` : `page=${page}`;
+    const query = (sized ? `page=${page}&page_size=${PAGE_SIZE}` : `page=${page}`) + (filter ? `&${filter}` : '');
     try {
       response = await this.fetcher(`${this.baseUrl}/api/v1/${path}?${query}`, {
         headers: { 'x-api-key': this.apiKey, accept: 'application/json' },
@@ -144,10 +177,10 @@ export class HuduClient {
     return items as T[];
   }
 
-  async all<T>(path: string, key: string, sized = true): Promise<T[]> {
+  async all<T>(path: string, key: string, sized = true, filter = ''): Promise<T[]> {
     const out: T[] = [];
     for (let page = 1; page <= MAX_PAGES; page++) {
-      const items = await this.page<T>(path, key, page, sized);
+      const items = await this.page<T>(path, key, page, sized, filter);
       out.push(...items);
       if (items.length < PAGE_SIZE) break;
     }
@@ -160,6 +193,11 @@ export class HuduClient {
   articles = () => this.all<HuduArticle>('articles', 'articles');
   passwords = () => this.all<HuduPassword>('asset_passwords', 'asset_passwords');
   websites = () => this.all<HuduWebsite>('websites', 'websites');
+  procedures = () => this.all<HuduProcedure>('procedures', 'procedures');
+  procedureTasks = (procedureId: number) =>
+    this.all<HuduProcedureTask>('procedure_tasks', 'procedure_tasks', true, `procedure_id=${procedureId}`);
+  networks = () => this.all<HuduNetwork>('networks', 'networks');
+  relations = () => this.all<HuduRelation>('relations', 'relations');
 }
 
 // Hudu field types → Atlas field types. Choice lists become text so any existing value imports cleanly.
@@ -538,6 +576,7 @@ export async function runHuduImport(
   const assets = new AssetService(layouts);
   const documents = new DocumentService();
   const relations = new RelationService();
+  const checklists = new ChecklistService();
   const companyChosen = (id: number) => !options.companyIds || options.companyIds.includes(id);
   const layoutChosen = (id: number) => !options.layoutIds || options.layoutIds.includes(id);
   const skipped = [
@@ -547,6 +586,8 @@ export async function runHuduImport(
     !options.documents && 'documents',
     !options.passwords && 'passwords',
     !options.domains && 'domains',
+    !options.procedures && 'processes',
+    !options.networks && 'networks',
   ].filter(Boolean);
   if (skipped.length) run.note(`Not imported this time, as chosen: ${skipped.join(', ')}.`);
   if (options.companyIds)
@@ -929,5 +970,144 @@ export async function runHuduImport(
         run.note(`password "${name}": couldn't be linked to its asset.`);
       }
     }
+  }
+
+  // Lists older Hudu versions may not have: noted, and the rest of the import carries on.
+  const optional = async <T>(what: string, read: () => Promise<T[]>): Promise<T[]> => {
+    try {
+      return await read();
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status !== 502) throw error;
+      run.note(`${what} were not imported: ${error.message}`);
+      return [];
+    }
+  };
+
+  // Processes → checklists (company ones in that client, global ones shared). Runs are copies being worked
+  // through, not templates, so they're left out.
+  const procedures = options.procedures ? await optional('Processes', client.procedures) : [];
+  for (const p of procedures.filter((x) => !x.run && !x.archived && (!x.company_id || companyChosen(x.company_id)))) {
+    const clientId = p.company_id ? companyToClient.get(p.company_id) : null;
+    const title = p.name.slice(0, 200) || `Process ${p.id}`;
+    if (p.company_id && !clientId) {
+      run.count('procedures', 'skipped');
+      run.note(`process "${title}": its company wasn't imported.`);
+      continue;
+    }
+    let tasks = p.procedure_tasks_attributes ?? [];
+    if (!tasks.length) tasks = await optional(`Tasks of process "${title}"`, () => client.procedureTasks(p.id));
+    const steps = tasks
+      .filter((t) => !t.parent_task_id && (t.name ?? '').trim())
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .slice(0, 200)
+      .map((t) => ({ text: t.name!.trim().slice(0, 500) }));
+    if (!steps.length) {
+      run.count('procedures', 'skipped');
+      run.note(`process "${title}": it has no tasks.`);
+      continue;
+    }
+    const description = htmlToText(p.description ?? '').slice(0, 2000);
+    await run.upsert(
+      'procedures',
+      p.id,
+      title,
+      async () => (await checklists.create(scope, { title, description, steps, clientId: clientId ?? null })).id,
+      async (existing) => void (await checklists.update(scope, existing, { title, description, steps })),
+    );
+  }
+
+  // Networks → Networks assets, by subnet.
+  const networks = options.networks
+    ? (await optional('Networks', client.networks)).filter(
+        (n) => !n.archived_at && !!n.company_id && companyChosen(n.company_id),
+      )
+    : [];
+  const networkLayout = networks.length
+    ? (await layouts.list(actor)).find((l) => l.key === 'network' && !l.archived)
+    : undefined;
+  if (networks.length && !networkLayout) run.note('Networks were not imported: the Networks layout is archived.');
+  for (const n of networkLayout ? networks : []) {
+    const clientId = companyToClient.get(n.company_id!);
+    const subnet = (n.address ?? '').trim();
+    const name = ((n.name ?? '').trim() || subnet).slice(0, 200);
+    if (!clientId || !subnet) {
+      run.count('networks', 'skipped');
+      run.note(`network "${name || n.id}": ${clientId ? 'no address' : "its company wasn't imported"}.`);
+      continue;
+    }
+    const notes = [htmlToText(n.description ?? ''), htmlToText(n.notes ?? '')]
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, 5000);
+    const fields = { subnet: subnet.slice(0, 100) };
+    const labels = new Map([['subnet', 'Subnet']]);
+    await run.upsert(
+      'networks',
+      n.id,
+      name,
+      async () =>
+        (
+          await saveTolerant(fields, notes, labels, (f, x) =>
+            assets.create(scope, clientId, { layoutId: networkLayout!.id, name, fields: f, notes: x }),
+          )
+        ).id,
+      async (existing) => {
+        const current = await assets.get(scope, existing);
+        const kept = (current.fields ?? {}) as Record<string, unknown>;
+        await saveTolerant(fields, notes, labels, (f, x) =>
+          assets.update(
+            scope,
+            existing,
+            { name, fields: { ...kept, ...f }, notes: x, version: current.version },
+            'Updated by import',
+          ),
+        );
+      },
+    );
+  }
+
+  // Relations between items this or an earlier import brought over. Each is added once; one whose ends
+  // weren't imported is skipped quietly, since most link to things Atlas has no place for.
+  const relationKinds: Record<string, [string, 'asset' | 'document' | 'password']> = {
+    asset: ['assets', 'asset'],
+    article: ['documents', 'document'],
+    assetpassword: ['passwords', 'password'],
+    website: ['domains', 'asset'],
+    network: ['networks', 'asset'],
+  };
+  const endOf = async (type: string | null | undefined, id: number | null | undefined) => {
+    const kind = relationKinds[(type ?? '').toLowerCase().replace(/[^a-z]/g, '')];
+    if (!kind || !id) return null;
+    const atlasId = await run.ref(kind[0], id);
+    return atlasId ? { type: kind[1], id: atlasId } : null;
+  };
+  const huduRelations =
+    options.assets || options.documents || options.passwords || options.domains || options.networks
+      ? await optional('Links between items', client.relations)
+      : [];
+  for (const r of huduRelations) {
+    const from = await endOf(r.fromable_type, r.fromable_id);
+    const to = await endOf(r.toable_type, r.toable_id);
+    if (!from || !to || from.id === to.id) continue;
+    const note = htmlToText(r.description ?? '').slice(0, 200);
+    await run.upsert(
+      'relations',
+      r.id,
+      `${r.fromable_type} ↔ ${r.toable_type}`,
+      async () => {
+        const list = await relations.add(scope, from.type, from.id, { type: to.type, id: to.id, note });
+        const added = list.find((x) => x.type === to.type && x.id === to.id);
+        if (!added) throw new HttpError(400, "The link couldn't be added.");
+        return added.relationId;
+      },
+      async (existing) => {
+        // A link deleted in Atlas since is made again, as other imported items are.
+        const [row] = await db
+          .select({ id: schema.relations.id })
+          .from(schema.relations)
+          .where(and(eq(schema.relations.orgId, actor.orgId), eq(schema.relations.id, existing)));
+        if (!row) throw new HttpError(404, 'Link not found.');
+      },
+    );
   }
 }

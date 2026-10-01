@@ -2,7 +2,7 @@ import { AppLink } from '@/components/AppLink';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Outlet, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Pencil, Settings2, StickyNote } from 'lucide-react';
+import { ArrowLeft, FileText, Pencil, Settings2, StickyNote } from 'lucide-react';
 import {
   CLIENT_SECTIONS,
   LEVEL_INFO,
@@ -87,6 +87,14 @@ export function ClientLayout() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {actor.isStaff && (
+            <AppLink
+              to={`/client-report/${client.id}`}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3.5 text-sm font-semibold hover:bg-surface-2"
+            >
+              <FileText className="size-4" aria-hidden /> Monthly report
+            </AppLink>
+          )}
           {actor.isStaff && <ExportButton clientId={client.id} canIncludePasswords={actor.isAdmin} />}
           {atLeast(client.access, 'edit') && (
             <Button variant="secondary" onClick={() => setEditing(true)}>
