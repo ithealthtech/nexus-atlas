@@ -1,8 +1,8 @@
 import { AppLink } from '@/components/AppLink';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Outlet, useParams } from '@tanstack/react-router';
-import { ArrowLeft, FileText, Pencil, Settings2, StickyNote } from 'lucide-react';
+import { Outlet, useNavigate, useParams } from '@tanstack/react-router';
+import { ArrowLeft, FileText, Pencil, Settings2, StickyNote, Trash2 } from 'lucide-react';
 import {
   CLIENT_SECTIONS,
   LEVEL_INFO,
@@ -11,8 +11,20 @@ import {
   type ClientSection,
   type WorkspacePrefs,
 } from '@atlas/shared';
-import { Badge, Button, Card, Checkbox, Dialog, EmptyState, Skeleton, useToast } from '@/components/ui';
-import { api } from '@/lib/api';
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Dialog,
+  EmptyState,
+  Field,
+  FormError,
+  Input,
+  Skeleton,
+  useToast,
+} from '@/components/ui';
+import { api, type ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useClient, useClientCounts, useWorkspacePrefs } from '@/lib/queries';
 import { useActor } from '@/lib/session';
@@ -38,6 +50,7 @@ export function ClientLayout() {
   const { data: client, isLoading, error } = useClient(clientId);
   const [editing, setEditing] = useState(false);
   const [customizing, setCustomizing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const actor = useActor();
   const counts = useClientCounts(clientId).data;
   const prefs = useWorkspacePrefs().data;
@@ -99,6 +112,11 @@ export function ClientLayout() {
           {atLeast(client.access, 'edit') && (
             <Button variant="secondary" onClick={() => setEditing(true)}>
               <Pencil /> Edit client
+            </Button>
+          )}
+          {actor.isAdmin && (
+            <Button variant="secondary" onClick={() => setDeleting(true)}>
+              <Trash2 /> Delete
             </Button>
           )}
         </div>
@@ -184,6 +202,7 @@ export function ClientLayout() {
       <Outlet />
       <ClientForm client={client} open={editing} onClose={() => setEditing(false)} />
       {customizing && prefs && <SectionsDialog prefs={prefs} onClose={() => setCustomizing(false)} />}
+      {deleting && <DeleteClientDialog id={client.id} name={client.name} onClose={() => setDeleting(false)} />}
     </>
   );
 }
@@ -240,6 +259,69 @@ function SectionsDialog({ prefs, onClose }: { prefs: WorkspacePrefs; onClose: ()
           />
         ))}
       </div>
+    </Dialog>
+  );
+}
+
+/** Administrators only: the client's name typed exactly, then the client and everything in it are gone. */
+function DeleteClientDialog({ id, name, onClose }: { id: string; name: string; onClose: () => void }) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/clients/${id}`, { method: 'DELETE', body: { confirmName: typed } });
+      toast(`Deleted ${name}.`);
+      await navigate({ to: '/clients' });
+      void qc.invalidateQueries();
+    } catch (err) {
+      setError(err as ApiError);
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Delete ${name}`}
+      description="This permanently deletes the client and everything in it: assets, passwords, documents, contacts, locations, checklists and files. It can't be undone. To combine two copies of a client instead, use Duplicates."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="delete-client"
+            variant="danger"
+            loading={busy}
+            disabled={typed.trim() !== name.trim()}
+          >
+            <Trash2 /> Delete client
+          </Button>
+        </>
+      }
+    >
+      <form id="delete-client" onSubmit={submit} className="space-y-4" noValidate>
+        <Field label={`Type the client name: ${name}`} error={error?.fields?.confirmName}>
+          {(p) => (
+            <Input
+              {...p}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          )}
+        </Field>
+        <FormError message={error && !error.fields ? error.message : null} />
+      </form>
     </Dialog>
   );
 }

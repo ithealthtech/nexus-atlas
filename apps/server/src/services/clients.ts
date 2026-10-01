@@ -1,4 +1,4 @@
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { schema, type Database } from '@atlas/db';
 import {
@@ -8,10 +8,11 @@ import {
   type ClientSummary,
   type RevisionView,
 } from '@atlas/shared';
-import { clientLevels, requireAllClientsEdit, requireClient } from '../authz.js';
+import { clientLevels, requireAdmin, requireAllClientsEdit, requireClient } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
 import { getRevision, listRevisions, snapshot } from './revisions.js';
+import type { FileStorage } from './storage.js';
 
 type ClientRow = typeof schema.clients.$inferSelect;
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -33,6 +34,7 @@ const view = (c: ClientRow, access: ClientSummary['access']): ClientSummary => (
 });
 // Sent by the quick notes editor so two people editing at once don't overwrite each other.
 const notesVersionSchema = z.object({ notesVersion: z.number().int().min(0).optional() });
+const deleteClientSchema = z.object({ confirmName: z.string().max(500) });
 const conflict = () =>
   new HttpError(409, 'Someone else changed these notes. Reload to see their changes before saving.', 'conflict');
 
@@ -130,6 +132,73 @@ export class ClientService {
         });
     });
     return this.get(actor, id);
+  }
+
+  /**
+   * Deletes a client and everything under it (contacts, locations, assets, documents, passwords, files, checklists,
+   * access, history). Administrators only, with the client's name typed exactly; recorded in the security log.
+   */
+  async remove(actor: Actor, id: string, input: unknown, storage: FileStorage, ip: string) {
+    requireAdmin(actor);
+    const { client } = await requireClient(this.db, actor, id, 'read');
+    const { confirmName } = deleteClientSchema.parse(input ?? {});
+    if (confirmName.trim() !== client.name.trim())
+      throw new HttpError(400, 'Type the client’s name exactly as shown.', undefined, {
+        confirmName: 'Type the client’s name exactly as shown.',
+      });
+    const files = await this.db
+      .select({ key: schema.attachments.storageKey })
+      .from(schema.attachments)
+      .where(eq(schema.attachments.clientId, id));
+    await this.db.transaction(async (tx) => {
+      // Rows under the client go with it (foreign keys cascade); links, favorites, history and import IDs only
+      // name their item by ID, so they're cleared here.
+      const ids = [id];
+      for (const t of [
+        schema.contacts,
+        schema.locations,
+        schema.assets,
+        schema.documents,
+        schema.passwords,
+        schema.checklists,
+        schema.passwordFolders,
+      ])
+        ids.push(...(await tx.select({ id: t.id }).from(t).where(eq(t.clientId, id))).map((r) => r.id));
+      const r = schema.relations;
+      await tx.delete(r).where(and(eq(r.orgId, actor.orgId), or(inArray(r.aId, ids), inArray(r.bId, ids))));
+      await tx.delete(schema.favorites).where(inArray(schema.favorites.entityId, ids));
+      await tx
+        .delete(schema.revisions)
+        .where(and(eq(schema.revisions.orgId, actor.orgId), inArray(schema.revisions.entityId, ids)));
+      await tx
+        .delete(schema.externalRefs)
+        .where(and(eq(schema.externalRefs.orgId, actor.orgId), inArray(schema.externalRefs.entityId, ids)));
+      await tx.delete(schema.clients).where(and(eq(schema.clients.id, id), eq(schema.clients.orgId, actor.orgId)));
+      // ConnectWise RMM companies linked to it go back to unlinked.
+      const [org] = await tx
+        .select({ settings: schema.orgs.settings })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, actor.orgId));
+      const map = (org?.settings as { cwRmm?: { map?: Record<string, { clientId?: string }> } } | null)?.cwRmm?.map;
+      const linked = Object.entries(map ?? {}).filter(([, m]) => m.clientId === id);
+      if (map && linked.length) {
+        for (const [company] of linked) delete map[company];
+        await tx
+          .update(schema.orgs)
+          .set({ settings: sql`jsonb_set(${schema.orgs.settings}, '{cwRmm,map}', ${JSON.stringify(map)}::jsonb)` })
+          .where(eq(schema.orgs.id, actor.orgId));
+      }
+      await tx.insert(schema.securityEvents).values({
+        orgId: actor.orgId,
+        userId: actor.id,
+        actor: actor.name,
+        action: 'Deleted a client',
+        detail: client.name.slice(0, 300),
+        ip,
+      });
+    });
+    // Files last: if the database part failed, nothing is gone.
+    for (const f of files) await storage.remove(f.key).catch(() => undefined);
   }
 
   // ---------- quick notes history ----------
