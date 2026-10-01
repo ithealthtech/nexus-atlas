@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
@@ -230,28 +230,44 @@ function readCollapsed(): string[] {
   }
 }
 
-function NavSection({ section, onNavigate }: { section: NavSectionDef; onNavigate?: () => void }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const [collapsed, setCollapsed] = useState(() => readCollapsed().includes(section.id));
-  // The section holding the current page always stays open, so the active link is never hidden.
-  const holdsActive = section.items.some((i) => pathname === i.to || pathname.startsWith(`${i.to}/`));
-  const open = !collapsed || holdsActive;
-  const toggle = () => {
-    const next = !collapsed;
+// Shared by the desktop sidebar and the phone drawer so both always show the same open sections.
+function useCollapsedSections() {
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggle = (id: string) => {
+    const next = collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id];
     setCollapsed(next);
     try {
-      const rest = readCollapsed().filter((id) => id !== section.id);
-      localStorage.setItem(collapsedKey, JSON.stringify(next ? [...rest, section.id] : rest));
+      localStorage.setItem(collapsedKey, JSON.stringify(next));
     } catch {
       // Storage can be unavailable (private mode); the toggle still works for this page view.
     }
   };
-  const listId = `nav-section-${section.id}`;
+  return { collapsed, toggle };
+}
+
+type CollapsedSections = ReturnType<typeof useCollapsedSections>;
+
+function NavSection({
+  section,
+  sections,
+  onNavigate,
+}: {
+  section: NavSectionDef;
+  sections: CollapsedSections;
+  onNavigate?: () => void;
+}) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const collapsed = sections.collapsed.includes(section.id);
+  // The section holding the current page always stays open, so the active link is never hidden.
+  const holdsActive = section.items.some((i) => pathname === i.to || pathname.startsWith(`${i.to}/`));
+  const open = !collapsed || holdsActive;
+  // The desktop sidebar and the phone drawer can both be mounted, so ids must be unique per instance.
+  const listId = `nav-section-${section.id}-${useId()}`;
   return (
     <div className="pt-3">
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => sections.toggle(section.id)}
         aria-expanded={open}
         aria-controls={listId}
         className="mb-1 flex min-h-8 w-full items-center gap-1 rounded-md px-3 text-left text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase hover:text-sidebar-active"
@@ -270,7 +286,15 @@ function NavSection({ section, onNavigate }: { section: NavSectionDef; onNavigat
   );
 }
 
-function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: () => void }) {
+function Sidebar({
+  onNavigate,
+  onSearch,
+  sections,
+}: {
+  onNavigate?: () => void;
+  onSearch: () => void;
+  sections: CollapsedSections;
+}) {
   const actor = useActor();
   return (
     <div className="flex h-full flex-col bg-sidebar px-3 pt-5 pb-3">
@@ -291,7 +315,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
         <NavLink to="/clients" icon={Building2} label="Clients" onNavigate={onNavigate} />
         <NavLink to="/expirations" icon={CalendarClock} label="Expirations" onNavigate={onNavigate} />
         {navSections(actor).map((section) => (
-          <NavSection key={section.id} section={section} onNavigate={onNavigate} />
+          <NavSection key={section.id} section={section} sections={sections} onNavigate={onNavigate} />
         ))}
       </nav>
       <div className="border-t border-sidebar-2 pt-3">
@@ -304,6 +328,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
+  const sections = useCollapsedSections();
   return (
     <div className="min-h-screen lg:pl-(--sidebar-width) print:pl-0">
       <a
@@ -313,7 +338,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--sidebar-width) lg:block print:hidden">
-        <Sidebar onSearch={() => setSearching(true)} />
+        <Sidebar onSearch={() => setSearching(true)} sections={sections} />
       </aside>
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden print:hidden">
         <button
@@ -342,6 +367,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="relative h-full w-72 max-w-[85vw]">
             <Sidebar
               onNavigate={() => setOpen(false)}
+              sections={sections}
               onSearch={() => {
                 setOpen(false);
                 setSearching(true);
