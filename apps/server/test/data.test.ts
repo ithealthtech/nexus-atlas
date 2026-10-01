@@ -95,9 +95,13 @@ function fakeHudu(options: { key?: string } = {}) {
       return new Response('{"error":"unauthorized"}', { status: 401 });
     const key = url.pathname.replace('/api/v1/', '');
     const page = Number(url.searchParams.get('page') ?? 1);
-    const items = (data[key] ?? []).slice((page - 1) * 25, page * 25);
-    // Hudu lists websites as a bare array.
-    return new Response(JSON.stringify(key === 'websites' ? items : { [key]: items }), {
+    const procedure = url.searchParams.get('procedure_id');
+    const items = (data[key] ?? [])
+      .filter((x) => !procedure || String((x as { procedure_id?: number }).procedure_id) === procedure)
+      .slice((page - 1) * 25, page * 25);
+    // Hudu lists websites and networks as a bare array.
+    const bare = key === 'websites' || key === 'networks';
+    return new Response(JSON.stringify(bare ? items : { [key]: items }), {
       headers: { 'content-type': 'application/json' },
     });
   }) as typeof fetch;
@@ -576,6 +580,99 @@ describe('Hudu import', () => {
     const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
     expect(again.counts.domains).toMatchObject({ created: 0, skipped: 2 });
     expect(existing).toBeTruthy();
+  });
+
+  it('imports processes as checklists, networks as Networks assets, and links between imported items', async () => {
+    hudu.data.procedures = [
+      {
+        id: 41,
+        company_id: 1,
+        name: 'New hire setup',
+        description: '<p>For every <b>new</b> starter</p>',
+        procedure_tasks_attributes: [
+          { id: 2, name: 'Create the M365 account', position: 2 },
+          { id: 1, name: 'Order a laptop', position: 1 },
+          { id: 3, name: 'Sub-step left out', position: 3, parent_task_id: 2 },
+        ],
+      },
+      // Tasks not listed with the process are read from procedure_tasks.
+      { id: 42, company_id: null, name: 'Monthly patch review' },
+      // A run is a copy being worked through, not a template.
+      {
+        id: 43,
+        company_id: 1,
+        name: 'New hire setup: Jane',
+        run: true,
+        procedure_tasks_attributes: [{ id: 9, name: 'x' }],
+      },
+      { id: 44, company_id: 1, name: 'Empty process', procedure_tasks_attributes: [] },
+    ];
+    hudu.data.procedure_tasks = [{ id: 5, procedure_id: 42, name: 'Check failed patches', position: 1 }];
+    hudu.data.networks = [
+      { id: 61, company_id: 1, name: 'Office LAN', address: '10.20.0.0/24', description: 'Main VLAN' },
+      { id: 62, company_id: 1, name: 'No address' },
+      { id: 63, company_id: 1, name: 'Old', address: '10.9.0.0/24', archived_at: '2026-01-01T00:00:00Z' },
+    ];
+    hudu.data.relations = [
+      {
+        id: 81,
+        fromable_type: 'Asset',
+        fromable_id: 501,
+        toable_type: 'Article',
+        toable_id: 900,
+        description: 'Runbook',
+      },
+      { id: 82, fromable_type: 'Network', fromable_id: 61, toable_type: 'Asset', toable_id: 501 },
+      // An end Atlas has no place for is skipped.
+      { id: 83, fromable_type: 'Asset', fromable_id: 501, toable_type: 'Company', toable_id: 1 },
+    ];
+
+    await owner.call('PUT', '/api/import/hudu', { url: 'https://itdr.huducloud.test', apiKey: 'hudu-key-1234567890' });
+    const job = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(job.status, JSON.stringify(job)).toBe('done');
+    expect(job.counts.procedures, JSON.stringify(job.messages)).toMatchObject({ created: 2, skipped: 1, failed: 0 });
+    expect(job.counts.networks).toMatchObject({ created: 1, skipped: 1, failed: 0 });
+    expect(job.counts.relations, JSON.stringify(job.messages)).toMatchObject({ created: 2, failed: 0 });
+    expect(hudu.calls).toContain('/api/v1/procedure_tasks?page=1&page_size=25&procedure_id=42');
+
+    const harbor = ((await owner.call('GET', '/api/clients')).data as { id: string; name: string }[]).find(
+      (c) => c.name === 'Harbor Dental Group',
+    )!.id;
+    const lists = (await owner.call('GET', '/api/checklists')).data as {
+      title: string;
+      description: string;
+      clientId: string | null;
+      steps: { text: string }[];
+    }[];
+    const hire = lists.find((c) => c.title === 'New hire setup')!;
+    expect(hire).toMatchObject({ clientId: harbor, description: 'For every new starter' });
+    expect(hire.steps.map((s) => s.text)).toEqual(['Order a laptop', 'Create the M365 account']);
+    expect(lists.find((c) => c.title === 'Monthly patch review')).toMatchObject({ clientId: null });
+    expect(lists.some((c) => c.title.includes('Jane'))).toBe(false);
+
+    const assets = (await owner.call('GET', `/api/assets?client=${harbor}`)).data as {
+      id: string;
+      name: string;
+      fields: Record<string, unknown>;
+    }[];
+    const lan = assets.find((a) => a.name === 'Office LAN')!;
+    expect(lan.fields).toMatchObject({ subnet: '10.20.0.0/24' });
+    const firewall = assets.find((a) => a.name === 'HDG-FW-01')!;
+    const linked = (await owner.call('GET', `/api/items/asset/${firewall.id}/relations`)).data as {
+      type: string;
+      title: string;
+      note: string;
+    }[];
+    // With the password the import already linked from Hudu's passwordable.
+    expect(linked.map((r) => r.title).sort()).toEqual(['Firewall admin', 'Firewall reboot', 'Office LAN']);
+    expect(linked.find((r) => r.title === 'Firewall reboot')!.note).toBe('Runbook');
+
+    // A second run updates, and adds no links twice.
+    const again = await waitForJob(owner, (await owner.call('POST', '/api/import/hudu/run', {})).data.id);
+    expect(again.counts.procedures).toMatchObject({ created: 0, updated: 2 });
+    expect(again.counts.networks).toMatchObject({ created: 0, updated: 1 });
+    expect(again.counts.relations).toMatchObject({ created: 0, skipped: 2 });
+    expect((await owner.call('GET', `/api/items/asset/${firewall.id}/relations`)).data).toHaveLength(3);
   });
 
   it('folds a Computer Assets layout an earlier import made into Endpoints, merging same-named assets', async () => {

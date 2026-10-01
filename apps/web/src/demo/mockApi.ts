@@ -1805,6 +1805,8 @@ const ALL_HUDU = {
   documents: true,
   passwords: true,
   domains: true,
+  procedures: true,
+  networks: true,
   companyIds: null as number[] | null,
   layoutIds: null as number[] | null,
 };

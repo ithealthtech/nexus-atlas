@@ -35,6 +35,9 @@ curl -H "Authorization: Bearer $ATLAS_KEY" https://atlas.example.com/api/v1/clie
 | Assets | Assets under the matching client and layout. The manufacturer, model, and serial number go into notes. A value that doesn't fit its field is kept in notes rather than lost. |
 | Knowledge base articles | Documents. Company articles go to that client and global articles to the internal knowledge base. HTML is converted to the Atlas editor, and scripts and unsafe links are removed. |
 | Passwords | Vault entries in the client's passwords, as a flat list (folders aren't kept), including one-time code keys. Passwords that aren't tied to a company are skipped and listed in the summary. |
+| Processes | Checklists. Company processes go to that client and global ones are shared. Each top-level task becomes a step; runs (processes being worked through) aren't imported. |
+| Networks | Networks assets under the matching client, with the address as the subnet. Networks without an address are skipped. |
+| Relations | Links between the imported assets, documents, passwords, domains, and networks. Relations to anything else are skipped. |
 
 - **Running it again is safe.** Atlas remembers which Hudu item became which Atlas record, and updates those records instead of creating duplicates. If a record was deleted in Atlas, it is created again. Each update is a new version, so earlier edits can be compared or restored.
 - **Archived items** in Hudu are skipped.

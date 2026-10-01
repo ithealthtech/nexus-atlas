@@ -3,7 +3,10 @@ import type { HuduImportOptions, HuduPreview } from '@atlas/shared';
 import { Button, Checkbox, Input } from '@/components/ui';
 
 const KINDS: [
-  keyof Pick<HuduImportOptions, 'clients' | 'locations' | 'assets' | 'documents' | 'passwords' | 'domains'>,
+  keyof Pick<
+    HuduImportOptions,
+    'clients' | 'locations' | 'assets' | 'documents' | 'passwords' | 'domains' | 'procedures' | 'networks'
+  >,
   string,
   string,
 ][] = [
@@ -13,6 +16,8 @@ const KINDS: [
   ['documents', 'Documents', 'Articles: company ones into each client, the rest into the knowledge base.'],
   ['passwords', 'Passwords', "Into each client's password list, in folders like Hudu's."],
   ['domains', 'Domains', "Hudu's websites, as Domains with automatic expiry and SSL certificate checks."],
+  ['procedures', 'Processes', "Hudu's processes, as checklists: company ones in each client, the rest shared."],
+  ['networks', 'Networks', "Each company's networks, as Networks assets with their subnet and VLAN."],
 ];
 
 /** A tick list with "all" and "none", used for companies and asset layouts. */

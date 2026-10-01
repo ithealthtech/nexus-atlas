@@ -43,6 +43,9 @@ const KIND_LABELS: Record<string, string> = {
   tenants: 'Tenants',
   licenses: 'Licenses',
   domains: 'Domains',
+  procedures: 'Checklists',
+  networks: 'Networks',
+  relations: 'Links between items',
   tickets: 'Tickets',
   atlasLinks: 'Atlas links in ConnectWise',
 };
