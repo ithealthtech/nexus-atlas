@@ -2,6 +2,19 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.18] - 2026-10-01
+
+### Added
+
+- **Hudu processes, networks and relations import.** Processes become checklists, networks become Networks assets, and Hudu relations become Atlas links. Two new import choices, Processes and Networks, are on by default.
+- **ConnectWise expiry tickets (opt-in).** Each sync can open one ConnectWise ticket for every domain, certificate, license or warranty date coming due within a set number of days (30 by default), through the v2 platform ticket API.
+- **Monthly client report.** Each client has a printable Monthly report page, linked from the client header, that the browser can save as a PDF.
+- **Windows preview download.** CI builds a downloadable Atlas for Windows preview.
+
+### Changed
+
+- The ConnectWise RMM code is split into separate files for the API client, device records and the sync. No behavior change.
+
 ## [1.7.17] - 2026-09-30
 
 ### Fixed
