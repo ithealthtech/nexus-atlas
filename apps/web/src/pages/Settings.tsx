@@ -42,6 +42,7 @@ import {
 import { ApiKeysCard } from './SettingsExtra';
 import { DangerZone } from './DangerZone';
 import { EntraSettings } from './EntraSettings';
+import { SamlSettings } from './SamlSettings';
 
 const SECURITY_LABEL: Record<SmtpSecurity, string> = {
   starttls: 'STARTTLS (usually port 587)',
@@ -794,6 +795,7 @@ export function Settings() {
         )}
 
         <EntraSettings />
+        <SamlSettings />
         <ApiKeysCard />
         {actor.isAdmin && <DangerZone />}
       </div>

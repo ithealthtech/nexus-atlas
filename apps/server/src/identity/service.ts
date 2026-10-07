@@ -478,6 +478,15 @@ export class IdentityService {
         !user.entraOid && user.entraPendingOid
           ? { oid: user.entraPendingOid, email: user.entraPendingEmail ?? '', name: user.entraPendingName ?? '' }
           : null,
+      saml: user.samlSubject ? ('linked' as const) : user.samlPendingSubject ? ('pending' as const) : null,
+      samlPending:
+        !user.samlSubject && user.samlPendingSubject
+          ? {
+              subject: user.samlPendingSubject,
+              email: user.samlPendingEmail ?? '',
+              name: user.samlPendingName ?? '',
+            }
+          : null,
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
     };

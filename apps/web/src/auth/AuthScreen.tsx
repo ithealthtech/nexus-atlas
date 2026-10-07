@@ -22,18 +22,18 @@ import { useApplySession } from '@/lib/session';
 import { Logo } from '@/components/Logo';
 import { useTheme } from '@/lib/branding';
 
-// What the sign-in page says when Microsoft sends the person back without signing them in.
+// What the sign-in page says when Microsoft or the SAML provider sends the person back without signing them in.
 const SSO_MESSAGES: Record<string, string> = {
   pending:
-    'Your Microsoft account matches an Atlas account, but an administrator has to confirm the link before you can sign in. Ask one to open People & access.',
-  unknown: 'That Microsoft account has no Atlas account. Ask an administrator to add you first.',
-  conflict: 'That Atlas account is already linked to a different Microsoft account. Ask an administrator.',
+    'That account matches an Atlas account, but an administrator has to confirm the link before you can sign in. Ask one to open People & access.',
+  unknown: 'That account has no Atlas account. Ask an administrator to add you first.',
+  conflict: 'That Atlas account is already linked to a different sign-in account. Ask an administrator.',
   disabled: 'That Atlas account is disabled.',
-  staff: 'Microsoft sign-in is for staff accounts.',
-  denied: 'Microsoft sign-in was cancelled or is not allowed for this account.',
+  staff: 'Single sign-on is for staff accounts.',
+  denied: 'The sign-in was cancelled or is not allowed for this account.',
   expired: 'The sign-in took too long or was opened in another browser. Try again.',
-  failed: 'Microsoft sign-in could not be completed. Try again, or ask an administrator.',
-  off: 'Microsoft sign-in is not turned on.',
+  failed: 'The sign-in could not be completed. Try again, or ask an administrator.',
+  off: 'That way of signing in is not turned on.',
 };
 
 type Stage = 'signin' | 'setup' | 'mfa' | 'password' | 'mfa-setup' | 'reset';
@@ -173,7 +173,13 @@ function SignIn({ done, passwordReset }: Done & { passwordReset: boolean }) {
     queryFn: () => api<{ enabled: boolean; requireSso: boolean }>('/auth/entra'),
     staleTime: 60_000,
   });
-  // Why Microsoft sent the person back, shown once and then dropped from the address.
+  const saml = useQuery({
+    queryKey: ['sso-saml'],
+    queryFn: () => api<{ enabled: boolean; name: string; requireSso: boolean }>('/auth/saml'),
+    staleTime: 60_000,
+  });
+  const ssoRequired = !!(sso.data?.enabled && sso.data.requireSso) || !!(saml.data?.enabled && saml.data.requireSso);
+  // Why the provider sent the person back, shown once and then dropped from the address.
   const [ssoNote] = useState(() => {
     const code = new URLSearchParams(window.location.search).get('sso');
     if (code) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
@@ -198,16 +204,26 @@ function SignIn({ done, passwordReset }: Done & { passwordReset: boolean }) {
           ? 'This is a demo with sample data. The sign-in details are filled in; on the next step, any 6-digit code works.'
           : 'Use the account your administrator created for you.'}
       </Heading>
-      {sso.data?.enabled && (
+      {(sso.data?.enabled || saml.data?.enabled) && (
         <>
-          <a
-            href="/api/auth/entra/start"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-fg hover:opacity-90"
-          >
-            <LogIn className="size-4" aria-hidden /> Sign in with Microsoft
-          </a>
+          {sso.data?.enabled && (
+            <a
+              href="/api/auth/entra/start"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-fg hover:opacity-90"
+            >
+              <LogIn className="size-4" aria-hidden /> Sign in with Microsoft
+            </a>
+          )}
+          {saml.data?.enabled && (
+            <a
+              href="/api/auth/saml/start"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-fg hover:opacity-90"
+            >
+              <LogIn className="size-4" aria-hidden /> Sign in with {saml.data.name}
+            </a>
+          )}
           <div className="flex items-center gap-3 text-xs text-muted" aria-hidden>
-            <span className="h-px flex-1 bg-border" /> {sso.data.requireSso ? 'owner sign-in' : 'or'}{' '}
+            <span className="h-px flex-1 bg-border" /> {ssoRequired ? 'owner sign-in' : 'or'}{' '}
             <span className="h-px flex-1 bg-border" />
           </div>
         </>

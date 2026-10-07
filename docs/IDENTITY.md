@@ -67,4 +67,4 @@ Atlas for Windows (`apps/windows`) signs in as the person using it, through thei
 
 ## Coming later
 
-- **After v1:** Entra ID / Microsoft 365 single sign-on.
+- **Since v1:** single sign-on through Microsoft Entra ID (OpenID Connect) and SAML 2.0. Both link an existing Atlas account to the provider's own ID for the person, after an administrator confirms the first match. See the administrator guide.
