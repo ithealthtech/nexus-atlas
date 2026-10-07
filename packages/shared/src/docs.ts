@@ -208,6 +208,31 @@ export interface DocumentView extends DocumentSummary {
   content: RichText;
   canEdit: boolean;
 }
+// ---------- sharing a document by link ----------
+export const createDocumentShareSchema = z.object({
+  /** Days until the link stops working; null for a link that works until it's revoked. */
+  expiresDays: z
+    .union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)])
+    .nullable()
+    .default(null),
+});
+export interface DocumentShareView {
+  id: string;
+  url: string;
+  createdByName: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  views: number;
+  lastViewedAt: string | null;
+  status: 'active' | 'expired' | 'revoked';
+}
+/** What someone with a link sees: the article and whose it is. Nothing else about the client or Atlas. */
+export interface SharedArticle {
+  title: string;
+  content: RichText;
+  updatedAt: string;
+  organization: string;
+}
 export interface FolderView {
   id: string;
   clientId: string | null;

@@ -669,6 +669,8 @@ export async function buildApp({
     maxUploadBytes,
     domains,
     warranty,
+    publicOrigin: config.publicOrigin,
+    articleLimiter: failureLimiter(30, 15 * 60_000),
   });
   const trackers = new TrackerService(db, settings, {
     domains,

@@ -29,6 +29,7 @@ import { DomainTracker, SslTracker } from '@/components/Trackers';
 import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
+import { SharedArticle } from '@/pages/SharedArticle';
 import { SendPage, Sends } from '@/pages/Sends';
 import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
@@ -274,6 +275,7 @@ const router = createRouter({
   routeTree: rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/share/$token', component: SharePage }),
     createRoute({ getParentRoute: () => rootRoute, path: '/send/$token', component: SendPage }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/kb/$token', component: SharedArticle }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/reset-password',

@@ -1122,6 +1122,57 @@ on('POST', '/documents', (_m, b) => {
   record('Created', 'document', d.id, d.title, d.clientId);
   return { ...docSummary(d), content: d.content, canEdit: true };
 });
+// Documents shared by link.
+const docShares: {
+  id: string;
+  documentId: string;
+  token: string;
+  createdAt: string;
+  expiresAt: string | null;
+  views: number;
+  lastViewedAt: string | null;
+  revoked: boolean;
+}[] = [];
+const shareView = (s: (typeof docShares)[0]) => ({
+  id: s.id,
+  url: `${location.origin}/kb/${s.token}`,
+  createdByName: db.owner.name,
+  createdAt: s.createdAt,
+  expiresAt: s.expiresAt,
+  views: s.views,
+  lastViewedAt: s.lastViewedAt,
+  status: s.revoked ? 'revoked' : s.expiresAt && s.expiresAt < now() ? 'expired' : 'active',
+});
+on('GET', '/documents/:id/shares', (m) => docShares.filter((s) => s.documentId === m[1]).map(shareView));
+on('POST', '/documents/:id/shares', (m, b) => {
+  find(documents, m[1]!, 'Document');
+  const days = Number(b.expiresDays) || 0;
+  const share = {
+    id: uuid(),
+    documentId: m[1]!,
+    token: uuid().replace(/-/g, ''),
+    createdAt: now(),
+    expiresAt: days ? new Date(Date.now() + days * 86_400_000).toISOString() : null,
+    views: 0,
+    lastViewedAt: null,
+    revoked: false,
+  };
+  docShares.unshift(share);
+  return shareView(share);
+});
+on('DELETE', '/document-shares/:id', (m) => {
+  const share = find(docShares, m[1]!, 'Link');
+  share.revoked = true;
+  return docShares.filter((s) => s.documentId === share.documentId).map(shareView);
+});
+on('GET', '/shared-articles/:token', (m) => {
+  const share = docShares.find((s) => s.token === m[1] && !s.revoked);
+  const d = share && documents.find((x) => x.id === share.documentId);
+  if (!share || !d) throw new MockError(404, 'This link doesn’t work any more, or was copied incompletely.');
+  share.views++;
+  share.lastViewedAt = now();
+  return { title: d.title, content: d.content, updatedAt: d.updatedAt, organization: 'IT Done Right' };
+});
 on('GET', '/documents/:id', (m) => {
   const d = find(documents, m[1]!, 'Document');
   return { ...docSummary(d), content: d.content, canEdit: true };
