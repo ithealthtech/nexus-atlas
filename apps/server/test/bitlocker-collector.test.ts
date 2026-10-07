@@ -174,6 +174,16 @@ describe('BitLocker collector', () => {
     const [device] = (await owner.call('GET', '/api/bitlocker/collector')).data.devices;
     expect(device.status).toBe('protected');
 
+    // One readable volume doesn't make a machine protected while another couldn't be read.
+    await upload(
+      agent,
+      report(agent, {}, [
+        { mount: 'C:', protection: 'On', keys: [] },
+        { mount: 'F:', protection: 'Unknown', keys: [] },
+      ]),
+    );
+    expect((await owner.call('GET', '/api/bitlocker/collector')).data.devices[0].status).toBe('unknown');
+
     // A key already in the vault under the same protector ID (typed in, or from the RMM field) isn't copied.
     const typed = '000187-000198-000209-000220-000231-000242-000253-000264';
     const protector = randomUUID();
@@ -210,6 +220,19 @@ describe('BitLocker collector', () => {
     expect((await upload(agent, garbled)).data).toEqual({ accepted: true, keys: 0, rejected: 1 });
     expect(await keys()).toHaveLength(0);
 
+    // If saving fails part-way, the same report sent again is taken in full, not waved through as a duplicate.
+    const pool = t.handle.pool;
+    const [{ private_key: sealed }] = (
+      await pool.query('select private_key from bitlocker_enrollments where id = $1', [id])
+    ).rows as { private_key: string }[];
+    await pool.query('update bitlocker_enrollments set private_key = $2 where id = $1', [id, 'v2:broken']);
+    const interrupted = report(agent, {}, [{ mount: 'G:', protection: 'On', keys: [[randomUUID(), KEY_D]] }]);
+    expect((await upload(agent, interrupted)).status).toBe(500);
+    expect(await keys()).toHaveLength(0);
+    await pool.query('update bitlocker_enrollments set private_key = $2 where id = $1', [id, sealed]);
+    expect((await upload(agent, interrupted)).data).toEqual({ accepted: true, keys: 1 });
+    expect((await upload(agent, interrupted)).data).toEqual({ accepted: false, duplicate: true });
+
     // A blocked machine, then a revoked enrollment. What's in the vault stays.
     expect((await upload(agent, report(agent))).data).toEqual({ accepted: true, keys: 1 });
     const [device] = (await owner.call('GET', '/api/bitlocker/collector')).data.devices;
@@ -219,7 +242,7 @@ describe('BitLocker collector', () => {
     expect((await upload(agent, report(agent))).status).toBe(200);
     expect((await owner.call('DELETE', `/api/bitlocker/enrollments/${id}`)).data.enrollments[0].revoked).toBe(true);
     expect((await upload(agent, report(agent))).status).toBe(403);
-    expect(await keys()).toHaveLength(1);
+    expect(await keys()).toHaveLength(2);
   });
 
   it('binds a one-device enrollment to its first machine, and is for administrators only', async () => {

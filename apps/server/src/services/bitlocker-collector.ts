@@ -33,10 +33,13 @@ type BitlockerVolume = schema.BitlockerVolume;
 type EnrollmentRow = typeof schema.bitlockerEnrollments.$inferSelect;
 type DeviceRow = typeof schema.bitlockerDevices.$inferSelect;
 
-/** A machine is protected only if every volume it reported is; one volume with protection off is a finding. */
+/**
+ * A machine is protected only if every volume it reported is. One volume with protection off is a finding, and
+ * one that couldn't be read means nobody knows: it never counts as protected.
+ */
 function statusOf(volumes: BitlockerVolume[]): BitlockerDeviceView['status'] {
-  if (!volumes.length || volumes.every((v) => v.protection === 'Unknown')) return 'unknown';
-  return volumes.some((v) => v.protection === 'Off') ? 'unprotected' : 'protected';
+  if (volumes.some((v) => v.protection === 'Off')) return 'unprotected';
+  return volumes.length && volumes.every((v) => v.protection === 'On') ? 'protected' : 'unknown';
 }
 
 /**
@@ -377,8 +380,27 @@ export class BitlockerCollectorService {
       await this.prune();
     }
 
-    // Decrypt and save the keys. Outside the transaction: the vault does its own, and a failure here is made good
-    // by the machine's next report (keys are saved by what they are, not by which report carried them).
+    // Decrypt and save the keys. Outside the transaction, because the vault does its own. If anything here fails,
+    // the report is forgotten again, so the script's retry is processed in full instead of being acknowledged as a
+    // duplicate and deleted with keys unsaved. (Saving is by key, so a retry never saves one twice.)
+    try {
+      const { saved, rejected } = await this.saveKeys(enrollment, device, report, ip);
+      return { accepted: true, keys: saved, ...(rejected ? { rejected } : {}) };
+    } catch (error) {
+      await this.db
+        .delete(schema.bitlockerReports)
+        .where(
+          and(
+            eq(schema.bitlockerReports.enrollmentId, enrollment.id),
+            eq(schema.bitlockerReports.reportId, report.reportId),
+          ),
+        );
+      throw error;
+    }
+  }
+
+  /** Decrypts a report's recovery passwords and saves the new ones to the vault, linked to the machine's asset. */
+  private async saveKeys(enrollment: EnrollmentRow, device: DeviceRow, report: BitlockerReport, ip: string) {
     const pem = await this.keys.open(enrollment.orgId, enrollment.privateKey, keyAad(enrollment.id));
     const privateKey = createPrivateKey(pem);
     const actor = await this.actorFor(enrollment);
@@ -456,7 +478,7 @@ export class BitlockerCollectorService {
             LINK_NOTE,
           );
       }
-    return { accepted: true, keys: saved, ...(rejected ? { rejected } : {}) };
+    return { saved, rejected };
   }
 
   private pruned = 0;

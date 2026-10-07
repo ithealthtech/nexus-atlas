@@ -33,6 +33,9 @@ describe('BitLocker collector script', () => {
     expect(script).not.toMatch(
       /ProtectKeyWith|DeleteKeyProtector|DisableKeyProtectors|Encrypt\(\)|Decrypt\(\)|manage-bde|Enable-BitLocker|Disable-BitLocker|Suspend-BitLocker|Add-BitLockerKeyProtector|Remove-BitLockerKeyProtector/i,
     );
+    const drain = script.indexOf('if (-not $NoUpload) { Send-AtlasQueue -Root $root }');
+    expect(drain).toBeGreaterThan(0);
+    expect(drain).toBeLessThan(script.indexOf("throw 'Encrypted queue is full'"));
     for (const bad of [
       { ...values, endpoint: "https://atlas.example.com/x'; Remove-Item C:\\ -Recurse #" },
       { ...values, token: "'; evil" },
@@ -84,6 +87,19 @@ $report = Get-AtlasReport -Rsa $rsa
 [IO.File]::WriteAllText('${out}', (ConvertTo-Json -InputObject $report -Depth 10 -Compress), (New-Object System.Text.UTF8Encoding($false)))
 try { Invoke-AtlasReadMethod ([pscustomobject]@{ DeviceID = 'vol-c' }) 'DisableKeyProtectors'; Write-Output 'ALLOWLIST-BROKEN' } catch { Write-Output 'allowlist-ok' }
 try { $null = Protect-AtlasPassword -Rsa $rsa -Password '123456-123456-123456-123456-123456-123456-123456-123456'; Write-Output 'FORMAT-BROKEN' } catch { Write-Output 'format-ok' }
+# The queue: oldest first, a file removed only once its upload is acknowledged, and a failure leaves the rest.
+$queue = Join-Path '${dir}' 'queue'
+$null = New-Item -ItemType Directory -Path $queue
+foreach ($n in 1..3) {
+    $name = Join-Path $queue ("r$n.json")
+    [IO.File]::WriteAllText($name, ('{"agentId":"' + $Config.agentId + '","n":' + $n + '}'))
+    (Get-Item -LiteralPath $name).CreationTimeUtc = [DateTime]::UtcNow.AddMinutes($n - 10)
+}
+$script:sent = @()
+function Send-AtlasReport { param([string]$Json) $n = ($Json | ConvertFrom-Json).n; if ($n -eq 3) { throw 'Upload temporarily unavailable' }; $script:sent += $n }
+try { Send-AtlasQueue -Root $queue } catch { Write-Output 'queue-stopped' }
+Write-Output ('queue-sent=' + ($script:sent -join ','))
+Write-Output ('queue-left=' + ((Get-ChildItem -LiteralPath $queue -Filter '*.json' | ForEach-Object { $_.Name }) -join ','))
 Write-Output ('ps-major=' + $PSVersionTable.PSVersion.Major)
 `;
         const file = join(dir, 'harness.ps1');
@@ -96,6 +112,9 @@ Write-Output ('ps-major=' + $PSVersionTable.PSVersion.Major)
         expect(printed).toContain('allowlist-ok');
         expect(printed).toContain('format-ok');
         expect(printed).toContain('ps-major=5');
+        expect(printed).toContain('queue-stopped');
+        expect(printed).toContain('queue-sent=1,2');
+        expect(printed).toContain('queue-left=r3.json');
 
         const raw = readFileSync(out, 'utf8');
         expect(raw).not.toContain(KEY);

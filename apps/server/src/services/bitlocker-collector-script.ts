@@ -186,6 +186,20 @@ function Send-AtlasReport {
     } finally { $client.Dispose(); $handler.Dispose() }
 }
 
+function Send-AtlasQueue {
+    param([Parameter(Mandatory)][string]$Root)
+    # Oldest first, so key rotations during an outage arrive in order. Up to 50 a call.
+    foreach ($file in @(Get-ChildItem -LiteralPath $Root -Filter '*.json' -File | Sort-Object CreationTimeUtc | Select-Object -First 50)) {
+        if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Unexpected queue file type' }
+        $queued = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
+        $parsed = $queued | ConvertFrom-Json
+        if ($parsed.agentId -ne $Config.agentId) { throw 'Queue enrollment mismatch' }
+        Send-AtlasReport -Json $queued
+        # Only an acknowledged report is removed.
+        Remove-Item -LiteralPath $file.FullName
+    }
+}
+
 # --- run ---
 $rsa = $null
 try {
@@ -219,6 +233,9 @@ try {
     # One run at a time per enrollment, even if the RMM starts two.
     $lock = [IO.File]::Open((Join-Path $root 'collector.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     try {
+        # What earlier runs left behind goes first, so a queue that filled up during an outage empties again
+        # instead of blocking every later run.
+        if (-not $NoUpload) { Send-AtlasQueue -Root $root }
         $pending = @(Get-ChildItem -LiteralPath $root -Filter '*.json' -File)
         if ($pending.Count -ge 100) { throw 'Encrypted queue is full' }
         $report = Get-AtlasReport -Rsa $rsa
@@ -230,17 +247,7 @@ try {
         Move-Item -LiteralPath $tempPath -Destination $path
         $keyCount = 0
         foreach ($volume in $report.volumes) { $keyCount += @($volume.protectors).Count }
-        if (-not $NoUpload) {
-            # Oldest first, so key rotations during an outage arrive in order.
-            foreach ($file in @(Get-ChildItem -LiteralPath $root -Filter '*.json' -File | Sort-Object CreationTimeUtc | Select-Object -First 50)) {
-                if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Unexpected queue file type' }
-                $queued = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
-                $parsed = $queued | ConvertFrom-Json
-                if ($parsed.agentId -ne $Config.agentId) { throw 'Queue enrollment mismatch' }
-                Send-AtlasReport -Json $queued
-                Remove-Item -LiteralPath $file.FullName
-            }
-        }
+        if (-not $NoUpload) { Send-AtlasQueue -Root $root }
         $mode = if ($NoUpload) { 'queued' } else { 'uploaded' }
         # Output for the RMM log: counts only, never keys, tokens, or provider errors.
         Write-Output ("MSP Atlas BitLocker: report {0}; volumes={1}; recoveryPasswords={2}" -f $mode, @($report.volumes).Count, $keyCount)
