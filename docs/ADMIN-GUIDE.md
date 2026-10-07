@@ -125,6 +125,35 @@ Check **System status** every week or so. It shows:
 - **Revoke keys** you no longer use.
 - The API is documented at `/api/openapi.json`. See [Data in and out](DATA.md#rest-api).
 
+## Webhooks
+
+**Administration → Webhooks** makes Atlas post a short message to an address you choose whenever something changes, so a chat channel, an automation, or another tool can react.
+
+1. Choose **New webhook**, give it a name and an `https://` address, and tick the kinds of item it should hear about: clients, assets, documents, passwords, contacts, locations, checklists.
+2. Copy the **signing secret** shown once. The receiver uses it to check a message came from Atlas.
+3. Choose **Send test** to post a `ping`.
+
+**What a message looks like:**
+
+```json
+{
+  "id": "0b1f…",
+  "event": "asset.updated",
+  "occurredAt": "2026-10-07T14:03:11.000Z",
+  "actor": { "id": "…", "name": "Avery Owner" },
+  "client": { "id": "…", "name": "Harbor Dental Group" },
+  "item": { "type": "asset", "id": "…", "title": "HDG-FW-01", "url": "https://atlas.example.com/assets/…" }
+}
+```
+
+Events are named `kind.what`: for example `asset.created`, `document.updated`, `password.rotated`, `asset.archived`, `document.file_added`, `checklist.completed`. A message never carries the item's contents. A password message gives the entry's name and nothing else; use the API with a key if the receiver needs more.
+
+**Checking a message is from Atlas.** Each request has these headers: `X-Atlas-Event`, `X-Atlas-Delivery` (the same as `id`), `X-Atlas-Timestamp` (seconds), and `X-Atlas-Signature`. The signature is `sha256=` followed by the HMAC-SHA256, in hex, of the timestamp, a full stop, and the exact body, keyed with the signing secret. Compare it, and refuse messages whose timestamp is more than a few minutes old.
+
+**Delivery.** A message is queued together with the change it describes, so it isn't lost if the receiver is down. Anything other than a 2xx answer within 10 seconds counts as a failure and is tried again after 1 minute, 5 minutes, 30 minutes, 2 hours, and 6 hours, with the same `id` each time, so a receiver can ignore repeats. Redirects are not followed. After ten messages in a row have been given up on, the webhook is **paused**; fix the receiver and choose **Resume**. **Deliveries** shows the latest 50 and why any failed. Delivered and abandoned messages are kept for 14 days.
+
+A bulk job such as an RMM sync changes many assets, and each change is a message. Leave Assets unticked on a webhook that posts to a chat channel if that would be noisy.
+
 ## Browser extension
 
 The extension for Edge and Chrome (Manifest V3) fills logins from the vault for staff. Client accounts can't use it.

@@ -48,6 +48,7 @@ import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
 import { PasswordRotation } from '@/pages/PasswordRotation';
+import { Webhooks } from '@/pages/Webhooks';
 import { BitlockerCollector } from '@/pages/BitlockerCollector';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
@@ -252,6 +253,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/request-log', component: adminOnly(RequestLog) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/webhooks', component: adminOnly(Webhooks) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),

@@ -1388,3 +1388,66 @@ export const bitlockerReports = pgTable(
   },
   (t) => [primaryKey({ columns: [t.enrollmentId, t.reportId] })],
 );
+
+/** An address Atlas posts to when something changes. The signing secret is sealed with the organization's vault key. */
+export const webhooks = pgTable(
+  'webhooks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    secret: text('secret').notNull(),
+    /** Which kinds of item it hears about: client, asset, document, password, contact, location, checklist. */
+    topics: jsonb('topics').$type<string[]>().notNull().default([]),
+    enabled: boolean('enabled').notNull().default(true),
+    /** Set when deliveries kept failing and Atlas stopped trying; cleared when an administrator resumes it. */
+    pausedAt: timestamp('paused_at', { withTimezone: true }),
+    /** Deliveries given up on in a row. */
+    failures: integer('failures').notNull().default(0),
+    createdBy: createdBy(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [index('webhooks_org').on(t.orgId)],
+);
+
+/** One event for one webhook: queued with the change it describes, then delivered with retries. */
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    webhookId: uuid('webhook_id')
+      .notNull()
+      .references(() => webhooks.id, { onDelete: 'cascade' }),
+    event: text('event').notNull(),
+    /** What happened, without the item's contents: who, which client, and which item. */
+    data: jsonb('data')
+      .$type<{
+        actorId: string | null;
+        actorName: string;
+        clientId: string | null;
+        entityType: string;
+        entityId: string | null;
+        title: string;
+      }>()
+      .notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    responseStatus: integer('response_status'),
+    error: text('error'),
+    createdAt: created(),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('webhook_deliveries_due').on(t.status, t.nextAttemptAt),
+    index('webhook_deliveries_webhook').on(t.webhookId, t.createdAt),
+    check('webhook_deliveries_status_check', sql`${t.status} in ('pending','delivered','failed')`),
+  ],
+);

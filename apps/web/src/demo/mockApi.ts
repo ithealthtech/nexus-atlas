@@ -2195,6 +2195,88 @@ on('POST', '/bitlocker/devices/:id/block', (m, b) => {
   return blOverview();
 });
 on('GET', '/assets/:id/bitlocker', (m) => blDevices.filter((d) => d.assetId === m[1]));
+// Webhooks: one sample, with a few deliveries. Nothing is really posted from the demo.
+type DemoHook = {
+  id: string;
+  name: string;
+  url: string;
+  topics: string[];
+  enabled: boolean;
+  paused: boolean;
+  last: { status: string; at: string; detail: string } | null;
+  createdAt: string;
+};
+const demoHooks: DemoHook[] = [
+  {
+    id: uuid(),
+    name: 'Documentation changes to chat',
+    url: 'https://automation.example.com/hooks/atlas',
+    topics: ['asset', 'document', 'checklist'],
+    enabled: true,
+    paused: false,
+    last: { status: 'delivered', at: ago(12), detail: 'asset.updated delivered' },
+    createdAt: ago(60 * 24 * 20),
+  },
+];
+const hookFrom = (b: Json, current?: DemoHook): DemoHook => {
+  const url = String(b.url ?? current?.url ?? '');
+  if (!String(b.name ?? current?.name ?? '').trim())
+    throw new MockError(400, 'Name the webhook, for example "Teams alerts".');
+  if (!url.startsWith('https://'))
+    throw new MockError(400, 'Enter an https:// address, without a username or password in it.');
+  const topics = (b.topics as string[] | undefined) ?? current?.topics ?? [];
+  if (!topics.length) throw new MockError(400, 'Choose at least one kind of item.');
+  return {
+    id: current?.id ?? uuid(),
+    name: String(b.name ?? current?.name),
+    url,
+    topics,
+    enabled: b.enabled === undefined ? (current?.enabled ?? true) : b.enabled === true,
+    paused: current?.paused ?? false,
+    last: current?.last ?? null,
+    createdAt: current?.createdAt ?? now(),
+  };
+};
+on('GET', '/webhooks', () => demoHooks);
+on('POST', '/webhooks', (_m, b) => {
+  const hook = hookFrom(b);
+  demoHooks.push(hook);
+  return { ...hook, secret: 'demo-signing-secret-not-real-0000000000000' };
+});
+on('PATCH', '/webhooks/:id', (m, b) =>
+  Object.assign(find(demoHooks, m[1]!, 'Webhook'), hookFrom(b, find(demoHooks, m[1]!, 'Webhook'))),
+);
+on('DELETE', '/webhooks/:id', (m) => {
+  demoHooks.splice(
+    demoHooks.findIndex((h) => h.id === m[1]),
+    1,
+  );
+  return { ok: true };
+});
+on('POST', '/webhooks/:id/secret', (m) => ({
+  ...find(demoHooks, m[1]!, 'Webhook'),
+  secret: 'demo-signing-secret-not-real-1111111111111',
+}));
+on('POST', '/webhooks/:id/resume', (m) => Object.assign(find(demoHooks, m[1]!, 'Webhook'), { paused: false }));
+on('POST', '/webhooks/:id/test', () => ({ ok: true, status: 200, detail: 'The receiver accepted it.' }));
+on('GET', '/webhooks/:id/deliveries', () =>
+  [
+    ['asset.updated', 'HDG-FW-01', 'delivered', 12],
+    ['document.updated', 'WAN outage runbook', 'delivered', 95],
+    ['checklist.completed', 'New user onboarding', 'delivered', 60 * 26],
+  ].map(([event, title, status, minutes]) => ({
+    id: uuid(),
+    event,
+    title,
+    status,
+    attempts: 1,
+    responseStatus: 200,
+    error: null,
+    createdAt: ago(minutes as number),
+    deliveredAt: ago(minutes as number),
+    nextAttemptAt: null,
+  })),
+);
 on('GET', '/import/jobs', () => importJobs);
 on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
 on('POST', '/import/csv', (_m, b) => {
