@@ -91,6 +91,11 @@ export const cwRmmSyncOptionsSchema = z.object({
   /** Each device's installed software, who signs in to it, and which host a virtual machine runs on. */
   inventory: z.boolean().default(true),
   /**
+   * Reads each device's custom fields and saves any BitLocker recovery key found there to the client's vault,
+   * linked to the device. Off by default: it stores secrets, and adds a request per device to every sync.
+   */
+  bitlocker: z.boolean().default(false),
+  /**
    * Writes each synced device's and linked company's Atlas address into an "Atlas link" custom field in
    * ConnectWise, so techs can jump from the RMM to the docs. Changes the ConnectWise tenant, so off by default.
    */

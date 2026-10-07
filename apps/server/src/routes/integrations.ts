@@ -42,6 +42,10 @@ import { clearLinkRefs, CwLinkWriter, runLinkWriteBack } from '../services/integ
 import { RmmHealthService } from '../services/rmm-health.js';
 import type { SettingsService } from '../services/settings.js';
 import type { WarrantyLookup } from '../services/warranty-lookup.js';
+import type { VaultService } from '../services/vault.js';
+import { AssetService } from '../services/assets.js';
+import { LayoutService } from '../services/layouts.js';
+import { runBitlockerSync } from '../services/integrations/cw-bitlocker.js';
 
 const HOUR = 3_600_000;
 
@@ -54,6 +58,7 @@ async function startSync(
   log: (error: unknown) => void,
   warranty?: WarrantyLookup,
   publicUrl?: string,
+  vault?: VaultService,
 ) {
   const saved = await settings.cwRmm(actor.orgId);
   if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');
@@ -69,6 +74,9 @@ async function startSync(
         const tickets = CwRmmClient.for(saved.region, saved.clientId, saved.clientSecret, fetcher, TICKET_SCOPES);
         await runTicketSync(db, actor.orgId, new CwTicketReader(tickets, saved.region), run, saved.map);
       } else await clearTickets(db, actor.orgId);
+      // Recovery keys kept in device custom fields go to the vault. Read with the sync's own (read-only) key.
+      if (options.bitlocker && vault)
+        await runBitlockerSync(db, actor, client, vault, new AssetService(new LayoutService(db)), run, saved.map);
       // Writing into ConnectWise is opt-in, and gets its own token so read-only keys never ask for write scopes.
       if (options.atlasLinks && publicUrl) {
         const writer = (scopes: string) =>
@@ -103,6 +111,8 @@ export function registerIntegrationRoutes(
     warranty?: WarrantyLookup;
     /** Atlas's own address, for the links written into ConnectWise. */
     publicUrl?: string;
+    /** Where BitLocker recovery keys found in device custom fields are saved. */
+    vault?: VaultService;
   },
 ) {
   const { db, authed, recent, settings } = deps;
@@ -309,6 +319,7 @@ export function registerIntegrationRoutes(
       (err) => req.log.error({ err }, 'ConnectWise RMM sync failed'),
       deps.warranty,
       deps.publicUrl,
+      deps.vault,
     );
     await event(req, 'ConnectWise RMM sync started');
     return reply.status(202).send({ id });
@@ -326,6 +337,7 @@ export class CwRmmScheduler {
     private readonly fetcher?: typeof fetch,
     private readonly warranty?: WarrantyLookup,
     private readonly publicUrl?: string,
+    private readonly vault?: VaultService,
   ) {}
 
   start(intervalMs = 10 * 60_000) {
@@ -363,6 +375,7 @@ export class CwRmmScheduler {
               this.log,
               this.warranty,
               this.publicUrl,
+              this.vault,
             )
           ).done,
         );

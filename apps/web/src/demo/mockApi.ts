@@ -1893,6 +1893,7 @@ let cwRmm: {
     contacts: boolean;
     tickets: boolean;
     inventory: boolean;
+    bitlocker: boolean;
     atlasLinks: boolean;
     ticketNotes: boolean;
     expiryTickets: boolean;
@@ -1935,6 +1936,7 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
       contacts: true,
       tickets: true,
       inventory: true,
+      bitlocker: false,
       atlasLinks: false,
       ticketNotes: false,
       expiryTickets: false,
@@ -1954,6 +1956,7 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
     contacts: b.contacts !== false,
     tickets: b.tickets !== false,
     inventory: b.inventory !== false,
+    bitlocker: b.bitlocker === true,
     atlasLinks: b.atlasLinks === true,
     ticketNotes: b.ticketNotes === true,
     expiryTickets: b.expiryTickets === true,

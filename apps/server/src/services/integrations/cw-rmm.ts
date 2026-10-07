@@ -1,3 +1,4 @@
+import { hasBitlockerKey } from '../bitlocker-keys.js';
 import { and, eq, inArray, like, or } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { cwRmmMappingSchema, cwRmmSyncOptionsSchema, type CwRmmSyncOptions, type Actor, type AssetView, type CwRmmCompany, type LayoutField, type RmmDeviceKind, MAX_LAYOUT_FIELDS } from '@atlas/shared';
@@ -363,7 +364,7 @@ async function dropSyncedLinks(
 }
 
 /** Links two items (undirected, stored once in a stable order), unless they already are; whether a link was made. */
-async function linkItems(
+export async function linkItems(
   db: Database,
   orgId: string,
   x: { type: string; id: string },
@@ -697,6 +698,8 @@ export async function runCwRmmSync(
         const layoutFields = existing.layoutFields.get(layoutId) ?? [];
         const out: Record<string, string> = {};
         for (const [label, value] of d.extra) {
+          // A BitLocker recovery key belongs in the vault, never in an asset's fields.
+          if (hasBitlockerKey(value)) continue;
           const field = layoutFields.find((f) => f.key === keys.get(label));
           // A value goes only into a field that can hold it (a choice list takes one of its options, a date a
           // date); anything else is left out rather than making the whole asset fail to save.
