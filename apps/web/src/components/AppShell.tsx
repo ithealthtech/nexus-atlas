@@ -34,6 +34,7 @@ import {
   type LucideIcon,
   ListChecks,
   RotateCw,
+  HardDrive,
   Waypoints,
 } from 'lucide-react';
 import { ClientPicker } from '@/components/ClientPicker';
@@ -180,7 +181,12 @@ function navSections(actor: { isStaff: boolean; isAdmin: boolean }): NavSectionD
         { to: '/passwords', icon: KeyRound, label: 'Passwords' },
         { to: '/password-health', icon: ShieldCheck, label: 'Password health' },
         { to: '/sends', icon: Send, label: 'Send' },
-        ...(actor.isAdmin ? [{ to: '/admin/rotation', icon: RotateCw, label: 'Password rotation' }] : []),
+        ...(actor.isAdmin
+          ? [
+              { to: '/admin/rotation', icon: RotateCw, label: 'Password rotation' },
+              { to: '/admin/bitlocker', icon: HardDrive, label: 'BitLocker collector' },
+            ]
+          : []),
       ],
     });
   if (actor.isAdmin)

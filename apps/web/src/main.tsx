@@ -48,6 +48,7 @@ import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
 import { PasswordRotation } from '@/pages/PasswordRotation';
+import { BitlockerCollector } from '@/pages/BitlockerCollector';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
 import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
@@ -247,6 +248,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/rotation', component: adminOnly(PasswordRotation) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/bitlocker', component: adminOnly(BitlockerCollector) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/request-log', component: adminOnly(RequestLog) }),

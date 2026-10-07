@@ -66,6 +66,21 @@ Each step is in the security log, and each password used this way says *Emergenc
 - **Syslog:** RFC 5424 lines (facility *log audit*) with the event as JSON, over TLS (recommended), TCP with octet counting, or UDP.
 - **What's sent:** streaming starts with what happens after you turn it on. If the SIEM can't be reached, Atlas records the error on the page and tries again from the same place, so nothing is skipped. **Send a test event** checks the connection without sending real events.
 
+## BitLocker collector
+
+**Administration → BitLocker collector** gives you a script for your RMM that reads each Windows machine's BitLocker status and recovery keys and sends them to Atlas. Keys go to the client's vault as BitLocker recovery key entries; status shows in a **BitLocker** panel on the machine's asset.
+
+1. **Make an enrollment.** Choose the client, give it a name, and choose whether it's for all of the client's devices or one device. The script downloads at once. **Keep the file as you would a password:** it holds an upload token, and Atlas can't show it again.
+2. **Add it to your RMM** as a PowerShell script for that client, set to run as **SYSTEM**. It needs no parameters and works on Windows PowerShell 5.1 and later.
+3. **Try it on one machine.** It prints one line with counts (never keys) and exits 0 when the report was uploaded; exit 10 means it failed and the encrypted report is waiting in its queue. The machine appears on the BitLocker collector page within a minute.
+4. **Schedule it** every 6 hours, and run it after a recovery key is rotated.
+
+Each machine is matched to an asset by serial number, then by name or hostname; a machine with no matching asset still has its keys saved, just not linked to a device. A machine with a volume that isn't protected is marked **Not protected**.
+
+**Revoke** an enrollment to stop its script uploading, or **Block** one machine. Either way, keys already saved stay in the vault. The script only reads: it can't turn BitLocker on or off or change a key. How it works, and what it doesn't protect against, is in [BITLOCKER.md](BITLOCKER.md).
+
+If your recovery keys are already written into a ConnectWise RMM device custom field, the **BitLocker keys** option on the ConnectWise RMM sync (Import & export) saves those to the vault instead, with no script to deploy. The two can run together: a key is never saved twice.
+
 ## Automatic password rotation
 
 **Administration → Password rotation** changes local administrator and Active Directory service account passwords on a schedule, through ConnectWise RMM, and keeps the new ones in the vault.
