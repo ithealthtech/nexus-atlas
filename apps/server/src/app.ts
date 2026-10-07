@@ -53,6 +53,8 @@ import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
 import { M365Scheduler, registerM365Routes } from './routes/m365.js';
 import { RotationScheduler, registerRotationRoutes } from './routes/rotation.js';
+import { registerBitlockerRoutes } from './routes/bitlocker.js';
+import { BitlockerCollectorService } from './services/bitlocker-collector.js';
 import { RotationService } from './services/rotation.js';
 import { failInterruptedJobs } from './services/importers/common.js';
 import { ApiKeyService } from './services/api-keys.js';
@@ -674,10 +676,11 @@ export async function buildApp({
   });
   registerTrackerRoutes(app, { db, authed, recent, settings, trackers });
 
+  const vaultKeys = new VaultKeys(db, keys);
   const { vault, sends } = registerVaultRoutes(app, {
     db,
     authed,
-    keys: new VaultKeys(db, keys),
+    keys: vaultKeys,
     storage: files,
     maxUploadBytes,
     shareLimiter: failureLimiter(30, 15 * 60_000),
@@ -854,6 +857,13 @@ export async function buildApp({
     vault,
   });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
+  registerBitlockerRoutes(app, {
+    db,
+    authed,
+    recent,
+    collector: new BitlockerCollectorService(db, vaultKeys, vault, config.publicOrigin),
+    agentLimiter: failureLimiter(20, 15 * 60_000),
+  });
   registerRequestLogRoutes(app, { db, authed, recent, requestLog });
   registerM365Routes(app, { db, authed, recent, settings, publicOrigin: config.publicOrigin, fetcher: m365Fetch });
 

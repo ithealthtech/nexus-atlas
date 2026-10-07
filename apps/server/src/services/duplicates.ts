@@ -371,6 +371,8 @@ async function mergeClients(db: Database, actor: Actor, keepId: string, mergeIds
       schema.attachments,
       schema.checklists,
       schema.checklistRuns,
+      schema.bitlockerEnrollments,
+      schema.bitlockerDevices,
       schema.activity,
       schema.vaultAudit,
     ])
