@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.22] - 2026-10-06
+
+### Added
+
+- **BitLocker collector.** Administration → BitLocker collector makes an enrollment for a client (for all of its devices, or one) and downloads a PowerShell script for your RMM to run as SYSTEM. The script reads each volume's BitLocker status and recovery passwords, encrypts the passwords on the machine, and uploads the report; it only reads, runs on Windows PowerShell 5.1 and later, and queues reports when Atlas can't be reached. Recovery keys are saved to the client's vault, once each, linked to the machine's asset (matched by serial number, then name), and each asset gets a BitLocker panel showing every volume's protection. Enrollments can be revoked and single machines blocked. Not yet run on real hardware: pilot it on one machine first. See docs/BITLOCKER.md. (#171)
+
 ## [1.7.21] - 2026-10-06
 
 ### Added
