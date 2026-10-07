@@ -253,6 +253,7 @@ describe('ConnectWise RMM sync', () => {
       contacts: true,
       tickets: true,
       inventory: true,
+      bitlocker: false,
       atlasLinks: false,
       ticketNotes: false,
       expiryTickets: false,
