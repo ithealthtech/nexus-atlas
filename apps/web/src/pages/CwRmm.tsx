@@ -311,6 +311,11 @@ export function CwRmmSync() {
                       'Software and sign-ins',
                       'Each device’s installed software and who signs in, and which host each virtual machine runs on.',
                     ],
+                    [
+                      'bitlocker',
+                      'BitLocker keys',
+                      'Saves recovery keys kept in a device custom field to the client’s vault, linked to the device. Off until you turn it on.',
+                    ],
                   ] as const
                 ).map(([key, label, help]) => (
                   <Checkbox

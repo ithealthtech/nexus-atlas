@@ -47,6 +47,7 @@ const KIND_LABELS: Record<string, string> = {
   networks: 'Networks',
   relations: 'Links between items',
   tickets: 'Tickets',
+  bitlocker: 'BitLocker keys',
   atlasLinks: 'Atlas links in ConnectWise',
   expiryTickets: 'Expiry tickets in ConnectWise',
 };
