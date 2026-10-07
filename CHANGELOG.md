@@ -6,11 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **BitLocker recovery keys from ConnectWise RMM.** A new BitLocker keys option on the ConnectWise RMM sync (off by default) reads each synced device's custom fields and saves any recovery key it finds to the client's vault, linked to the device. Keys are recognized by their shape, so the custom field can have any name and hold several drives' keys with their IDs. Each key is saved once; when a device gets a new key, the old entry is kept. (#169)
-
-### Changed
-
-- **Recovery keys stay out of asset fields.** The ConnectWise RMM device sync no longer copies a value containing a BitLocker recovery key into an asset field. With the BitLocker keys option on, a key already in a synced asset's fields is moved to the vault (earlier versions of the asset still show it in history). (#169)
+- **BitLocker collector.** Administration → BitLocker collector makes an enrollment for a client (for all of its devices, or one) and downloads a PowerShell script for your RMM to run as SYSTEM. The script reads each volume's BitLocker status and recovery passwords, encrypts the passwords on the machine, and uploads the report; it only reads, runs on Windows PowerShell 5.1 and later, and queues reports when Atlas can't be reached. Recovery keys are saved to the client's vault, once each, linked to the machine's asset (matched by serial number, then name), and each asset gets a BitLocker panel showing every volume's protection. Enrollments can be revoked and single machines blocked. Not yet run on real hardware: pilot it on one machine first. See docs/BITLOCKER.md. (#171)
 
 ## [1.7.21] - 2026-10-06
 
