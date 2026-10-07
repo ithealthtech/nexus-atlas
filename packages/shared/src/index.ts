@@ -14,3 +14,4 @@ export * from './workspace.js';
 export * from './devices.js';
 export * from './rotation.js';
 export * from './templates.js';
+export * from './bitlocker.js';

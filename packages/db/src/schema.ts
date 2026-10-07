@@ -1294,3 +1294,97 @@ export const requestLog = pgTable(
   },
   (t) => [index('request_log_org').on(t.orgId, t.id)],
 );
+
+/** What the BitLocker collector reported for one volume. Recovery keys themselves go to the vault, never here. */
+export interface BitlockerVolume {
+  volumeId: string;
+  mountPoint: string;
+  protection: 'On' | 'Off' | 'Unknown';
+  encryptionMethod: string;
+  encryptionPercentage: number;
+  conversionStatus: string;
+  /** Key protector IDs of the recovery passwords found on the volume. */
+  keyIds: string[];
+  error?: string;
+}
+
+/**
+ * An enrollment of the BitLocker collector script for a client: the upload token (stored hashed) and the key pair
+ * the script encrypts recovery keys to. The private key is sealed with the organization's vault key.
+ */
+export const bitlockerEnrollments = pgTable(
+  'bitlocker_enrollments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** 'client': any of the client's machines may report. 'device': the first machine to report, and no other. */
+    scope: text('scope').notNull().default('client'),
+    tokenHash: text('token_hash').notNull(),
+    publicKey: text('public_key').notNull(),
+    privateKey: text('private_key').notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('bitlocker_enrollments_token').on(t.tokenHash),
+    index('bitlocker_enrollments_client').on(t.orgId, t.clientId),
+    check('bitlocker_enrollments_scope_check', sql`${t.scope} in ('client','device')`),
+  ],
+);
+
+/** A machine that has reported through an enrollment, with its latest volume status. */
+export const bitlockerDevices = pgTable(
+  'bitlocker_devices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    enrollmentId: uuid('enrollment_id')
+      .notNull()
+      .references(() => bitlockerEnrollments.id, { onDelete: 'cascade' }),
+    /** Windows MachineGuid, as the machine reports it. Not attested. */
+    machineId: uuid('machine_id').notNull(),
+    hostname: text('hostname').notNull(),
+    os: text('os').notNull().default(''),
+    serialNumber: text('serial_number').notNull().default(''),
+    /** The asset this machine was matched to, by serial number or name. */
+    assetId: uuid('asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    volumes: jsonb('volumes').$type<BitlockerVolume[]>().notNull().default([]),
+    /** When the machine collected its latest accepted report; older reports are ignored. */
+    collectedAt: timestamp('collected_at', { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    /** A blocked machine's reports are refused; keys already saved stay in the vault. */
+    blocked: boolean('blocked').notNull().default(false),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('bitlocker_devices_machine').on(t.enrollmentId, t.machineId),
+    index('bitlocker_devices_client').on(t.orgId, t.clientId),
+    index('bitlocker_devices_asset').on(t.assetId),
+  ],
+);
+
+/** Reports already taken in, so a repeated upload changes nothing. */
+export const bitlockerReports = pgTable(
+  'bitlocker_reports',
+  {
+    enrollmentId: uuid('enrollment_id')
+      .notNull()
+      .references(() => bitlockerEnrollments.id, { onDelete: 'cascade' }),
+    reportId: uuid('report_id').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.enrollmentId, t.reportId] })],
+);

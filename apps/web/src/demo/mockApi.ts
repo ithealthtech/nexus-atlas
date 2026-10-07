@@ -2115,6 +2115,86 @@ on('POST', '/integrations/m365/tenants/:id/check', (m) => {
 });
 on('DELETE', '/integrations/m365/tenants/:id', (m) => (m365Tenants.delete(m[1]!), m365View()));
 on('POST', '/integrations/m365/sync', () => notInDemo('Syncing from a real Microsoft 365 tenant'));
+// BitLocker collector: an enrollment for the first client, with a few machines reporting.
+const blClient = db.clients[0]!;
+const blEnrollments = [
+  {
+    id: uuid(),
+    clientId: blClient.id,
+    clientName: blClient.name,
+    name: 'All Windows devices',
+    scope: 'client',
+    revoked: false,
+    devices: 0,
+    lastSeenAt: ago(42) as string | null,
+    createdAt: ago(60 * 24 * 9),
+  },
+];
+const blVolume = (mountPoint: string, on: boolean, keys = on ? 1 : 0) => ({
+  mountPoint,
+  protection: on ? 'On' : 'Off',
+  encryptionMethod: on ? 'XTS-AES-256' : 'None',
+  encryptionPercentage: on ? 100 : 0,
+  conversionStatus: on ? 'Fully encrypted' : 'Fully decrypted',
+  keys,
+  error: null as string | null,
+});
+const blAssets = assets.filter((a) => a.clientId === blClient.id);
+const blDevices = [
+  { hostname: 'HDG-DC-01', volumes: [blVolume('C:', true), blVolume('D:', true)], asset: blAssets[0] },
+  { hostname: 'HDG-WS-014', volumes: [blVolume('C:', true)], asset: blAssets[1] },
+  { hostname: 'HDG-LT-007', volumes: [blVolume('C:', false)], asset: undefined },
+].map((d, i) => ({
+  id: uuid(),
+  enrollmentId: blEnrollments[0]!.id,
+  clientId: blClient.id,
+  clientName: blClient.name,
+  hostname: d.hostname,
+  os: i === 0 ? 'Microsoft Windows Server 2022 Standard' : 'Microsoft Windows 11 Pro',
+  serialNumber: `5CG${1234 + i}XYZ`,
+  assetId: d.asset?.id ?? null,
+  assetName: d.asset?.name ?? null,
+  volumes: d.volumes,
+  status: d.volumes.some((v) => v.protection === 'Off') ? 'unprotected' : 'protected',
+  collectedAt: ago(42 + i * 37),
+  lastSeenAt: ago(42 + i * 37),
+  blocked: false,
+}));
+const blOverview = () => ({
+  enrollments: blEnrollments.map((e) => ({ ...e, devices: blDevices.filter((d) => d.enrollmentId === e.id).length })),
+  devices: blDevices,
+});
+on('GET', '/bitlocker/collector', () => blOverview());
+on('POST', '/bitlocker/enrollments', (_m, b) => {
+  const client = find(db.clients, String(b.clientId ?? ''), 'Client');
+  if (!String(b.name ?? '').trim()) throw new MockError(400, 'Name the enrollment, for example "All workstations".');
+  const enrollment = {
+    id: uuid(),
+    clientId: client.id,
+    clientName: client.name,
+    name: String(b.name),
+    scope: b.scope === 'device' ? 'device' : 'client',
+    revoked: false,
+    devices: 0,
+    lastSeenAt: null,
+    createdAt: now(),
+  };
+  blEnrollments.unshift(enrollment);
+  return {
+    enrollment,
+    filename: `Atlas-BitLocker-${client.name.replace(/[^\w-]+/g, '-')}.ps1`,
+    script: '# Demo only: a real Atlas server puts the collector script here, with this enrollment inside.\r\n',
+  };
+});
+on('DELETE', '/bitlocker/enrollments/:id', (m) => {
+  find(blEnrollments, m[1]!, 'Enrollment').revoked = true;
+  return blOverview();
+});
+on('POST', '/bitlocker/devices/:id/block', (m, b) => {
+  find(blDevices, m[1]!, 'Device').blocked = b.blocked === true;
+  return blOverview();
+});
+on('GET', '/assets/:id/bitlocker', (m) => blDevices.filter((d) => d.assetId === m[1]));
 on('GET', '/import/jobs', () => importJobs);
 on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
 on('POST', '/import/csv', (_m, b) => {
