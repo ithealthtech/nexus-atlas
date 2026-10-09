@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { DocumentShareDialog } from '@/components/DocumentShare';
 import {
   Archive,
   ArchiveRestore,
@@ -8,6 +9,7 @@ import {
   BookOpen,
   Folder,
   FolderPlus,
+  Link2,
   Pencil,
   Plus,
   Search,
@@ -545,6 +547,7 @@ export function DocumentPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [editing, setEditing] = useState(false);
+  const [sharing, setSharing] = useState(false);
   if (isLoading) return <Skeleton className="h-96" />;
   if (error || !doc)
     return (
@@ -638,6 +641,11 @@ export function DocumentPage() {
                     {doc.archived ? <ArchiveRestore /> : <Archive />} {doc.archived ? 'Restore' : 'Archive'}
                   </Button>
                   {!doc.archived && (
+                    <Button variant="secondary" onClick={() => setSharing(true)}>
+                      <Link2 /> Share
+                    </Button>
+                  )}
+                  {!doc.archived && (
                     <Button onClick={() => setEditing(true)}>
                       <Pencil /> Edit
                     </Button>
@@ -667,6 +675,7 @@ export function DocumentPage() {
           </div>
         </div>
       )}
+      {sharing && <DocumentShareDialog documentId={doc.id} title={doc.title} onClose={() => setSharing(false)} />}
     </>
   );
 }

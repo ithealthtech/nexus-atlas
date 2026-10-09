@@ -37,6 +37,7 @@ import {
   RotateCw,
   HardDrive,
   Waypoints,
+  Webhook,
 } from 'lucide-react';
 import { ClientPicker } from '@/components/ClientPicker';
 import { CommandPalette } from '@/components/CommandPalette';
@@ -219,6 +220,7 @@ function navSections(actor: { isStaff: boolean; isAdmin: boolean }, personalVaul
         items: [
           { to: '/admin/status', icon: Gauge, label: 'System status' },
           { to: '/admin/request-log', icon: Waypoints, label: 'Request log' },
+          { to: '/admin/webhooks', icon: Webhook, label: 'Webhooks' },
           { to: '/admin/updates', icon: ArrowUpCircle, label: 'Updates' },
           { to: '/admin/theme', icon: Palette, label: 'Theme' },
           { to: '/admin/settings', icon: Settings2, label: 'Settings' },

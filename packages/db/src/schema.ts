@@ -58,6 +58,12 @@ export const users = pgTable(
     // What the pending Microsoft account claimed, so an administrator can see who they are approving.
     entraPendingEmail: text('entra_pending_email'),
     entraPendingName: text('entra_pending_name'),
+    // SAML single sign-on: the identity provider's name ID for the account once linked, and a match by email
+    // waiting for an administrator to confirm, with what that account claimed.
+    samlSubject: text('saml_subject'),
+    samlPendingSubject: text('saml_pending_subject'),
+    samlPendingEmail: text('saml_pending_email'),
+    samlPendingName: text('saml_pending_name'),
     disabled: boolean('disabled').notNull().default(false),
     failedAttempts: integer('failed_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -68,6 +74,7 @@ export const users = pgTable(
   (t) => [
     uniqueIndex('users_email_unique').on(t.email),
     uniqueIndex('users_entra_oid').on(t.entraOid),
+    uniqueIndex('users_saml_subject').on(t.samlSubject),
     check(
       'users_role_check',
       sql`${t.role} in ('owner','admin','technician','readonly_technician','client_editor','client_viewer')`,
@@ -1420,4 +1427,92 @@ export const bitlockerReports = pgTable(
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.enrollmentId, t.reportId] })],
+);
+
+/** An address Atlas posts to when something changes. The signing secret is sealed with the organization's vault key. */
+export const webhooks = pgTable(
+  'webhooks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    secret: text('secret').notNull(),
+    /** Which kinds of item it hears about: client, asset, document, password, contact, location, checklist. */
+    topics: jsonb('topics').$type<string[]>().notNull().default([]),
+    enabled: boolean('enabled').notNull().default(true),
+    /** Set when deliveries kept failing and Atlas stopped trying; cleared when an administrator resumes it. */
+    pausedAt: timestamp('paused_at', { withTimezone: true }),
+    /** Deliveries given up on in a row. */
+    failures: integer('failures').notNull().default(0),
+    createdBy: createdBy(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [index('webhooks_org').on(t.orgId)],
+);
+
+/** One event for one webhook: queued with the change it describes, then delivered with retries. */
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    webhookId: uuid('webhook_id')
+      .notNull()
+      .references(() => webhooks.id, { onDelete: 'cascade' }),
+    event: text('event').notNull(),
+    /** What happened, without the item's contents: who, which client, and which item. */
+    data: jsonb('data')
+      .$type<{
+        actorId: string | null;
+        actorName: string;
+        clientId: string | null;
+        entityType: string;
+        entityId: string | null;
+        title: string;
+      }>()
+      .notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    responseStatus: integer('response_status'),
+    error: text('error'),
+    createdAt: created(),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('webhook_deliveries_due').on(t.status, t.nextAttemptAt),
+    index('webhook_deliveries_webhook').on(t.webhookId, t.createdAt),
+    check('webhook_deliveries_status_check', sql`${t.status} in ('pending','delivered','failed')`),
+  ],
+);
+
+/**
+ * A link that lets anyone read one document without signing in. The token is kept as it is, so the link can be
+ * copied again: someone who could read this table could read the documents themselves anyway.
+ */
+export const documentShares = pgTable(
+  'document_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    views: integer('views').notNull().default(0),
+    lastViewedAt: timestamp('last_viewed_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('document_shares_token').on(t.token), index('document_shares_document').on(t.documentId)],
 );

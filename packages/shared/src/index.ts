@@ -16,3 +16,4 @@ export * from './rotation.js';
 export * from './templates.js';
 export * from './bitlocker.js';
 export * from './personal-vault.js';
+export * from './webhooks.js';

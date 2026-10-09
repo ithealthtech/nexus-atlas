@@ -10,6 +10,7 @@ import { ChecklistService } from '../services/checklists.js';
 import type { DomainLookup } from '../services/domain-lookup.js';
 import type { WarrantyLookup } from '../services/warranty-lookup.js';
 import { DocumentService } from '../services/documents.js';
+import { DocumentShareService } from '../services/document-shares.js';
 import { LayoutService, ensureDefaultLayouts } from '../services/layouts.js';
 import { contacts, locations } from '../services/people.js';
 import { RelationService } from '../services/relations.js';
@@ -35,6 +36,10 @@ export function registerDocumentationRoutes(
     storage: FileStorage;
     maxUploadBytes: number;
     domains?: DomainLookup;
+    /** Atlas's own address, for the links to shared documents. */
+    publicOrigin: string;
+    /** Wrong shared-article links per address. */
+    articleLimiter: { check(key: string): void; fail(key: string): void };
     warranty?: WarrantyLookup;
   },
 ) {
@@ -49,6 +54,7 @@ export function registerDocumentationRoutes(
   const templates = new TemplateService(checklists, documents);
   const attachments = new AttachmentService(deps.storage, deps.maxUploadBytes);
   const scopeOf = (req: FastifyRequest) => new Scope(db, req.session!.actor);
+  const shares = new DocumentShareService(db, deps.publicOrigin);
 
   // ---- asset layouts ----
   app.get('/api/layouts', authed, async (req) => {
@@ -277,6 +283,30 @@ export function registerDocumentationRoutes(
       .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
       .header('Cache-Control', 'private, no-store')
       .send(body);
+  });
+
+  // ---- sharing a document by link ----
+  app.get<{ Params: Params }>('/api/documents/:id/shares', authed, async (req) =>
+    shares.list(scopeOf(req), req.params.id),
+  );
+  app.post<{ Params: Params }>('/api/documents/:id/shares', authed, async (req, reply) =>
+    reply.status(201).send(await shares.create(scopeOf(req), req.params.id, req.body, req.ip)),
+  );
+  app.delete<{ Params: Params }>('/api/document-shares/:id', authed, async (req) =>
+    shares.revoke(scopeOf(req), req.params.id, req.ip),
+  );
+  // Reading a shared article needs no account; wrong links count toward the per-address limit, so they can't be
+  // guessed at speed.
+  app.get<{ Params: { token: string } }>('/api/shared-articles/:token', async (req, reply) => {
+    deps.articleLimiter.check(req.ip);
+    try {
+      return reply
+        .headers({ 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' })
+        .send(await shares.open(req.params.token));
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404) deps.articleLimiter.fail(req.ip);
+      throw error;
+    }
   });
 
   // ---- search and activity ----
