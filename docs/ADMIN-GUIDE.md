@@ -29,6 +29,29 @@ This guide is for the people who set up and run Atlas for an MSP. Installing the
 
 Changes to access apply to people who are already signed in, straight away.
 
+## Single sign-on
+
+Staff can sign in through **Microsoft Entra ID** or any **SAML 2.0** identity provider (Okta, Google Workspace, Duo, JumpCloud, and others). Both are set up under **Administration → Settings**, and both follow the same rules:
+
+- **Signing in never creates an account.** Add the person in Atlas first, with the same email address they have at the provider.
+- **An administrator confirms each person's first link.** The first time someone signs in, Atlas matches them by email and stops. Open them under **People & access → Manage**, check the name, email, and ID shown, and choose **Confirm**. After that Atlas recognizes them by the provider's own ID for the account, not the email, so a changed address still works and a look-alike address gets nowhere.
+- **The owner can always use a password.** With **Require single sign-on for staff** on, other staff can't sign in with a password or passkey, but the owner can, so a problem at the provider never locks everyone out.
+- **Atlas's own two-step verification still applies** unless you choose to rely on the provider's.
+
+### SAML
+
+1. In your identity provider, add a SAML app for Atlas using the **ACS URL** and **Audience (entity ID)** shown on the SAML sign-in card. Send the person's email as an attribute named `email`, and pick a name ID that doesn't change for a person (a persistent ID rather than the email, if offered). The provider must **sign the assertion**.
+2. In Atlas, enter the provider's name (it goes on the button), its **issuer (entity ID)**, its **sign-on URL**, and paste its **signing certificate**.
+3. Tick **Show “Sign in with …”**, save, and try it in a private window before requiring it.
+
+What Atlas checks on every response: the assertion's signature against the saved certificate, the issuer, that it was meant for Atlas (audience), that it's in date, and that it answers a sign-in this same browser started within the last 10 minutes. A response nobody asked for (provider-initiated sign-in) is refused, so start from the Atlas sign-in page, not the provider's app tile.
+
+- **The identity provider enforces multi-factor sign-in:** SAML can't dependably tell Atlas whether MFA was used, so this is your word that the provider requires it for the Atlas app. Tick it only if that's true; Atlas then skips its own code.
+- **Certificate rollover:** when the provider issues a new certificate, paste the old and new together, then remove the old one once the provider has switched.
+- **Changing provider:** saving a different issuer clears everyone's link, because one provider's IDs mean nothing at another. People are matched by email and confirmed again.
+
+Atlas does not sign its requests, encrypt assertions, or support single logout: signing out of Atlas doesn't sign you out of the provider.
+
 ## Passwords
 
 - **Who can open the vault:** only people with *edit + passwords* on a client can see its passwords.

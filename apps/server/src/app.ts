@@ -43,11 +43,13 @@ import { AuditService } from './services/audit.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerDataRoutes } from './routes/data.js';
 import { registerEntraRoutes } from './routes/entra.js';
+import { registerSamlRoutes } from './routes/saml.js';
 import { registerEraseRoutes } from './routes/erase.js';
 import { registerPolicyRoutes } from './routes/policies.js';
 import { EmergencyAccessService } from './services/emergency.js';
 import { SiemForwarder, defaultSender, type SiemSender } from './services/siem.js';
 import { EntraService } from './services/entra.js';
+import { SamlService } from './services/saml.js';
 import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
@@ -233,14 +235,24 @@ export async function buildApp({
     // Device routes (the browser extension) never use cookies: each request is signed with the device's own key,
     // so a request from another origin can't borrow a session. The extension's origin is its own.
     if (req.url.startsWith('/api/device/')) return;
-    if (origin && origin !== config.publicOrigin && !(devHosts.length && origin === `${req.protocol}://${host}`))
+    // A SAML identity provider posts its signed response from its own site, so that one address takes a request
+    // from another origin. It carries no session; the response's signature, issuer, audience, and the request it
+    // answers are what's checked.
+    const isSamlReturn = req.method === 'POST' && req.url.split('?')[0] === '/api/auth/saml/acs';
+    if (
+      origin &&
+      origin !== config.publicOrigin &&
+      !isSamlReturn &&
+      !(devHosts.length && origin === `${req.protocol}://${host}`)
+    )
       throw new HttpError(403, 'Origin is not allowed.');
     // Microsoft's redirect back to the sign-in callback is a cross-site navigation by nature, and browsers keep
     // that label on the redirect that follows it, which lands on a page. So only API paths are refused, and the
     // callback is exempt; it verifies its own state, nonce, and PKCE before it does anything.
     const path = req.url.split('?')[0]!;
     const isSsoReturn =
-      req.method === 'GET' && (path === '/api/auth/entra/callback' || path === '/api/integrations/m365/consent');
+      (req.method === 'GET' && (path === '/api/auth/entra/callback' || path === '/api/integrations/m365/consent')) ||
+      isSamlReturn;
     const isPage = req.method === 'GET' && !path.startsWith('/api/');
     if (req.headers['sec-fetch-site'] === 'cross-site' && !isSsoReturn && !isPage)
       throw new HttpError(403, 'Cross-site requests are not allowed.');
@@ -418,13 +430,21 @@ export async function buildApp({
     return reply.status(201).send(view((await identity.resolve(token))!));
   });
 
-  // Where Microsoft sign-in is required, staff (other than the owner) can't get in with a password or a passkey.
+  // Where single sign-on is required, staff (other than the owner) can't get in with a password or a passkey.
   const requireNoSso = async (user: { orgId: string; role: string }) => {
+    if (user.role === 'owner' || !ROLE_INFO[user.role as Role].staff) return;
     const sso = await settings.entra(user.orgId);
-    if (sso?.enabled && sso.requireSso && user.role !== 'owner' && ROLE_INFO[user.role as Role].staff)
+    if (sso?.enabled && sso.requireSso)
       throw new HttpError(
         403,
         'Your organization signs in with Microsoft. Use Sign in with Microsoft.',
+        'sso_required',
+      );
+    const saml = await settings.saml(user.orgId);
+    if (saml?.enabled && saml.requireSso)
+      throw new HttpError(
+        403,
+        `Your organization signs in with ${saml.name}. Use Sign in with ${saml.name}.`,
         'sso_required',
       );
   };
@@ -760,6 +780,18 @@ export async function buildApp({
     sessionToken: setSession,
     currentSession: (req) => identity.resolve(req.cookies[cookieName]),
     fetcher: entraFetch,
+  });
+  await registerSamlRoutes(app, {
+    db,
+    authed,
+    recent,
+    identity,
+    settings,
+    saml: new SamlService(keys),
+    publicOrigin: config.publicOrigin,
+    secureCookies: config.secureCookies,
+    sessionToken: setSession,
+    currentSession: (req) => identity.resolve(req.cookies[cookieName]),
   });
   registerEraseRoutes(app, { db, authed, recent, identity, settings, mail, backups, storage: files });
   registerUpdateRoutes(app, {
