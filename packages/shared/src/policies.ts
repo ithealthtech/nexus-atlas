@@ -28,6 +28,8 @@ export const vaultPolicySchema = z.object({
    * listed too, or use emergency access.
    */
   restrictedListedOnly: z.boolean().default(false),
+  /** Staff each get a personal vault that only they can open. Turning it off hides the vaults; nothing is deleted. */
+  personalVaults: z.boolean().default(true),
 });
 export type VaultPolicy = z.infer<typeof vaultPolicySchema>;
 export const DEFAULT_VAULT_POLICY: VaultPolicy = vaultPolicySchema.parse({});

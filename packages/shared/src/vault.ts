@@ -86,7 +86,7 @@ export function guessPasswordCategory(name: string, username = '', url = ''): Pa
 /** A BitLocker numerical recovery password: eight groups of six digits. */
 export const BITLOCKER_KEY = /^\d{6}(-\d{6}){7}$/;
 
-const totpSecret = z
+export const totpSecret = z
   .string()
   .trim()
   .transform((v) => v.replace(/\s+/g, '').toUpperCase())
@@ -111,7 +111,7 @@ export type CustomFieldInput = z.input<typeof customFieldSchema>;
 export const MAX_CUSTOM_FIELDS = 30;
 const customFields = z.array(customFieldSchema).max(MAX_CUSTOM_FIELDS);
 
-const address = z
+export const webAddress = z
   .string()
   .trim()
   .max(2000)
@@ -119,7 +119,7 @@ const address = z
 const base = {
   name: z.string().trim().min(1, 'Name is required.').max(200),
   username: z.string().trim().max(254).default(''),
-  url: address.default(''),
+  url: webAddress.default(''),
   // Checked against the kind below: a secure note's text may be longer than a password.
   secret: z.string().max(MAX_NOTE_LENGTH),
   notes: z.string().max(20000).default(''),
@@ -157,7 +157,7 @@ export const updatePasswordSchema = z.object({
   name: base.name.optional(),
   username: z.string().trim().max(254).optional(),
   // Without a default: a change that leaves the address out keeps it.
-  url: address.optional(),
+  url: webAddress.optional(),
   // The entry's kind sets the upper limit (checked by the server); empty is never a change.
   secret: z.string().min(1, 'The password is required.').max(MAX_NOTE_LENGTH).optional(),
   notes: z.string().max(20000).optional(),

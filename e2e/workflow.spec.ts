@@ -960,6 +960,7 @@ test.describe.serial('accessibility sweep', () => {
       '/passwords',
       '/expirations',
       '/sends',
+      '/my-vault',
       '/account',
       '/admin/users',
       '/admin/groups',

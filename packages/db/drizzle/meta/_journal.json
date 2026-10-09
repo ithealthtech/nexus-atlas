@@ -239,6 +239,13 @@
       "when": 1791505373498,
       "tag": "0033_document_shares",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791505429926,
+      "tag": "0034_personal_vaults",
+      "breakpoints": true
     }
   ]
 }

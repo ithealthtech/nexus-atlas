@@ -70,6 +70,16 @@ Atlas does not sign its requests, encrypt assertions, or support single logout: 
 - **Read-only accounts:** *Don't let read-only accounts reveal passwords* stops client viewers revealing or copying the passwords shared with them. They still see which ones are shared.
 - **Restricted means listed:** with *Restricted passwords are for the people listed on them*, administrators need a place on an entry's list like everyone else. The owner always has access. An administrator who restricts an entry is listed on it automatically.
 
+### Personal vaults
+
+Every staff member has **My vault**: their own logins and notes, which only they can open. Client accounts don't get one.
+
+- **Nobody else can open one.** There is no administrator view, no emergency access, and no API or desktop-app access. Entries aren't in search, reports, password health, exports, or the audit log, so Atlas can't tell you what someone keeps there.
+- **Turning them off:** the owner can untick *Give each staff member a personal vault* in Vault policies. The vaults are hidden and closed straight away. Nothing is deleted, and everything comes back if you turn them on again.
+- **When someone leaves:** disabling their account locks their vault with it. Ask them to move anything the company needs into a client's vault first, because you can't do it for them.
+- **What "private" means here:** entries are encrypted with the same vault key as the rest of Atlas, and the application only ever hands them to their owner. They are in your backups. Someone with access to the server, its key, and the database could still decrypt them, as with every other password in Atlas.
+- *Erase all data* removes documentation and client passwords. It leaves personal vaults alone.
+
 ### Emergency access
 
 For when the owner can't be reached and a restricted password is needed.

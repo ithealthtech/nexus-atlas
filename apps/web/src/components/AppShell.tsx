@@ -10,6 +10,7 @@ import {
   Gauge,
   BookOpen,
   KeyRound,
+  Lock,
   LockKeyhole,
   Building2,
   ChevronDown,
@@ -45,6 +46,7 @@ import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useActor, useApplySession } from '@/lib/session';
+import { useVaultPolicy } from '@/lib/vault';
 import { applyTheme, storedTheme, type Theme } from '@/lib/theme';
 
 function NavLink({
@@ -158,7 +160,7 @@ type NavItem = { to: string; icon: LucideIcon; label: string };
 type NavSectionDef = { id: string; title: string; items: NavItem[] };
 
 // Pages beyond the top three are grouped by purpose; each group collapses and remembers that per browser.
-function navSections(actor: { isStaff: boolean; isAdmin: boolean }): NavSectionDef[] {
+function navSections(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: boolean): NavSectionDef[] {
   const sections: NavSectionDef[] = [
     {
       id: 'documentation',
@@ -180,6 +182,7 @@ function navSections(actor: { isStaff: boolean; isAdmin: boolean }): NavSectionD
       title: 'Passwords',
       items: [
         { to: '/passwords', icon: KeyRound, label: 'Passwords' },
+        ...(personalVaults ? [{ to: '/my-vault', icon: Lock, label: 'My vault' }] : []),
         { to: '/password-health', icon: ShieldCheck, label: 'Password health' },
         { to: '/sends', icon: Send, label: 'Send' },
         ...(actor.isAdmin
@@ -304,6 +307,9 @@ function Sidebar({
   sections: CollapsedSections;
 }) {
   const actor = useActor();
+  // Shown to staff unless the organization turned personal vaults off.
+  const policy = useVaultPolicy();
+  const personalVaults = actor.isStaff && policy.data?.personalVaults !== false;
   return (
     <div className="flex h-full flex-col bg-sidebar px-3 pt-5 pb-3">
       <Link to="/" onClick={onNavigate} className="mb-6 px-2 text-sidebar-active">
@@ -322,7 +328,7 @@ function Sidebar({
         <NavLink to="/" exact icon={LayoutDashboard} label="Dashboard" onNavigate={onNavigate} />
         <NavLink to="/clients" icon={Building2} label="Clients" onNavigate={onNavigate} />
         <NavLink to="/expirations" icon={CalendarClock} label="Expirations" onNavigate={onNavigate} />
-        {navSections(actor).map((section) => (
+        {navSections(actor, personalVaults).map((section) => (
           <NavSection key={section.id} section={section} sections={sections} onNavigate={onNavigate} />
         ))}
       </nav>

@@ -39,6 +39,17 @@ You see a client's passwords only with *edit + passwords* access to that client.
 - **Sharing with someone outside Atlas:** **Share** creates a one-time link that expires. The password is encrypted in your browser, and the key is only in the link, so send the link through a different channel from the username.
 - **Sharing with the client's own staff:** tick *Share with the client's own accounts* so the client's contacts can see it when they sign in.
 
+## My vault
+
+**My vault** is a private place for logins and notes that are yours alone, such as your own vendor portal account, your payroll login, or a door code. Find it under **Passwords** in the menu.
+
+- **Only you can see it.** Not administrators, not the owner. What you keep there isn't attached to any client and doesn't appear in search, reports, the activity feed, or the audit log.
+- **Adding:** choose **Add**, then a login or a secure note. The generator and the one-time code work the same as in a client's vault.
+- **Using:** click an entry to see it, or use the buttons on its row to copy the password or the one-time code. The star keeps an entry at the top.
+- **In the browser extension:** your own logins are offered on matching sites beside the shared ones, marked *My vault*.
+- **Deleting is permanent.** There is no archive and no history, and nobody can restore a deleted entry.
+- Keep client passwords in the client's vault, where your team can reach them. If you leave, nobody can open your personal vault.
+
 ## Browser extension
 
 The Atlas extension for Edge and Chrome fills logins from the vault. Your administrator installs it, or gives you the file.
