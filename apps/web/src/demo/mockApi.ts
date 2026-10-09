@@ -613,6 +613,8 @@ const users = db.users.map((u, i) => ({
   // The demo shows both a linked Microsoft account and one waiting for an administrator to confirm it.
   entra: (i === 1 ? 'linked' : i === 2 ? 'pending' : null) as 'linked' | 'pending' | null,
   entraPending: i === 2 ? { oid: '7c1e-demo', email: u.email, name: u.name } : null,
+  saml: null as 'linked' | 'pending' | null,
+  samlPending: null as { subject: string; email: string; name: string } | null,
   createdAt: ago(60 * 24 * 120),
 }));
 const groups = [...db.groups];
@@ -1552,6 +1554,8 @@ on('POST', '/users', (_m, b) => {
     mustChangePassword: true,
     entra: null,
     entraPending: null,
+    saml: null,
+    samlPending: null,
     lastLoginAt: null as unknown as string,
     createdAt: now(),
   };
@@ -1570,6 +1574,44 @@ let entraSettings: {
 } | null = null;
 const entraRedirect = 'https://atlas.example.com/api/auth/entra/callback';
 on('GET', '/auth/entra', () => ({ enabled: false, requireSso: false }));
+// SAML sign-in: settings can be saved and shown, but there is no identity provider behind the demo.
+const samlProvider = {
+  entityId: 'https://atlas.example.com/api/auth/saml/metadata',
+  acsUrl: 'https://atlas.example.com/api/auth/saml/acs',
+  metadataUrl: 'https://atlas.example.com/api/auth/saml/metadata',
+};
+let samlSettings: {
+  name: string;
+  entryPoint: string;
+  idpIssuer: string;
+  certificates: { subject: string; expires: string; fingerprint: string }[];
+  enabled: boolean;
+  trustMfa: boolean;
+  requireSso: boolean;
+} | null = null;
+on('GET', '/auth/saml', () => ({ enabled: false, name: '', requireSso: false }));
+on('GET', '/settings/saml', () => ({ serviceProvider: samlProvider, settings: samlSettings }));
+on('PUT', '/settings/saml', (_m, b) => {
+  if (!String(b.entryPoint ?? '').startsWith('https://'))
+    throw new MockError(400, 'The sign-on URL must start with https://.');
+  if (!String(b.idpIssuer ?? '').trim())
+    throw new MockError(400, 'Enter the issuer (entity ID) from your identity provider.');
+  if (!samlSettings && !b.idpCert)
+    throw new MockError(400, 'Paste the signing certificate from your identity provider.');
+  samlSettings = {
+    name: String(b.name || 'single sign-on'),
+    entryPoint: String(b.entryPoint),
+    idpIssuer: String(b.idpIssuer),
+    certificates: samlSettings?.certificates ?? [
+      { subject: 'CN=demo identity provider', expires: daysFromNow(700), fingerprint: 'AB:CD:EF' },
+    ],
+    enabled: b.enabled === true,
+    trustMfa: b.trustMfa === true && b.enabled === true,
+    requireSso: b.requireSso === true && b.enabled === true,
+  };
+  return { serviceProvider: samlProvider, settings: samlSettings, linksCleared: false };
+});
+on('DELETE', '/settings/saml', () => ((samlSettings = null), { ok: true }));
 on('GET', '/settings/entra', () => ({ ...(entraSettings ?? {}), redirectUri: entraRedirect }));
 on('PUT', '/settings/entra', (_m, b) => {
   if (!/^[0-9a-f-]{36}$/i.test(String(b.clientId ?? '')))

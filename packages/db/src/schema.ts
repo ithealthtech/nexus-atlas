@@ -58,6 +58,12 @@ export const users = pgTable(
     // What the pending Microsoft account claimed, so an administrator can see who they are approving.
     entraPendingEmail: text('entra_pending_email'),
     entraPendingName: text('entra_pending_name'),
+    // SAML single sign-on: the identity provider's name ID for the account once linked, and a match by email
+    // waiting for an administrator to confirm, with what that account claimed.
+    samlSubject: text('saml_subject'),
+    samlPendingSubject: text('saml_pending_subject'),
+    samlPendingEmail: text('saml_pending_email'),
+    samlPendingName: text('saml_pending_name'),
     disabled: boolean('disabled').notNull().default(false),
     failedAttempts: integer('failed_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -68,6 +74,7 @@ export const users = pgTable(
   (t) => [
     uniqueIndex('users_email_unique').on(t.email),
     uniqueIndex('users_entra_oid').on(t.entraOid),
+    uniqueIndex('users_saml_subject').on(t.samlSubject),
     check(
       'users_role_check',
       sql`${t.role} in ('owner','admin','technician','readonly_technician','client_editor','client_viewer')`,

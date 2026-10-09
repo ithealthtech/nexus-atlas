@@ -80,6 +80,7 @@ interface StoredSettings {
   erase?: EraseRequest;
   health?: PasswordHealthSettings & { lastRunAt?: string };
   entra?: StoredEntra;
+  saml?: StoredSaml;
   trackers?: TrackerSettings;
   rmmHealth?: RmmHealthSettings;
   rotation?: RotationSettings;
@@ -113,6 +114,17 @@ export interface SiemConfig extends Omit<StoredSiem, 'secretSealed'> {
 export interface StoredWarranty {
   soonDays: number;
   autoLookup?: boolean;
+}
+/** SAML sign-in settings. Nothing here is secret: the certificates are the identity provider's public ones. */
+export interface StoredSaml {
+  name: string;
+  entryPoint: string;
+  idpIssuer: string;
+  /** Signing certificates, each as base64 DER (the inside of a PEM). */
+  idpCerts: string[];
+  enabled: boolean;
+  trustMfa: boolean;
+  requireSso: boolean;
 }
 export interface StoredEntra {
   tenantId: string;
@@ -595,6 +607,31 @@ export class SettingsService {
       .update(schema.orgs)
       .set({ settings: sql`${schema.orgs.settings} - 'entra'` })
       .where(eq(schema.orgs.id, orgId));
+  }
+
+  async saml(orgId: string): Promise<StoredSaml | null> {
+    return (await this.load(orgId)).saml ?? null;
+  }
+
+  async saveSaml(orgId: string, settings: StoredSaml) {
+    await this.put(orgId, 'saml', settings);
+  }
+
+  async forgetSaml(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${schema.orgs.settings} - 'saml'` })
+      .where(eq(schema.orgs.id, orgId));
+  }
+
+  /** The organization whose SAML sign-in is on, for the sign-in page (Atlas serves one organization). */
+  async samlOrg(): Promise<{ orgId: string; settings: StoredSaml } | null> {
+    const rows = await this.db.select({ id: schema.orgs.id, settings: schema.orgs.settings }).from(schema.orgs);
+    for (const r of rows) {
+      const s = (r.settings as StoredSettings | null)?.saml;
+      if (s?.enabled) return { orgId: r.id, settings: s };
+    }
+    return null;
   }
 
   /** The organization whose Entra sign-in is on, for the sign-in page (Atlas serves one organization). */
