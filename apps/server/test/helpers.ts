@@ -61,6 +61,7 @@ export async function startApp(
     cwRmmFetch?: typeof fetch;
     warrantyFetch?: typeof fetch;
     m365Fetch?: typeof fetch;
+    webhookFetch?: typeof fetch;
     breachFetch?: typeof fetch;
     entraFetch?: typeof fetch;
     domainLookup?: DomainLookup;

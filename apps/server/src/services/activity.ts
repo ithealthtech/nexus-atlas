@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-o
 import { schema, type Database } from '@atlas/db';
 import type { ActivityView, Actor } from '@atlas/shared';
 import type { Scope } from './scope.js';
+import { queueWebhooks } from './webhooks.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -17,6 +18,8 @@ export async function recordActivity(
     ...entry,
     title: entry.title.slice(0, 200),
   });
+  // Webhooks hear about the same changes, queued in the same transaction.
+  await queueWebhooks(db, actor, entry);
 }
 
 export async function listActivity(

@@ -55,6 +55,8 @@ import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
 import { M365Scheduler, registerM365Routes } from './routes/m365.js';
 import { RotationScheduler, registerRotationRoutes } from './routes/rotation.js';
+import { registerWebhookRoutes } from './routes/webhooks.js';
+import { WebhookService } from './services/webhooks.js';
 import { registerBitlockerRoutes } from './routes/bitlocker.js';
 import { BitlockerCollectorService } from './services/bitlocker-collector.js';
 import { RotationService } from './services/rotation.js';
@@ -96,6 +98,8 @@ export interface AppOptions {
   warrantyFetch?: typeof fetch;
   /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
   cwRmmFetch?: typeof fetch;
+  /** Replaces fetch for webhook deliveries (tests use a fake receiver). */
+  webhookFetch?: typeof fetch;
   /** Replaces fetch for the Microsoft 365 sync (tests use a fake Microsoft Graph). */
   m365Fetch?: typeof fetch;
   /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
@@ -160,6 +164,7 @@ export async function buildApp({
   cwRmmFetch,
   warrantyFetch,
   m365Fetch,
+  webhookFetch,
   breachFetch,
   entraFetch,
   domainLookup,
@@ -889,6 +894,14 @@ export async function buildApp({
     vault,
   });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
+  const webhooks = new WebhookService(db, vaultKeys, config.publicOrigin, logged(webhookFetch));
+  registerWebhookRoutes(app, { authed, recent, webhooks });
+  if (config.NODE_ENV !== 'test') {
+    webhooks.start(5_000, (err) => app.log.error({ err }, 'Webhook delivery'));
+    app.addHook('onClose', async () => webhooks.stop());
+  }
+  // Tests deliver on demand instead of waiting for the timer.
+  app.decorate('webhooks', webhooks);
   registerBitlockerRoutes(app, {
     db,
     authed,
