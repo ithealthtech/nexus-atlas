@@ -49,6 +49,8 @@ import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
 import { PasswordRotation } from '@/pages/PasswordRotation';
+import { Webhooks } from '@/pages/Webhooks';
+import { AssetLabels } from '@/pages/AssetLabels';
 import { BitlockerCollector } from '@/pages/BitlockerCollector';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
@@ -211,6 +213,16 @@ const routes = [
   clientRoute.addChildren(clientRoutes),
   createRoute({ getParentRoute: () => appRoute, path: '/client-report/$clientId', component: ClientReport }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/assets/labels',
+    component: AssetLabels,
+    validateSearch: (search: Record<string, unknown>) => ({
+      asset: typeof search.asset === 'string' ? search.asset : undefined,
+      client: typeof search.client === 'string' ? search.client : undefined,
+      layout: typeof search.layout === 'string' ? search.layout : undefined,
+    }),
+  }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets/$assetId', component: AssetDetail }),
   createRoute({
     getParentRoute: () => appRoute,
@@ -253,6 +265,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/status', component: adminOnly(Status) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/request-log', component: adminOnly(RequestLog) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/webhooks', component: adminOnly(Webhooks) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),

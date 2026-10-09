@@ -29,6 +29,29 @@ This guide is for the people who set up and run Atlas for an MSP. Installing the
 
 Changes to access apply to people who are already signed in, straight away.
 
+## Single sign-on
+
+Staff can sign in through **Microsoft Entra ID** or any **SAML 2.0** identity provider (Okta, Google Workspace, Duo, JumpCloud, and others). Both are set up under **Administration → Settings**, and both follow the same rules:
+
+- **Signing in never creates an account.** Add the person in Atlas first, with the same email address they have at the provider.
+- **An administrator confirms each person's first link.** The first time someone signs in, Atlas matches them by email and stops. Open them under **People & access → Manage**, check the name, email, and ID shown, and choose **Confirm**. After that Atlas recognizes them by the provider's own ID for the account, not the email, so a changed address still works and a look-alike address gets nowhere.
+- **The owner can always use a password.** With **Require single sign-on for staff** on, other staff can't sign in with a password or passkey, but the owner can, so a problem at the provider never locks everyone out.
+- **Atlas's own two-step verification still applies** unless you choose to rely on the provider's.
+
+### SAML
+
+1. In your identity provider, add a SAML app for Atlas using the **ACS URL** and **Audience (entity ID)** shown on the SAML sign-in card. Send the person's email as an attribute named `email`, and pick a name ID that doesn't change for a person (a persistent ID rather than the email, if offered). The provider must **sign the assertion**.
+2. In Atlas, enter the provider's name (it goes on the button), its **issuer (entity ID)**, its **sign-on URL**, and paste its **signing certificate**.
+3. Tick **Show “Sign in with …”**, save, and try it in a private window before requiring it.
+
+What Atlas checks on every response: the assertion's signature against the saved certificate, the issuer, that it was meant for Atlas (audience), that it's in date, and that it answers a sign-in this same browser started within the last 10 minutes. A response nobody asked for (provider-initiated sign-in) is refused, so start from the Atlas sign-in page, not the provider's app tile.
+
+- **The identity provider enforces multi-factor sign-in:** SAML can't dependably tell Atlas whether MFA was used, so this is your word that the provider requires it for the Atlas app. Tick it only if that's true; Atlas then skips its own code.
+- **Certificate rollover:** when the provider issues a new certificate, paste the old and new together, then remove the old one once the provider has switched.
+- **Changing provider:** saving a different issuer clears everyone's link, because one provider's IDs mean nothing at another. People are matched by email and confirmed again.
+
+Atlas does not sign its requests, encrypt assertions, or support single logout: signing out of Atlas doesn't sign you out of the provider.
+
 ## Passwords
 
 - **Who can open the vault:** only people with *edit + passwords* on a client can see its passwords.
@@ -124,6 +147,35 @@ Check **System status** every week or so. It shows:
 - **The key acts as you:** it acts with your access, is shown once, and expires after a year unless you choose otherwise.
 - **Revoke keys** you no longer use.
 - The API is documented at `/api/openapi.json`. See [Data in and out](DATA.md#rest-api).
+
+## Webhooks
+
+**Administration → Webhooks** makes Atlas post a short message to an address you choose whenever something changes, so a chat channel, an automation, or another tool can react.
+
+1. Choose **New webhook**, give it a name and an `https://` address, and tick the kinds of item it should hear about: clients, assets, documents, passwords, contacts, locations, checklists.
+2. Copy the **signing secret** shown once. The receiver uses it to check a message came from Atlas.
+3. Choose **Send test** to post a `ping`.
+
+**What a message looks like:**
+
+```json
+{
+  "id": "0b1f…",
+  "event": "asset.updated",
+  "occurredAt": "2026-10-07T14:03:11.000Z",
+  "actor": { "id": "…", "name": "Avery Owner" },
+  "client": { "id": "…", "name": "Harbor Dental Group" },
+  "item": { "type": "asset", "id": "…", "title": "HDG-FW-01", "url": "https://atlas.example.com/assets/…" }
+}
+```
+
+Events are named `kind.what`: for example `asset.created`, `document.updated`, `password.rotated`, `asset.archived`, `document.file_added`, `checklist.completed`. A message never carries the item's contents. A password message gives the entry's name and nothing else; use the API with a key if the receiver needs more.
+
+**Checking a message is from Atlas.** Each request has these headers: `X-Atlas-Event`, `X-Atlas-Delivery` (the same as `id`), `X-Atlas-Timestamp` (seconds), and `X-Atlas-Signature`. The signature is `sha256=` followed by the HMAC-SHA256, in hex, of the timestamp, a full stop, and the exact body, keyed with the signing secret. Compare it, and refuse messages whose timestamp is more than a few minutes old.
+
+**Delivery.** A message is queued together with the change it describes, so it isn't lost if the receiver is down. Anything other than a 2xx answer within 10 seconds counts as a failure and is tried again after 1 minute, 5 minutes, 30 minutes, 2 hours, and 6 hours, with the same `id` each time, so a receiver can ignore repeats. Redirects are not followed. After ten messages in a row have been given up on, the webhook is **paused**; fix the receiver and choose **Resume**. **Deliveries** shows the latest 50 and why any failed. Delivered and abandoned messages are kept for 14 days.
+
+A bulk job such as an RMM sync changes many assets, and each change is a message. Leave Assets unticked on a webhook that posts to a chat channel if that would be noisy.
 
 ## Browser extension
 

@@ -1,7 +1,18 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, ArrowLeft, Pencil, Plus, RefreshCw, Search, Server, ShieldCheck } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  Pencil,
+  Plus,
+  QrCode,
+  RefreshCw,
+  Search,
+  Server,
+  ShieldCheck,
+} from 'lucide-react';
 import {
   ASSET_STATUSES,
   atLeast,
@@ -370,6 +381,15 @@ export function AssetsView({ clientId }: { clientId?: string }) {
             >
               {search.archived ? <ArchiveRestore /> : <Archive />} {search.archived ? 'Show active' : 'Show archived'}
             </Button>
+            {clientId && !search.archived && (
+              <AppLink
+                to="/assets/labels"
+                search={{ client: clientId, layout: search.layout }}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-text-2 hover:bg-surface-3 hover:text-text"
+              >
+                <QrCode className="size-4" aria-hidden /> QR labels
+              </AppLink>
+            )}
             {canEdit && (
               <Button onClick={() => setAdding(true)}>
                 <Plus /> Add asset
@@ -500,23 +520,34 @@ export function AssetDetail() {
             </p>
           </div>
         </div>
-        {canEdit && (
-          <div className="flex gap-2">
-            {canCheckWarranty && !asset.archived && (
-              <Button variant="secondary" loading={checking} onClick={() => void checkWarranty()}>
-                <ShieldCheck /> Check warranty
+        <div className="flex flex-wrap gap-2">
+          {!asset.archived && (
+            <AppLink
+              to="/assets/labels"
+              search={{ asset: asset.id }}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-semibold hover:bg-surface-3"
+            >
+              <QrCode className="size-4" aria-hidden /> QR label
+            </AppLink>
+          )}
+          {canEdit && (
+            <>
+              {canCheckWarranty && !asset.archived && (
+                <Button variant="secondary" loading={checking} onClick={() => void checkWarranty()}>
+                  <ShieldCheck /> Check warranty
+                </Button>
+              )}
+              <Button variant="secondary" onClick={archive}>
+                {asset.archived ? <ArchiveRestore /> : <Archive />} {asset.archived ? 'Restore' : 'Archive'}
               </Button>
-            )}
-            <Button variant="secondary" onClick={archive}>
-              {asset.archived ? <ArchiveRestore /> : <Archive />} {asset.archived ? 'Restore' : 'Archive'}
-            </Button>
-            {!asset.archived && (
-              <Button onClick={() => setEditing(true)}>
-                <Pencil /> Edit
-              </Button>
-            )}
-          </div>
-        )}
+              {!asset.archived && (
+                <Button onClick={() => setEditing(true)}>
+                  <Pencil /> Edit
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">

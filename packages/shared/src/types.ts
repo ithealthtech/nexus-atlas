@@ -53,6 +53,10 @@ export interface UserView {
   entra: 'linked' | 'pending' | null;
   /** The Microsoft account waiting for confirmation: what it claimed, and its account ID to check against. */
   entraPending: { oid: string; email: string; name: string } | null;
+  /** SAML single sign-on: linked, or matched by email and waiting for an administrator to confirm. */
+  saml: 'linked' | 'pending' | null;
+  /** The identity provider account waiting for confirmation: what it claimed, and its name ID to check against. */
+  samlPending: { subject: string; email: string; name: string } | null;
   lastLoginAt: string | null;
   createdAt: string;
 }

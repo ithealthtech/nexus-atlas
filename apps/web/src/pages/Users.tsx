@@ -176,6 +176,38 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
                   <LogIn /> {user.entra === 'pending' ? 'Confirm Microsoft account' : 'Unlink Microsoft'}
                 </Button>
               )}
+              {user.saml === 'pending' && user.samlPending && (
+                <p className="basis-full text-xs text-text-2">
+                  Waiting (SAML): {user.samlPending.name} &lt;{user.samlPending.email}&gt; (ID{' '}
+                  {user.samlPending.subject}). Confirm only if this is {user.name}.
+                </p>
+              )}
+              {user.saml && (
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      if (user.saml === 'pending')
+                        await api(`/users/${user.id}/saml/confirm`, {
+                          method: 'POST',
+                          body: { subject: user.samlPending?.subject },
+                        });
+                      else await api(`/users/${user.id}/saml`, { method: 'DELETE' });
+                      await queryClient.invalidateQueries({ queryKey: ['users'] });
+                      toast(
+                        user.saml === 'pending'
+                          ? `${user.name} can now use single sign-on.`
+                          : 'Single sign-on account unlinked.',
+                      );
+                      onClose();
+                    } catch (err) {
+                      toast((err as Error).message, 'error');
+                    }
+                  }}
+                >
+                  <LogIn /> {user.saml === 'pending' ? 'Confirm SAML account' : 'Unlink SAML'}
+                </Button>
+              )}
               {user.id !== actor.id && (
                 <Button
                   variant="ghost"
@@ -445,6 +477,11 @@ export function Users() {
                         {u.entra && (
                           <Badge tone={u.entra === 'linked' ? 'primary' : 'warning'}>
                             {u.entra === 'linked' ? 'Microsoft' : 'Confirm Microsoft link'}
+                          </Badge>
+                        )}
+                        {u.saml && (
+                          <Badge tone={u.saml === 'linked' ? 'primary' : 'warning'}>
+                            {u.saml === 'linked' ? 'SAML' : 'Confirm SAML link'}
                           </Badge>
                         )}
                         {u.mfa && (

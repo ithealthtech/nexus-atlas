@@ -613,6 +613,8 @@ const users = db.users.map((u, i) => ({
   // The demo shows both a linked Microsoft account and one waiting for an administrator to confirm it.
   entra: (i === 1 ? 'linked' : i === 2 ? 'pending' : null) as 'linked' | 'pending' | null,
   entraPending: i === 2 ? { oid: '7c1e-demo', email: u.email, name: u.name } : null,
+  saml: null as 'linked' | 'pending' | null,
+  samlPending: null as { subject: string; email: string; name: string } | null,
   createdAt: ago(60 * 24 * 120),
 }));
 const groups = [...db.groups];
@@ -1603,6 +1605,8 @@ on('POST', '/users', (_m, b) => {
     mustChangePassword: true,
     entra: null,
     entraPending: null,
+    saml: null,
+    samlPending: null,
     lastLoginAt: null as unknown as string,
     createdAt: now(),
   };
@@ -1621,6 +1625,44 @@ let entraSettings: {
 } | null = null;
 const entraRedirect = 'https://atlas.example.com/api/auth/entra/callback';
 on('GET', '/auth/entra', () => ({ enabled: false, requireSso: false }));
+// SAML sign-in: settings can be saved and shown, but there is no identity provider behind the demo.
+const samlProvider = {
+  entityId: 'https://atlas.example.com/api/auth/saml/metadata',
+  acsUrl: 'https://atlas.example.com/api/auth/saml/acs',
+  metadataUrl: 'https://atlas.example.com/api/auth/saml/metadata',
+};
+let samlSettings: {
+  name: string;
+  entryPoint: string;
+  idpIssuer: string;
+  certificates: { subject: string; expires: string; fingerprint: string }[];
+  enabled: boolean;
+  trustMfa: boolean;
+  requireSso: boolean;
+} | null = null;
+on('GET', '/auth/saml', () => ({ enabled: false, name: '', requireSso: false }));
+on('GET', '/settings/saml', () => ({ serviceProvider: samlProvider, settings: samlSettings }));
+on('PUT', '/settings/saml', (_m, b) => {
+  if (!String(b.entryPoint ?? '').startsWith('https://'))
+    throw new MockError(400, 'The sign-on URL must start with https://.');
+  if (!String(b.idpIssuer ?? '').trim())
+    throw new MockError(400, 'Enter the issuer (entity ID) from your identity provider.');
+  if (!samlSettings && !b.idpCert)
+    throw new MockError(400, 'Paste the signing certificate from your identity provider.');
+  samlSettings = {
+    name: String(b.name || 'single sign-on'),
+    entryPoint: String(b.entryPoint),
+    idpIssuer: String(b.idpIssuer),
+    certificates: samlSettings?.certificates ?? [
+      { subject: 'CN=demo identity provider', expires: daysFromNow(700), fingerprint: 'AB:CD:EF' },
+    ],
+    enabled: b.enabled === true,
+    trustMfa: b.trustMfa === true && b.enabled === true,
+    requireSso: b.requireSso === true && b.enabled === true,
+  };
+  return { serviceProvider: samlProvider, settings: samlSettings, linksCleared: false };
+});
+on('DELETE', '/settings/saml', () => ((samlSettings = null), { ok: true }));
 on('GET', '/settings/entra', () => ({ ...(entraSettings ?? {}), redirectUri: entraRedirect }));
 on('PUT', '/settings/entra', (_m, b) => {
   if (!/^[0-9a-f-]{36}$/i.test(String(b.clientId ?? '')))
@@ -2246,6 +2288,88 @@ on('POST', '/bitlocker/devices/:id/block', (m, b) => {
   return blOverview();
 });
 on('GET', '/assets/:id/bitlocker', (m) => blDevices.filter((d) => d.assetId === m[1]));
+// Webhooks: one sample, with a few deliveries. Nothing is really posted from the demo.
+type DemoHook = {
+  id: string;
+  name: string;
+  url: string;
+  topics: string[];
+  enabled: boolean;
+  paused: boolean;
+  last: { status: string; at: string; detail: string } | null;
+  createdAt: string;
+};
+const demoHooks: DemoHook[] = [
+  {
+    id: uuid(),
+    name: 'Documentation changes to chat',
+    url: 'https://automation.example.com/hooks/atlas',
+    topics: ['asset', 'document', 'checklist'],
+    enabled: true,
+    paused: false,
+    last: { status: 'delivered', at: ago(12), detail: 'asset.updated delivered' },
+    createdAt: ago(60 * 24 * 20),
+  },
+];
+const hookFrom = (b: Json, current?: DemoHook): DemoHook => {
+  const url = String(b.url ?? current?.url ?? '');
+  if (!String(b.name ?? current?.name ?? '').trim())
+    throw new MockError(400, 'Name the webhook, for example "Teams alerts".');
+  if (!url.startsWith('https://'))
+    throw new MockError(400, 'Enter an https:// address, without a username or password in it.');
+  const topics = (b.topics as string[] | undefined) ?? current?.topics ?? [];
+  if (!topics.length) throw new MockError(400, 'Choose at least one kind of item.');
+  return {
+    id: current?.id ?? uuid(),
+    name: String(b.name ?? current?.name),
+    url,
+    topics,
+    enabled: b.enabled === undefined ? (current?.enabled ?? true) : b.enabled === true,
+    paused: current?.paused ?? false,
+    last: current?.last ?? null,
+    createdAt: current?.createdAt ?? now(),
+  };
+};
+on('GET', '/webhooks', () => demoHooks);
+on('POST', '/webhooks', (_m, b) => {
+  const hook = hookFrom(b);
+  demoHooks.push(hook);
+  return { ...hook, secret: 'demo-signing-secret-not-real-0000000000000' };
+});
+on('PATCH', '/webhooks/:id', (m, b) =>
+  Object.assign(find(demoHooks, m[1]!, 'Webhook'), hookFrom(b, find(demoHooks, m[1]!, 'Webhook'))),
+);
+on('DELETE', '/webhooks/:id', (m) => {
+  demoHooks.splice(
+    demoHooks.findIndex((h) => h.id === m[1]),
+    1,
+  );
+  return { ok: true };
+});
+on('POST', '/webhooks/:id/secret', (m) => ({
+  ...find(demoHooks, m[1]!, 'Webhook'),
+  secret: 'demo-signing-secret-not-real-1111111111111',
+}));
+on('POST', '/webhooks/:id/resume', (m) => Object.assign(find(demoHooks, m[1]!, 'Webhook'), { paused: false }));
+on('POST', '/webhooks/:id/test', () => ({ ok: true, status: 200, detail: 'The receiver accepted it.' }));
+on('GET', '/webhooks/:id/deliveries', () =>
+  [
+    ['asset.updated', 'HDG-FW-01', 'delivered', 12],
+    ['document.updated', 'WAN outage runbook', 'delivered', 95],
+    ['checklist.completed', 'New user onboarding', 'delivered', 60 * 26],
+  ].map(([event, title, status, minutes]) => ({
+    id: uuid(),
+    event,
+    title,
+    status,
+    attempts: 1,
+    responseStatus: 200,
+    error: null,
+    createdAt: ago(minutes as number),
+    deliveredAt: ago(minutes as number),
+    nextAttemptAt: null,
+  })),
+);
 on('GET', '/import/jobs', () => importJobs);
 on('GET', '/import/jobs/:id', (m) => find(importJobs, m[1]!, 'Import'));
 on('POST', '/import/csv', (_m, b) => {

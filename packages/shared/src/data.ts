@@ -793,6 +793,55 @@ export const entraSettingsSchema = z.object({
   /** Staff must sign in with Microsoft; only the owner can still use a password (break-glass). */
   requireSso: z.boolean().default(false),
 });
+// ---------- SAML single sign-on ----------
+export const samlSettingsSchema = z.object({
+  /** What the sign-in button says after "Sign in with": the identity provider's name. */
+  name: z.string().trim().min(1, 'Name the identity provider, for example Okta.').max(40).default('single sign-on'),
+  /** The identity provider's single sign-on address (HTTP-Redirect binding). */
+  entryPoint: z
+    .string()
+    .trim()
+    .url('Enter the sign-on URL from your identity provider.')
+    .max(2000)
+    .refine((v) => v.startsWith('https://'), 'The sign-on URL must start with https://.'),
+  /** The identity provider's issuer (entity ID). Responses from any other issuer are refused. */
+  idpIssuer: z.string().trim().min(1, 'Enter the issuer (entity ID) from your identity provider.').max(500),
+  /**
+   * The signing certificate, as PEM or bare base64. Two can be given while the provider rolls one over. Omitted
+   * keeps the saved one.
+   */
+  idpCert: z
+    .string()
+    .trim()
+    .min(100, 'Paste the signing certificate from your identity provider.')
+    .max(20_000)
+    .optional(),
+  enabled: z.boolean().default(false),
+  /**
+   * The identity provider enforces multi-factor sign-in for this app, so Atlas doesn't ask for its own code.
+   * SAML has no dependable way to say whether MFA was used, so this is the administrator's word.
+   */
+  trustMfa: z.boolean().default(false),
+  /** Staff must use single sign-on; only the owner can still use a password (break-glass). */
+  requireSso: z.boolean().default(false),
+});
+export interface SamlView {
+  name: string;
+  entryPoint: string;
+  idpIssuer: string;
+  /** The saved signing certificates: who they were issued to, and when they expire. */
+  certificates: { subject: string; expires: string; fingerprint: string }[];
+  enabled: boolean;
+  trustMfa: boolean;
+  requireSso: boolean;
+}
+/** What the identity provider needs to know about Atlas. Shown before anything is saved. */
+export interface SamlServiceProvider {
+  entityId: string;
+  acsUrl: string;
+  metadataUrl: string;
+}
+
 export interface EntraView {
   tenantId: string;
   clientId: string;
