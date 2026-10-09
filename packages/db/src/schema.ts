@@ -1458,3 +1458,28 @@ export const webhookDeliveries = pgTable(
     check('webhook_deliveries_status_check', sql`${t.status} in ('pending','delivered','failed')`),
   ],
 );
+
+/**
+ * A link that lets anyone read one document without signing in. The token is kept as it is, so the link can be
+ * copied again: someone who could read this table could read the documents themselves anyway.
+ */
+export const documentShares = pgTable(
+  'document_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    views: integer('views').notNull().default(0),
+    lastViewedAt: timestamp('last_viewed_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('document_shares_token').on(t.token), index('document_shares_document').on(t.documentId)],
+);
