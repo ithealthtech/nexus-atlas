@@ -2,6 +2,20 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.23] - 2026-10-08
+
+### Added
+
+- **Personal vaults.** **My vault**, under Passwords, gives each staff member a private place for their own logins and secure notes. Only the person who made an entry can open it: there is no administrator view, no emergency access, and no API-key access, and entries stay out of search, reports, password health, exports, and the audit log. The browser extension offers your own logins on matching sites, marked "My vault". Deleting an entry is permanent. The owner can turn personal vaults off in Vault policies, which hides them without deleting anything. (#178)
+- **SAML single sign-on.** Administration → SAML sign-in connects Atlas to any SAML 2.0 identity provider (Okta, Entra ID, Google Workspace, JumpCloud, and others). People are matched to accounts you've already created, and an administrator confirms each link before it works. Not yet tested against a real identity provider: try it with one account first, and keep a password sign-in for the owner. (#174)
+- **Webhooks.** Administration → Webhooks sends a signed message to an address of yours when something changes in Atlas, by topic (clients, assets, documents, passwords, and more). A failed delivery is retried five times over several hours, each webhook shows its recent deliveries, and one that keeps failing is paused. Messages never contain secrets. (#176)
+- **Share a document by link.** **Share** on a document makes a link that anyone can open without signing in, for how-to articles you send to a client's staff. Links can expire, show how often they've been opened, and can be revoked. The reader sees that one document only. (#177)
+- **QR labels for assets.** **QR label** on an asset, or **QR labels** on a client's Assets tab, prints labels in three sizes. Scanning one opens the asset in Atlas, after signing in. (#175)
+
+### Changed
+
+- **README.** Brought up to date with everything shipped since 1.0. (#173)
+
 ## [1.7.22] - 2026-10-06
 
 ### Added
