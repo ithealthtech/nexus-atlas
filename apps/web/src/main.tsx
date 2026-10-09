@@ -48,6 +48,7 @@ import { DEMO } from '@/lib/demo';
 import { useApplyBranding } from '@/lib/branding';
 import { DataTools } from '@/pages/DataTools';
 import { PasswordRotation } from '@/pages/PasswordRotation';
+import { AssetLabels } from '@/pages/AssetLabels';
 import { BitlockerCollector } from '@/pages/BitlockerCollector';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
@@ -210,6 +211,16 @@ const routes = [
   clientRoute.addChildren(clientRoutes),
   createRoute({ getParentRoute: () => appRoute, path: '/client-report/$clientId', component: ClientReport }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/assets/labels',
+    component: AssetLabels,
+    validateSearch: (search: Record<string, unknown>) => ({
+      asset: typeof search.asset === 'string' ? search.asset : undefined,
+      client: typeof search.client === 'string' ? search.client : undefined,
+      layout: typeof search.layout === 'string' ? search.layout : undefined,
+    }),
+  }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets/$assetId', component: AssetDetail }),
   createRoute({
     getParentRoute: () => appRoute,

@@ -23,6 +23,7 @@ For technicians who document clients and use the password vault, and for client 
 - **Documents** are runbooks, procedures, and notes. The editor has headings, checklists, tables, code blocks, and links. Templates for a runbook and an onboarding checklist are there to start from. Set a **review date** to be reminded to check a document.
 - **The MSP knowledge base** (under **Knowledge base**) is for your own procedures that apply to every client. Client accounts never see it.
 - **Relationships:** on any item, choose **Link** (under **Related**) to connect it to related assets, documents, contacts, or locations. For example, link the firewall runbook to the firewall.
+- **QR labels:** on an asset choose **QR label**, or on a client's Assets tab choose **QR labels** for everything shown. Pick a label size and print. Scanning a label with a phone opens that asset in Atlas (after signing in); the label itself shows only the name, client, and serial number.
 - **Files:** drag files onto an item to attach them.
 - **History:** every save keeps the previous version. **Version history** shows the changes line by line and can restore an old version. If someone else saved while you were editing, Atlas tells you instead of overwriting their work.
 
