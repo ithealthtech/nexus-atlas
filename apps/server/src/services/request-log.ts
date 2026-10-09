@@ -58,6 +58,7 @@ const PRIVATE_SEGMENTS = new Set([
   'erase',
   'agent',
   'bitlocker',
+  'personal-vault',
 ]);
 
 export const isSecretName = (name: string) => SECRET_NAME.test(name);

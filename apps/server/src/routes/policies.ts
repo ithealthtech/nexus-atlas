@@ -17,6 +17,7 @@ const describe = (p: VaultPolicy) =>
     `reasons ${onOff(p.requireRevealReason)}`,
     `read-only reveals ${p.blockReadOnlyReveal ? 'blocked' : 'allowed'}`,
     `restricted for listed people only ${onOff(p.restrictedListedOnly)}`,
+    `personal vaults ${onOff(p.personalVaults)}`,
   ].join(' · ');
 
 /** Vault policies (owner), emergency access to restricted passwords, and streaming the audit logs to a SIEM. */

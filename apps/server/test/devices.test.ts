@@ -420,6 +420,64 @@ describe('browser extension sign-in and autofill', () => {
     expect(await ended(fifth)).toBe(true);
   });
 
+  it('offers a person their own personal logins beside the shared ones, and nobody else’s', async () => {
+    const shared = await login(harbor, 'Harbor portal', 'https://portal.harbor-dental.com');
+    const mine = (
+      await owner.call('POST', '/api/personal-vault', {
+        name: 'My dental plan',
+        username: 'avery',
+        url: 'https://portal.harbor-dental.com/members',
+        secret: 'Own-secret-2026!',
+        totp: TOTP_SEED,
+      })
+    ).data.id as string;
+    await owner.call('POST', '/api/personal-vault', { kind: 'note', name: 'Harbor door code', secret: '4821' });
+    const device = await connect(t.app, owner);
+    const page = 'https://portal.harbor-dental.com/login';
+
+    const found = (await device.call('GET', `/api/device/logins?url=${encodeURIComponent(page)}`)).data;
+    expect(names(found).sort()).toEqual(['Harbor portal', 'My dental plan']);
+    expect(found.find((l: { id: string }) => l.id === mine)).toMatchObject({
+      clientName: 'My vault',
+      clientId: '',
+      hasTotp: true,
+      requireReason: false,
+      match: 'exact',
+    });
+    // Notes are never offered to fill.
+    expect(names((await device.call('GET', '/api/device/logins/search?q=harbor')).data).sort()).toEqual([
+      'Harbor portal',
+      'My dental plan',
+    ]);
+
+    expect((await device.call('POST', `/api/device/logins/${mine}/fill`, { url: page })).data).toEqual({
+      username: 'avery',
+      password: 'Own-secret-2026!',
+    });
+    expect(
+      (await device.call('POST', `/api/device/logins/${mine}/fill`, { url: 'https://evil.example' })).data.code,
+    ).toBe('site_mismatch');
+    expect((await device.call('POST', `/api/device/logins/${mine}/copy`, { field: 'totp' })).data.value).toBe(
+      totp(TOTP_SEED),
+    );
+    // Using a personal login leaves no trace in the shared audit log; a shared one still does.
+    await device.call('POST', `/api/device/logins/${shared}/fill`, { url: page });
+    const audit = (await t.handle.pool.query('select password_name from vault_audit')).rows as {
+      password_name: string;
+    }[];
+    expect(audit.some((a) => a.password_name === 'Harbor portal')).toBe(true);
+    expect(JSON.stringify(audit)).not.toContain('My dental plan');
+
+    // Another person's extension never sees it, even an administrator's.
+    const ada = await person('ada@atlas.test', 'maple north orbit 9', { role: 'admin' });
+    const theirs = await connect(t.app, ada.b);
+    expect(names((await theirs.call('GET', `/api/device/logins?url=${encodeURIComponent(page)}`)).data)).toEqual([
+      'Harbor portal',
+    ]);
+    expect((await theirs.call('POST', `/api/device/logins/${mine}/fill`, { url: page })).status).toBe(404);
+    expect((await theirs.call('POST', `/api/device/logins/${mine}/copy`, { field: 'secret' })).status).toBe(404);
+  });
+
   it('keeps client accounts out, and checks what a device sends', async () => {
     const viewer = await person(
       'viewer@harbor.example',

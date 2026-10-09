@@ -52,7 +52,7 @@ function PoliciesCard({ current }: { current: VaultPolicyView }) {
   const [error, setError] = useState<string | null>(null);
   const save = useSave(
     (body: VaultPolicy) => api<VaultPolicyView>('/settings/vault-policy', { method: 'PUT', body }),
-    [['settings', 'vault-policy'], ['vault-policy'], ['passwords']],
+    [['settings', 'vault-policy'], ['vault-policy'], ['passwords'], ['personal-vault']],
   );
   const generator = (patch: Partial<VaultPolicy['generator']>) =>
     setForm((f) => ({ ...f, generator: { ...f.generator, ...patch } }));
@@ -175,6 +175,16 @@ function PoliciesCard({ current }: { current: VaultPolicyView }) {
             onChange={(e) => setForm((f) => ({ ...f, restrictedListedOnly: e.target.checked }))}
             label="Restricted passwords are for the people listed on them"
             description="Administrators then need a place on the list too, or emergency access. The owner always has access."
+          />
+        </fieldset>
+
+        <fieldset disabled={!owner}>
+          <legend className="mb-2 text-[13px] font-semibold">Personal vaults</legend>
+          <Checkbox
+            checked={form.personalVaults}
+            onChange={(e) => setForm((f) => ({ ...f, personalVaults: e.target.checked }))}
+            label="Give each staff member a personal vault"
+            description="A private place for their own logins and notes. Nobody else can open it, including you, and it isn’t in reports or the audit log. Turning this off hides the vaults without deleting anything."
           />
         </fieldset>
 

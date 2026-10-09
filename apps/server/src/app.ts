@@ -33,6 +33,8 @@ import { TrackerScheduler, TrackerService } from './services/trackers.js';
 import { registerTrackerRoutes } from './routes/trackers.js';
 import { registerVaultRoutes } from './routes/vault.js';
 import { registerDeviceRoutes } from './routes/devices.js';
+import { registerPersonalVaultRoutes } from './routes/personal-vault.js';
+import { PersonalVaultService } from './services/personal-vault.js';
 import { DeviceService } from './identity/devices.js';
 import { VaultKeys } from './crypto/vault-keys.js';
 import { AccountSecurity, DEVICE_DAYS, type RelyingParty } from './identity/account.js';
@@ -686,12 +688,15 @@ export async function buildApp({
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
+  const personal = new PersonalVaultService(vaultKeys);
+  registerPersonalVaultRoutes(app, { db, authed, personal });
 
   await registerDeviceRoutes(app, {
     db,
     authed,
     devices: new DeviceService(db, identity),
     vault,
+    personal,
     limiter: failureLimiter(20, 15 * 60_000),
   });
 

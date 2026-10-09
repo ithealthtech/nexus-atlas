@@ -30,6 +30,7 @@ import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
 import { SendPage, Sends } from '@/pages/Sends';
+import { PersonalVault } from '@/pages/PersonalVault';
 import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
 import { Groups } from '@/pages/Groups';
@@ -256,6 +257,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
   createRoute({ getParentRoute: () => appRoute, path: '/sends', component: Sends }),
+  createRoute({ getParentRoute: () => appRoute, path: '/my-vault', component: PersonalVault }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklists', component: ChecklistsPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklist-runs/$runId', component: RunPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),

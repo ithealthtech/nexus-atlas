@@ -4,6 +4,7 @@ import { deviceCopySchema } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import type { DeviceContext, DeviceService, SignedRequest } from '../identity/devices.js';
 import { Scope } from '../services/scope.js';
+import type { PersonalVaultService } from '../services/personal-vault.js';
 import type { VaultService } from '../services/vault.js';
 
 declare module 'fastify' {
@@ -27,10 +28,11 @@ export function registerDeviceRoutes(
     authed: { onRequest: onRequestHookHandler };
     devices: DeviceService;
     vault: VaultService;
+    personal: PersonalVaultService;
     limiter: Limiter;
   },
 ) {
-  const { db, authed, devices, vault, limiter } = deps;
+  const { db, authed, devices, vault, personal, limiter } = deps;
 
   // ---- in Atlas: approve a device, sign one out ----
   app.get<{ Params: { code: string } }>('/api/account/apps/pairing/:code', authed, async (req) =>
@@ -104,19 +106,33 @@ export function registerDeviceRoutes(
       await devices.signOut(req.device!, req.ip);
       return { ok: true };
     });
-    device.get<{ Querystring: { url?: string } }>('/api/device/logins', signed, async (req) =>
-      vault.matchingLogins(scopeOf(req), String(req.query.url ?? '').slice(0, 2048)),
-    );
-    device.get<{ Querystring: { q?: string } }>('/api/device/logins/search', signed, async (req) =>
-      vault.searchLogins(scopeOf(req), String(req.query.q ?? '')),
-    );
-    device.post<{ Params: { id: string } }>('/api/device/logins/:id/fill', signed, async (req) =>
-      vault.fill(scopeOf(req), req.params.id, req.body, req.ip),
-    );
+    // The person's own logins come first, then the shared vault's. Each id belongs to exactly one of the two.
+    device.get<{ Querystring: { url?: string } }>('/api/device/logins', signed, async (req) => {
+      const scope = scopeOf(req);
+      const url = String(req.query.url ?? '').slice(0, 2048);
+      const [own, shared] = await Promise.all([personal.matchingLogins(scope, url), vault.matchingLogins(scope, url)]);
+      const rank = { exact: 0, domain: 1 } as const;
+      return [...own, ...shared].sort((a, b) => rank[a.match ?? 'domain'] - rank[b.match ?? 'domain']).slice(0, 50);
+    });
+    device.get<{ Querystring: { q?: string } }>('/api/device/logins/search', signed, async (req) => {
+      const scope = scopeOf(req);
+      const q = String(req.query.q ?? '');
+      const [own, shared] = await Promise.all([personal.searchLogins(scope, q), vault.searchLogins(scope, q)]);
+      return [...own, ...shared].slice(0, 25);
+    });
+    device.post<{ Params: { id: string } }>('/api/device/logins/:id/fill', signed, async (req) => {
+      const scope = scopeOf(req);
+      return (await personal.owns(scope, req.params.id))
+        ? personal.fill(scope, req.params.id, req.body)
+        : vault.fill(scope, req.params.id, req.body, req.ip);
+    });
     // Copying goes through the same reveal as the web app, so access, reasons, and the audit entry are identical.
     device.post<{ Params: { id: string } }>('/api/device/logins/:id/copy', signed, async (req) => {
       const body = deviceCopySchema.parse(req.body ?? {});
-      return vault.reveal(scopeOf(req), req.params.id, { ...body, copy: true }, req.ip);
+      const scope = scopeOf(req);
+      if (await personal.owns(scope, req.params.id))
+        return personal.reveal(scope, req.params.id, { field: body.field });
+      return vault.reveal(scope, req.params.id, { ...body, copy: true }, req.ip);
     });
   });
 }

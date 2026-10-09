@@ -703,6 +703,39 @@ export const passwords = pgTable(
   ],
 );
 
+// A person's own logins and notes. Kept apart from `passwords` on purpose: nothing that reads the shared vault
+// (search, reports, exports, imports, the API) can reach these rows. Only the owner's own requests read them.
+export const personalPasswords = pgTable(
+  'personal_passwords',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull().default('login'),
+    name: text('name').notNull(),
+    username: text('username').notNull().default(''),
+    url: text('url').notNull().default(''),
+    // Ciphertext, sealed with the organization's vault key and bound to the entry and its owner.
+    secret: text('secret').notNull(),
+    notes: text('notes'),
+    totp: text('totp'),
+    strength: integer('strength'),
+    favorite: boolean('favorite').notNull().default(false),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
+    version: integer('version').notNull().default(1),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    index('personal_passwords_user').on(t.userId),
+    check('personal_passwords_kind_check', sql`${t.kind} in ('login','note')`),
+  ],
+);
+
 export const passwordHistory = pgTable(
   'password_history',
   {

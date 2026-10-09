@@ -1678,6 +1678,151 @@ on('PUT', '/settings/email', (_m, b) => {
 });
 on('POST', '/settings/email/test', () => notInDemo('Sending email'));
 on('POST', '/settings/email/permissions', () => notInDemo('Checking Microsoft 365 permissions'));
+// Personal vault: the signed-in person's own entries.
+const personalEntries: {
+  id: string;
+  kind: 'login' | 'note';
+  name: string;
+  username: string;
+  url: string;
+  secret: string;
+  notes: string;
+  totp: string;
+  favorite: boolean;
+  changedAt: string;
+  updatedAt: string;
+  version: number;
+}[] = [
+  {
+    id: uuid(),
+    kind: 'login',
+    name: 'Distributor partner portal',
+    username: 'alex.rivera',
+    url: 'https://partners.example.com',
+    secret: 'Maple-Orbit-Lantern-47!',
+    notes: 'My own partner login, not the shared one.',
+    totp: 'JBSWY3DPEHPK3PXP',
+    favorite: true,
+    changedAt: now(),
+    updatedAt: now(),
+    version: 1,
+  },
+  {
+    id: uuid(),
+    kind: 'login',
+    name: 'Payroll',
+    username: 'alex@itdoneright.example',
+    url: 'https://payroll.example.com',
+    secret: 'winter24',
+    notes: '',
+    totp: '',
+    favorite: false,
+    changedAt: now(),
+    updatedAt: now(),
+    version: 1,
+  },
+  {
+    id: uuid(),
+    kind: 'note',
+    name: 'Office alarm code',
+    username: '',
+    url: '',
+    secret: 'Front door: 4821\nServer room: 9930',
+    notes: '',
+    totp: '',
+    favorite: false,
+    changedAt: now(),
+    updatedAt: now(),
+    version: 1,
+  },
+];
+const personalView = (p: (typeof personalEntries)[0]) => ({
+  id: p.id,
+  kind: p.kind,
+  name: p.name,
+  username: p.username,
+  url: p.url,
+  hasNotes: !!p.notes,
+  hasTotp: !!p.totp,
+  strength: p.kind === 'note' ? null : passwordStrength(p.secret),
+  favorite: p.favorite,
+  changedAt: p.changedAt,
+  updatedAt: p.updatedAt,
+  version: p.version,
+});
+const personalOn = () => {
+  if (!vaultPolicy.personalVaults)
+    throw new MockError(403, 'Your organization has turned personal vaults off.', 'personal_vaults_off');
+};
+on('GET', '/personal-vault/status', () =>
+  vaultPolicy.personalVaults ? { enabled: true, count: personalEntries.length } : { enabled: false, count: 0 },
+);
+on('GET', '/personal-vault', () => {
+  personalOn();
+  return [...personalEntries]
+    .sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.name.localeCompare(b.name))
+    .map(personalView);
+});
+on('POST', '/personal-vault', (_m, b) => {
+  personalOn();
+  const note = b.kind === 'note';
+  if (!String(b.name ?? '').trim()) throw new MockError(400, 'Name is required.');
+  if (!String(b.secret ?? '')) throw new MockError(400, note ? 'Write the note.' : 'The password is required.');
+  const entry = {
+    id: uuid(),
+    kind: note ? ('note' as const) : ('login' as const),
+    name: String(b.name).trim(),
+    username: note ? '' : String(b.username ?? ''),
+    url: note ? '' : String(b.url ?? ''),
+    secret: String(b.secret),
+    notes: note ? '' : String(b.notes ?? ''),
+    totp: note ? '' : String(b.totp ?? ''),
+    favorite: false,
+    changedAt: now(),
+    updatedAt: now(),
+    version: 1,
+  };
+  personalEntries.push(entry);
+  return personalView(entry);
+});
+on('PATCH', '/personal-vault/:id', (m, b) => {
+  personalOn();
+  const p = find(personalEntries, m[1]!, 'Entry');
+  if (b.version !== p.version)
+    throw new MockError(409, 'This entry was changed in another window. Reload before saving.', 'conflict');
+  if (b.name !== undefined) p.name = String(b.name).trim();
+  if (b.favorite !== undefined) p.favorite = !!b.favorite;
+  if (b.secret !== undefined) {
+    p.secret = String(b.secret);
+    p.changedAt = now();
+  }
+  if (p.kind === 'login') {
+    if (b.username !== undefined) p.username = String(b.username);
+    if (b.url !== undefined) p.url = String(b.url);
+    if (b.notes !== undefined) p.notes = String(b.notes);
+    if (b.totp !== undefined) p.totp = String(b.totp);
+  }
+  p.version++;
+  p.updatedAt = now();
+  return personalView(p);
+});
+on('DELETE', '/personal-vault/:id', (m) => {
+  personalOn();
+  const p = find(personalEntries, m[1]!, 'Entry');
+  personalEntries.splice(personalEntries.indexOf(p), 1);
+  return { ok: true };
+});
+on('POST', '/personal-vault/:id/reveal', (m, b) => {
+  personalOn();
+  const p = find(personalEntries, m[1]!, 'Entry');
+  const field = String(b.field ?? 'secret');
+  if (field === 'totp')
+    return {
+      value: String(Math.floor(Math.random() * 1e6)).padStart(6, '0'),
+      expiresIn: 30 - (Math.floor(Date.now() / 1000) % 30),
+    };
+  return { value: field === 'notes' ? p.notes : p.secret };
+});
 on('GET', '/vault/policy', () => vaultPolicy);
 on('GET', '/settings/vault-policy', () => ({ ...vaultPolicy, mfa: { requiredForStaff: true, withoutMfa: [] } }));
 on('PUT', '/settings/vault-policy', (_m, b) => {

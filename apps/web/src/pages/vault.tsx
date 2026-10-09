@@ -114,7 +114,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export const rotationOverdue = (p: PasswordView) => !!p.rotationDue && p.rotationDue <= today();
 export const expired = (p: PasswordView) => !!p.expiresOn && p.expiresOn <= today();
 
-function StrengthMeter({ value }: { value: string }) {
+export function StrengthMeter({ value }: { value: string }) {
   const score = passwordStrength(value);
   return (
     <div className="mt-1.5 flex items-center gap-2" aria-live="polite">
@@ -134,7 +134,7 @@ function StrengthMeter({ value }: { value: string }) {
   );
 }
 
-function Generator({ onUse }: { onUse: (value: string) => void }) {
+export function Generator({ onUse }: { onUse: (value: string) => void }) {
   const { data } = useVaultPolicy();
   // Starts again if the policy changes while it's open.
   return data ? (
