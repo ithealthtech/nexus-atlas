@@ -1,7 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
+import { WINDOWS_APP_VERSION } from '@atlas/shared';
 import { enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+
+const SETUP_URL = 'https://github.com/ithealthtech/nexus-atlas/releases/latest/download/AtlasForWindowsSetup.exe';
+
+describe('the Atlas for Windows version', () => {
+  it('is the same here as in the app, so signed-in copies are told about the build that actually ships', () => {
+    const props = readFileSync(new URL('../../windows/Directory.Build.props', import.meta.url), 'utf8');
+    expect(/<Version>([^<]+)<\/Version>/.exec(props)?.[1]).toBe(WINDOWS_APP_VERSION);
+    expect(WINDOWS_APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
 
 const TEMP = 'temporary pass 1234';
 const REDIRECT = 'http://127.0.0.1:53123/callback';
@@ -101,7 +113,12 @@ describe('Atlas for Windows sign-in (native apps)', () => {
 
     const me = await v1('GET', '/native/session', granted.access_token);
     expect(me.statusCode).toBe(200);
-    expect(me.json()).toMatchObject({ deviceName: 'TECH-LAPTOP-07', scopes: ['read', 'reveal'] });
+    expect(me.json()).toMatchObject({
+      deviceName: 'TECH-LAPTOP-07',
+      scopes: ['read', 'reveal'],
+      // What the app checks its own version against, and where it sends the person for a newer one.
+      app: { latestVersion: WINDOWS_APP_VERSION, downloadUrl: SETUP_URL },
+    });
 
     const events = (await owner.call('GET', '/api/security-events')).data.map((e: { action: string }) => e.action);
     expect(events).toEqual(expect.arrayContaining(['Desktop app approved', 'Desktop app signed in']));
@@ -264,6 +281,7 @@ describe('Atlas for Windows sign-in (native apps)', () => {
       }),
     ]);
     expect(overview.sessions).toHaveLength(1);
+    expect(overview.desktopApp).toEqual({ name: 'Atlas for Windows', version: WINDOWS_APP_VERSION, url: SETUP_URL });
 
     // Removing it from the Account page.
     expect((await owner.call('DELETE', `/api/account/sessions/${overview.desktopApps[0].id}`)).status).toBe(200);

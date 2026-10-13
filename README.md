@@ -111,8 +111,9 @@ A REST API with scoped keys and an OpenAPI description covers the rest.
 ### Outside the browser tab
 
 A browser extension for Edge and Chrome fills logins from the vault on matching sites, and
-Atlas for Windows (preview) gives technicians quick search and credential copy from the
-desktop. Both sign in through Atlas with their own revocable sessions.
+Atlas for Windows gives technicians quick search and credential copy from the desktop, and
+installs from a setup program attached to every release. Both sign in through Atlas with
+their own revocable sessions.
 
 ## Architecture
 
@@ -137,7 +138,7 @@ data/attachments            Uploaded files, outside the web root under random na
 | `apps/server` | Fastify API, background jobs, and the command-line tools (backup, restore, migration) |
 | `apps/web` | React, Vite, TanStack Router and Query, Tailwind |
 | `apps/extension` | The browser extension for Edge and Chrome |
-| `apps/windows` | Atlas for Windows (.NET), in preview |
+| `apps/windows` | Atlas for Windows (.NET) and its setup program |
 | `packages/shared` | zod schemas, roles, access levels, and API types shared by server and web |
 | `packages/db` | Drizzle schema and SQL migrations |
 | `deploy` | Docker Compose with Caddy (automatic HTTPS), the Linux and Windows installers, and the RMM rotation script |
@@ -252,7 +253,9 @@ Know these limits before relying on it:
   anything newer as needing a pilot of your own.
 - **The BitLocker collector has not been run on real hardware yet,** and its script isn't
   code-signed. Pilot it on one machine first.
-- **Atlas for Windows is a preview.**
+- **Atlas for Windows is new.** Every build starts it, installs it, upgrades it over a running
+  copy, and uninstalls it on a clean machine, but nobody has used it day to day yet. Its
+  setup program isn't code-signed, so Windows asks before running it.
 
 Not included: other PSA and RMM integrations (Autotask, HaloPSA, NinjaOne, Datto), network
 discovery, IT Glue and ITBoost importers, mobile apps, and multi-tenant cloud hosting. See

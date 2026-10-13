@@ -4,8 +4,8 @@ using H.NotifyIcon.Core;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Windows.AppLifecycle;
+using ILaunchActivatedEventArgs = Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs;
 using StartupTask = Windows.ApplicationModel.StartupTask;
 using StartupTaskState = Windows.ApplicationModel.StartupTaskState;
 
@@ -13,27 +13,41 @@ namespace Atlas.Windows;
 
 /// <summary>
 /// Atlas for Windows lives in the tray. Ctrl+Shift+Space (or clicking the tray icon) opens quick search; the tray
-/// menu has sign-in, "Start with Windows", and sign-out. It keeps only the Atlas address, preferences, and a
-/// DPAPI-protected session token on disk.
+/// menu has sign-in, "Start with Windows", the newer version when Atlas offers one, and sign-out. It keeps only the
+/// Atlas address, preferences, and a DPAPI-protected session token on disk.
 /// </summary>
 public partial class App : Application
 {
     private const string StartupTaskId = "AtlasStartup";
+    // Held while the app runs, so the installer can tell and ask it to close before replacing its files.
+    private const string RunningMutexName = "AtlasForWindows.Running";
+    // Asks the copy that is already running to quit cleanly (the installer uses it).
+    private const string QuitArgument = "--quit";
+    // Loads the window and the tray, reports whether that worked, and exits. Run by the build, never by people.
+    private const string SelfTestArgument = "--self-test";
+    private static readonly string SelfTestReport = Path.Combine(Path.GetTempPath(), "AtlasForWindows-selftest.txt");
+
     private readonly SecureStore store = new(SecureStore.DefaultFolder(), new DpapiProtector());
     private AppSettings settings = new();
     private AtlasClient? client;
     private SearchWindow? window;
     private TaskbarIcon? tray;
     private MenuFlyoutItem? signInItem;
+    private MenuFlyoutItem? updateItem;
     private ToggleMenuFlyoutItem? startupItem;
-    private DispatcherQueueTimer? expirationTimer;
+    private DispatcherQueueTimer? checkTimer;
     private DateOnly lastExpirationNotice;
+    private AppRelease? update;
+    private Mutex? running;
+    private bool selfTest;
 
     public App()
     {
         InitializeComponent();
         UnhandledException += (_, e) =>
         {
+            if (selfTest)
+                FinishSelfTest(e.Exception);
             // Never write the exception anywhere: a message could quote a value. Show a generic notice instead.
             e.Handled = true;
             Notify("Something went wrong", "Atlas for Windows hit an error. Try again, or restart the app.");
@@ -44,7 +58,14 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        // One copy runs at a time; opening it again brings up search in the running copy.
+        var arguments = Environment.GetCommandLineArgs();
+        if (HasArgument(arguments, SelfTestArgument))
+        {
+            RunSelfTest();
+            return;
+        }
+
+        // One copy runs at a time; opening it again brings up search in the running copy, or tells it to quit.
         var main = AppInstance.FindOrRegisterForKey("main");
         if (!main.IsCurrent)
         {
@@ -52,10 +73,28 @@ public partial class App : Application
             Exit();
             return;
         }
-        main.Activated += (_, _) => window?.DispatcherQueue.TryEnqueue(ShowSearch);
+        if (HasArgument(arguments, QuitArgument))
+        {
+            // Nothing was running to quit.
+            Exit();
+            return;
+        }
+        main.Activated += (_, e) =>
+        {
+            var quit = WantsQuit(e);
+            window?.DispatcherQueue.TryEnqueue(() =>
+            {
+                if (quit)
+                    Quit();
+                else
+                    ShowSearch();
+            });
+        };
+        running = new Mutex(false, RunningMutexName);
 
         Native.ExcludeFromErrorReporting();
         settings = store.LoadSettings();
+        StartupRegistration.KeepCurrent();
         window = new SearchWindow(this);
         CreateTray();
         if (!window.RegisterHotkey())
@@ -69,9 +108,9 @@ public partial class App : Application
         UpdateMenu();
         if (client is { SignedIn: true })
         {
-            StartExpirationChecks();
+            StartChecks();
             // Launched by hand (not at sign-in): show search so it's clear the app started.
-            if (!IsStartupLaunch())
+            if (!IsStartupLaunch(arguments))
                 ShowSearch();
         }
         else
@@ -104,7 +143,7 @@ public partial class App : Application
         settings = settings with { AtlasUrl = address.ToString() };
         store.SaveSettings(settings);
         UpdateMenu();
-        StartExpirationChecks();
+        StartChecks();
         Notify("Signed in to Atlas", $"Signed in as {token.User.Name}. Press Ctrl+Shift+Space to search.");
     }
 
@@ -112,7 +151,8 @@ public partial class App : Application
     internal void SessionEnded()
     {
         store.ForgetToken();
-        expirationTimer?.Stop();
+        checkTimer?.Stop();
+        update = null;
         UpdateMenu();
         window?.ShowSetup(settings.AtlasUrl, "You were signed out of Atlas. Sign in again to continue.");
     }
@@ -132,7 +172,8 @@ public partial class App : Application
         }
         window?.ClearClipboard();
         store.ForgetToken();
-        expirationTimer?.Stop();
+        checkTimer?.Stop();
+        update = null;
         UpdateMenu();
         window?.ShowSetup(settings.AtlasUrl);
     }
@@ -140,19 +181,22 @@ public partial class App : Application
     private void CreateTray()
     {
         signInItem = new MenuFlyoutItem { Command = new RelayCommand(() => _ = SignInOrOut()) };
+        updateItem = new MenuFlyoutItem { Command = new RelayCommand(OpenUpdate), Visibility = Visibility.Collapsed };
         startupItem = new ToggleMenuFlyoutItem { Text = "Start with Windows", Command = new RelayCommand(() => _ = ToggleStartupAsync()) };
         var menu = new MenuFlyout();
         menu.Items.Add(new MenuFlyoutItem { Text = "Search Atlas    Ctrl+Shift+Space", Command = new RelayCommand(ShowSearch) });
+        menu.Items.Add(updateItem);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(startupItem);
         menu.Items.Add(signInItem);
         menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(new MenuFlyoutItem { Text = $"Version {AppInfo.VersionText}", IsEnabled = false });
         menu.Items.Add(new MenuFlyoutItem { Text = "Quit", Command = new RelayCommand(Quit) });
         tray = new TaskbarIcon
         {
             ToolTipText = "Atlas for Windows",
-            // Loaded straight from the file next to the exe, which works installed (MSIX) and unpackaged (the preview
-            // zip) alike; BitmapImage can't load a file: URI, and ms-appx: needs a package.
+            // Loaded straight from the file next to the exe, which works installed and from a folder alike;
+            // BitmapImage can't load a file: URI, and ms-appx: needs a package.
             Icon = new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico")),
             ContextMenuMode = ContextMenuMode.SecondWindow,
             ContextFlyout = menu,
@@ -175,15 +219,39 @@ public partial class App : Application
     {
         if (signInItem is not null)
             signInItem.Text = client is { SignedIn: true } ? "Sign out" : "Sign in…";
+        if (updateItem is not null)
+        {
+            updateItem.Text = update is null ? "" : $"Get version {update.LatestVersion}…";
+            updateItem.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
+        }
     }
 
-    private static bool IsStartupLaunch() =>
-        AppInstance.GetCurrent().GetActivatedEventArgs().Kind == ExtendedActivationKind.StartupTask;
+    private static bool HasArgument(string[] arguments, string name) =>
+        arguments.Contains(name, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Started by Windows at sign-in rather than by hand: stay in the tray without opening a window.</summary>
+    private static bool IsStartupLaunch(string[] arguments) =>
+        HasArgument(arguments, StartupRegistration.Argument)
+        || AppInstance.GetCurrent().GetActivatedEventArgs().Kind == ExtendedActivationKind.StartupTask;
+
+    /// <summary>Whether a second copy was started only to ask this one to quit.</summary>
+    private static bool WantsQuit(AppActivationArguments activation) =>
+        activation.Kind == ExtendedActivationKind.Launch
+        && activation.Data is ILaunchActivatedEventArgs launch
+        && launch.Arguments.Contains(QuitArgument, StringComparison.OrdinalIgnoreCase);
+
+    // ---------- start with Windows ----------
+    // Installed from the setup program (or run from a folder), the app registers itself under the person's own Run
+    // key. Packaged as MSIX, Windows keeps the setting as a startup task instead.
     private async Task RefreshStartupItemAsync()
     {
         if (startupItem is null)
             return;
+        if (!Native.IsPackaged())
+        {
+            startupItem.IsChecked = StartupRegistration.IsEnabled();
+            return;
+        }
         try
         {
             var task = await StartupTask.GetAsync(StartupTaskId);
@@ -191,13 +259,21 @@ public partial class App : Application
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            // Running unpackaged (development): there's no startup task.
             startupItem.IsEnabled = false;
         }
     }
 
     private async Task ToggleStartupAsync()
     {
+        if (!Native.IsPackaged())
+        {
+            if (!StartupRegistration.Set(!StartupRegistration.IsEnabled()))
+                Notify("Not available", "Windows didn't let Atlas for Windows change its startup setting.");
+            settings = settings with { StartWithWindows = StartupRegistration.IsEnabled() };
+            store.SaveSettings(settings);
+            await RefreshStartupItemAsync();
+            return;
+        }
         try
         {
             var task = await StartupTask.GetAsync(StartupTaskId);
@@ -210,26 +286,74 @@ public partial class App : Application
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            Notify("Not available", "Start with Windows needs the installed app.");
+            Notify("Not available", "Windows didn't let Atlas for Windows change its startup setting.");
         }
         await RefreshStartupItemAsync();
     }
 
-    /// <summary>Checks for items coming due at start and every six hours, and mentions them once a day.</summary>
-    private void StartExpirationChecks()
+    // ---------- background checks ----------
+    /// <summary>At start and every six hours: is there a newer version of this app, and is anything coming due.</summary>
+    private void StartChecks()
     {
-        if (!settings.NotifyExpiring || window is null)
+        if (window is null)
             return;
-        if (expirationTimer is null)
+        if (checkTimer is null)
         {
-            expirationTimer = window.DispatcherQueue.CreateTimer();
-            expirationTimer.Interval = TimeSpan.FromHours(6);
-            expirationTimer.Tick += async (_, _) => await CheckExpirationsAsync();
+            checkTimer = window.DispatcherQueue.CreateTimer();
+            checkTimer.Interval = TimeSpan.FromHours(6);
+            checkTimer.Tick += async (_, _) => await RunChecksAsync();
         }
-        expirationTimer.Start();
-        _ = CheckExpirationsAsync();
+        checkTimer.Start();
+        _ = RunChecksAsync();
     }
 
+    private async Task RunChecksAsync()
+    {
+        await CheckForUpdateAsync();
+        if (settings.NotifyExpiring)
+            await CheckExpirationsAsync();
+    }
+
+    /// <summary>
+    /// Asks Atlas which version of this app it offers. A newer one is added to the tray menu and mentioned once;
+    /// the app never downloads or replaces itself.
+    /// </summary>
+    private async Task CheckForUpdateAsync()
+    {
+        if (client is not { SignedIn: true })
+            return;
+        try
+        {
+            var session = await client.GetSessionAsync();
+            var offered = session.App;
+            update = offered is { DownloadLink: not null } && AppInfo.IsNewer(offered.LatestVersion) ? offered : null;
+            UpdateMenu();
+            if (update is not null && settings.UpdateNoticeFor != update.LatestVersion)
+            {
+                settings = settings with { UpdateNoticeFor = update.LatestVersion };
+                store.SaveSettings(settings);
+                Notify(
+                    $"Atlas for Windows {update.LatestVersion} is available",
+                    $"Choose “Get version {update.LatestVersion}” in the tray menu to download it.");
+            }
+        }
+        catch (SessionEndedException)
+        {
+            SessionEnded();
+        }
+        catch (Exception e) when (e is HttpRequestException or AtlasApiException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            // Offline or Atlas unavailable; try again at the next check.
+        }
+    }
+
+    private void OpenUpdate()
+    {
+        if (update?.DownloadLink is { } link)
+            _ = global::Windows.System.Launcher.LaunchUriAsync(link);
+    }
+
+    /// <summary>Mentions items coming due in the next 14 days, once a day.</summary>
     private async Task CheckExpirationsAsync()
     {
         if (client is not { SignedIn: true })
@@ -261,11 +385,53 @@ public partial class App : Application
     internal void Notify(string title, string message) =>
         tray?.ShowNotification(title, message, NotificationIcon.Info);
 
+    // ---------- self-test ----------
+    /// <summary>
+    /// Builds the window (both of its panels) and the tray icon exactly as a normal start does, waits a moment for
+    /// anything that fails late, then exits 0 and writes "ok", or exits 1 and writes what went wrong. Nothing here
+    /// touches an Atlas server or anyone's data, so the report is safe to write.
+    /// </summary>
+    private void RunSelfTest()
+    {
+        selfTest = true;
+        try
+        {
+            window = new SearchWindow(this);
+            CreateTray();
+            window.ShowSetup(null);
+            window.ShowSearch();
+            var timer = window.DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromSeconds(3);
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) => FinishSelfTest(null);
+            timer.Start();
+        }
+        catch (Exception e)
+        {
+            FinishSelfTest(e);
+        }
+    }
+
+    private void FinishSelfTest(Exception? error)
+    {
+        try
+        {
+            File.WriteAllText(SelfTestReport, error?.ToString() ?? "ok");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // The exit code still says how it went.
+        }
+        tray?.Dispose();
+        Environment.Exit(error is null ? 0 : 1);
+    }
+
     private void Quit()
     {
         window?.ClearClipboard();
         tray?.Dispose();
         client?.Dispose();
+        running?.Dispose();
         window?.Shutdown();
         Exit();
     }

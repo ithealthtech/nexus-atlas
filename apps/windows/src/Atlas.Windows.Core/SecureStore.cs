@@ -30,6 +30,9 @@ public sealed record AppSettings
     public string? AtlasUrl { get; init; }
     public bool StartWithWindows { get; init; }
     public bool NotifyExpiring { get; init; } = true;
+
+    /// <summary>The newer version the person has already been told about, so each is mentioned once.</summary>
+    public string? UpdateNoticeFor { get; init; }
 }
 
 /// <summary>

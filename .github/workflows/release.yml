@@ -1,7 +1,8 @@
 name: Release
 
-# Publishes the version in package.json: the Docker image goes to GitHub Container Registry and a ready-to-run
-# Windows package is attached to a GitHub release with that version's changelog. Start it either by pushing a tag
+# Publishes the version in package.json: the Docker image goes to GitHub Container Registry, and a ready-to-run
+# Windows package and the Atlas for Windows setup program are attached to a GitHub release with that version's
+# changelog. Start it either by pushing a tag
 # such as v1.0.1, or from the Actions tab (Run workflow on main), which creates the tag on that commit.
 on:
   push:
@@ -125,9 +126,37 @@ jobs:
           name: windows-package
           path: msp-atlas-*-windows.zip*
 
+  # The desktop app's setup program. Every release carries it under the same file name, so
+  # releases/latest/download/AtlasForWindowsSetup.exe always works; the app has its own version number
+  # (apps/windows/Directory.Build.props), which only changes when the app does.
+  client:
+    name: Atlas for Windows
+    needs: check
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.tag }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Inno Setup
+        shell: pwsh
+        run: if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+      - name: Build the setup program
+        shell: pwsh
+        run: apps/windows/build-installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: |
+            apps/windows/dist/AtlasForWindowsSetup.exe
+            apps/windows/dist/AtlasForWindowsSetup.exe.sha256
+
   release:
     name: GitHub release
-    needs: [check, docker, windows]
+    needs: [check, docker, windows, client]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -138,6 +167,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows-package
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-app
       - name: Release notes from the changelog
         run: |
           awk -v v="${{ needs.check.outputs.version }}" '
@@ -149,6 +181,7 @@ jobs:
 
           **Docker:** \`ghcr.io/${GITHUB_REPOSITORY,,}:${{ needs.check.outputs.version }}\`
           **Windows:** download the zip below, extract it to a folder such as \`C:\\Program Files\\MSP Atlas\`, and run \`deploy\\windows\\Install-Atlas.ps1\` (see docs/DEPLOYMENT.md).
+          **Atlas for Windows** (the desktop app for technicians): run \`AtlasForWindowsSetup.exe\` below. It installs for the person running it, without administrator rights.
           EOF
       - uses: softprops/action-gh-release@v2
         with:
@@ -158,3 +191,5 @@ jobs:
           files: |
             msp-atlas-*-windows.zip
             msp-atlas-*-windows.zip.sha256
+            AtlasForWindowsSetup.exe
+            AtlasForWindowsSetup.exe.sha256

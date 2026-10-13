@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import {
   Bell,
+  Download,
   Fingerprint,
   KeyRound,
   LifeBuoy,
@@ -403,12 +404,33 @@ export function Account() {
           </ul>
         </Card>
 
-        {!!data?.desktopApps.length && (
+        {data && (!!data.desktopApp || !!data.desktopApps.length) && (
           <Card>
             <CardHeader
               title="Desktop apps"
-              description="Apps signed in as you. Each stays signed in for up to 90 days, or 30 days unused."
+              description={
+                data.desktopApp
+                  ? `${data.desktopApp.name} searches Atlas and copies passwords from anywhere with Ctrl+Shift+Space. It signs in through your browser and stays signed in for up to 90 days, or 30 days unused.`
+                  : 'Apps signed in as you. Each stays signed in for up to 90 days, or 30 days unused.'
+              }
+              actions={
+                data.desktopApp && (
+                  <a
+                    href={data.desktopApp.url}
+                    rel="noreferrer noopener"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-text hover:bg-surface-3"
+                  >
+                    <Download className="size-4" aria-hidden /> Download version {data.desktopApp.version}
+                  </a>
+                )
+              }
             />
+            {!data.desktopApps.length && (
+              <p className="px-5 py-4 text-sm text-muted">
+                Not signed in on any computer. Run the setup program, then sign in from the app. Windows may warn that
+                it doesn&rsquo;t recognise the publisher: choose More info, then Run anyway.
+              </p>
+            )}
             <ul className="divide-y divide-border">
               {data.desktopApps.map((a) => (
                 <li key={a.id}>

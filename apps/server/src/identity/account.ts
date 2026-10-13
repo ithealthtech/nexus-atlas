@@ -12,10 +12,13 @@ import {
 import { schema, type Database } from '@atlas/db';
 import {
   NATIVE_CLIENTS,
+  ROLE_INFO,
+  WINDOWS_APP_VERSION,
   forgotPasswordSchema,
   notificationPrefsSchema,
   passkeyNameSchema,
   resetPasswordSchema,
+  windowsAppDownload,
   type AccountSecurityView,
   type Actor,
   type AppScope,
@@ -62,7 +65,7 @@ export class AccountSecurity {
     private readonly db: Database,
     private readonly identity: IdentityService,
     private readonly mail: MailService,
-    private readonly options: { publicOrigin: string; rpName: string },
+    private readonly options: { publicOrigin: string; rpName: string; releaseRepo: string },
   ) {}
 
   // ---------- overview ----------
@@ -111,6 +114,13 @@ export class AccountSecurity {
           createdAt: s.createdAt.toISOString(),
           lastSeenAt: s.lastSeenAt.toISOString(),
         })),
+      desktopApp: ROLE_INFO[context.actor.role].staff
+        ? {
+            name: NATIVE_CLIENTS['atlas-windows'].name,
+            version: WINDOWS_APP_VERSION,
+            url: windowsAppDownload(this.options.releaseRepo),
+          }
+        : null,
       desktopApps: sessions
         .filter((s) => s.kind === 'app')
         .map((s) => ({

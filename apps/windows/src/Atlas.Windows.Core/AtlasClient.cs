@@ -35,7 +35,7 @@ public sealed class AtlasClient : IDisposable
         http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: true);
         http.BaseAddress = address.Api;
         http.Timeout = TimeSpan.FromSeconds(30);
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("AtlasForWindows", "0.1"));
+        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("AtlasForWindows", AppInfo.VersionText));
     }
 
     public AtlasAddress Address { get; }

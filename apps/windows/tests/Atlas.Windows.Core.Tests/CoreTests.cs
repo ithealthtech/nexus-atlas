@@ -379,3 +379,77 @@ public class ClipboardGuardTests
         Assert.Null(clipboard.Text);
     }
 }
+
+public class AppUpdateTests
+{
+    private const string Session =
+        """{"user":{"name":"Tess Tech","email":"tess@atlas.test","role":"technician"},"organization":{"id":"o1","name":"IT Done Right"},"deviceName":"TECH-LAPTOP","scopes":["read","reveal"],"createdAt":"2026-10-13T12:00:00.000Z"}""";
+
+    [Theory]
+    [InlineData("0.2.1", true)]
+    [InlineData("0.3", true)]
+    [InlineData("1.0.0", true)]
+    [InlineData("0.2.0", false)]
+    [InlineData("0.2", false)]
+    [InlineData("0.1.9", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    [InlineData("latest", false)]
+    public void Knows_when_Atlas_offers_a_newer_version(string? offered, bool newer) =>
+        Assert.Equal(newer, AppInfo.IsNewer(offered, new Version(0, 2, 0, 0)));
+
+    [Fact]
+    public void Reads_its_own_version_from_the_build() => Assert.Matches(@"^\d+\.\d+\.\d+$", AppInfo.VersionText);
+
+    [Fact]
+    public async Task Reads_the_version_Atlas_offers()
+    {
+        var offer = ""","app":{"latestVersion":"99.0.0","downloadUrl":"https://github.com/ithealthtech/nexus-atlas/releases/latest/download/AtlasForWindowsSetup.exe"}}""";
+        var atlas = new FakeAtlas { Respond = (_, _) => FakeAtlas.Json(200, Session[..^1] + offer) };
+        using var client = new AtlasClient(AtlasAddress.Parse("https://atlas.example.com"), atlas);
+        client.UseToken("atlasd_token");
+        var session = await client.GetSessionAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("/api/v1/native/session", atlas.Requests[0].Path);
+        Assert.Equal("Tess Tech", session.User.Name);
+        Assert.True(session.CanReveal);
+        Assert.Equal("99.0.0", session.App!.LatestVersion);
+        Assert.True(AppInfo.IsNewer(session.App.LatestVersion));
+        Assert.Equal("github.com", session.App.DownloadLink!.Host);
+    }
+
+    [Fact]
+    public async Task Works_with_an_Atlas_that_offers_nothing()
+    {
+        var atlas = new FakeAtlas { Respond = (_, _) => FakeAtlas.Json(200, Session) };
+        using var client = new AtlasClient(AtlasAddress.Parse("https://atlas.example.com"), atlas);
+        client.UseToken("atlasd_token");
+        var session = await client.GetSessionAsync(TestContext.Current.CancellationToken);
+        Assert.Null(session.App);
+        Assert.Equal("TECH-LAPTOP", session.DeviceName);
+    }
+
+    [Theory]
+    [InlineData("http://atlas.example.com/setup.exe")]
+    [InlineData("file:///C:/setup.exe")]
+    [InlineData("ms-settings:privacy")]
+    [InlineData("not a link")]
+    [InlineData("")]
+    public void Only_opens_a_secure_download_link(string url) =>
+        Assert.Null(new AppRelease("99.0.0", url).DownloadLink);
+}
+
+public class ConnectionProblemTests
+{
+    [Fact]
+    public void Names_an_untrusted_certificate_as_the_reason()
+    {
+        var untrusted = new HttpRequestException(
+            "The SSL connection could not be established, see inner exception.",
+            new System.Security.Authentication.AuthenticationException("The remote certificate is invalid according to the validation procedure."));
+        Assert.Contains("certificate", ConnectionProblem.Describe(untrusted), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_Atlas_is_unreachable_for_anything_else() =>
+        Assert.DoesNotContain("certificate", ConnectionProblem.Describe(new HttpRequestException("No such host is known.")), StringComparison.Ordinal);
+}

@@ -138,7 +138,7 @@ public sealed partial class SearchWindow : Window
         catch (Exception ex) when (ex is AtlasApiException or HttpRequestException or TimeoutException or TaskCanceledException)
         {
             SetupMessage.Severity = InfoBarSeverity.Error;
-            SetupMessage.Message = ex is HttpRequestException ? "Atlas could not be reached. Check the address and your connection." : ex.Message;
+            SetupMessage.Message = ex is HttpRequestException unreachable ? ConnectionProblem.Describe(unreachable) : ex.Message;
             SetupMessage.IsOpen = true;
         }
         finally
@@ -367,7 +367,7 @@ public sealed partial class SearchWindow : Window
             app.SessionEnded();
             return;
         }
-        Show(ex is HttpRequestException ? "Atlas could not be reached. Check your connection." : ex.Message, InfoBarSeverity.Error);
+        Show(ex is HttpRequestException unreachable ? ConnectionProblem.Describe(unreachable) : ex.Message, InfoBarSeverity.Error);
     }
 
     private void Show(string message, InfoBarSeverity severity)

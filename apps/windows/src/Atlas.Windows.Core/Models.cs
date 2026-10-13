@@ -11,9 +11,23 @@ public sealed record TokenResponse(
     [property: JsonPropertyName("session_id")] string SessionId,
     [property: JsonPropertyName("user")] SignedInUser User);
 
-public sealed record AppSessionInfo(SignedInUser User, OrganizationInfo Organization, string DeviceName, string[] Scopes)
+/// <summary>Who the app is signed in as. <c>App</c> is missing from an Atlas older than this app's update notice.</summary>
+public sealed record AppSessionInfo(
+    SignedInUser User,
+    OrganizationInfo Organization,
+    string DeviceName,
+    string[] Scopes,
+    AppRelease? App = null)
 {
     public bool CanReveal => Scopes.Contains("reveal");
+}
+
+/// <summary>The version of this app that Atlas offers, and where its setup program is.</summary>
+public sealed record AppRelease(string LatestVersion, string DownloadUrl)
+{
+    /// <summary>Where to get it, or null unless it's an https address: the app only ever opens a secure link.</summary>
+    public Uri? DownloadLink =>
+        Uri.TryCreate(DownloadUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps ? uri : null;
 }
 
 public sealed record OrganizationInfo(string Id, string Name);

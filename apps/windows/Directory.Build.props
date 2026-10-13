@@ -7,6 +7,8 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <Company>MSP Atlas</Company>
     <Product>Atlas for Windows</Product>
-    <Version>0.1.0</Version>
+    <!-- The app's own version, raised when the app changes (not with every Atlas release). Atlas tells signed-in
+         copies which version it offers: keep WINDOWS_APP_VERSION in packages/shared/src/native.ts the same. -->
+    <Version>0.2.0</Version>
   </PropertyGroup>
 </Project>
