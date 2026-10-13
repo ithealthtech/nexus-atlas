@@ -57,7 +57,9 @@ export function Dialog({
           </div>
           <div className="overflow-y-auto px-6 py-5">{children}</div>
           {footer && (
-            <div className="flex justify-end gap-2 border-t border-border bg-surface-2 px-6 py-3.5">{footer}</div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-border bg-surface-2 px-6 py-3.5">
+              {footer}
+            </div>
           )}
         </div>
       )}

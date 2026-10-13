@@ -1,16 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq, or, sql, type SQL } from 'drizzle-orm';
-import { schema } from '@atlas/db';
+import { schema, type Database } from '@atlas/db';
 import {
   MAX_PERSONAL_ENTRIES,
   MAX_SECRET_LENGTH,
+  PERSONAL_EXPORT_COLUMNS,
   ROLE_INFO,
   createPersonalPasswordSchema,
   deviceFillSchema,
+  movePersonalPasswordSchema,
   passwordStrength,
   personalRevealSchema,
   updatePersonalPasswordSchema,
   type DeviceLoginView,
+  type MovedPersonalPassword,
   type PersonalPasswordView,
   type PersonalVaultStatus,
   type RevealResult,
@@ -19,7 +22,8 @@ import { HttpError } from '../errors.js';
 import type { VaultKeys } from '../crypto/vault-keys.js';
 import { totp } from '../identity/totp.js';
 import { matchLogin, siteOf } from './login-match.js';
-import { isUuid, type Scope } from './scope.js';
+import { Scope, isUuid } from './scope.js';
+import type { VaultService } from './vault.js';
 
 type Row = typeof schema.personalPasswords.$inferSelect;
 type Field = 'secret' | 'notes' | 'totp';
@@ -29,6 +33,9 @@ const notFound = () => new HttpError(404, 'That entry was not found in your vaul
 const conflict = () =>
   new HttpError(409, 'This entry was changed in another window. Reload before saving.', 'conflict');
 const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+// Exact values, unlike the audit exports: a password that starts with "=" or "-" has to survive being imported
+// into another password manager, so nothing is prefixed to stop a spreadsheet reading it as a formula.
+const csvCell = (text: string) => (/[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
 /** What the browser extension shows where a shared login shows its client. */
 export const PERSONAL_VAULT_NAME = 'My vault';
 
@@ -39,7 +46,10 @@ export const PERSONAL_VAULT_NAME = 'My vault';
  * vault.
  */
 export class PersonalVaultService {
-  constructor(private readonly keys: VaultKeys) {}
+  constructor(
+    private readonly keys: VaultKeys,
+    private readonly vault: VaultService,
+  ) {}
 
   /** Staff have a personal vault unless the organization turned them off. Client accounts never do. */
   async enabled(scope: Scope) {
@@ -180,6 +190,86 @@ export class PersonalVaultService {
   async remove(scope: Scope, id: string) {
     const row = await this.load(scope, id);
     await scope.db.delete(schema.personalPasswords).where(this.mine(scope, eq(schema.personalPasswords.id, row.id)));
+  }
+
+  /**
+   * Moves an entry into a client's vault: it becomes an ordinary shared password there, for everyone with password
+   * access to that client, and leaves the personal vault. Both happen together or not at all. The person needs
+   * password access to the client, exactly as if they had typed the entry in there.
+   */
+  async move(scope: Scope, id: string, input: unknown, ip: string): Promise<MovedPersonalPassword> {
+    await this.require(scope);
+    const body = movePersonalPasswordSchema.parse(input);
+    if (!isUuid(id)) throw notFound();
+    const p = schema.personalPasswords;
+    return scope.db.transaction(async (tx) => {
+      // Locked, so the same entry can't be moved twice at once.
+      const [row] = await tx
+        .select()
+        .from(p)
+        .where(this.mine(scope, eq(p.id, id)))
+        .for('update');
+      if (!row) throw notFound();
+      const note = row.kind === 'note';
+      // The shared vault's own checks and audit entry, run inside this transaction.
+      const within = new Scope(tx as unknown as Database, scope.actor);
+      const created = await this.vault.create(
+        within,
+        body.clientId,
+        {
+          kind: row.kind,
+          name: row.name,
+          username: row.username,
+          url: row.url,
+          secret: await this.open(scope, row, 'secret'),
+          notes: row.notes && !note ? await this.open(scope, row, 'notes') : '',
+          totp: row.totp && !note ? await this.open(scope, row, 'totp') : '',
+          folderId: body.folderId,
+        },
+        ip,
+      );
+      await tx.delete(p).where(this.mine(scope, eq(p.id, row.id)));
+      return { passwordId: created.id, clientId: created.clientId, clientName: created.clientName };
+    });
+  }
+
+  /**
+   * Everything in the person's vault, decrypted, as a CSV file another password manager can import. The route asks
+   * for the account password again first.
+   */
+  async export(scope: Scope): Promise<{ filename: string; csv: string; count: number }> {
+    await this.require(scope);
+    const p = schema.personalPasswords;
+    const rows = await scope.db
+      .select()
+      .from(p)
+      .where(this.mine(scope))
+      .orderBy(asc(sql`lower(${p.name})`));
+    const lines = [PERSONAL_EXPORT_COLUMNS.join(',')];
+    for (const row of rows) {
+      const note = row.kind === 'note';
+      const secret = await this.open(scope, row, 'secret');
+      const values: Record<(typeof PERSONAL_EXPORT_COLUMNS)[number], string> = {
+        folder: '',
+        favorite: row.favorite ? '1' : '',
+        type: note ? 'note' : 'login',
+        name: row.name,
+        // A note's text goes where the other password managers keep a note's text.
+        notes: note ? secret : row.notes ? await this.open(scope, row, 'notes') : '',
+        fields: '',
+        reprompt: '0',
+        login_uri: row.url,
+        login_username: row.username,
+        login_password: note ? '' : secret,
+        login_totp: row.totp ? await this.open(scope, row, 'totp') : '',
+      };
+      lines.push(PERSONAL_EXPORT_COLUMNS.map((column) => csvCell(values[column])).join(','));
+    }
+    return {
+      filename: `my-vault-${new Date().toISOString().slice(0, 10)}.csv`,
+      csv: lines.join('\r\n') + '\r\n',
+      count: rows.length,
+    };
   }
 
   private async open(scope: Scope, row: Row, field: Field) {

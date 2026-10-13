@@ -54,6 +54,37 @@ export const updatePersonalPasswordSchema = z.object({
   version: z.number().int().positive(),
 });
 
+/** Moving an entry into a client's vault, where everyone with password access to that client can use it. */
+export const movePersonalPasswordSchema = z.object({
+  clientId: z.string().uuid('Choose a client.'),
+  // A folder of that client, or null for none.
+  folderId: z.string().uuid().nullable().default(null),
+});
+/** Where a moved entry now lives. */
+export interface MovedPersonalPassword {
+  passwordId: string;
+  clientId: string;
+  clientName: string;
+}
+
+/**
+ * The columns of a personal vault export, in the layout Bitwarden reads, so the file can be imported into another
+ * password manager as it is.
+ */
+export const PERSONAL_EXPORT_COLUMNS = [
+  'folder',
+  'favorite',
+  'type',
+  'name',
+  'notes',
+  'fields',
+  'reprompt',
+  'login_uri',
+  'login_username',
+  'login_password',
+  'login_totp',
+] as const;
+
 export const personalRevealSchema = z.object({ field: z.enum(['secret', 'notes', 'totp']).default('secret') });
 
 export interface PersonalPasswordView {

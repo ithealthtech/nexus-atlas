@@ -715,8 +715,8 @@ export async function buildApp({
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
-  const personal = new PersonalVaultService(vaultKeys);
-  registerPersonalVaultRoutes(app, { db, authed, personal });
+  const personal = new PersonalVaultService(vaultKeys, vault);
+  registerPersonalVaultRoutes(app, { db, authed, recent, personal });
 
   await registerDeviceRoutes(app, {
     db,

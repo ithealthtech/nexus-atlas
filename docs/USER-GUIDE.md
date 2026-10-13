@@ -48,7 +48,9 @@ You see a client's passwords only with *edit + passwords* access to that client.
 - **Using:** click an entry to see it, or use the buttons on its row to copy the password or the one-time code. The star keeps an entry at the top.
 - **In the browser extension:** your own logins are offered on matching sites beside the shared ones, marked *My vault*.
 - **Deleting is permanent.** There is no archive and no history, and nobody can restore a deleted entry.
-- Keep client passwords in the client's vault, where your team can reach them. If you leave, nobody can open your personal vault.
+- **Moving an entry to a client:** open the entry and choose **Move to a client**, for a login that turns out to belong to the team. Pick a client you have password access to, and a folder if you like. It becomes one of that client's passwords, visible to everyone with password access there and recorded in the audit log from then on, and it leaves your vault. You can't move it back.
+- **Exporting:** **Export** downloads everything in your vault as a CSV file, in the layout Bitwarden uses, which it and several other password managers can import. Atlas asks for your password first. The file holds every password in plain text, so import it where it's going and then delete it.
+- Keep client passwords in the client's vault, where your team can reach them. If you leave, nobody can open your personal vault: move what the company needs to its client, and export the rest, before your account is closed.
 
 ## Browser extension
 

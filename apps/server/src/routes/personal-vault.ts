@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import type { Database } from '@atlas/db';
+import { schema, type Database } from '@atlas/db';
 import { HttpError } from '../errors.js';
 import type { PersonalVaultService } from '../services/personal-vault.js';
 import { Scope } from '../services/scope.js';
@@ -12,9 +12,14 @@ type Params = { id: string };
  */
 export function registerPersonalVaultRoutes(
   app: FastifyInstance,
-  deps: { db: Database; authed: { onRequest: onRequestHookHandler }; personal: PersonalVaultService },
+  deps: {
+    db: Database;
+    authed: { onRequest: onRequestHookHandler };
+    recent: (req: FastifyRequest) => void;
+    personal: PersonalVaultService;
+  },
 ) {
-  const { db, authed, personal } = deps;
+  const { db, authed, recent, personal } = deps;
   const scopeOf = (req: FastifyRequest) => {
     if ((req.raw as { atlasApi?: boolean }).atlasApi) throw new HttpError(404, 'Not found.');
     return new Scope(db, req.session!.actor);
@@ -25,6 +30,26 @@ export function registerPersonalVaultRoutes(
   app.post('/api/personal-vault', authed, async (req, reply) =>
     reply.status(201).send(await personal.create(scopeOf(req), req.body)),
   );
+  // Every secret at once, in plain text: the password is asked for again, and the security log records that an
+  // export happened (never what was in it).
+  app.get('/api/personal-vault/export', authed, async (req, reply) => {
+    const scope = scopeOf(req);
+    recent(req);
+    const { filename, csv } = await personal.export(scope);
+    const { actor } = req.session!;
+    await db.insert(schema.securityEvents).values({
+      orgId: actor.orgId,
+      userId: actor.id,
+      actor: actor.name,
+      action: 'Personal vault exported',
+      detail: '',
+      ip: req.ip,
+    });
+    return reply
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .send(csv);
+  });
   app.get<{ Params: Params }>('/api/personal-vault/:id', authed, async (req) =>
     personal.get(scopeOf(req), req.params.id),
   );
@@ -35,6 +60,9 @@ export function registerPersonalVaultRoutes(
     await personal.remove(scopeOf(req), req.params.id);
     return { ok: true };
   });
+  app.post<{ Params: Params }>('/api/personal-vault/:id/move', authed, async (req) =>
+    personal.move(scopeOf(req), req.params.id, req.body, req.ip),
+  );
   app.post<{ Params: Params }>('/api/personal-vault/:id/reveal', authed, async (req) =>
     personal.reveal(scopeOf(req), req.params.id, req.body),
   );
