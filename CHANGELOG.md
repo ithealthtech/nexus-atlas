@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.25] - 2026-10-12
+
+### Added
+
+- **Move a personal entry to a client.** Open an entry in My vault and choose **Move to a client** for a login that turns out to belong to the team. Pick a client you have password access to, and a folder if you like. It becomes one of that client's passwords, visible to everyone with password access there and audited from then on, and it leaves your vault. It can't be moved back. (#182)
+- **Export your personal vault.** **Export** on My vault downloads everything in it as a CSV file in the layout Bitwarden uses. Atlas asks for your password first, and the security log records that you exported, not what was in the file. The file holds every password in plain text. Importing it into another password manager has not been tested yet. (#182)
+
+### Changed
+
+- **Dialogs on phones.** A dialog's buttons now wrap onto a second line instead of running off a narrow screen. (#182)
+
 ## [1.7.24] - 2026-10-08
 
 Version 1.7.23 was never published: its build failed, and this release carries everything meant for it.
