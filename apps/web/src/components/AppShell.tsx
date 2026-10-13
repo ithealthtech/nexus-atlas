@@ -37,6 +37,7 @@ import {
   RotateCw,
   HardDrive,
   Waypoints,
+  Wrench,
   Webhook,
 } from 'lucide-react';
 import { ClientPicker } from '@/components/ClientPicker';
@@ -219,6 +220,7 @@ function navSections(actor: { isStaff: boolean; isAdmin: boolean }, personalVaul
         title: 'System',
         items: [
           { to: '/admin/status', icon: Gauge, label: 'System status' },
+          { to: '/admin/services', icon: Wrench, label: 'Services' },
           { to: '/admin/request-log', icon: Waypoints, label: 'Request log' },
           { to: '/admin/webhooks', icon: Webhook, label: 'Webhooks' },
           { to: '/admin/updates', icon: ArrowUpCircle, label: 'Updates' },
