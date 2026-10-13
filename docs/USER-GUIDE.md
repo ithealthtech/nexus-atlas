@@ -63,6 +63,18 @@ The Atlas extension for Edge and Chrome fills logins from the vault. Your admini
 - **Matching:** a login matches when its **Website or address** has the same host as the page, or the same domain (so a login saved for `login.example.com` is offered on `portal.example.com`). Addresses on shared hosting, like `*.github.io`, and IP addresses only match exactly, and an `https://` login is never offered on a plain `http://` page.
 - **Signing out:** use **Sign out** in the extension, or **Signed-in apps** on your account page. The extension also signs out after 7 days unused, 30 days after signing in, and whenever your password changes or an administrator signs you out.
 
+## Atlas for Windows
+
+A small app that sits in the notification area, for looking things up without opening a browser tab.
+
+- **Getting it:** on your account page, under **Desktop apps**, choose **Download** and run the setup program. Windows may say it doesn't recognise the publisher: choose **More info**, then **Run anyway**. It installs for you only and doesn't need an administrator.
+- **Signing in:** enter your Atlas address and choose **Sign in with your browser**. Your browser opens, you sign in as usual, and you approve the app. The app never sees your password.
+- **Searching:** press Ctrl+Shift+Space anywhere in Windows, or click the Atlas icon in the notification area, and type. It searches the clients, assets, documents, contacts, locations, and passwords you can see.
+- **Copying:** with a password selected, Enter copies it, and the buttons copy the username or the one-time code or open the sign-in address. A copy is recorded like a reveal in the browser, asks for a reason where the client requires one, and is cleared from the clipboard after 30 seconds.
+- **Updates:** when a newer version is out, the app tells you once and adds **Get version …** to its menu. Run the new setup program over the old one. You stay signed in.
+- **Signing out:** **Sign out** in the app's menu, or **Desktop apps** on your account page. Use the account page if the computer is lost.
+- Your personal vault isn't available in the app.
+
 ## For client contacts
 
 When your IT provider gives you an account, you sign in at the same address and see only your organization.

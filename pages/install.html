@@ -186,10 +186,13 @@ docker compose -f deploy/docker-compose.yml logs app | grep "setup code"</code><
               policy. Each browser is approved in Atlas after checking a code, and stores no passwords.
             </p>
             <p>
-              <strong>Atlas for Windows</strong> (preview) is a tray app: Ctrl+Shift+Space searches what you can see and
-              copies a username, password, or one-time code. It signs in through your browser and keeps only a
-              DPAPI-protected session token. Build it from <code>apps/windows</code>; a signed installer with automatic
-              updates is planned.
+              <strong>Atlas for Windows</strong> is a notification-area app: Ctrl+Shift+Space searches what you can see
+              and copies a username, password, or one-time code. It signs in through your browser and keeps only a
+              DPAPI-protected session token. Staff download <code>AtlasForWindowsSetup.exe</code> from
+              <strong>Desktop apps</strong> on their account page, or from the
+              <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">latest release</a>. It installs for
+              one person without administrator rights. It isn't code-signed yet, so Windows asks before running it, and
+              it needs your Atlas to use a certificate the computer trusts.
             </p>
 
             <h2 id="backups">Backups and restore</h2>

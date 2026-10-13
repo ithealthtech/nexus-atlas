@@ -63,7 +63,8 @@ Atlas for Windows (`apps/windows`) signs in as the person using it, through thei
 - **App sessions:** the token (`atlasd_…`) is sent as `Authorization: Bearer` to `/api/v1`. It is never accepted as a browser cookie, and a browser session is never accepted in its place. It lasts 30 days without use and 90 days at most, with up to 10 per person. App sessions are stored with browser sessions, so everything that signs someone out ends them too: a lockout, a password change or reset, MFA enrollment, **Sign out all others**, an administrator's sign-out or reset, and disabling the account.
 - **Scopes:** `read` (GET requests), `write` (changes), and `reveal` (the password and history reveal endpoints). Atlas for Windows asks for `read reveal`. Apps reach the same endpoints as API keys (documentation, the vault, search, and expirations) plus their own `GET` and `DELETE /api/v1/native/session`; account, people, settings, and log endpoints are closed to them.
 - **Records:** copying a password or code is a reveal, with the same access checks, required reasons, and access history as the browser, recorded as "*Name* (Atlas for Windows on *computer*)". Approving, signing in, and signing out an app go into the security log.
-- **Account page:** **Desktop apps** lists each signed-in app with its computer, address, and permissions, and **Sign out** ends it at once.
+- **Account page:** **Desktop apps** lists each signed-in app with its computer, address, and permissions, and **Sign out** ends it at once. Staff also get the download link for the setup program there.
+- **Updates:** `GET /api/v1/native/session` also returns the app version this server offers and where its setup program is, so a signed-in copy can tell when it is behind. The app opens that link in the browser only if it is an `https://` address, and never downloads or runs anything itself.
 
 ## Coming later
 

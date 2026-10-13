@@ -199,6 +199,18 @@ The extension for Edge and Chrome (Manifest V3) fills logins from the vault for 
 - **Sign-ins:** approvals and sign-ins appear in the security log as *Device sign-in approved* and *Signed in* (naming the browser). Each fill and copy is in the vault access history, and the person's name there includes the browser.
 - **Taking it away:** **Sign out everywhere** on the Users page, disabling the account, or resetting its sign-in also signs out the extension.
 
+## Atlas for Windows
+
+A notification-area app for staff: quick search and audited copying from anywhere in Windows. Client accounts can't use it.
+
+- **Where people get it:** **Desktop apps** on their own account page links to `AtlasForWindowsSetup.exe` in the newest release of the repository Atlas updates from (`ATLAS_UPDATE_REPO`). Every release carries it.
+- **Installing:** it installs for one person, without administrator rights. To push it from your RMM, run `AtlasForWindowsSetup.exe /VERYSILENT /SUPPRESSMSGBOXES` as the signed-in person, not as SYSTEM.
+- **It isn't code-signed.** Windows SmartScreen asks before the setup program runs. The `.sha256` file beside the download lets you check it.
+- **Certificates:** the app refuses a certificate Windows doesn't trust, and has no way to override that. If your Atlas uses a private or self-signed certificate, put its issuer in your computers' trusted roots first, and have people use the name on the certificate as the address.
+- **What it can do:** read what the person can read in the browser, and copy passwords and one-time codes. A copy appears in the password's access history as "*Name* (Atlas for Windows on *computer*)". It can't reach anyone's personal vault.
+- **Taking it away:** the person's own **Desktop apps** list, **Sign out everywhere** on the Users page, disabling the account, and resetting its sign-in all end the app's session at once. A lost laptop needs nothing more.
+- **Updates:** the app has its own version number. When the Atlas you're running carries a newer one, signed-in copies say so, and people run the new setup program themselves. Nothing installs on its own.
+
 ## If something goes wrong
 
 | Problem | What to do |
