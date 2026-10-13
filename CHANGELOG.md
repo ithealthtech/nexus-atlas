@@ -2,6 +2,18 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.26] - 2026-10-13
+
+### Added
+
+- **Atlas for Windows has a setup program.** `AtlasForWindowsSetup.exe` is attached to every release from this one on, and staff can download it from **Desktop apps** on their account page. It installs for the person running it, without administrator rights and with nothing else to install first. Running a newer one upgrades in place and keeps you signed in; uninstalling removes the app, its Start with Windows setting, and its saved session. It isn't code-signed, so Windows SmartScreen asks before running it (More info, then Run anyway). Every build now starts the app, installs it, upgrades it over a running copy, and uninstalls it on a clean machine, but nobody has used it day to day yet. (#184)
+- **Update notice in Atlas for Windows.** The app has its own version number (0.2.0), which changes when the app does. When the Atlas it is signed in to offers a newer one, it says so once and adds **Get version …** to its tray menu, which opens the download in your browser. It never downloads or installs anything itself. (#184)
+
+### Changed
+
+- **Atlas for Windows: Start with Windows works for the installed app.** It was only available to an MSIX package before. (#184)
+- **Atlas for Windows: a clearer message when the certificate isn't trusted.** If the computer doesn't trust your Atlas's certificate, the app says so instead of saying Atlas could not be reached. It still has no way to accept an untrusted certificate. (#184)
+
 ## [1.7.25] - 2026-10-12
 
 ### Added
