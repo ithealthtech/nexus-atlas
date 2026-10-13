@@ -76,7 +76,8 @@ Every staff member has **My vault**: their own logins and notes, which only they
 
 - **Nobody else can open one.** There is no administrator view, no emergency access, and no API or desktop-app access. Entries aren't in search, reports, password health, exports, or the audit log, so Atlas can't tell you what someone keeps there.
 - **Turning them off:** the owner can untick *Give each staff member a personal vault* in Vault policies. The vaults are hidden and closed straight away. Nothing is deleted, and everything comes back if you turn them on again.
-- **When someone leaves:** disabling their account locks their vault with it. Ask them to move anything the company needs into a client's vault first, because you can't do it for them.
+- **When someone leaves:** disabling their account locks their vault with it. Ask them first to use **Move to a client** for anything the company needs, because you can't do it for them. They can take the rest with **Export**.
+- **What you can see:** when someone exports their vault, the security log records *Personal vault exported* with their name, and nothing about its contents. An entry moved to a client shows in that client's audit log as created by the person who moved it.
 - **What "private" means here:** entries are encrypted with the same vault key as the rest of Atlas, and the application only ever hands them to their owner. They are in your backups. Someone with access to the server, its key, and the database could still decrypt them, as with every other password in Atlas.
 - *Erase all data* removes documentation and client passwords. It leaves personal vaults alone.
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { totp } from '../src/identity/totp.js';
-import { enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+import { OWNER, enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TEMP = 'temporary pass 1234';
 const SEED = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
@@ -185,5 +185,163 @@ describe('personal vaults', () => {
     expect((await owner.call('POST', `/api/personal-vault/${made.data.id}/reveal`, {})).data.value).toBe(
       'Bank-pass-2026!x',
     );
+  });
+
+  it('moves an entry into a client’s vault, where it becomes an ordinary shared password', async () => {
+    const northline = (await owner.call('POST', '/api/clients', { name: 'Northline Architecture' })).data.id;
+    const tech = await person('quinn@atlas.test', 'maple north orbit 9', {
+      role: 'technician',
+      grants: [
+        { clientId: harbor, level: 'edit_passwords' },
+        { clientId: northline, level: 'edit' },
+      ],
+    });
+    const add = async (b: Browser, body: Record<string, unknown>) => {
+      const r = await b.call('POST', '/api/personal-vault', body);
+      expect(r.status, JSON.stringify(r.data)).toBe(201);
+      return r.data.id as string;
+    };
+    const login = await add(tech, {
+      name: 'Harbor phone portal',
+      username: 'quinn',
+      url: 'https://phones.example.com',
+      secret: 'Ph0ne-portal-secret!',
+      notes: 'Ask for Dana',
+      totp: SEED,
+    });
+    const note = await add(tech, { kind: 'note', name: 'Harbor alarm code', secret: 'Front door: 4821' });
+    const move = (b: Browser, id: string, body: unknown) => b.call('POST', `/api/personal-vault/${id}/move`, body);
+    const count = async (b: Browser) => (await b.call('GET', '/api/personal-vault/status')).data.count;
+
+    // It needs password access to the client, a real client, and a folder of that client. A refusal moves nothing.
+    const stranger = (await owner.call('POST', '/api/clients', { name: 'Cedar Veterinary' })).data.id;
+    const elsewhere = (await owner.call('POST', `/api/clients/${northline}/password-folders`, { name: 'Vendors' })).data
+      .id;
+    expect((await move(tech, login, {})).status).toBe(400);
+    expect((await move(tech, login, { clientId: stranger })).status).toBe(404);
+    expect((await move(tech, login, { clientId: northline })).status).toBe(403);
+    expect((await move(tech, login, { clientId: harbor, folderId: elsewhere })).status).toBe(400);
+    // Nobody moves someone else's entry, whatever their role.
+    expect((await move(owner, login, { clientId: harbor })).status).toBe(404);
+    expect(await count(tech)).toBe(2);
+    expect((await owner.call('GET', `/api/passwords?client=${harbor}`)).data).toEqual([]);
+
+    const phones = (await owner.call('POST', `/api/clients/${harbor}/password-folders`, { name: 'Phones' })).data.id;
+    const moved = await move(tech, login, { clientId: harbor, folderId: phones });
+    expect(moved.status, JSON.stringify(moved.data)).toBe(200);
+    expect(moved.data).toEqual({
+      passwordId: expect.any(String),
+      clientId: harbor,
+      clientName: 'Harbor Dental Group',
+    });
+    // Gone from the personal vault, and it can't be moved a second time.
+    expect((await tech.call('GET', `/api/personal-vault/${login}`)).status).toBe(404);
+    expect((await move(tech, login, { clientId: harbor })).status).toBe(404);
+    expect(await count(tech)).toBe(1);
+
+    // In the client's vault it is everything it was, for everyone with password access there.
+    const shared = moved.data.passwordId as string;
+    expect((await owner.call('GET', `/api/passwords/${shared}`)).data).toMatchObject({
+      kind: 'login',
+      name: 'Harbor phone portal',
+      username: 'quinn',
+      url: 'https://phones.example.com',
+      clientId: harbor,
+      folderName: 'Phones',
+      hasNotes: true,
+      hasTotp: true,
+      restricted: false,
+      clientVisible: false,
+    });
+    const reveal = async (id: string, field: string) =>
+      (await owner.call('POST', `/api/passwords/${id}/reveal`, { field })).data.value;
+    expect(await reveal(shared, 'secret')).toBe('Ph0ne-portal-secret!');
+    expect(await reveal(shared, 'notes')).toBe('Ask for Dana');
+    expect(await reveal(shared, 'totp')).toBe(totp(SEED));
+    // From here on it is audited like any other shared password, starting with who put it there.
+    const audit = (await owner.call('GET', `/api/passwords/${shared}/audit`)).data as {
+      action: string;
+      actorName: string;
+    }[];
+    expect(audit.find((a) => a.action === 'Created')).toMatchObject({ actorName: 'quinn' });
+
+    // A note moves as a note.
+    const movedNote = (await move(tech, note, { clientId: harbor })).data.passwordId as string;
+    expect((await owner.call('GET', `/api/passwords/${movedNote}`)).data).toMatchObject({
+      kind: 'note',
+      name: 'Harbor alarm code',
+      folderName: null,
+    });
+    expect(await reveal(movedNote, 'secret')).toBe('Front door: 4821');
+    expect(await count(tech)).toBe(0);
+    expect((await owner.call('GET', `/api/passwords?client=${harbor}`)).data).toHaveLength(2);
+  });
+
+  it('exports a person’s own vault as a file other password managers read, after their password again', async () => {
+    await owner.call('POST', '/api/personal-vault', {
+      name: 'Bank',
+      username: 'avery',
+      url: 'https://bank.example.com',
+      // Kept exactly: commas, quotes, and a leading "=" all have to survive an import elsewhere.
+      secret: '=Tricky,"pass"',
+      notes: 'PIN is separate',
+      totp: SEED,
+      favorite: true,
+    });
+    await owner.call('POST', '/api/personal-vault', {
+      kind: 'note',
+      name: 'alarm code',
+      secret: 'Front: 4821\nBack: 9930',
+    });
+    const tech = await person('quinn@atlas.test', 'maple north orbit 9', {
+      role: 'technician',
+      grants: [{ clientId: harbor, level: 'edit' }],
+    });
+    await tech.call('POST', '/api/personal-vault', { name: 'Quinn only', secret: 'Quinn-private-2026!' });
+
+    // Every secret at once needs the password again.
+    await t.handle.pool.query('update sessions set reauth_at = null');
+    const stale = await owner.call('GET', '/api/personal-vault/export');
+    expect([stale.status, stale.data.code]).toEqual([403, 'reauth']);
+    await owner.call('POST', '/api/session/reauth', { password: OWNER.password });
+
+    const file = await owner.call('GET', '/api/personal-vault/export');
+    expect(file.status, JSON.stringify(file.data)).toBe(200);
+    expect(String(file.headers['content-type'])).toContain('text/csv');
+    expect(String(file.headers['content-disposition'])).toMatch(
+      /^attachment; filename="my-vault-\d{4}-\d{2}-\d{2}\.csv"$/,
+    );
+    expect(file.data).toBe(
+      [
+        'folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp',
+        ',,note,alarm code,"Front: 4821\nBack: 9930",,0,,,,',
+        `,1,login,Bank,PIN is separate,,0,https://bank.example.com,avery,"=Tricky,""pass""",${SEED}`,
+        '',
+      ].join('\r\n'),
+    );
+    // Only their own entries, and the security log says an export happened without saying what was in it.
+    expect(file.data).not.toContain('Quinn');
+    const events = (await t.handle.pool.query(`select actor, action, detail from security_events`)).rows as {
+      actor: string;
+      action: string;
+      detail: string;
+    }[];
+    expect(events.filter((e) => e.action === 'Personal vault exported')).toEqual([
+      { actor: 'Avery Owner', action: 'Personal vault exported', detail: '' },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/Bank|alarm code|Tricky/);
+
+    // Not for API keys, and not while personal vaults are off.
+    const key = (await owner.call('POST', '/api/api-keys', { name: 'Sync', scopes: ['read', 'write', 'passwords'] }))
+      .data;
+    const viaKey = await t.app.inject({
+      method: 'GET',
+      url: '/api/v1/personal-vault/export',
+      headers: { authorization: `Bearer ${key.token}` },
+    });
+    expect([403, 404]).toContain(viaKey.statusCode);
+    expect(viaKey.body).not.toContain('Bank');
+    await owner.call('PUT', '/api/settings/vault-policy', { ...POLICY, personalVaults: false });
+    expect((await owner.call('GET', '/api/personal-vault/export')).data.code).toBe('personal_vaults_off');
   });
 });

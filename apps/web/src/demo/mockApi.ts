@@ -6,6 +6,7 @@ import {
   runbookContent,
   DEFAULT_BRANDING,
   DEFAULT_VAULT_POLICY,
+  PERSONAL_EXPORT_COLUMNS,
   type SiemSettingsView,
   type VaultPolicy,
   LEVEL_INFO,
@@ -1904,6 +1905,51 @@ on('DELETE', '/personal-vault/:id', (m) => {
   const p = find(personalEntries, m[1]!, 'Entry');
   personalEntries.splice(personalEntries.indexOf(p), 1);
   return { ok: true };
+});
+on('GET', '/personal-vault/export', () => {
+  personalOn();
+  const cell = (text: string) => (/[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
+  const rows = [...personalEntries]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) =>
+      p.kind === 'note'
+        ? ['', p.favorite ? '1' : '', 'note', p.name, p.secret, '', '0', '', '', '', '']
+        : ['', p.favorite ? '1' : '', 'login', p.name, p.notes, '', '0', p.url, p.username, p.secret, p.totp],
+    );
+  event('Personal vault exported');
+  return (
+    [PERSONAL_EXPORT_COLUMNS as readonly string[], ...rows].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n'
+  );
+});
+on('POST', '/personal-vault/:id/move', (m, b) => {
+  personalOn();
+  const entry = find(personalEntries, m[1]!, 'Entry');
+  const client = find(db.clients, String(b.clientId ?? ''), 'Client');
+  const p = {
+    id: uuid(),
+    clientId: client.id,
+    kind: entry.kind as PasswordKind,
+    category: null,
+    folderId: (b.folderId as string | null) ?? null,
+    name: entry.name,
+    username: entry.username,
+    url: entry.url,
+    secret: entry.secret,
+    notes: entry.notes,
+    totp: !!entry.totp,
+    rotationDays: null,
+    expiresOn: null,
+    restricted: false,
+    clientVisible: false,
+    changedDaysAgo: 0,
+    changedAt: now(),
+    ...meta(),
+    updatedAt: now(),
+  };
+  passwords.push(p);
+  personalEntries.splice(personalEntries.indexOf(entry), 1);
+  record('Added a password', 'password', p.id, p.name, p.clientId);
+  return { passwordId: p.id, clientId: client.id, clientName: client.name };
 });
 on('POST', '/personal-vault/:id/reveal', (m, b) => {
   personalOn();

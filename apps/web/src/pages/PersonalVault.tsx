@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowRightLeft,
   Copy,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 import {
   MAX_NOTE_LENGTH,
+  type MovedPersonalPassword,
   type PersonalKind,
   type PersonalPasswordView,
   type PersonalVaultStatus,
@@ -34,14 +37,17 @@ import {
   FormError,
   Input,
   PageHeader,
+  Select,
   Skeleton,
   Textarea,
   useToast,
 } from '@/components/ui';
-import { api, type ApiError } from '@/lib/api';
+import { useGo } from '@/components/AppLink';
+import { api, download, type ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
-import { copySecret } from '@/lib/vault';
+import { useClients } from '@/lib/queries';
+import { copySecret, usePasswordFolders } from '@/lib/vault';
 import { Generator, StrengthMeter } from '@/pages/vault';
 
 const KEY = ['personal-vault'];
@@ -286,10 +292,12 @@ function ViewDialog({
   item,
   onClose,
   onEdit,
+  onMove,
 }: {
   item: PersonalPasswordView;
   onClose: () => void;
   onEdit: () => void;
+  onMove: () => void;
 }) {
   const toast = useToast();
   const [secret, setSecret] = useState<string | null>(null);
@@ -324,6 +332,9 @@ function ViewDialog({
       description={`${note ? 'Secure note' : 'Login'} in your vault · changed ${formatDate(item.changedAt)}`}
       footer={
         <>
+          <Button variant="ghost" onClick={onMove} className="mr-auto">
+            <ArrowRightLeft /> Move to a client
+          </Button>
           <Button variant="secondary" onClick={onEdit}>
             <Pencil /> Edit
           </Button>
@@ -496,7 +507,163 @@ function DeleteDialog({ item, onClose }: { item: PersonalPasswordView; onClose: 
   );
 }
 
-type Open = { mode: 'add' } | { mode: 'view' | 'edit' | 'delete'; id: string };
+/** Hands an entry over to a client's vault, for a login that turned out to belong to the team. */
+function MoveDialog({ item, onClose }: { item: PersonalPasswordView; onClose: () => void }) {
+  const toast = useToast();
+  const go = useGo();
+  const queryClient = useQueryClient();
+  const clients = useClients();
+  // Only clients whose vault this person can add to.
+  const choices = useMemo(
+    () =>
+      (clients.data ?? []).filter((c) => c.access === 'edit_passwords').sort((a, b) => a.name.localeCompare(b.name)),
+    [clients.data],
+  );
+  const [clientId, setClientId] = useState('');
+  const [folderId, setFolderId] = useState('');
+  const folders = usePasswordFolders(clientId || undefined).data ?? [];
+  const client = choices.find((c) => c.id === clientId);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const move = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!clientId) return setError('Choose a client.');
+    setBusy(true);
+    setError(null);
+    try {
+      const moved = await api<MovedPersonalPassword>(`/personal-vault/${item.id}/move`, {
+        method: 'POST',
+        body: { clientId, folderId: folderId || null },
+      });
+      await Promise.all(
+        [KEY, ['passwords'], ['activity']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      );
+      toast(`Moved to ${moved.clientName}.`);
+      onClose();
+      go(`/passwords/${moved.passwordId}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Move ${item.name} to a client`}
+      description="For a login that belongs to the team after all. It leaves your vault and becomes one of the client’s passwords."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="personal-move-form" loading={busy} disabled={!choices.length}>
+            Move
+          </Button>
+        </>
+      }
+    >
+      {!clients.data ? (
+        <Skeleton className="h-24" />
+      ) : !choices.length ? (
+        <p className="text-sm text-text-2">
+          You don’t have password access to any client, so there’s nowhere to move this. Ask an administrator for
+          access, or to add it for you.
+        </p>
+      ) : (
+        <form id="personal-move-form" onSubmit={move} className="space-y-4" noValidate>
+          <Field label="Client">
+            {(p) => (
+              <Select
+                {...p}
+                value={clientId}
+                onChange={(e) => {
+                  setClientId(e.target.value);
+                  setFolderId('');
+                }}
+                required
+              >
+                <option value="">Choose a client</option>
+                {choices.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          {folders.length > 0 && (
+            <Field label="Folder">
+              {(p) => (
+                <Select {...p} value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+                  <option value="">No folder</option>
+                  {folders.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          )}
+          <div className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2.5 text-sm text-warning">
+            Everyone with password access to {client?.name ?? 'that client'} will be able to see and use it, and it’s
+            recorded in the audit log from then on. You can’t move it back.
+          </div>
+          <FormError message={error} />
+        </form>
+      )}
+    </Dialog>
+  );
+}
+
+function ExportDialog({ count, onClose }: { count: number; onClose: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      await download('/personal-vault/export', 'my-vault.csv');
+      toast('Export downloaded.');
+      onClose();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Export your vault"
+      description={`A CSV file with ${count === 1 ? 'your 1 entry' : `all ${count} of your entries`}, in the layout Bitwarden uses, which it and several other password managers can import.`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button loading={busy} onClick={run}>
+            <Download /> Download
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm text-text-2">
+        <div className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2.5 text-warning">
+          The file holds every password, note, and authenticator key in plain text. Anyone who gets the file can read
+          them.
+        </div>
+        <p>
+          Import it where it’s going, then delete it, and empty the recycle bin. Don’t email it or leave it in a synced
+          folder.
+        </p>
+        <p>Atlas asks for your password first, and records that you exported (not what was in it).</p>
+      </div>
+    </Dialog>
+  );
+}
+
+type Open = { mode: 'add' | 'export' } | { mode: 'view' | 'edit' | 'delete' | 'move'; id: string };
 
 export function PersonalVault() {
   const toast = useToast();
@@ -513,7 +680,7 @@ export function PersonalVault() {
     );
   }, [list.data, query]);
   // Always the freshest copy of the entry, so an edit after a change sends the right version.
-  const current = open && open.mode !== 'add' ? list.data?.find((p) => p.id === open.id) : undefined;
+  const current = open && 'id' in open ? list.data?.find((p) => p.id === open.id) : undefined;
   const guard = (work: () => Promise<void>) => () => work().catch((e: Error) => toast(e.message, 'error'));
   const star = (p: PersonalPasswordView) =>
     guard(async () => {
@@ -534,9 +701,16 @@ export function PersonalVault() {
         description="Your own logins and notes. Only you can see them: not administrators, not the owner. They stay out of client records, reports, search, and the audit log."
         actions={
           !off && (
-            <Button onClick={() => setOpen({ mode: 'add' })}>
-              <Plus /> Add
-            </Button>
+            <>
+              {!!list.data?.length && (
+                <Button variant="secondary" onClick={() => setOpen({ mode: 'export' })}>
+                  <Download /> Export
+                </Button>
+              )}
+              <Button onClick={() => setOpen({ mode: 'add' })}>
+                <Plus /> Add
+              </Button>
+            </>
           )
         }
       />
@@ -688,8 +862,11 @@ export function PersonalVault() {
           item={current}
           onClose={() => setOpen(null)}
           onEdit={() => setOpen({ mode: 'edit', id: current.id })}
+          onMove={() => setOpen({ mode: 'move', id: current.id })}
         />
       )}
+      {open?.mode === 'move' && current && <MoveDialog item={current} onClose={() => setOpen(null)} />}
+      {open?.mode === 'export' && <ExportDialog count={list.data?.length ?? 0} onClose={() => setOpen(null)} />}
       {open?.mode === 'edit' && current && <EntryDialog item={current} onClose={() => setOpen(null)} />}
       {open?.mode === 'delete' && current && <DeleteDialog item={current} onClose={() => setOpen(null)} />}
     </>
