@@ -64,4 +64,4 @@ CI runs all three on every pull request. `Test-Setup.ps1` starts the app with `-
 
 ## Not in this version
 
-Code signing (so Windows asks before running the setup program), MSIX packaging, updates that install themselves, and an ARM64 build. Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
+Code signing (so Windows asks before running the setup program), MSIX packaging, updates that install themselves, and a native ARM64 build (the x64 app installs on ARM64 Windows 11 and runs under emulation; that has not been tried). Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
