@@ -1,4 +1,5 @@
 import { X509Certificate } from 'node:crypto';
+import { request } from 'node:http';
 import { isIP } from 'node:net';
 import { connect } from 'node:tls';
 import type { PortalCertificateStatus, PortalCertificateView } from '@atlas/shared';
@@ -47,21 +48,39 @@ export const probeChain: ChainProbe = (host, port) =>
     socket.once('error', reject);
   });
 
+/** A plain GET, answered with a status and a body. */
+export type HttpGet = (url: URL) => Promise<{ status: number; body: string }>;
+
+// Not fetch: fetch marks its requests the way a browser does (Sec-Fetch-Mode), and Caddy's admin address refuses
+// those unless they come from an origin it allows, as protection against web pages reaching it.
+const httpGet: HttpGet = (url) =>
+  new Promise((resolve, reject) => {
+    const req = request(url, { method: 'GET', headers: { accept: 'application/json' }, timeout: 3000 }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => {
+        body += chunk;
+        if (body.length > 100_000) req.destroy(new Error('The answer was too large.'));
+      });
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+    });
+    req.on('timeout', () => req.destroy(new Error('The request timed out.')));
+    req.on('error', reject);
+    req.end();
+  });
+
 /**
  * Caddy, which the Linux installer sets up in front of Atlas, describes its own certificate authority on its
  * local admin address. Only its public root certificate is read. Anything else answering there is ignored, and
  * what comes back is only ever used after checking that it really issued the certificate the portal serves.
  */
 export const caddyAuthorities =
-  (adminUrl = 'http://127.0.0.1:2019', doFetch: typeof fetch = fetch): AuthorityFetch =>
+  (adminUrl = 'http://127.0.0.1:2019', get: HttpGet = httpGet): AuthorityFetch =>
   async () => {
     try {
-      const res = await doFetch(new URL('/pki/ca/local', adminUrl), {
-        headers: { accept: 'application/json' },
-        signal: AbortSignal.timeout(3000),
-      });
-      if (!res.ok) return [];
-      const body = (await res.json()) as { root_certificate?: unknown } | null;
+      const res = await get(new URL('/pki/ca/local', adminUrl));
+      if (res.status !== 200) return [];
+      const body = JSON.parse(res.body) as { root_certificate?: unknown } | null;
       const root = body?.root_certificate;
       return typeof root === 'string' && root.length < 20_000 ? [root] : [];
     } catch {

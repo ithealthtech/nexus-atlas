@@ -4,6 +4,7 @@ import {
   PortalCertificate,
   caddyAuthorities,
   probeChain,
+  type HttpGet,
   type ServedChain,
 } from '../src/services/portal-certificate.js';
 import { INTERMEDIATE, LEAF, OTHER_ROOT, ROOT, SELF_SIGNED } from './portal-certs.js';
@@ -188,10 +189,10 @@ describe('PortalCertificate', () => {
 describe('caddyAuthorities', () => {
   const answering = (status: number, body: unknown) => {
     const urls: string[] = [];
-    const fn = (async (url: URL | string) => {
+    const fn: HttpGet = async (url) => {
       urls.push(String(url));
-      return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
-    }) as typeof fetch;
+      return { status, body: typeof body === 'string' ? body : JSON.stringify(body) };
+    };
     return { fn, urls };
   };
 
@@ -214,9 +215,16 @@ describe('caddyAuthorities', () => {
     expect(await caddyAuthorities(undefined, answering(200, { root_certificate: 'x'.repeat(30_000) }).fn)()).toEqual(
       [],
     );
-    const refused = (async () => {
+    // What Caddy says to a request that looks like it came from a web page.
+    expect(
+      await caddyAuthorities(
+        undefined,
+        answering(403, { error: "client is not allowed to access from origin ''" }).fn,
+      )(),
+    ).toEqual([]);
+    const refused: HttpGet = async () => {
       throw new Error('connect ECONNREFUSED 127.0.0.1:2019');
-    }) as typeof fetch;
+    };
     expect(await caddyAuthorities(undefined, refused)()).toEqual([]);
   });
 });
