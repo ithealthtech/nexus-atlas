@@ -17,6 +17,9 @@ import { ageOf, isServiceRequest, pendingRequest, readJson, writeRequest } from 
 // The helper starts within seconds and its actions take a minute at most.
 const REQUEST_STALE_MS = 2 * 60 * 1000;
 const RUNNING_STALE_MS = 10 * 60 * 1000;
+// systemd stops starting a unit that is started too often (five times in ten seconds unless the unit says
+// otherwise), and takes the watcher that starts it down too. Spacing requests keeps well clear of that.
+export const SERVICE_COOLDOWN_MS = 5000;
 
 /** What `systemctl show` says about one unit, or null when it couldn't be asked. */
 export type ShowUnit = (unit: string) => Promise<Record<string, string> | null>;
@@ -195,6 +198,9 @@ export class SystemServices {
     const run = await this.run();
     if (run.state === 'requested' || run.state === 'running')
       throw new HttpError(409, 'The server is already doing something. Wait for it to finish.');
+    const since = ageOf(run.requestedAt, this.now());
+    if (since !== null && since >= 0 && since < SERVICE_COOLDOWN_MS)
+      throw new HttpError(409, 'The server has just done something. Give it a few seconds, then try again.');
     const body = { kind: 'service', action, requestedBy, requestedAt: new Date(this.now()).toISOString() };
     await writeRequest(dir, body);
     return { ...IDLE, state: 'requested', action, requestedBy, requestedAt: body.requestedAt };

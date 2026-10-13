@@ -78,7 +78,7 @@ ExecStart=/bin/sleep infinity
 WantedBy=multi-user.target
 EOF
 fi
-# The same two units the installer writes.
+# The same two units the installer writes (install-atlas.sh).
 cat > /etc/systemd/system/msp-atlas-updater.path <<EOF
 [Unit]
 Description=Watch for MSP Atlas update requests
@@ -93,6 +93,10 @@ EOF
 cat > /etc/systemd/system/msp-atlas-updater.service <<'EOF'
 [Unit]
 Description=Install a requested MSP Atlas update
+# Each update or service action is one start. systemd's default (5 starts in 10 seconds) would stop the watcher
+# for good if an administrator restarted a few services in a row; this still stops a helper that keeps failing.
+StartLimitIntervalSec=60
+StartLimitBurst=20
 
 [Service]
 Type=oneshot
@@ -207,6 +211,9 @@ missing="$(systemd-run --wait --pipe --quiet -p User=atlas -p NoNewPrivileges=tr
   systemctl show no-such-atlas-unit.service --no-pager --property=LoadState,ActiveState)"
 grep -qx 'LoadState=not-found' <<<"$missing" || fail "a missing unit wasn't reported as not-found: $missing"
 echo "ok: a missing service is reported as not found"
+
+echo "== The watcher is still listening after all of that"
+expect "msp-atlas-updater.path" "$(systemctl is-active msp-atlas-updater.path)" active
 
 echo
 echo "The helper's service actions work."

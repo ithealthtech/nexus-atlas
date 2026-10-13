@@ -142,6 +142,7 @@ Other installations, such as Docker or Windows, see the Updates page read-only a
 2. To act, it writes `{"kind":"service","action":"…"}` to the same inbox as an update request. The helper does one thing at a time, so an action waits for an update and an update waits for an action.
 3. The helper reads only the action's name and who asked. The name must be one of `restart-atlas`, `restart-proxy`, `restart-database`, or `repair`. Nothing from the request is run or used as a path.
 4. It writes progress to `service.json`, and command output to `last-service.log`, in `/var/lib/msp-atlas-updater`.
+5. Atlas leaves at least five seconds between actions. systemd stops starting a unit that is started too often, and takes the watcher down with it; if that ever happens, the page says so, and `sudo systemctl restart msp-atlas-updater.path` brings it back.
 
 **Repair** resets the owner and mode of `/etc/msp-atlas`, its settings file and master key, `/opt/msp-atlas`, the updater's folders, and the data folder. Inside the data folder, which Atlas can write to, it only hands files that aren't Atlas's back to Atlas: it never follows a link, skips files with more than one hard link, and skips the step altogether unless `fs.protected_hardlinks` is on (the default on Ubuntu and Debian). Then it runs `systemctl daemon-reload`, enables the units, restarts them, and waits for Atlas to answer. It doesn't rewrite the units or the Caddyfile; run `sudo atlas-install` for that.
 

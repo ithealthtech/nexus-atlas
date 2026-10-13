@@ -239,6 +239,10 @@ EOF
 cat > /etc/systemd/system/msp-atlas-updater.service <<EOF
 [Unit]
 Description=Install a requested MSP Atlas update
+# Each update or service action is one start. systemd's default (5 starts in 10 seconds) would stop the watcher
+# for good if an administrator restarted a few services in a row; this still stops a helper that keeps failing.
+StartLimitIntervalSec=60
+StartLimitBurst=20
 
 [Service]
 Type=oneshot

@@ -153,6 +153,33 @@ describe('SystemServices', () => {
     expect((await updates.run()).state).toBe('requested');
   });
 
+  it('leaves a few seconds between actions, so systemd never stops starting the helper', async () => {
+    let now = NOW;
+    const services = make({ now: () => now });
+    const done = () =>
+      put(join(dir, 'service.json'), {
+        state: 'succeeded',
+        action: 'restart-proxy',
+        requestedBy: 'Avery Owner',
+        requestedAt: new Date(NOW).toISOString(),
+        finishedAt: new Date(NOW + 800).toISOString(),
+        message: 'The web proxy was restarted.',
+        updatedAt: new Date(NOW + 800).toISOString(),
+      });
+    await services.request('restart-proxy', 'Avery Owner');
+    // The helper took the request and finished within a second.
+    rmSync(inbox(dir));
+    done();
+    now = NOW + 2000;
+    await expect(services.request('restart-proxy', 'Avery Owner')).rejects.toMatchObject({
+      status: 409,
+      message: 'The server has just done something. Give it a few seconds, then try again.',
+    });
+    expect(existsSync(inbox(dir))).toBe(false);
+    now = NOW + 5000;
+    expect((await services.request('restart-proxy', 'Avery Owner')).state).toBe('requested');
+  });
+
   it('reports what the helper wrote, and notices a run or a request that died', async () => {
     const services = make();
     const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString();

@@ -65,13 +65,16 @@ export function Services() {
     queryKey: ['system-services'],
     queryFn: () => api<SystemServicesView>('/system/services'),
     // Follow an action while it runs. Atlas itself may be what's restarting, so failed requests just retry.
-    refetchInterval: (q) => (['requested', 'running'].includes(q.state.data?.run.state ?? '') ? 2000 : 15_000),
+    refetchInterval: (q) => (settling(q.state.data?.run) ? 2000 : 15_000),
     // Keep following it if the administrator looks at another tab meanwhile.
     refetchIntervalInBackground: true,
     retry: true,
   });
   const s = services.data;
-  const busy = s ? s.run.state === 'requested' || s.run.state === 'running' : false;
+  // Nothing new can be asked for while an action runs, or in the few seconds after one (the server refuses).
+  const busy = settling(s?.run);
+  const updater = s?.services.find((service) => service.id === 'updater');
+  const updaterDown = updater ? updater.state === 'stopped' || updater.state === 'failed' : false;
   const send = async () => {
     if (!asking) return;
     setSending(true);
@@ -128,6 +131,18 @@ export function Services() {
               }
             />
             {s.run.state !== 'idle' && <RunBanner run={s.run} />}
+            {updaterDown && (
+              <div
+                className="flex items-start gap-3 border-t border-border bg-warning-soft px-5 py-3.5 text-sm text-warning"
+                role="alert"
+              >
+                <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <p>
+                  The updater has stopped, so the actions on this page and updates won’t run. Start it on the server:{' '}
+                  <code className="font-mono text-xs">sudo systemctl restart msp-atlas-updater.path</code>
+                </p>
+              </div>
+            )}
             <ul className="divide-y divide-border border-t border-border">
               {s.services.map((service) => {
                 const { icon: Icon, text } = ABOUT[service.id];
@@ -223,6 +238,14 @@ export function Services() {
       )}
     </>
   );
+}
+
+/** An action is in progress, or one was asked for in the last few seconds. */
+function settling(run: ServiceRun | undefined) {
+  if (!run) return false;
+  if (run.state === 'requested' || run.state === 'running') return true;
+  const asked = run.requestedAt ? Date.parse(run.requestedAt) : NaN;
+  return !Number.isNaN(asked) && Date.now() - asked < 6000;
 }
 
 function RunBanner({ run }: { run: ServiceRun }) {
