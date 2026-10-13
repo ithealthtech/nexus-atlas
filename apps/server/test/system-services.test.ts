@@ -288,8 +288,10 @@ describe('service routes', () => {
       name: 'Tess Tech',
       password: 'temporary pass 1234',
       role: 'technician',
+      allClients: 'edit_passwords',
     });
-    const { b: tech } = await signIn(t.app, 'tess@atlas.test', 'temporary pass 1234');
+    const { b: tech, r: signedIn } = await signIn(t.app, 'tess@atlas.test', 'temporary pass 1234');
+    expect(signedIn.status, JSON.stringify(signedIn.data)).toBeLessThan(300);
     await tech.call('POST', '/api/account/password', { current: 'temporary pass 1234', next: 'cobalt fresh pass 12' });
     await enroll(tech);
     expect((await tech.call('GET', '/api/system/services')).status).toBe(403);
