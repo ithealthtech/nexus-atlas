@@ -117,7 +117,8 @@ jobs:
             if ($errors) { $errors | ForEach-Object { Write-Error "${script}: $_" }; exit 1 }
           }
 
-  # Atlas for Windows (apps/windows): the core library's tests, then the WinUI app itself, which only builds on Windows.
+  # Atlas for Windows (apps/windows): the core library's tests, the WinUI app itself (which only builds on Windows),
+  # and its setup program, built the way a release builds it and then run for real.
   windows-client:
     name: Windows client
     runs-on: windows-latest
@@ -129,18 +130,23 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet test apps/windows/tests/Atlas.Windows.Core.Tests
       - run: dotnet build apps/windows/src/Atlas.Windows -c Release -p:Platform=x64
-      # A preview anyone can try without installing a certificate: unpackaged and self-contained (no .NET or
-      # Windows App SDK install needed). Signed MSIX packages come from the release workflow once signing is set up.
-      - name: Preview build
+      - name: Inno Setup
         shell: pwsh
-        run: |
-          dotnet publish apps/windows/src/Atlas.Windows -c Release -r win-x64 -p:Platform=x64 `
-            -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true --self-contained true -o preview
-          Compress-Archive -Path preview/* -DestinationPath AtlasForWindows-preview-x64.zip
+        run: if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+      - name: Build the setup program
+        shell: pwsh
+        run: apps/windows/build-installer.ps1
+      # Compiling says nothing about whether the window loads or setup can replace a running copy, so do it: the
+      # app's self-test, a first install, an upgrade over a running copy, and an uninstall.
+      - name: Install, upgrade, and uninstall
+        shell: pwsh
+        run: apps/windows/installer/Test-Setup.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: atlas-for-windows-preview-x64
-          path: AtlasForWindows-preview-x64.zip
+          name: atlas-for-windows-setup
+          path: |
+            apps/windows/dist/AtlasForWindowsSetup.exe
+            apps/windows/dist/AtlasForWindowsSetup.exe.sha256
           retention-days: 30
 
   docker:

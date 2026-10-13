@@ -13,6 +13,7 @@ internal static partial class Native
     private const uint VK_SPACE = 0x20;
     private const uint CF_UNICODETEXT = 13;
     private const uint GMEM_MOVEABLE = 0x0002;
+    private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
 
     public delegate IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, UIntPtr data);
 
@@ -66,6 +67,19 @@ internal static partial class Native
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr GlobalFree(IntPtr mem);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetCurrentPackageFullName(ref int length, System.Text.StringBuilder? name);
+
+    /// <summary>
+    /// Whether the app runs as an MSIX package (which has its own startup task) rather than as plain files put there
+    /// by the setup program.
+    /// </summary>
+    public static bool IsPackaged()
+    {
+        var length = 0;
+        return GetCurrentPackageFullName(ref length, null) != APPMODEL_ERROR_NO_PACKAGE;
+    }
 
     /// <summary>Ctrl+Shift+Space. Returns false if another app already uses it.</summary>
     public static bool RegisterSearchHotkey(IntPtr hWnd, int id) =>

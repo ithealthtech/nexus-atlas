@@ -5,8 +5,10 @@ import {
   APP_SESSION_LIMITS,
   NATIVE_CLIENTS,
   ROLE_INFO,
+  WINDOWS_APP_VERSION,
   nativeDecisionSchema,
   nativeTokenSchema,
+  windowsAppDownload,
   type AppScope,
   type NativeClientId,
   type NativeTokenResponse,
@@ -43,6 +45,8 @@ export class NativeAppService {
   constructor(
     private readonly db: Database,
     private readonly identity: IdentityService,
+    // The repository releases come from, which is where the app's setup program is downloaded from.
+    private readonly releaseRepo: string,
     private readonly perMinute = 600,
   ) {}
 
@@ -231,6 +235,8 @@ export class NativeAppService {
       deviceName: context.session.deviceName,
       scopes: context.session.scopes as AppScope[],
       createdAt: context.session.createdAt.toISOString(),
+      // The app compares this with its own version and offers the download when it is behind.
+      app: { latestVersion: WINDOWS_APP_VERSION, downloadUrl: windowsAppDownload(this.releaseRepo) },
     };
   }
 

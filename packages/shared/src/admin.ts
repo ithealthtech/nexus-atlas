@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ACCESS_LEVELS, type AccessLevel } from './access.js';
 import { emailSchema, passwordSchema } from './schemas.js';
-import type { AppSessionView } from './native.js';
+import type { AppSessionView, DesktopAppDownload } from './native.js';
 import type { ConnectedAppView } from './devices.js';
 
 // ---------- account security ----------
@@ -52,6 +52,8 @@ export interface AccountSecurityView {
   devices: TrustedDeviceView[];
   /** Desktop apps signed in as this person (Atlas for Windows). */
   desktopApps: AppSessionView[];
+  /** The desktop app staff can install, or null for client accounts, who can't use it. */
+  desktopApp: DesktopAppDownload | null;
   /** Apps signed in through Atlas, like the browser extension. */
   apps: ConnectedAppView[];
   notifyDigest: boolean;

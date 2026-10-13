@@ -216,10 +216,14 @@ export async function buildApp({
   entraFetch = logged(entraFetch);
   updateFetch = logged(updateFetch);
   const mail = new MailService(settings, mailTransport);
-  const account = new AccountSecurity(db, identity, mail, { publicOrigin: config.publicOrigin, rpName: 'MSP Atlas' });
+  const account = new AccountSecurity(db, identity, mail, {
+    publicOrigin: config.publicOrigin,
+    rpName: 'MSP Atlas',
+    releaseRepo: config.ATLAS_UPDATE_REPO,
+  });
   const audit = new AuditService(db, keys, settings);
   const apiKeys = new ApiKeyService(db);
-  const nativeApps = new NativeAppService(db, identity);
+  const nativeApps = new NativeAppService(db, identity, config.ATLAS_UPDATE_REPO);
   const limiter = failureLimiter(10, 15 * 60_000);
   const cookieName = config.secureCookies ? '__Host-atlas_session' : 'atlas_session';
   const cookieOptions = { httpOnly: true, sameSite: 'strict' as const, path: '/', secure: config.secureCookies };

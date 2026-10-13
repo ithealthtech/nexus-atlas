@@ -7,6 +7,8 @@ import {
   DEFAULT_BRANDING,
   DEFAULT_VAULT_POLICY,
   PERSONAL_EXPORT_COLUMNS,
+  WINDOWS_APP_VERSION,
+  windowsAppDownload,
   type SiemSettingsView,
   type VaultPolicy,
   LEVEL_INFO,
@@ -872,6 +874,11 @@ on('POST', '/session/reauth', () => ({ ok: true }));
 on('POST', '/password-reset', () => ({ ok: true }));
 on('POST', '/password-reset/complete', () => ({ ok: true }));
 on('POST', '/account/password', () => sessionView());
+const desktopApp = {
+  name: 'Atlas for Windows',
+  version: WINDOWS_APP_VERSION,
+  url: windowsAppDownload('ithealthtech/nexus-atlas'),
+};
 on('GET', '/account/security', () => ({
   totp: true,
   recoveryCodesLeft: recoveryLeft,
@@ -879,6 +886,7 @@ on('GET', '/account/security', () => ({
   sessions,
   devices,
   desktopApps: [],
+  desktopApp,
   apps,
   notifyDigest,
 }));
@@ -891,6 +899,7 @@ on('PATCH', '/account/preferences', (_m, b) => {
     sessions,
     devices,
     desktopApps: [],
+    desktopApp,
     apps,
     notifyDigest,
   };

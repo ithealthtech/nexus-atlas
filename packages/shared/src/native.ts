@@ -8,6 +8,24 @@ export const NATIVE_CLIENTS = {
 } as const;
 export type NativeClientId = keyof typeof NATIVE_CLIENTS;
 
+/**
+ * The newest Atlas for Windows this server knows of. It is the app's own version (apps/windows/Directory.Build.props;
+ * a test keeps the two equal), raised when the app changes rather than with every Atlas release. Signed-in copies
+ * compare it with their own version and offer the download when it is newer.
+ */
+export const WINDOWS_APP_VERSION = '0.2.0';
+/** The setup program's file name. Every release carries it under this name. */
+export const WINDOWS_APP_SETUP = 'AtlasForWindowsSetup.exe';
+/** Where the newest setup program is, in the repository this server takes its releases from. */
+export const windowsAppDownload = (repo: string) =>
+  `https://github.com/${repo}/releases/latest/download/${WINDOWS_APP_SETUP}`;
+/** A desktop app people can install, for the Account page. */
+export interface DesktopAppDownload {
+  name: string;
+  version: string;
+  url: string;
+}
+
 export const APP_SCOPES = ['read', 'write', 'reveal'] as const;
 export type AppScope = (typeof APP_SCOPES)[number];
 export const APP_SCOPE_LABELS: Record<AppScope, string> = {
