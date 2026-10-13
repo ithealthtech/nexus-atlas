@@ -71,6 +71,12 @@ import { StatusService } from './services/status.js';
 import { registerUpdateRoutes } from './routes/updates.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { SystemServices, type ShowUnit } from './services/system-services.js';
+import {
+  PortalCertificate,
+  caddyAuthorities,
+  type AuthorityFetch,
+  type ChainProbe,
+} from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
@@ -112,6 +118,10 @@ export interface AppOptions {
   certProbe?: CertProbe;
   /** Replaces asking systemd about the services Atlas runs on (tests use a fake). */
   serviceShow?: ShowUnit;
+  /** Replaces connecting to the portal's own address to read its certificate. */
+  portalProbe?: ChainProbe;
+  /** Replaces asking the web proxy on this server for its certificate authority. Tests without it ask nothing. */
+  portalAuthorities?: AuthorityFetch;
   /** Replaces fetch for the GitHub release check (tests use fake releases). */
   updateFetch?: typeof fetch;
   /** Replaces SIEM delivery (tests capture events instead of sending them). */
@@ -177,6 +187,8 @@ export async function buildApp({
   certProbe,
   updateFetch,
   serviceShow,
+  portalProbe,
+  portalAuthorities,
   siemSender,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
@@ -827,6 +839,11 @@ export async function buildApp({
     authed,
     recent,
     services: new SystemServices({ dir: config.ATLAS_UPDATER_DIR, updates, show: serviceShow }),
+    certificate: new PortalCertificate({
+      publicUrl: config.PUBLIC_URL,
+      probe: portalProbe,
+      authorities: portalAuthorities ?? (config.NODE_ENV === 'test' ? undefined : caddyAuthorities()),
+    }),
   });
   if (config.NODE_ENV !== 'test') {
     // Nothing is running yet, so an import still marked running was cut off by the restart (an update, say).

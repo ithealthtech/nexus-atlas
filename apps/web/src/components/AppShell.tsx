@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   CopyCheck,
   ArrowUpCircle,
+  BadgeCheck,
   Gauge,
   BookOpen,
   KeyRound,
@@ -221,6 +222,7 @@ function navSections(actor: { isStaff: boolean; isAdmin: boolean }, personalVaul
         items: [
           { to: '/admin/status', icon: Gauge, label: 'System status' },
           { to: '/admin/services', icon: Wrench, label: 'Services' },
+          { to: '/admin/certificate', icon: BadgeCheck, label: 'Certificate' },
           { to: '/admin/request-log', icon: Waypoints, label: 'Request log' },
           { to: '/admin/webhooks', icon: Webhook, label: 'Webhooks' },
           { to: '/admin/updates', icon: ArrowUpCircle, label: 'Updates' },

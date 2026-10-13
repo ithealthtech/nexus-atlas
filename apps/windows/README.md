@@ -19,7 +19,7 @@ Download **AtlasForWindowsSetup.exe** from **Desktop apps** on your account page
 
 ## Atlas needs a certificate this computer trusts
 
-The app talks to Atlas only over HTTPS with a certificate Windows trusts, and has no option to accept one it doesn't. If your Atlas uses a certificate from your own certificate authority, or a self-signed one, add its issuer to the computer's trusted root certificates first. Use the name on the certificate as the Atlas address: a certificate for `atlas.example.com` doesn't cover `https://192.168.1.20`. When this is the problem, the app says so instead of only saying Atlas can't be reached.
+The app talks to Atlas only over HTTPS with a certificate Windows trusts, and has no option to accept one it doesn't. If your Atlas uses a certificate from your own certificate authority, or a self-signed one, add its issuer to the computer's trusted root certificates first. Use the name on the certificate as the Atlas address: a certificate for `atlas.example.com` doesn't cover `https://192.168.1.20`. When this is the problem, the app says so instead of only saying Atlas can't be reached. An administrator can download the issuer's certificate, with the commands to install it, from **Administration → Certificate** in Atlas.
 
 ## Updates
 

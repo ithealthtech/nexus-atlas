@@ -25,6 +25,7 @@ import {
   type ActivityView,
   type ApiKeyView,
   type BackupRunView,
+  type PortalCertificateView,
   type ServiceAction,
   type ServiceRun,
   type SystemServicesView,
@@ -2727,6 +2728,45 @@ on('POST', '/system/services/run', (_m, b) => {
   event('Service action requested', SERVICE_ACTION_LABELS[action]);
   return serviceRun();
 });
+// The portal's certificate, as on a server installed at an IP address: from its own certificate authority.
+on('GET', '/system/certificate', (): PortalCertificateView => {
+  const dates = (from: string, to: string, fingerprint: string) => ({
+    validFrom: from,
+    validTo: to,
+    daysLeft: Math.floor((Date.parse(to) - Date.now()) / 86_400_000),
+    fingerprint,
+    thumbprint: fingerprint.replace(/:/g, '').slice(0, 40),
+  });
+  const hour = 3_600_000;
+  return {
+    url: 'https://192.168.1.20',
+    host: '192.168.1.20',
+    status: 'private',
+    problem: null,
+    coversHost: true,
+    certificate: {
+      name: '192.168.1.20',
+      issuer: 'Caddy Local Authority - ECC Intermediate',
+      names: ['192.168.1.20'],
+      ...dates(
+        new Date(Date.now() - 2 * hour).toISOString(),
+        new Date(Date.now() + 10 * hour).toISOString(),
+        '5C:1E:9A:07:B3:44:D2:8F:6A:11:C9:E0:73:2B:9D:54:0F:A6:38:C1:7E:92:4D:B5:60:1A:EE:83:2F:C7:19:A4',
+      ),
+    },
+    authority: {
+      name: 'Caddy Local Authority - 2026 ECC Root',
+      isAuthority: true,
+      source: 'proxy',
+      ...dates(
+        ago(40 * 24 * 60),
+        new Date(Date.now() + 3610 * 24 * hour).toISOString(),
+        'A9:4F:21:D8:6B:3C:90:E7:15:82:FA:4D:C6:0B:77:39:E2:58:1D:A0:93:6E:F4:2C:B8:05:71:DE:4A:96:3F:C2',
+      ),
+    },
+  };
+});
+on('GET', '/system/certificate/authority', () => notInDemo('Downloading the certificate'));
 on('GET', '/status', (): SystemStatus => ({
   version: '1.0.1',
   node: 'v22.12.0',
