@@ -230,6 +230,39 @@ public sealed class AtlasClient : IDisposable
     public Task<PasswordEntry> ArchivePasswordAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
         SendAsync<PasswordEntry>(HttpMethod.Post, $"passwords/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
 
+    /// <summary>Adds an asset to a client, in one of the layouts. Atlas checks each field against the layout.</summary>
+    public Task<AssetSummary> CreateAssetAsync(
+        string clientId,
+        string layoutId,
+        string name,
+        string status,
+        IReadOnlyDictionary<string, object?> fields,
+        string notes,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(
+            HttpMethod.Post,
+            $"clients/{Uri.EscapeDataString(clientId)}/assets",
+            new { layoutId, name, status, fields, notes },
+            cancellationToken);
+
+    /// <summary>Changes an asset, refused (409) if someone saved it since the version it was opened at.</summary>
+    public Task<AssetSummary> UpdateAssetAsync(
+        string id,
+        int version,
+        string name,
+        string status,
+        IReadOnlyDictionary<string, object?> fields,
+        string notes,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(
+            HttpMethod.Patch,
+            $"assets/{Uri.EscapeDataString(id)}",
+            new { version, name, status, fields, notes },
+            cancellationToken);
+
+    public Task<AssetSummary> ArchiveAssetAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(HttpMethod.Post, $"assets/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
+
     /// <summary>Stars or unstars a client, asset, document, or password: the person's own bookmark in Atlas.</summary>
     public Task<FavoriteState> SetFavoriteAsync(string kind, string id, bool favorite, CancellationToken cancellationToken = default)
     {

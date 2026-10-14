@@ -118,7 +118,8 @@ public sealed record PasswordSummary(
     string UpdatedAt,
     string? UpdatedByName = null);
 
-public sealed record LayoutField(string Key, string Label, string Type);
+/// <summary>One field of an asset layout: what it holds, whether it must be filled, and the choices for a list.</summary>
+public sealed record LayoutField(string Key, string Label, string Type, bool Required = false, string[]? Options = null, string? Help = null);
 
 public sealed record LayoutInfo(string Id, string Name, string Icon, LayoutField[] Fields);
 
@@ -133,7 +134,8 @@ public sealed record AssetSummary(
     Dictionary<string, System.Text.Json.JsonElement> Fields,
     string Notes,
     string UpdatedAt,
-    string? UpdatedByName = null);
+    string? UpdatedByName = null,
+    int Version = 0);
 
 public sealed record DocumentSummary(
     string Id,

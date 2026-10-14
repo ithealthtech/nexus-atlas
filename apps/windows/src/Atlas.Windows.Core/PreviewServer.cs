@@ -51,7 +51,7 @@ public sealed class PreviewServer : HttpMessageHandler
             id = "l-config", name = "Configurations", icon = "server",
             fields = new object[]
             {
-                new { key = "type", label = "Type", type = "select" },
+                new { key = "type", label = "Type", type = "select", required = true, options = new[] { "Server", "Workstation", "Firewall", "Switch", "Storage" } },
                 new { key = "hostname", label = "Hostname", type = "text" },
                 new { key = "ip", label = "IP address", type = "ip" },
                 new { key = "manufacturer", label = "Manufacturer", type = "text" },
@@ -73,7 +73,7 @@ public sealed class PreviewServer : HttpMessageHandler
     ];
 
     private static object Asset(string id, string client, string clientName, string layout, string layoutName, string name, object fields) =>
-        new { id, clientId = client, clientName, layoutId = layout, layoutName, name, status = "active", fields, notes = "", updatedAt = Now, updatedByName = "Alex Rivera" };
+        new { id, clientId = client, clientName, layoutId = layout, layoutName, name, status = "active", fields, notes = "", updatedAt = Now, updatedByName = "Alex Rivera", version = 1 };
 
     private static readonly object[] Assets =
     [
@@ -132,6 +132,52 @@ public sealed class PreviewServer : HttpMessageHandler
 
 // The vault as you change it in the preview: the made-up entries to start with, then whatever is added or edited.
     private readonly List<Dictionary<string, object?>> passwords = [.. Passwords.Select(Mutable)];
+    private readonly List<Dictionary<string, object?>> assets = [.. Assets.Select(Mutable)];
+
+    private object[] Things() => [.. assets.Cast<object>()];
+
+    // Adding, changing, and archiving assets in the preview.
+    private async Task<HttpResponseMessage?> ChangeAssetsAsync(HttpRequestMessage request, string tail, CancellationToken cancellationToken)
+    {
+        if (request.Method == HttpMethod.Get)
+            return null;
+        var adding = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)/assets$");
+        var one = System.Text.RegularExpressions.Regex.Match(tail, "^assets/([^/]+)(/archive)?$");
+        if (!adding.Success && !one.Success)
+            return null;
+        var raw = await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var body = JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        static string Text(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : "";
+        object? Fields() => body.TryGetProperty("fields", out var v) ? JsonSerializer.Deserialize<Dictionary<string, object?>>(v.GetRawText()) : null;
+        if (adding.Success)
+        {
+            var clientId = adding.Groups[1].Value;
+            var layoutId = Text(body, "layoutId");
+            var layoutName = Prop(Layouts.First(l => Prop(l, "id") == layoutId), "name")!;
+            var entry = Mutable(Asset($"a-new-{++added}", clientId, Prop(Clients.First(c => Prop(c, "id") == clientId), "name")!, layoutId, layoutName, Text(body, "name"), Fields() ?? new { }));
+            entry["status"] = Text(body, "status");
+            entry["notes"] = Text(body, "notes");
+            assets.Add(entry);
+            return new HttpResponseMessage(HttpStatusCode.Created) { Content = Json(entry) };
+        }
+        var found = assets.FirstOrDefault(a => (string?)a["id"] == one.Groups[1].Value);
+        if (found is null)
+            return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = Json(new { error = "That asset isn't here any more." }) };
+        if (one.Groups[2].Success)
+        {
+            assets.Remove(found);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(found) };
+        }
+        if (body.GetProperty("version").GetInt32() != (int)found["version"]!)
+            return new HttpResponseMessage(HttpStatusCode.Conflict) { Content = Json(new { error = "Someone saved this asset while you were editing it.", code = "conflict" }) };
+        found["name"] = Text(body, "name");
+        found["status"] = Text(body, "status");
+        found["notes"] = Text(body, "notes");
+        found["fields"] = Fields();
+        found["version"] = (int)found["version"]! + 1;
+        found["updatedAt"] = DateTime.UtcNow.ToString("O");
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(found) };
+    }
     private int added;
 
     private static Dictionary<string, object?> Mutable(object item) =>
@@ -223,6 +269,8 @@ public sealed class PreviewServer : HttpMessageHandler
         var tail = path[(path.IndexOf("/api/v1/", StringComparison.Ordinal) + 8)..];
         if (await ChangeVaultAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changed)
             return changed;
+        if (await ChangeAssetsAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedAsset)
+            return changedAsset;
         if (tail.EndsWith("/password-folders", StringComparison.Ordinal))
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Array.Empty<object>()) };
         var clientPage = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)(/contacts|/locations)?$");
@@ -249,7 +297,7 @@ public sealed class PreviewServer : HttpMessageHandler
             "native/session" => Session(),
             "clients" => Clients,
             "passwords" => Filter(Vault(), client),
-            "assets" => Filter(Assets, client),
+            "assets" => Filter(Things(), client),
             "documents" => Filter(Documents, client),
             "layouts" => Layouts,
             "favorites" => Favorites,
@@ -260,7 +308,7 @@ public sealed class PreviewServer : HttpMessageHandler
                     ? new { value = "482193", expiresIn = (int?)18 }
                     : new { value = "c7Hq-29Lm-Vx4r-Np8e", expiresIn = (int?)null },
             _ when tail.StartsWith("passwords/", StringComparison.Ordinal) => Find(Vault(), tail[10..]),
-            _ when tail.StartsWith("assets/", StringComparison.Ordinal) => Find(Assets, tail[7..]),
+            _ when tail.StartsWith("assets/", StringComparison.Ordinal) => Find(Things(), tail[7..]),
             _ when tail.StartsWith("documents/", StringComparison.Ordinal) => DocumentFor(tail[10..]),
             _ => null,
         };
@@ -294,7 +342,7 @@ public sealed class PreviewServer : HttpMessageHandler
     }
 
     private object[] Search(string q) =>
-        Vault().Concat(Assets).Concat(Documents)
+        Vault().Concat(Things()).Concat(Documents)
             .Where(i => (Prop(i, "name") ?? Prop(i, "title") ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
             .Select(i => new
             {

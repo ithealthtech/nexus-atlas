@@ -35,7 +35,7 @@ public sealed partial class SearchWindow : Window
     /// One page: a sidebar place (home, clients, passwords, assets, documents), a client with one of its tabs, the
     /// results of a search, or an item. The pages you went through make the breadcrumb trail and the way back.
     /// </summary>
-    private sealed record Place(string Kind, string Title, string? ClientId = null, string Tab = "overview", Row? Item = null, string? Query = null);
+    private sealed record Place(string Kind, string Title, string? ClientId = null, string Tab = "overview", Row? Item = null, string? Query = null, string Editing = "password");
 
     private readonly App app;
     private readonly IntPtr hwnd;
@@ -352,8 +352,10 @@ public sealed partial class SearchWindow : Window
         var isOverview = place.Kind == "client" && place.Tab == "overview";
         var isEditor = place.Kind == "edit";
         var showsPasswords = place.Kind == "passwords" || (place.Kind == "client" && place.Tab == "passwords");
-        NewButton.Visibility = canWrite && showsPasswords ? Visibility.Visible : Visibility.Collapsed;
-        var editable = canWrite && place.Item is { Kind: "password" };
+        var showsAssets = place.Kind == "assets" || (place.Kind == "client" && place.Tab == "assets");
+        NewButton.Visibility = canWrite && (showsPasswords || showsAssets) ? Visibility.Visible : Visibility.Collapsed;
+        NewText.Text = showsAssets ? "New asset" : "New password";
+        var editable = canWrite && place.Item is { Kind: "password" or "asset" };
         EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
         ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
         ListPanel.Visibility = isItem || isOverview || isEditor ? Visibility.Collapsed : Visibility.Visible;
@@ -368,7 +370,13 @@ public sealed partial class SearchWindow : Window
         if (isEditor)
         {
             PageInfo.Text = place.Item is null ? "Saved encrypted in the client's vault, and recorded under your name." : "Only what you change is saved. The old password is kept in the entry's history.";
-            ShowPasswordEditor(place);
+            if (place.Editing == "asset")
+            {
+                PageInfo.Text = place.Item is null ? "Atlas checks each field against the asset's type when it's saved." : "Only what you change is saved. The previous version is kept in the asset's history.";
+                ShowAssetEditor(place);
+            }
+            else
+                ShowPasswordEditor(place);
             return;
         }
         if (isItem)
@@ -406,18 +414,19 @@ public sealed partial class SearchWindow : Window
     private void New_Click(object sender, RoutedEventArgs e)
     {
         var place = trail.LastOrDefault();
-        Go(new Place("edit", "New password", ClientId: place?.Kind == "client" ? place.ClientId : null));
+        var kind = place is { Kind: "assets" } or { Kind: "client", Tab: "assets" } ? "asset" : "password";
+        Go(new Place("edit", kind == "asset" ? "New asset" : "New password", ClientId: place?.Kind == "client" ? place.ClientId : null, Editing: kind));
     }
 
     private void EditHere_Click(object sender, RoutedEventArgs e)
     {
-        if (current is { Kind: "password" } row)
-            Go(new Place("edit", $"Edit {row.Title}", ClientId: row.ClientId, Item: row));
+        if (current is { Kind: "password" or "asset" } row)
+            Go(new Place("edit", $"Edit {row.Title}", ClientId: row.ClientId, Item: row, Editing: row.Kind));
     }
 
     private async void Archive_Click(object sender, RoutedEventArgs e)
     {
-        if (current is not { Kind: "password" } row || app.Client is not { } client)
+        if (current is not { Kind: "password" or "asset" } row || app.Client is not { } client)
             return;
         var dialog = new ContentDialog
         {
@@ -432,7 +441,10 @@ public sealed partial class SearchWindow : Window
             return;
         try
         {
-            await client.ArchivePasswordAsync(row.Id);
+            if (row.Kind == "asset")
+                await client.ArchiveAssetAsync(row.Id);
+            else
+                await client.ArchivePasswordAsync(row.Id);
             recent.RemoveAll(r => r.Kind == row.Kind && r.Id == row.Id);
             Back();
             Show($"{row.Title} archived. Restore it from the archived list in Atlas.", InfoBarSeverity.Success);
@@ -611,6 +623,218 @@ public sealed partial class SearchWindow : Window
                 save.IsEnabled = true;
             }
         };
+    }
+
+    // ---------- adding and changing assets ----------
+    private static readonly (string Value, string Label)[] AssetStatuses = [("active", "Active"), ("inactive", "Inactive"), ("retired", "Retired")];
+
+    /// <summary>
+    /// The form for a new asset, or for changing one, built from the asset's layout: a box for text, a list for a
+    /// choice, ticks for several, a date picker for dates. Atlas checks every field again when it's saved.
+    /// </summary>
+    private async void ShowAssetEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        AssetSummary? existing = null;
+        try
+        {
+            if (place.Item is { } row)
+                existing = await client.GetAssetAsync(row.Id, cancel.Token);
+            if (layouts.Count == 0)
+                foreach (var layout in await client.ListLayoutsAsync(cancel.Token))
+                    layouts[layout.Id] = layout;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return;
+        }
+        if (cancel.IsCancellationRequested)
+            return;
+        if (existing is not null && existing.Notes.Contains("Synced from", StringComparison.OrdinalIgnoreCase))
+            PageInfo.Text = "This asset is kept up to date by a sync: fields it fills are replaced at the next sync. Fields you add yourself are kept.";
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        ComboBox? clientBox = null;
+        if (existing is null && place.ClientId is null)
+        {
+            clientBox = new ComboBox { Header = "Client", PlaceholderText = "Choose the client it belongs to", HorizontalAlignment = HorizontalAlignment.Stretch };
+            clientBox.ItemsSource = clients.Select(c => c.Name).ToList();
+            form.Children.Add(clientBox);
+        }
+        else
+        {
+            var owner = existing?.ClientName ?? clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+            form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
+        }
+
+        // The layout can only be chosen for a new asset; its fields are drawn below and redrawn when it changes.
+        var layoutList = layouts.Values.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        var layoutBox = new ComboBox { Header = "Type", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = layoutList.Select(l => l.Name).ToList() };
+        if (existing is not null)
+        {
+            layoutBox.SelectedIndex = layoutList.FindIndex(l => l.Id == existing.LayoutId);
+            layoutBox.IsEnabled = false;
+        }
+        var name = new TextBox { Header = "Name", Text = existing?.Name ?? "", MaxLength = 200, PlaceholderText = "For example, HDG-FW-01" };
+        var status = new ComboBox { Header = "Status", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = AssetStatuses.Select(s => s.Label).ToList() };
+        status.SelectedIndex = Math.Max(0, Array.FindIndex(AssetStatuses, s => s.Value == (existing?.Status ?? "active")));
+        var fieldsPanel = new StackPanel { Spacing = 14 };
+        var readers = new List<(LayoutField Field, Func<object?> Read)>();
+        void DrawFields()
+        {
+            fieldsPanel.Children.Clear();
+            readers.Clear();
+            if (layoutBox.SelectedIndex < 0)
+                return;
+            foreach (var field in layoutList[layoutBox.SelectedIndex].Fields)
+            {
+                JsonElement? value = existing is not null && existing.Fields.TryGetValue(field.Key, out var v) ? v : null;
+                var (control, read) = FieldEditor(field, value);
+                fieldsPanel.Children.Add(control);
+                readers.Add((field, read));
+            }
+        }
+        layoutBox.SelectionChanged += (_, _) => DrawFields();
+        var notes = new TextBox { Header = "Notes", Text = existing?.Notes ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxLength = 20000 };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button { Content = existing is null ? "Add asset" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        foreach (var control in new UIElement[] { layoutBox, name, status, fieldsPanel, notes, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        DrawFields();
+        (existing is null ? (Control)layoutBox : name).Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            var clientId = existing?.ClientId ?? place.ClientId ?? (clientBox?.SelectedIndex is >= 0 and var i ? clients[i].Id : null);
+            var missing = readers.FirstOrDefault(r => r.Field.Required && IsEmpty(r.Read()));
+            string? problem = clientId is null ? "Choose the client it belongs to."
+                : layoutBox.SelectedIndex < 0 ? "Choose what type of asset it is."
+                : name.Text.Trim().Length == 0 ? "Give it a name."
+                : missing.Field is not null ? $"{missing.Field.Label} is required."
+                : null;
+            if (problem is not null)
+            {
+                error.Message = problem;
+                error.IsOpen = true;
+                return;
+            }
+            var values = readers.ToDictionary(r => r.Field.Key, r => r.Read());
+            var statusValue = AssetStatuses[Math.Max(0, status.SelectedIndex)].Value;
+            save.IsEnabled = false;
+            try
+            {
+                var saved = existing is null
+                    ? await client.CreateAssetAsync(clientId!, layoutList[layoutBox.SelectedIndex].Id, name.Text.Trim(), statusValue, values, notes.Text)
+                    : await client.UpdateAssetAsync(existing.Id, existing.Version, name.Text.Trim(), statusValue, values, notes.Text);
+                var row = new Row("asset", saved.Id, saved.Name, saved.LayoutName, saved.ClientId, saved.ClientName);
+                Remember(row);
+                trail[^1] = new Place("item", row.Title, Item: row);
+                if (existing is not null && trail.Count > 1 && trail[^2] is { Kind: "item", Item: { } before } && before.Id == row.Id)
+                    trail.RemoveAt(trail.Count - 2);
+                ShowPlace();
+                Show(existing is null ? $"{row.Title} added." : "Changes saved. The previous version is in the asset's history.", InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+            {
+                error.Message = "Someone saved this asset while you were editing. Copy anything you typed, then go back and open it again.";
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
+    }
+
+    private static bool IsEmpty(object? value) =>
+        value is null || (value is string s && s.Trim().Length == 0) || (value is IList<string> list && list.Count == 0) || value is false;
+
+    /// <summary>The control for one layout field, and how to read what was entered (null for nothing).</summary>
+    private static (UIElement Control, Func<object?> Read) FieldEditor(LayoutField field, JsonElement? value)
+    {
+        var label = Tidy(field.Label) + (field.Required ? " *" : "");
+        var text = value is { } v ? Display(v) : "";
+        switch (field.Type)
+        {
+            case "select":
+            {
+                var choices = new List<string> { "" };
+                choices.AddRange(field.Options ?? []);
+                // A value from before the list changed is kept rather than lost.
+                if (text.Length > 0 && !choices.Contains(text))
+                    choices.Add(text);
+                var box = new ComboBox { Header = label, ItemsSource = choices, SelectedItem = text, HorizontalAlignment = HorizontalAlignment.Stretch };
+                return (box, () => box.SelectedItem is string s && s.Length > 0 ? s : null);
+            }
+            case "multiselect":
+            {
+                var chosen = value is { ValueKind: JsonValueKind.Array } array ? array.EnumerateArray().Select(Display).ToHashSet() : [];
+                var panel = new StackPanel { Spacing = 2 };
+                panel.Children.Add(new TextBlock { Text = label });
+                var boxes = (field.Options ?? []).Select(o => new CheckBox { Content = o, IsChecked = chosen.Contains(o) }).ToList();
+                foreach (var box in boxes)
+                    panel.Children.Add(box);
+                return (panel, () => boxes.Where(b => b.IsChecked == true).Select(b => (string)b.Content).ToList());
+            }
+            case "checkbox":
+            {
+                var box = new CheckBox { Content = label, IsChecked = value is { ValueKind: JsonValueKind.True } };
+                return (box, () => box.IsChecked == true);
+            }
+            case "date":
+            {
+                var picker = new CalendarDatePicker { Header = label, PlaceholderText = "Choose a date", HorizontalAlignment = HorizontalAlignment.Stretch };
+                if (DateTimeOffset.TryParse(text, out var day))
+                    picker.Date = day;
+                return (picker, () => picker.Date?.ToString("yyyy-MM-dd"));
+            }
+            case "number":
+            {
+                var box = new NumberBox { Header = label, Value = double.TryParse(text, out var n) ? n : double.NaN, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden };
+                return (box, () => double.IsNaN(box.Value) ? null : box.Value);
+            }
+            case "textarea":
+            {
+                var box = new TextBox { Header = label, Text = text, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 70, MaxLength = 10000 };
+                return (box, () => box.Text.Length > 0 ? box.Text : null);
+            }
+            default:
+            {
+                var box = new TextBox { Header = label, Text = text, MaxLength = field.Type == "phone" ? 40 : 500, PlaceholderText = field.Help ?? "" };
+                if (field.Type is "ip" or "url")
+                    box.FontFamily = new FontFamily("Cascadia Mono, Consolas");
+                return (box, () => box.Text.Trim().Length > 0 ? box.Text.Trim() : null);
+            }
+        }
     }
 
     // ---------- a client's overview ----------

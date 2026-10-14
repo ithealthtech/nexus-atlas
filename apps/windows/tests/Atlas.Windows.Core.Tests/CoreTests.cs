@@ -536,6 +536,19 @@ public class PreviewServerTests
         Assert.Equal(HttpStatusCode.Conflict, late.Status);
         await client.ArchivePasswordAsync(added.Id, cancellationToken: ct);
         Assert.DoesNotContain(await client.ListPasswordsAsync("c-harbor", ct), p => p.Id == added.Id);
+
+        // Adding, changing, and archiving an asset in a layout.
+        var layout = (await client.ListLayoutsAsync(ct))[0];
+        Assert.Contains("Firewall", layout.Fields.Single(f => f.Key == "type").Options!);
+        var fields = new Dictionary<string, object?> { ["type"] = "Switch", ["ip"] = "10.20.0.2" };
+        var asset = await client.CreateAssetAsync("c-harbor", layout.Id, "HDG-SW-01", "active", fields, "", ct);
+        Assert.Equal(("HDG-SW-01", "10.20.0.2", 1), (asset.Name, asset.Fields["ip"].GetString(), asset.Version));
+        fields["ip"] = "10.20.0.3";
+        var edited = await client.UpdateAssetAsync(asset.Id, asset.Version, "HDG-SW-01", "active", fields, "Core switch", ct);
+        Assert.Equal(("10.20.0.3", "Core switch", 2), (edited.Fields["ip"].GetString(), edited.Notes, edited.Version));
+        await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdateAssetAsync(asset.Id, asset.Version, "Old", "active", fields, "", ct));
+        await client.ArchiveAssetAsync(asset.Id, cancellationToken: ct);
+        Assert.DoesNotContain(await client.ListAssetsAsync("c-harbor", ct), a => a.Id == asset.Id);
         Assert.NotEmpty(await client.SearchAsync("hdg", cancellationToken: ct));
     }
 
