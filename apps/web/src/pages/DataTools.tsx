@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CloudDownload, Factory, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
 import type { CsvImportResult, CsvTarget, HuduImportOptions, HuduPreview, ImportJobView } from '@atlas/shared';
 import { PageSections } from '@/components/PageSections';
+import { DangerZone } from './DangerZone';
+import { useActor } from '@/lib/session';
 import {
   Badge,
   Button,
@@ -612,6 +614,7 @@ function ImportHistory() {
 }
 
 export function DataTools() {
+  const actor = useActor();
   return (
     <>
       <PageHeader
@@ -636,6 +639,7 @@ export function DataTools() {
             on the server. People keep their passwords; see the deployment guide for details.
           </p>
         </div>
+        {actor.isAdmin && <DangerZone />}
       </PageSections>
     </>
   );

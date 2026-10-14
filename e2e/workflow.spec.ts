@@ -699,7 +699,7 @@ test.describe.serial('account security and administration', () => {
   test('admin sets up Microsoft 365 email, a group, and checks expirations and log integrity', async ({ page }) => {
     watch(page);
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);
-    await nav(page, 'Settings');
+    await nav(page, 'Email & alerts');
     await page.getByLabel('Send email from Atlas').check();
     // The legacy SMTP preset still fills in Office 365's server.
     await page.getByLabel('Microsoft 365 SMTP (legacy)', { exact: true }).check();
@@ -779,7 +779,7 @@ test.describe.serial('data in and out, and the client portal', () => {
     await page.getByRole('button', { name: 'Import 1 row' }).click();
     await expect(page.getByText('Imported: 1 new, 0 updated.')).toBeVisible();
 
-    await nav(page, 'Settings');
+    await nav(page, 'API keys');
     await page.getByRole('button', { name: 'New key' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Name').fill('ConnectWise sync');
@@ -997,7 +997,10 @@ test.describe.serial('accessibility sweep', () => {
       '/admin/updates',
       '/admin/services',
       '/admin/certificate',
-      '/admin/settings',
+      '/admin/email',
+      '/admin/monitoring',
+      '/admin/sign-in',
+      '/admin/api-keys',
     ];
     for (const theme of ['light', 'dark'] as const) {
       // Choose the theme the way a person does (it's saved and applied as each page loads), rather than
@@ -1017,7 +1020,8 @@ test.describe.serial('accessibility sweep', () => {
       client,
       `${client}/passwords`,
       '/admin/status',
-      '/admin/settings',
+      '/admin/email',
+      '/admin/monitoring',
       '/admin/vault-policies',
     ]) {
       await page.goto(path);

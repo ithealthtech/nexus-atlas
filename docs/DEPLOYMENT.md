@@ -55,7 +55,7 @@ In development, with no key configured, Atlas creates `data/atlas-master.key` on
 
 ## Email
 
-Atlas sends password reset links, expiry alerts, and a Monday digest. An administrator sets it up under **Settings → Email**; nothing is needed in the environment.
+Atlas sends password reset links, expiry alerts, and a Monday digest. An administrator sets it up under **Administration → Email & alerts**; nothing is needed in the environment.
 
 - **Microsoft 365 (app registration), recommended:** Atlas signs in as an Entra app with OAuth2 (client credentials) and sends through Microsoft Graph, with no mailbox password and no SMTP sign-in.
   1. In the Microsoft Entra admin center, go to **App registrations → New registration**. Choose single tenant and leave the redirect URI empty.

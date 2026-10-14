@@ -272,8 +272,16 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
             { to: '/admin/request-log', label: 'Request log' },
             { to: '/admin/webhooks', label: 'Webhooks' },
             { to: '/admin/updates', label: 'Updates' },
+          ],
+        },
+        {
+          title: 'Settings',
+          items: [
+            { to: '/admin/email', label: 'Email & alerts' },
+            { to: '/admin/monitoring', label: 'Monitoring' },
+            { to: '/admin/sign-in', label: 'Sign-in' },
+            { to: '/admin/api-keys', label: 'API keys' },
             { to: '/admin/theme', label: 'Theme' },
-            { to: '/admin/settings', label: 'Settings' },
           ],
         },
       ],

@@ -86,7 +86,7 @@ export function Status() {
                 icon={Mail}
                 label="Email"
                 value={s.email.enabled ? 'On' : 'Off'}
-                hint={s.email.enabled ? s.email.host : 'Set it up under Settings → Email.'}
+                hint={s.email.enabled ? s.email.host : 'Set it up under Administration → Email & alerts.'}
               />
               <Fact
                 icon={KeyRound}

@@ -156,7 +156,7 @@ export function AssetStatsCard({ clientId }: { clientId?: string }) {
           description="Configurations and other device layouts are counted here, by their Type and operating system."
           action={
             actor.isAdmin ? (
-              <AppLink to="/admin/settings" className="text-sm font-semibold text-primary hover:underline">
+              <AppLink to="/admin/monitoring" className="text-sm font-semibold text-primary hover:underline">
                 Choose which layouts count
               </AppLink>
             ) : undefined

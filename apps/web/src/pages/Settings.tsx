@@ -41,7 +41,6 @@ import {
   useTrackerSettings,
 } from '@/lib/queries';
 import { ApiKeysCard } from './SettingsExtra';
-import { DangerZone } from './DangerZone';
 import { EntraSettings } from './EntraSettings';
 import { SamlSettings } from './SamlSettings';
 
@@ -745,20 +744,16 @@ function TrackerSettingsCard({ current }: { current: TrackerSettings }) {
   );
 }
 
-export function Settings() {
-  const actor = useActor();
+/** Email Atlas sends, and what it alerts on and keeps. */
+export function EmailAlertsPage() {
   const email = useEmailSettings();
   const notifications = useNotificationSettings();
-  const rmmHealth = useRmmHealthSettings();
-  const warranty = useWarrantySettings();
-  const assetStats = useAssetStatsSettings();
-  const trackers = useTrackerSettings();
   return (
     <>
       <PageHeader
         eyebrow="Administration"
-        title="Settings"
-        description="Email, alerts, log retention, RMM health, warranty, asset statistics, domain and SSL trackers, branding, and API keys."
+        title="Email & alerts"
+        description="How Atlas sends email, who hears about expiring items, and how long logs are kept."
       />
       <PageSections>
         {email.data ? (
@@ -774,6 +769,25 @@ export function Settings() {
         ) : (
           <Skeleton className="h-48" />
         )}
+      </PageSections>
+    </>
+  );
+}
+
+/** What the client pages measure: RMM health, warranties, device counts, and domain and SSL trackers. */
+export function MonitoringPage() {
+  const rmmHealth = useRmmHealthSettings();
+  const warranty = useWarrantySettings();
+  const assetStats = useAssetStatsSettings();
+  const trackers = useTrackerSettings();
+  return (
+    <>
+      <PageHeader
+        eyebrow="Administration"
+        title="Monitoring"
+        description="What counts as healthy on the client pages: RMM devices, warranties, asset statistics, and domain and SSL trackers."
+      />
+      <PageSections>
         {rmmHealth.data ? (
           <RmmHealthSettingsCard key={JSON.stringify(rmmHealth.data)} current={rmmHealth.data} />
         ) : (
@@ -794,11 +808,39 @@ export function Settings() {
         ) : (
           <Skeleton className="h-40" />
         )}
+      </PageSections>
+    </>
+  );
+}
 
+/** Single sign-on for staff. */
+export function SignInPage() {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Administration"
+        title="Sign-in"
+        description="Let staff sign in with Microsoft Entra ID or a SAML identity provider."
+      />
+      <PageSections>
         <EntraSettings />
         <SamlSettings />
+      </PageSections>
+    </>
+  );
+}
+
+/** Keys for PSA, RMM, and scripts. */
+export function ApiKeysPage() {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Administration"
+        title="API keys"
+        description="Keys let your RMM and scripts read and update Atlas. Each key sees only what its scopes allow."
+      />
+      <PageSections>
         <ApiKeysCard />
-        {actor.isAdmin && <DangerZone />}
       </PageSections>
     </>
   );
