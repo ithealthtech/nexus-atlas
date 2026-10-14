@@ -180,6 +180,56 @@ public sealed class AtlasClient : IDisposable
     public Task<ClientDetail> SaveQuickNoteAsync(string clientId, string notes, int version, CancellationToken cancellationToken = default) =>
         SendAsync<ClientDetail>(HttpMethod.Patch, $"clients/{Uri.EscapeDataString(clientId)}", new { notes, notesVersion = version }, cancellationToken);
 
+    public Task<IReadOnlyList<PasswordFolder>> ListPasswordFoldersAsync(string clientId, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<PasswordFolder>>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(clientId)}/password-folders", null, cancellationToken);
+
+    /// <summary>Adds a login to a client's vault. Atlas records who added it, with this app named.</summary>
+    public Task<PasswordEntry> CreatePasswordAsync(string clientId, PasswordDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<PasswordEntry>(
+            HttpMethod.Post,
+            $"clients/{Uri.EscapeDataString(clientId)}/passwords",
+            new
+            {
+                kind = "login",
+                name = draft.Name,
+                username = draft.Username,
+                url = draft.Url,
+                secret = draft.Secret ?? "",
+                totp = draft.Totp ?? "",
+                notes = draft.Notes ?? "",
+                rotationDays = draft.RotationDays,
+                folderId = draft.FolderId,
+            },
+            cancellationToken);
+
+    /// <summary>
+    /// Changes a password entry. The version it was opened at goes with it: if someone saved since, Atlas refuses
+    /// (409) rather than overwrite them. The old password moves to the entry's history.
+    /// </summary>
+    public Task<PasswordEntry> UpdatePasswordAsync(string id, int version, PasswordDraft draft, CancellationToken cancellationToken = default)
+    {
+        var changes = new Dictionary<string, object?>
+        {
+            ["version"] = version,
+            ["name"] = draft.Name,
+            ["username"] = draft.Username,
+            ["url"] = draft.Url,
+            ["rotationDays"] = draft.RotationDays,
+            ["folderId"] = draft.FolderId,
+        };
+        if (!string.IsNullOrEmpty(draft.Secret))
+            changes["secret"] = draft.Secret;
+        if (draft.Totp is not null)
+            changes["totp"] = draft.Totp;
+        if (draft.Notes is not null)
+            changes["notes"] = draft.Notes;
+        return SendAsync<PasswordEntry>(HttpMethod.Patch, $"passwords/{Uri.EscapeDataString(id)}", changes, cancellationToken);
+    }
+
+    /// <summary>Archives an entry (or restores it). Archived entries leave lists but can be restored in Atlas.</summary>
+    public Task<PasswordEntry> ArchivePasswordAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
+        SendAsync<PasswordEntry>(HttpMethod.Post, $"passwords/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
+
     /// <summary>Stars or unstars a client, asset, document, or password: the person's own bookmark in Atlas.</summary>
     public Task<FavoriteState> SetFavoriteAsync(string kind, string id, bool favorite, CancellationToken cancellationToken = default)
     {

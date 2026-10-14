@@ -525,6 +525,17 @@ public class PreviewServerTests
         var stale = await Assert.ThrowsAsync<AtlasApiException>(() => client.SaveQuickNoteAsync("c-harbor", "Older edit", harborClient.NotesVersion, ct));
         Assert.Equal(HttpStatusCode.Conflict, stale.Status);
         Assert.True((await client.GetSessionAsync(ct)).CanWrite);
+
+        // Adding, changing, and archiving a password.
+        var draft = new PasswordDraft("Router admin", "admin", "https://10.20.0.254", PasswordGenerator.Generate(), null, null, 90, null);
+        var added = await client.CreatePasswordAsync("c-harbor", draft, ct);
+        Assert.Equal(("Router admin", "Harbor Dental Group", 1), (added.Name, added.ClientName, added.Version));
+        var changed = await client.UpdatePasswordAsync(added.Id, added.Version, draft with { Name = "Router admin (new)", Secret = null }, ct);
+        Assert.Equal(("Router admin (new)", 2), (changed.Name, changed.Version));
+        var late = await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdatePasswordAsync(added.Id, added.Version, draft, ct));
+        Assert.Equal(HttpStatusCode.Conflict, late.Status);
+        await client.ArchivePasswordAsync(added.Id, cancellationToken: ct);
+        Assert.DoesNotContain(await client.ListPasswordsAsync("c-harbor", ct), p => p.Id == added.Id);
         Assert.NotEmpty(await client.SearchAsync("hdg", cancellationToken: ct));
     }
 
@@ -545,5 +556,25 @@ public class PreviewServerTests
             seen(request.RequestUri!);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]", Encoding.UTF8, "application/json") });
         }
+    }
+}
+
+public class PasswordGeneratorTests
+{
+    [Fact]
+    public void Makes_long_mixed_passwords_without_look_alike_characters()
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            var password = PasswordGenerator.Generate(16);
+            Assert.Equal(16, password.Length);
+            Assert.Contains(password, char.IsLower);
+            Assert.Contains(password, char.IsUpper);
+            Assert.Contains(password, char.IsDigit);
+            Assert.Contains(password, c => !char.IsLetterOrDigit(c));
+            Assert.DoesNotContain(password, c => "0Oo1lI|".Contains(c));
+        }
+        Assert.NotEqual(PasswordGenerator.Generate(), PasswordGenerator.Generate());
+        Assert.Throws<ArgumentOutOfRangeException>(() => PasswordGenerator.Generate(4));
     }
 }

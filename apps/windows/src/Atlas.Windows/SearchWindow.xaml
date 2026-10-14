@@ -137,12 +137,20 @@
                         <TextBlock x:Name="PageTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
                         <TextBlock x:Name="PageInfo" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <Button x:Name="StarButton" Grid.Column="1" Click="Star_Click" Visibility="Collapsed" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon x:Name="StarIcon" Glyph="&#xE734;" FontSize="14" />
-                            <TextBlock x:Name="StarText" Text="Add to favorites" />
-                        </StackPanel>
-                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button x:Name="NewButton" Click="New_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE710;" FontSize="14" />
+                                <TextBlock x:Name="NewText" Text="New password" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="StarButton" Click="Star_Click" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon x:Name="StarIcon" Glyph="&#xE734;" FontSize="14" />
+                                <TextBlock x:Name="StarText" Text="Add to favorites" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                     <ComboBox x:Name="TypeFilter" Grid.Column="2" MinWidth="150" VerticalAlignment="Center" Visibility="Collapsed"
                               SelectionChanged="TypeFilter_SelectionChanged" AutomationProperties.Name="Asset type" />
                     <TextBox x:Name="FilterBox" Grid.Column="3" Width="240" VerticalAlignment="Center" PlaceholderText="Filter this list"
@@ -211,16 +219,28 @@
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
                         Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Click="Edit_Click" Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Edit in Atlas">
+                        <Button x:Name="EditHereButton" Click="EditHere_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE70F;" FontSize="14" />
-                                <TextBlock Text="Edit in Atlas" />
+                                <TextBlock Text="Edit" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="Edit_Click" AutomationProperties.Name="Open in Atlas">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8A7;" FontSize="14" />
+                                <TextBlock Text="Open in Atlas" />
                             </StackPanel>
                         </Button>
                         <Button Click="CopyLink_Click" AutomationProperties.Name="Copy link">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE71B;" FontSize="14" />
                                 <TextBlock Text="Copy link" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ArchiveButton" Click="Archive_Click" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE7B8;" FontSize="14" />
+                                <TextBlock Text="Archive" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

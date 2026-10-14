@@ -350,15 +350,27 @@ public sealed partial class SearchWindow : Window
 
         var isItem = place.Kind == "item";
         var isOverview = place.Kind == "client" && place.Tab == "overview";
-        ListPanel.Visibility = isItem || isOverview ? Visibility.Collapsed : Visibility.Visible;
-        DetailScroll.Visibility = isItem || isOverview ? Visibility.Visible : Visibility.Collapsed;
+        var isEditor = place.Kind == "edit";
+        var showsPasswords = place.Kind == "passwords" || (place.Kind == "client" && place.Tab == "passwords");
+        NewButton.Visibility = canWrite && showsPasswords ? Visibility.Visible : Visibility.Collapsed;
+        var editable = canWrite && place.Item is { Kind: "password" };
+        EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        ListPanel.Visibility = isItem || isOverview || isEditor ? Visibility.Collapsed : Visibility.Visible;
+        DetailScroll.Visibility = isItem || isOverview || isEditor ? Visibility.Visible : Visibility.Collapsed;
         DetailBar.Visibility = isItem ? Visibility.Visible : Visibility.Collapsed;
-        FilterBox.Visibility = isItem || isOverview || place.Kind == "search" ? Visibility.Collapsed : Visibility.Visible;
+        FilterBox.Visibility = isItem || isOverview || isEditor || place.Kind == "search" ? Visibility.Collapsed : Visibility.Visible;
         TypeFilter.Visibility = Visibility.Collapsed;
         Tabs.Visibility = place.Kind == "client" ? Visibility.Visible : Visibility.Collapsed;
         PageTitle.Text = place.Title;
         PageInfo.Text = "";
         ShowStar();
+        if (isEditor)
+        {
+            PageInfo.Text = place.Item is null ? "Saved encrypted in the client's vault, and recorded under your name." : "Only what you change is saved. The old password is kept in the entry's history.";
+            ShowPasswordEditor(place);
+            return;
+        }
         if (isItem)
         {
             PageInfo.Text = Join(Kind(place.Item!.Kind), place.Item.ClientName);
@@ -378,6 +390,223 @@ public sealed partial class SearchWindow : Window
         }
         FilterBox.Text = "";
         _ = LoadPageAsync();
+    }
+
+    // ---------- adding and changing passwords ----------
+    private static readonly (string Label, int? Days)[] RotationChoices =
+    [
+        ("Don't remind me", null),
+        ("Every 30 days", 30),
+        ("Every 60 days", 60),
+        ("Every 90 days", 90),
+        ("Every 6 months", 180),
+        ("Every year", 365),
+    ];
+
+    private void New_Click(object sender, RoutedEventArgs e)
+    {
+        var place = trail.LastOrDefault();
+        Go(new Place("edit", "New password", ClientId: place?.Kind == "client" ? place.ClientId : null));
+    }
+
+    private void EditHere_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is { Kind: "password" } row)
+            Go(new Place("edit", $"Edit {row.Title}", ClientId: row.ClientId, Item: row));
+    }
+
+    private async void Archive_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is not { Kind: "password" } row || app.Client is not { } client)
+            return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = $"Archive {row.Title}?",
+            Content = "It leaves the lists and search. It isn't deleted: you can restore it from the archived list in Atlas.",
+            PrimaryButtonText = "Archive",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+        try
+        {
+            await client.ArchivePasswordAsync(row.Id);
+            recent.RemoveAll(r => r.Kind == row.Kind && r.Id == row.Id);
+            Back();
+            Show($"{row.Title} archived. Restore it from the archived list in Atlas.", InfoBarSeverity.Success);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    /// <summary>The form for a new password, or for changing one. Secrets already saved are never shown here.</summary>
+    private async void ShowPasswordEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        PasswordEntry? existing = null;
+        IReadOnlyList<PasswordFolder> folders = [];
+        try
+        {
+            if (place.Item is { } row)
+                existing = await client.GetPasswordAsync(row.Id, cancel.Token);
+            var clientId = existing?.ClientId ?? place.ClientId;
+            if (clientId is not null)
+                folders = await client.ListPasswordFoldersAsync(clientId, cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return;
+        }
+        if (cancel.IsCancellationRequested)
+            return;
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        ComboBox? clientBox = null;
+        if (existing is null && place.ClientId is null)
+        {
+            clientBox = new ComboBox { Header = "Client", PlaceholderText = "Choose the client it belongs to", HorizontalAlignment = HorizontalAlignment.Stretch };
+            clientBox.ItemsSource = clients.Select(c => c.Name).ToList();
+            form.Children.Add(clientBox);
+        }
+        else
+        {
+            var owner = existing?.ClientName ?? clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+            form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
+        }
+        var name = new TextBox { Header = "Name", Text = existing?.Name ?? "", PlaceholderText = "For example, HDG-FW-01 admin", MaxLength = 200 };
+        var username = new TextBox { Header = "Username", Text = existing?.Username ?? "", MaxLength = 254 };
+        var secret = new PasswordBox
+        {
+            Header = existing is null ? "Password" : "New password",
+            PlaceholderText = existing is null ? "" : "Leave empty to keep the current password",
+            PasswordRevealMode = PasswordRevealMode.Peek,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        var generate = new Button { Content = "Generate", VerticalAlignment = VerticalAlignment.Bottom };
+        generate.Click += (_, _) =>
+        {
+            secret.Password = PasswordGenerator.Generate();
+            secret.PasswordRevealMode = PasswordRevealMode.Visible;
+        };
+        var secretRow = new Grid { ColumnSpacing = 8 };
+        secretRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        secretRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(generate, 1);
+        secretRow.Children.Add(secret);
+        secretRow.Children.Add(generate);
+        var url = new TextBox { Header = "Website or address", Text = existing?.Url ?? "", PlaceholderText = "https://", InputScope = new InputScope { Names = { new InputScopeName(InputScopeNameValue.Url) } } };
+        var totp = new PasswordBox
+        {
+            Header = "Authenticator setup key (optional)",
+            PlaceholderText = existing?.HasTotp == true ? "Leave empty to keep the current key" : "The key shown when two-step sign-in was set up",
+            PasswordRevealMode = PasswordRevealMode.Peek,
+        };
+        var removeTotp = new CheckBox { Content = "Remove the one-time code", Visibility = existing?.HasTotp == true ? Visibility.Visible : Visibility.Collapsed };
+        var folder = new ComboBox { Header = "Folder", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var folderChoices = new List<(string? Id, string Name)> { (null, "No folder") };
+        folderChoices.AddRange(folders.Select(f => ((string?)f.Id, f.Name)));
+        folder.ItemsSource = folderChoices.Select(f => f.Name).ToList();
+        folder.SelectedIndex = Math.Max(0, folderChoices.FindIndex(f => f.Id == existing?.FolderId));
+        folder.Visibility = folders.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var rotation = new ComboBox { Header = "Remind me to change it", HorizontalAlignment = HorizontalAlignment.Stretch };
+        rotation.ItemsSource = RotationChoices.Select(c => c.Label).ToList();
+        rotation.SelectedIndex = Math.Max(0, Array.FindIndex(RotationChoices, c => c.Days == existing?.RotationDays));
+        var notes = new TextBox
+        {
+            Header = "Notes",
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 80,
+            MaxLength = 20000,
+            PlaceholderText = existing?.HasNotes == true ? "Leave empty to keep the current notes" : "Kept encrypted, like the password",
+        };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button { Content = existing is null ? "Add password" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        foreach (var control in new UIElement[] { name, username, secretRow, url, totp, removeTotp, folder, rotation, notes, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        name.Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            var clientId = existing?.ClientId ?? place.ClientId ?? (clientBox?.SelectedIndex is >= 0 and var i ? clients[i].Id : null);
+            string? problem = clientId is null ? "Choose the client it belongs to."
+                : name.Text.Trim().Length == 0 ? "Give it a name."
+                : existing is null && secret.Password.Length == 0 ? "Enter the password, or choose Generate."
+                : url.Text.Trim().Length > 0 && !IsWebAddress(url.Text.Trim()) ? "The address must start with http:// or https://."
+                : null;
+            if (problem is not null)
+            {
+                error.Message = problem;
+                error.IsOpen = true;
+                return;
+            }
+            var draft = new PasswordDraft(
+                name.Text.Trim(),
+                username.Text.Trim(),
+                url.Text.Trim(),
+                secret.Password.Length > 0 ? secret.Password : null,
+                removeTotp.IsChecked == true ? "" : totp.Password.Length > 0 ? totp.Password.Replace(" ", "", StringComparison.Ordinal) : null,
+                notes.Text.Length > 0 ? notes.Text : null,
+                RotationChoices[Math.Max(0, rotation.SelectedIndex)].Days,
+                folderChoices[Math.Max(0, folder.SelectedIndex)].Id);
+            save.IsEnabled = false;
+            try
+            {
+                var saved = existing is null
+                    ? await client.CreatePasswordAsync(clientId!, draft)
+                    : await client.UpdatePasswordAsync(existing.Id, existing.Version, draft);
+                var row = new Row("password", saved.Id, saved.Name, saved.Username, saved.ClientId, saved.ClientName);
+                Remember(row);
+                // The form gives way to the saved entry, so Back goes where it would have before.
+                trail[^1] = new Place("item", row.Title, Item: row);
+                if (existing is not null && trail.Count > 1 && trail[^2] is { Kind: "item", Item: { } before } && before.Id == row.Id)
+                    trail.RemoveAt(trail.Count - 2);
+                ShowPlace();
+                Show(existing is null ? $"{row.Title} added." : "Changes saved. The previous password is in the entry's history.", InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+            {
+                error.Message = "Someone saved this password while you were editing. Copy anything you typed, then go back and open it again.";
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
     }
 
     // ---------- a client's overview ----------

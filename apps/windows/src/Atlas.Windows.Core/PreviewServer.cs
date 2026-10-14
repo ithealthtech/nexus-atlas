@@ -30,6 +30,7 @@ public sealed class PreviewServer : HttpMessageHandler
         {
             id, clientId = client, clientName, kind, name, username = user, url, hasTotp = totp, hasNotes = false,
             requireReason = reason, canReveal = true, restricted = false, updatedAt = Now, updatedByName = "Alex Rivera",
+            version = 1, folderId = (string?)null, folderName = (string?)null, rotationDays = (int?)null,
         };
 
     private static readonly object[] Passwords =
@@ -129,6 +130,55 @@ public sealed class PreviewServer : HttpMessageHandler
         new { type = "document", id = "d-reboot", name = "Firewall reboot procedure", clientId = Harbor, clientName = "Harbor Dental Group" },
     ];
 
+// The vault as you change it in the preview: the made-up entries to start with, then whatever is added or edited.
+    private readonly List<Dictionary<string, object?>> passwords = [.. Passwords.Select(Mutable)];
+    private int added;
+
+    private static Dictionary<string, object?> Mutable(object item) =>
+        item.GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(item));
+
+    private object[] Vault() => [.. passwords.Cast<object>()];
+
+    private async Task<HttpResponseMessage?> ChangeVaultAsync(HttpRequestMessage request, string tail, CancellationToken cancellationToken)
+    {
+        var raw = request.Content is null ? "{}" : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        JsonElement Body() => JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        static string Text(JsonElement body, string name) => body.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : "";
+
+        var adding = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)/passwords$");
+        if (request.Method == HttpMethod.Post && adding.Success)
+        {
+            var body = Body();
+            var clientId = adding.Groups[1].Value;
+            var entry = Mutable(Pw($"p-new-{++added}", clientId, Prop(Clients.First(c => Prop(c, "id") == clientId), "name")!,
+                Text(body, "name"), Text(body, "username"), Text(body, "url"), Text(body, "totp").Length > 0));
+            passwords.Add(entry);
+            return new HttpResponseMessage(HttpStatusCode.Created) { Content = Json(entry) };
+        }
+        var one = System.Text.RegularExpressions.Regex.Match(tail, "^passwords/([^/]+)(/archive)?$");
+        if (!one.Success || request.Method == HttpMethod.Get)
+            return null;
+        var found = passwords.FirstOrDefault(p => (string?)p["id"] == one.Groups[1].Value);
+        if (found is null)
+            return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = Json(new { error = "That password isn't here any more." }) };
+        if (one.Groups[2].Success)
+        {
+            passwords.Remove(found);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(found) };
+        }
+        var change = Body();
+        if (change.GetProperty("version").GetInt32() != (int)found["version"]!)
+            return new HttpResponseMessage(HttpStatusCode.Conflict) { Content = Json(new { error = "Someone saved this password while you were editing it.", code = "conflict" }) };
+        foreach (var field in new[] { "name", "username", "url" })
+            if (change.TryGetProperty(field, out var value))
+                found[field] = value.GetString();
+        if (change.TryGetProperty("totp", out var totp))
+            found["hasTotp"] = totp.GetString()!.Length > 0;
+        found["version"] = (int)found["version"]! + 1;
+        found["updatedAt"] = DateTime.UtcNow.ToString("O");
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(found) };
+    }
+
     // The quick notes, which the preview lets you edit: text and version, by client.
     private readonly Dictionary<string, (string Text, int Version)> notes = new()
     {
@@ -171,6 +221,10 @@ public sealed class PreviewServer : HttpMessageHandler
         var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
         var client = query["client"];
         var tail = path[(path.IndexOf("/api/v1/", StringComparison.Ordinal) + 8)..];
+        if (await ChangeVaultAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changed)
+            return changed;
+        if (tail.EndsWith("/password-folders", StringComparison.Ordinal))
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Array.Empty<object>()) };
         var clientPage = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)(/contacts|/locations)?$");
         if (clientPage.Success && notes.ContainsKey(clientPage.Groups[1].Value))
         {
@@ -194,7 +248,7 @@ public sealed class PreviewServer : HttpMessageHandler
         {
             "native/session" => Session(),
             "clients" => Clients,
-            "passwords" => Filter(Passwords, client),
+            "passwords" => Filter(Vault(), client),
             "assets" => Filter(Assets, client),
             "documents" => Filter(Documents, client),
             "layouts" => Layouts,
@@ -205,7 +259,7 @@ public sealed class PreviewServer : HttpMessageHandler
                 (await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).Contains("\"totp\"")
                     ? new { value = "482193", expiresIn = (int?)18 }
                     : new { value = "c7Hq-29Lm-Vx4r-Np8e", expiresIn = (int?)null },
-            _ when tail.StartsWith("passwords/", StringComparison.Ordinal) => Find(Passwords, tail[10..]),
+            _ when tail.StartsWith("passwords/", StringComparison.Ordinal) => Find(Vault(), tail[10..]),
             _ when tail.StartsWith("assets/", StringComparison.Ordinal) => Find(Assets, tail[7..]),
             _ when tail.StartsWith("documents/", StringComparison.Ordinal) => DocumentFor(tail[10..]),
             _ => null,
@@ -239,8 +293,8 @@ public sealed class PreviewServer : HttpMessageHandler
         return copy;
     }
 
-    private static object[] Search(string q) =>
-        Passwords.Concat(Assets).Concat(Documents)
+    private object[] Search(string q) =>
+        Vault().Concat(Assets).Concat(Documents)
             .Where(i => (Prop(i, "name") ?? Prop(i, "title") ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
             .Select(i => new
             {
@@ -255,7 +309,9 @@ public sealed class PreviewServer : HttpMessageHandler
             .ToArray<object>();
 
     private static string? Prop(object item, string name) =>
-        item.GetType().GetProperty(name)?.GetValue(item) as string;
+        item is IDictionary<string, object?> fields
+            ? fields.TryGetValue(name, out var value) ? value as string : null
+            : item.GetType().GetProperty(name)?.GetValue(item) as string;
 
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 

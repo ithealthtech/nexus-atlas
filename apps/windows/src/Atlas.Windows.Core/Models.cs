@@ -58,7 +58,31 @@ public sealed record PasswordEntry(
     string Url,
     bool HasTotp,
     bool RequireReason,
-    string UpdatedAt);
+    string UpdatedAt,
+    string Kind = "login",
+    int Version = 0,
+    bool HasNotes = false,
+    string? FolderId = null,
+    string? FolderName = null,
+    int? RotationDays = null,
+    string? ExpiresOn = null);
+
+/// <summary>A folder in a client's vault.</summary>
+public sealed record PasswordFolder(string Id, string ClientId, string Name, int Count);
+
+/// <summary>
+/// A new password, or the changes to one. On a change, a field left null is left as it is; Secret, Totp and Notes
+/// are only sent when the person typed something there, so opening the form never has to show the stored values.
+/// </summary>
+public sealed record PasswordDraft(
+    string Name,
+    string Username,
+    string Url,
+    string? Secret,
+    string? Totp,
+    string? Notes,
+    int? RotationDays,
+    string? FolderId);
 
 public sealed record RevealResult(string Value, int? ExpiresIn);
 
