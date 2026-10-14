@@ -508,6 +508,8 @@ public class PreviewServerTests
         Assert.Equal("10.20.0.10", assets.First(a => a.Name == "HDG-DC-01").Fields["ip"].GetString());
         Assert.NotEmpty((await client.ListLayoutsAsync(ct))[0].Fields);
         Assert.Equal(4, (await client.ListFavoritesAsync(ct)).Count);
+        Assert.True((await client.SetFavoriteAsync("password", "p-wifi", true, ct)).Favorite);
+        Assert.False((await client.SetFavoriteAsync("client", "c-harbor", false, ct)).Favorite);
         var doc = await client.GetDocumentAsync("d-reboot", ct);
         Assert.Contains("1. Sign in to the FortiGate", RichTextPlain.From(doc.Content));
         Assert.Equal("482193", (await client.RevealToShowAsync("p-m365", SecretField.OneTimeCode, cancellationToken: ct)).Value);

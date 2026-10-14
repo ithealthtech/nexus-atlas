@@ -136,6 +136,8 @@ public sealed class PreviewServer : HttpMessageHandler
         var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
         var client = query["client"];
         var tail = path[(path.IndexOf("/api/v1/", StringComparison.Ordinal) + 8)..];
+        if (request.Method == HttpMethod.Put || request.Method == HttpMethod.Delete)
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new { favorite = request.Method == HttpMethod.Put }) };
         object? body = tail switch
         {
             "native/session" => Session(),

@@ -44,6 +44,8 @@ public sealed partial class SearchWindow : Window
     private readonly List<Row> recent = [];
     private readonly Dictionary<string, LayoutInfo> layouts = [];
     private readonly List<Place> trail = [];
+    // What the person starred, as "kind:id", so the star on a page shows whether it is.
+    private readonly HashSet<string> starred = [];
     private List<ClientChoice> clients = [];
     private IReadOnlyList<AssetSummary> assetCache = [];
     private List<Row> loaded = [];
@@ -202,6 +204,16 @@ public sealed partial class SearchWindow : Window
             AppTitleBar.Subtitle = session.Organization.Name;
             foreach (var layout in await client.ListLayoutsAsync())
                 layouts[layout.Id] = layout;
+            try
+            {
+                foreach (var f in await client.ListFavoritesAsync())
+                    starred.Add($"{f.Type}:{f.Id}");
+                ShowStar();
+            }
+            catch (AtlasApiException ex) when (ex.Code == "api_scope")
+            {
+                // An Atlas older than this app doesn't share favorites with it yet.
+            }
             var list = await client.ListClientsAsync();
             clients = [.. list.Where(c => c.Status != "inactive").Select(c => new ClientChoice(c.Id, c.Name))];
             if (trail.LastOrDefault()?.Kind == "clients")
@@ -343,6 +355,7 @@ public sealed partial class SearchWindow : Window
         Tabs.Visibility = place.Kind == "client" ? Visibility.Visible : Visibility.Collapsed;
         PageTitle.Text = place.Title;
         PageInfo.Text = "";
+        ShowStar();
         if (isItem)
         {
             PageInfo.Text = Join(Kind(place.Item!.Kind), place.Item.ClientName);
@@ -357,6 +370,60 @@ public sealed partial class SearchWindow : Window
         }
         FilterBox.Text = "";
         _ = LoadPageAsync();
+    }
+
+    // ---------- favorites ----------
+    /// <summary>What the current page is, as something that can be starred: a client, or an item.</summary>
+    private (string Kind, string Id)? Starrable() => trail.LastOrDefault() switch
+    {
+        { Kind: "client", ClientId: { } id } => ("client", id),
+        { Kind: "item", Item: { Kind: "password" or "asset" or "document" } row } => (row.Kind, row.Id),
+        _ => null,
+    };
+
+    private void ShowStar()
+    {
+        if (Starrable() is not { } thing)
+        {
+            StarButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var on = starred.Contains($"{thing.Kind}:{thing.Id}");
+        StarButton.Visibility = Visibility.Visible;
+        StarIcon.Glyph = on ? "" : "";
+        StarText.Text = on ? "In favorites" : "Add to favorites";
+        ToolTipService.SetToolTip(StarButton, on ? "Remove from favorites" : "Keep this on Home");
+    }
+
+    private async void Star_Click(object sender, RoutedEventArgs e)
+    {
+        if (Starrable() is not { } thing || app.Client is not { } client)
+            return;
+        var key = $"{thing.Kind}:{thing.Id}";
+        var on = !starred.Contains(key);
+        try
+        {
+            StarButton.IsEnabled = false;
+            await client.SetFavoriteAsync(thing.Kind, thing.Id, on);
+            if (on)
+                starred.Add(key);
+            else
+                starred.Remove(key);
+            ShowStar();
+            Show(on ? "Added to favorites. It's on Home." : "Removed from favorites.", InfoBarSeverity.Success);
+        }
+        catch (AtlasApiException ex) when (ex.Code == "api_scope")
+        {
+            Show("Your Atlas server needs updating before favorites can be changed here. Star it in Atlas in your browser for now.", InfoBarSeverity.Warning);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+        finally
+        {
+            StarButton.IsEnabled = true;
+        }
     }
 
     private void OpenAtlas_Click(object sender, RoutedEventArgs e)
@@ -397,7 +464,11 @@ public sealed partial class SearchWindow : Window
                     rows = [];
                     try
                     {
-                        rows.AddRange((await client.ListFavoritesAsync(cancel.Token))
+                        var favorites = await client.ListFavoritesAsync(cancel.Token);
+                        starred.Clear();
+                        foreach (var f in favorites)
+                            starred.Add($"{f.Type}:{f.Id}");
+                        rows.AddRange(favorites
                             .Where(f => f.Type is "password" or "asset" or "document" or "client")
                             .Select(f => new Row(f.Type, f.Id, f.Name, Join(Kind(f.Type), f.ClientName), f.ClientId, "Favorites")));
                     }
@@ -407,7 +478,7 @@ public sealed partial class SearchWindow : Window
                     }
                     rows.AddRange(recent.Select(r => r with { ClientName = "Recently opened", Subtitle = Join(Kind(r.Kind), r.ClientName) }));
                     groupBy = r => r.ClientName!;
-                    empty = "Star things in Atlas to keep them here. What you open shows up here too.";
+                    empty = "Nothing here yet. Open a client or an item and choose Add to favorites at the top to keep it here. What you open also shows up here.";
                     break;
                 case "clients":
                     rows = [.. clients.Select(c => new Row("client", c.Id!, c.Name, "Client", c.Id, c.Name))];

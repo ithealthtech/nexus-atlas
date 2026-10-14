@@ -127,5 +127,7 @@ public sealed record DocumentDetail(
     System.Text.Json.JsonElement Content,
     string? UpdatedByName = null);
 
+public sealed record FavoriteState(bool Favorite);
+
 /// <summary>Something the person starred in Atlas.</summary>
 public sealed record FavoriteItem(string Type, string Id, string Name, string? ClientId, string? ClientName);

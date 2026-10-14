@@ -163,6 +163,14 @@ public sealed class AtlasClient : IDisposable
     public Task<IReadOnlyList<FavoriteItem>> ListFavoritesAsync(CancellationToken cancellationToken = default) =>
         SendAsync<IReadOnlyList<FavoriteItem>>(HttpMethod.Get, "favorites", null, cancellationToken);
 
+    /// <summary>Stars or unstars a client, asset, document, or password: the person's own bookmark in Atlas.</summary>
+    public Task<FavoriteState> SetFavoriteAsync(string kind, string id, bool favorite, CancellationToken cancellationToken = default)
+    {
+        var escaped = Uri.EscapeDataString(id);
+        var path = kind == "password" ? $"passwords/{escaped}/favorite" : $"favorites/{Uri.EscapeDataString(kind)}/{escaped}";
+        return SendAsync<FavoriteState>(favorite ? HttpMethod.Put : HttpMethod.Delete, path, null, cancellationToken);
+    }
+
     /// <summary>
     /// Reads a password or the current one-time code to show it on screen for a moment. Recorded in the password's
     /// access history like a reveal in the browser.

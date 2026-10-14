@@ -131,14 +131,21 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock x:Name="PageTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
                         <TextBlock x:Name="PageInfo" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <ComboBox x:Name="TypeFilter" Grid.Column="1" MinWidth="150" VerticalAlignment="Center" Visibility="Collapsed"
+                    <Button x:Name="StarButton" Grid.Column="1" Click="Star_Click" Visibility="Collapsed" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon x:Name="StarIcon" Glyph="&#xE734;" FontSize="14" />
+                            <TextBlock x:Name="StarText" Text="Add to favorites" />
+                        </StackPanel>
+                    </Button>
+                    <ComboBox x:Name="TypeFilter" Grid.Column="2" MinWidth="150" VerticalAlignment="Center" Visibility="Collapsed"
                               SelectionChanged="TypeFilter_SelectionChanged" AutomationProperties.Name="Asset type" />
-                    <TextBox x:Name="FilterBox" Grid.Column="2" Width="240" VerticalAlignment="Center" PlaceholderText="Filter this list"
+                    <TextBox x:Name="FilterBox" Grid.Column="3" Width="240" VerticalAlignment="Center" PlaceholderText="Filter this list"
                              TextChanged="FilterBox_TextChanged" AutomationProperties.Name="Filter this list" />
                 </Grid>
 

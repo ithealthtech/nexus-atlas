@@ -248,7 +248,14 @@ describe('Atlas for Windows sign-in (native apps)', () => {
     const starred = await v1('GET', '/favorites', token);
     expect(starred.statusCode).toBe(200);
     expect(starred.json()).toMatchObject([{ type: 'password', id: router }]);
-    expect((await v1('DELETE', `/passwords/${router}/favorite`, token)).statusCode).toBe(403);
+    // Starring is the person's own bookmark, so the read-only app may do it, and only that.
+    expect((await v1('DELETE', `/passwords/${router}/favorite`, token)).statusCode).toBe(200);
+    expect((await v1('GET', '/favorites', token)).json()).toEqual([]);
+    expect((await v1('PUT', `/passwords/${router}/favorite`, token)).statusCode).toBe(200);
+    expect((await v1('PUT', `/favorites/client/${harbor}`, token)).statusCode).toBe(200);
+    expect((await v1('GET', '/favorites', token)).json()).toHaveLength(2);
+    expect((await v1('PUT', `/favorites/client/${coastal}`, token)).statusCode).toBe(404);
+    expect((await v1('PATCH', `/passwords/${router}`, token, { name: 'X' })).statusCode).toBe(403);
 
     // Read-only: no reveals.
     const readOnly = await signInApp(b, { scope: 'read' });

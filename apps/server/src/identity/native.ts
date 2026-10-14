@@ -25,6 +25,9 @@ const ABSOLUTE_MS = APP_SESSION_LIMITS.absoluteDays * DAY;
 const TOKEN = /^Bearer (atlasd_[A-Za-z0-9_-]{43})$/;
 // Reading and changing a password's secret: these need "reveal", never just "write".
 const REVEAL_ROUTE = /^\/api\/passwords\/[^/]+\/(reveal|history\/[^/]+\/reveal)$/;
+// Starring and unstarring, which the app may do with only "read" (see authenticate).
+const STAR_ROUTE = /^\/api\/favorites\/(client|asset|document)\/[^/]+$/;
+const PASSWORD_STAR_ROUTE = /^\/api\/passwords\/[^/]+\/favorite$/;
 // The app's own session (who am I, sign out) is always available to it.
 const OWN_SESSION = '/api/native/session';
 
@@ -197,14 +200,17 @@ export class NativeAppService {
 
     const path = url.split('?')[0]!;
     if (path !== OWN_SESSION) {
-      // The desktop app also lists what the person starred, to show in its sidebar. Read only.
-      const favorites = path === '/api/favorites' && (method === 'GET' || method === 'HEAD');
-      if (!favorites && !API_ROUTES.some((r) => r.test(path)))
+      // The desktop app lists what the person starred, and can star and unstar things. A star is the person's own
+      // bookmark: it changes nothing anyone else sees and leaves no record, so it needs only "read".
+      const listing = path === '/api/favorites' && (method === 'GET' || method === 'HEAD');
+      const starring =
+        (method === 'PUT' || method === 'DELETE') && (STAR_ROUTE.test(path) || PASSWORD_STAR_ROUTE.test(path));
+      if (!listing && !starring && !API_ROUTES.some((r) => r.test(path)))
         throw new HttpError(403, 'This endpoint is not available to desktop apps.', 'api_scope');
       const scopes = session.scopes as AppScope[];
       const needed: AppScope = REVEAL_ROUTE.test(path)
         ? 'reveal'
-        : method === 'GET' || method === 'HEAD'
+        : method === 'GET' || method === 'HEAD' || starring
           ? 'read'
           : 'write';
       if (!scopes.includes(needed))
