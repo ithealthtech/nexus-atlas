@@ -461,9 +461,23 @@ export function ActivityFeed({
 }) {
   if (!items) return <Skeleton className="m-4 h-24" />;
   if (!items.length) return <p className="px-5 py-4 text-sm text-muted">{empty}</p>;
+  // A sync or an import writes one entry per record. Thirty identical lines say less than one that counts them.
+  const groups: { first: ActivityView; rest: ActivityView[] }[] = [];
+  for (const a of items) {
+    const last = groups.at(-1);
+    if (
+      last &&
+      last.first.actorName === a.actorName &&
+      last.first.action === a.action &&
+      last.first.entityType === a.entityType &&
+      last.first.clientId === a.clientId
+    )
+      last.rest.push(a);
+    else groups.push({ first: a, rest: [] });
+  }
   return (
     <ul className="divide-y divide-border">
-      {items.map((a) => {
+      {groups.map(({ first: a, rest }) => {
         const href =
           a.entityId && ['asset', 'document', 'password'].includes(a.entityType)
             ? itemHref({ type: a.entityType as ItemType, id: a.entityId, clientId: a.clientId })
@@ -490,6 +504,7 @@ export function ActivityFeed({
                 ) : (
                   <span className="font-medium text-text">{a.title}</span>
                 )}
+                {rest.length > 0 && ` and ${rest.length} more`}
               </p>
               <p className="text-xs text-muted">
                 {relativeTime(a.createdAt)}

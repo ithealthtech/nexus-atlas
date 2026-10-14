@@ -32,6 +32,7 @@ export function CardHeader({
 // are the ones that catch the eye.
 const tones = {
   neutral: 'text-text-2 before:opacity-45',
+  quiet: 'font-normal text-muted before:hidden',
   primary: 'text-primary',
   success: 'text-success',
   warning: 'text-warning',

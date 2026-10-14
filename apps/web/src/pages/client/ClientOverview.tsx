@@ -82,13 +82,13 @@ export function ClientOverview() {
             }
           />
           {counts.length ? (
-            <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-3 sm:grid-cols-3">
               {counts.map((l) => (
                 <AppLink
                   key={l.id}
                   to={`/clients/${clientId}/assets`}
                   search={{ layout: l.id }}
-                  className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 hover:bg-surface-2"
+                  className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-2"
                 >
                   <ItemIcon type="asset" icon={l.icon} />
                   <span className="min-w-0">
@@ -158,7 +158,7 @@ export function ClientOverview() {
       <div className="space-y-6">
         <WarrantyCard clientId={clientId} />
         <Card>
-          <CardHeader title="Primary contact" />
+          <CardHeader title="Contact and location" />
           {contact ? (
             <div className="space-y-1.5 px-5 py-4 text-sm">
               <p className="flex items-center gap-2 font-semibold">
@@ -187,11 +187,8 @@ export function ClientOverview() {
               and mark one as primary.
             </p>
           )}
-        </Card>
-        <Card>
-          <CardHeader title="Primary location" />
           {location ? (
-            <div className="px-5 py-4 text-sm">
+            <div className="border-t border-border px-5 py-4 text-sm">
               <p className="flex items-center gap-2 font-semibold">
                 <MapPin className="size-4 text-muted" aria-hidden /> {location.name}
               </p>
@@ -206,7 +203,7 @@ export function ClientOverview() {
               </p>
             </div>
           ) : (
-            <p className="px-5 py-4 text-sm text-muted">
+            <p className="border-t border-border px-5 py-4 text-sm text-muted">
               <AppLink to={`/clients/${clientId}/locations`} className="text-primary underline underline-offset-2">
                 Add locations
               </AppLink>{' '}

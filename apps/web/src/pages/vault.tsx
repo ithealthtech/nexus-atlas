@@ -1526,7 +1526,9 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                       <td className="hidden px-5 py-3 sm:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {p.kind === 'login' && (
-                            <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
+                            <Badge tone={p.strength >= 3 ? 'quiet' : strengthTone[p.strength]}>
+                              {STRENGTH_LABELS[p.strength]}
+                            </Badge>
                           )}
                           {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
                           {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}

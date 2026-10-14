@@ -283,7 +283,7 @@ function AssetTable({ assets, layout, showClient }: { assets: AssetView[]; layou
                 </td>
               ))}
               <td className="px-5 py-3">
-                <Badge tone={statusTone[a.status]} className="capitalize">
+                <Badge tone={a.status === 'active' ? 'quiet' : statusTone[a.status]} className="capitalize">
                   {a.status}
                 </Badge>
               </td>
