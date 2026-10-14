@@ -38,7 +38,7 @@ export function Dialog({
       }}
       aria-labelledby="dialog-title"
       className={cn(
-        'animate-dialog m-auto max-h-[90vh] w-[calc(100%-2rem)] overflow-hidden rounded-2xl border border-border bg-surface p-0 text-text shadow-2xl',
+        'animate-dialog m-auto max-h-[90vh] w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-border bg-surface p-0 text-text shadow-2xl',
         size === 'sm' ? 'max-w-md' : size === 'lg' ? 'max-w-3xl' : 'max-w-xl',
       )}
     >

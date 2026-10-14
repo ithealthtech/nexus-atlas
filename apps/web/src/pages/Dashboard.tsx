@@ -61,10 +61,8 @@ import {
 import { formatDate, relativeTime } from '@/lib/format';
 import { statusTone } from './Clients';
 
-function greeting() {
-  const hour = new Date().getHours();
-  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-}
+const longDate = () =>
+  new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
 // Layouts whose expiry dates the Domains and SSL card shows.
 const DOMAIN_LAYOUTS = ['domain', 'ssl_certificate'];
@@ -369,12 +367,8 @@ export function Dashboard() {
     <>
       <PageHeader
         eyebrow={actor.organization.name}
-        title={`${greeting()}, ${actor.name.split(' ')[0]}.`}
-        description={
-          actor.isStaff
-            ? "Here's what's happening across your client workspaces."
-            : 'Your documentation, kept by our team.'
-        }
+        title="Overview"
+        description={actor.isStaff ? longDate() : 'Your documentation, kept by our team.'}
         actions={
           <Button variant="secondary" size="sm" onClick={() => setCustomizing(true)}>
             <LayoutGrid /> Customize

@@ -10,7 +10,7 @@ import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 const control =
-  'w-full rounded-lg border border-border-strong bg-surface px-3 text-sm text-text placeholder:text-muted transition-colors focus:border-primary focus:outline-none focus:ring-3 focus:ring-primary/15 disabled:opacity-60 aria-[invalid=true]:border-danger';
+  'w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-text placeholder:text-muted transition-colors focus:border-primary focus:outline-none focus:ring-3 focus:ring-primary/15 disabled:opacity-60 aria-[invalid=true]:border-danger';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...props },

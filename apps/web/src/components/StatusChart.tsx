@@ -47,7 +47,7 @@ function Donut({ slices, total, active }: { slices: Slice[]; total: number; acti
   // Where each slice starts, as a share of the ring.
   const starts = shown.map((_, i) => shown.slice(0, i).reduce((sum, s) => sum + (s.count / total) * 100, 0));
   return (
-    <svg viewBox="0 0 120 120" className="size-32 shrink-0 -rotate-90" aria-hidden>
+    <svg viewBox="0 0 120 120" className="size-24 shrink-0 -rotate-90" aria-hidden>
       {shown.map((s, i) => {
         const length = (s.count / total) * 100;
         const dash = Math.max(length - gap, 0.1);
@@ -168,14 +168,14 @@ export function StatusChart<F extends string>({
 }) {
   const [active, setActive] = useState<string | null>(null);
   return (
-    <section aria-label={title} className={cn('flex min-w-0 flex-col', !bare && 'rounded-lg border border-border p-4')}>
+    <section aria-label={title} className={cn('flex min-w-0 flex-col', !bare && 'py-1')}>
       <h3 className={cn('text-sm font-semibold text-text', bare && 'sr-only')}>{title}</h3>
       <div className={cn('flex flex-wrap items-center gap-4', !bare && 'mt-3')}>
         <div className="relative">
           <Donut slices={slices} total={total} active={active} />
           <div className="absolute inset-0 grid place-content-center text-center">
-            <span className="text-2xl font-semibold tracking-tight text-text">{pct(headline.count, total)}%</span>
-            <span className="text-xs text-muted">{headline.label}</span>
+            <span className="text-lg leading-tight font-semibold text-text tabular-nums">{pct(headline.count, total)}%</span>
+            <span className="text-[11px] text-muted">{headline.label}</span>
           </div>
         </div>
         <table className="min-w-40 flex-1 text-sm">
@@ -252,22 +252,22 @@ export function Tile({
 }) {
   const body = (
     <>
-      <div className="flex items-center justify-between text-xs text-muted">
+      <div className="flex items-center gap-1.5 text-xs text-muted">
         {label}
-        <Icon className={cn('size-4', alert && SWATCH.critical)} aria-hidden />
+        {alert && <Icon className={cn('size-3.5', SWATCH.critical)} aria-hidden />}
       </div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight text-text tabular-nums">{value}</div>
+      <div className="mt-1 text-2xl leading-none font-semibold tracking-[-0.02em] text-text tabular-nums">{value}</div>
     </>
   );
   return onClick && value > 0 ? (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-lg border border-border px-4 py-3 text-left hover:border-primary hover:bg-surface-2"
+      className="border-l border-border-strong py-0.5 pl-4 text-left hover:border-primary"
     >
       {body}
     </button>
   ) : (
-    <div className="rounded-lg border border-border px-4 py-3">{body}</div>
+    <div className="border-l border-border-strong py-0.5 pl-4">{body}</div>
   );
 }

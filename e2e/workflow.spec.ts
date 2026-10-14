@@ -66,7 +66,7 @@ test.describe.serial('first run to restricted client access', () => {
     recoveryCode = await codes.first().innerText();
     await accessible(page);
     await page.getByRole('button', { name: 'Continue to Atlas' }).click();
-    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Avery/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
     await accessible(page);
   });
 
@@ -639,14 +639,14 @@ test.describe.serial('account security and administration', () => {
     await page.getByLabel('Remember this browser for 30 days').check();
     await accessible(page);
     await page.getByRole('button', { name: 'Verify' }).click();
-    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
 
     await signOut(page);
     await page.getByLabel('Email').fill(OWNER.email);
     await page.getByLabel('Password').fill(OWNER.password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     // Remembered: no second step on this browser.
-    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
     await page.goto('/account');
     await expect(page.getByText('9 of 10 unused')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Remembered browsers' })).toBeVisible();
@@ -679,7 +679,7 @@ test.describe.serial('account security and administration', () => {
     await page.context().clearCookies();
     await page.goto('/');
     await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
-    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
   });
 
   test('admin sets up Microsoft 365 email, a group, and checks expirations and log integrity', async ({ page }) => {
@@ -1082,7 +1082,7 @@ async function signIn(page: Page, email: string, password: string, given: string
   if (saved && Date.now() - saved.at < REUSE_MS) {
     await page.context().addCookies(saved.cookies);
     await page.goto('/');
-    const dashboard = page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ });
+    const dashboard = page.getByRole('heading', { name: 'Overview', exact: true, level: 1 });
     // Signed out or expired since: fall back to a full sign-in.
     if (
       await dashboard
@@ -1106,7 +1106,7 @@ async function signInFully(page: Page, email: string, password: string, given: s
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByLabel('Authentication code').fill(await freshCode(secret));
   await page.getByRole('button', { name: 'Verify' }).click();
-  await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
 }
 
 const nav = (page: Page, name: string) =>

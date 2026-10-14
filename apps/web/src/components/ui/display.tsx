@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn';
 import { initials } from '@/lib/format';
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('rounded-xl border border-border bg-surface shadow-card', className)} {...props} />;
+  return <div className={cn('rounded-lg border border-border bg-surface', className)} {...props} />;
 }
 export function CardHeader({
   title,
@@ -28,20 +28,22 @@ export function CardHeader({
   );
 }
 
+// A status is a small dot and a word, not a filled pill: a column of them stays quiet, and the few that differ
+// are the ones that catch the eye.
 const tones = {
-  neutral: 'bg-surface-3 text-text-2',
-  primary: 'bg-primary-soft text-primary',
-  success: 'bg-success-soft text-success',
-  warning: 'bg-warning-soft text-warning',
-  danger: 'bg-danger-soft text-danger',
-  info: 'bg-info-soft text-info',
+  neutral: 'text-text-2 before:opacity-45',
+  primary: 'text-primary',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+  info: 'text-info',
 };
 export type Tone = keyof typeof tones;
 export function Badge({ tone = 'neutral', className, ...props }: HTMLAttributes<HTMLSpanElement> & { tone?: Tone }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap [&_svg]:size-3',
+        'inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap before:size-1.5 before:shrink-0 before:rounded-full before:bg-current has-[svg]:before:hidden [&_svg]:size-3',
         tones[tone],
         className,
       )}
@@ -50,12 +52,6 @@ export function Badge({ tone = 'neutral', className, ...props }: HTMLAttributes<
   );
 }
 
-const avatarTones = [
-  'bg-info-soft text-info',
-  'bg-primary-soft text-primary',
-  'bg-warning-soft text-warning',
-  'bg-success-soft text-success',
-];
 export function Avatar({
   name,
   size = 'md',
@@ -65,13 +61,11 @@ export function Avatar({
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
-  const tone = avatarTones[[...name].reduce((sum, c) => sum + c.charCodeAt(0), 0) % avatarTones.length];
   return (
     <span
       aria-hidden
       className={cn(
-        'inline-grid shrink-0 place-items-center rounded-lg font-semibold',
-        tone,
+        'inline-grid shrink-0 place-items-center rounded-md bg-surface-3 font-semibold text-text-2',
         size === 'sm' ? 'size-7 text-[11px]' : size === 'lg' ? 'size-12 text-base' : 'size-9 text-xs',
         className,
       )}
@@ -95,9 +89,9 @@ export function PageHeader({
   return (
     <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        {eyebrow && <p className="mb-2 text-xs font-bold tracking-[0.14em] text-muted uppercase">{eyebrow}</p>}
-        <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-text">{title}</h1>
-        {description && <p className="mt-1.5 max-w-2xl text-sm text-muted">{description}</p>}
+        {eyebrow && <p className="mb-1 text-[13px] text-muted">{eyebrow}</p>}
+        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em] text-text">{title}</h1>
+        {description && <p className="mt-1.5 max-w-2xl text-sm text-text-2">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -116,10 +110,8 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center px-6 py-14 text-center">
-      <span className="mb-4 grid size-12 place-items-center rounded-xl bg-primary-soft text-primary">
-        <Icon className="size-6" aria-hidden />
-      </span>
+    <div className="flex flex-col items-center px-6 py-12 text-center">
+      <Icon className="mb-3 size-6 text-muted" strokeWidth={1.5} aria-hidden />
       <h3 className="font-semibold text-text">{title}</h3>
       <p className="mt-1 max-w-sm text-sm text-muted">{description}</p>
       {action && <div className="mt-5">{action}</div>}
@@ -135,21 +127,21 @@ export function Stat({
   label,
   value,
   hint,
-  icon: Icon,
 }: {
   label: string;
   value: ReactNode;
   hint?: string;
-  icon: LucideIcon;
+  /** Kept so callers don't change; a figure needs no decoration. */
+  icon?: LucideIcon;
 }) {
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between text-[13px] text-muted">
-        {label}
-        <Icon className="size-4" aria-hidden />
+    // A figure in a row of figures, set apart by a rule rather than a box of its own.
+    <div className="border-l border-border-strong py-0.5 pl-4">
+      <div className="text-[13px] text-muted">{label}</div>
+      <div className="mt-1 text-[28px] leading-none font-semibold tracking-[-0.02em] text-text tabular-nums">
+        {value}
       </div>
-      <div className="mt-3 text-3xl font-semibold tracking-tight text-text">{value}</div>
       {hint && <p className="mt-1.5 text-xs text-muted">{hint}</p>}
-    </Card>
+    </div>
   );
 }

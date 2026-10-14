@@ -69,9 +69,9 @@ function NavLink({
       to={to}
       onClick={onNavigate}
       activeOptions={{ exact: !!exact }}
-      className="nav-link group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition-colors hover:bg-sidebar-2 data-[status=active]:bg-sidebar-2 data-[status=active]:font-semibold data-[status=active]:text-sidebar-active"
+      className="nav-link group flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13.5px] text-sidebar-text transition-colors hover:bg-sidebar-2 data-[status=active]:bg-sidebar-2 data-[status=active]:font-semibold data-[status=active]:text-sidebar-active"
     >
-      <Icon className="size-[18px] text-sidebar-muted group-data-[status=active]:text-sidebar-accent" aria-hidden />
+      <Icon className="size-4 text-sidebar-muted group-data-[status=active]:text-sidebar-accent" aria-hidden />
       {label}
     </Link>
   );
@@ -128,9 +128,7 @@ function UserMenu() {
             </Link>
           </Menu.Item>
           <Menu.Separator className="my-1 h-px bg-border" />
-          <Menu.Label className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
-            Theme
-          </Menu.Label>
+          <Menu.Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted">Theme</Menu.Label>
           <Menu.RadioGroup value={theme} onValueChange={(v) => choose(v as Theme)}>
             {(
               [
@@ -285,13 +283,13 @@ function NavSection({
         onClick={() => sections.toggle(section.id)}
         aria-expanded={open}
         aria-controls={listId}
-        className="mb-1 flex min-h-8 w-full items-center gap-1 rounded-md px-3 text-left text-[11px] font-semibold tracking-[0.12em] text-sidebar-muted uppercase hover:text-sidebar-active"
+        className="mb-0.5 flex min-h-8 w-full items-center gap-1 rounded-md px-2.5 text-left text-xs font-medium text-sidebar-muted hover:text-sidebar-active"
       >
         <span className="flex-1">{section.title}</span>
         <ChevronDown className={cn('size-3.5 transition-transform', !open && '-rotate-90')} aria-hidden />
       </button>
       {open && (
-        <div id={listId} className="space-y-1">
+        <div id={listId} className="space-y-px">
           {section.items.map((item) => (
             <NavLink key={item.to} {...item} onNavigate={onNavigate} />
           ))}
@@ -322,13 +320,13 @@ function Sidebar({
       <ClientPicker orgName={actor.organization.name} onNavigate={onNavigate} />
       <button
         onClick={onSearch}
-        className="mb-4 flex w-full items-center gap-2.5 rounded-lg bg-sidebar-2 px-3 py-2.5 text-left text-sm text-sidebar-muted hover:text-sidebar-active"
+        className="mb-4 flex w-full items-center gap-2.5 rounded-md bg-sidebar-2 px-2.5 py-2 text-left text-[13.5px] text-sidebar-muted hover:text-sidebar-active"
       >
         <Search className="size-4" aria-hidden />
         <span className="flex-1">Search…</span>
-        <kbd className="rounded border border-white/10 px-1.5 text-[10px]">Ctrl K</kbd>
+        <kbd className="rounded border border-current/25 px-1.5 text-[10px]">Ctrl K</kbd>
       </button>
-      <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto">
+      <nav aria-label="Main" className="flex-1 space-y-px overflow-y-auto">
         <NavLink to="/" exact icon={LayoutDashboard} label="Dashboard" onNavigate={onNavigate} />
         <NavLink to="/clients" icon={Building2} label="Clients" onNavigate={onNavigate} />
         <NavLink to="/expirations" icon={CalendarClock} label="Expirations" onNavigate={onNavigate} />
@@ -401,7 +399,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl px-4 py-7 outline-none sm:px-8 sm:py-9">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[90rem] px-4 py-7 outline-none sm:px-10 sm:py-10">
         {children}
       </main>
       <CommandPalette open={searching} onOpenChange={setSearching} />
