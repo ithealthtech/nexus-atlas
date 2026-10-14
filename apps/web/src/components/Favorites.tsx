@@ -77,7 +77,7 @@ export function FavoritesCard() {
         <div className="divide-y divide-border">
           {GROUPS.filter(([type]) => list.some((f) => f.type === type)).map(([type, label]) => (
             <section key={type} aria-label={label} className="px-3 py-2">
-              <h3 className="px-2 pt-1 pb-1.5 text-xs font-bold tracking-wide text-muted uppercase">{label}</h3>
+              <h3 className="px-2 pt-1 pb-1.5 text-[13px] font-medium text-muted">{label}</h3>
               <ul className="grid gap-1 sm:grid-cols-2">
                 {list
                   .filter((f) => f.type === type)

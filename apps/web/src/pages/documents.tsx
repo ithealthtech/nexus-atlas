@@ -39,6 +39,7 @@ import {
   type Tone,
 } from '@/components/ui';
 import { AppLink, useGo } from '@/components/AppLink';
+import { BackLink, DetailHeader } from '@/components/DetailHeader';
 import { AttachmentsPanel, ItemActivity, RelatedPanel, RevisionsPanel } from '@/components/panels';
 import { RichTextEditor, RichTextView } from '@/components/RichText';
 import { ApiError, api } from '@/lib/api';
@@ -567,12 +568,7 @@ export function DocumentPage() {
   };
   return (
     <>
-      <AppLink
-        to={back}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-text"
-      >
-        <ArrowLeft className="size-4" /> {doc.clientName ? `${doc.clientName} · Documents` : 'Knowledge base'}
-      </AppLink>
+      <BackLink to={back}>{doc.clientName ? `${doc.clientName} · Documents` : 'Knowledge base'}</BackLink>
       {editing ? (
         <DocumentForm
           clientId={doc.clientId}
@@ -610,18 +606,18 @@ export function DocumentPage() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0 space-y-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="mb-2 text-xs font-bold tracking-[0.14em] text-muted uppercase">
-                  {doc.clientName ?? 'MSP knowledge base'}
-                </p>
-                <div className="flex items-start gap-2">
-                  <h1 className="text-[28px] leading-tight font-semibold tracking-tight">{doc.title}</h1>
-                  {!doc.archived && <FavoriteStar type="document" id={doc.id} name={doc.title} />}
-                </div>
-                <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
+            <DetailHeader
+              kind={doc.clientName ?? 'MSP knowledge base'}
+              title={doc.title}
+              star={!doc.archived && <FavoriteStar type="document" id={doc.id} name={doc.title} />}
+              status={
+                <>
                   <Badge tone={docTone[doc.status]}>{DOCUMENT_STATUS_LABELS[doc.status]}</Badge>
                   {doc.archived && <Badge tone="warning">Archived</Badge>}
+                </>
+              }
+              meta={
+                <>
                   Updated {relativeTime(doc.updatedAt)}
                   {doc.updatedByName && ` by ${doc.updatedByName}`}
                   {doc.reviewDate && (
@@ -630,29 +626,32 @@ export function DocumentPage() {
                         doc.reviewDate < new Date().toISOString().slice(0, 10) && 'font-semibold text-warning',
                       )}
                     >
+                      {' '}
                       · Review by {formatDate(`${doc.reviewDate}T12:00:00`)}
                     </span>
                   )}
-                </p>
-              </div>
-              {doc.canEdit && (
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={archive}>
-                    {doc.archived ? <ArchiveRestore /> : <Archive />} {doc.archived ? 'Restore' : 'Archive'}
-                  </Button>
-                  {!doc.archived && (
-                    <Button variant="secondary" onClick={() => setSharing(true)}>
-                      <Link2 /> Share
+                </>
+              }
+              actions={
+                doc.canEdit && (
+                  <>
+                    <Button variant="secondary" onClick={archive}>
+                      {doc.archived ? <ArchiveRestore /> : <Archive />} {doc.archived ? 'Restore' : 'Archive'}
                     </Button>
-                  )}
-                  {!doc.archived && (
-                    <Button onClick={() => setEditing(true)}>
-                      <Pencil /> Edit
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
+                    {!doc.archived && (
+                      <Button variant="secondary" onClick={() => setSharing(true)}>
+                        <Link2 /> Share
+                      </Button>
+                    )}
+                    {!doc.archived && (
+                      <Button onClick={() => setEditing(true)}>
+                        <Pencil /> Edit
+                      </Button>
+                    )}
+                  </>
+                )
+              }
+            />
             <Card className="px-6 py-6 sm:px-8">
               <RichTextView content={doc.content} />
             </Card>

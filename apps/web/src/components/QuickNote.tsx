@@ -34,7 +34,7 @@ export function QuickNote({ client }: { client: ClientSummary }) {
   return (
     <Card className="mb-5 border-warning/40 bg-warning-soft/40 px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="text-xs font-bold tracking-wide text-warning uppercase">Quick note</p>
+        <p className="text-[13px] font-semibold text-warning">Quick note</p>
         {!editing && (
           <div className="-my-1 flex gap-1">
             {client.notesVersion > 0 && (

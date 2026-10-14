@@ -477,7 +477,7 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
           const inArea = widgets.filter((w) => DASHBOARD_WIDGET_INFO[w.id].area === area);
           return (
             <fieldset key={area}>
-              <legend className="mb-2 text-xs font-bold tracking-wide text-muted uppercase">{label}</legend>
+              <legend className="mb-2 text-[13px] font-medium text-muted">{label}</legend>
               <ul className="divide-y divide-border rounded-lg border border-border">
                 {inArea.map((w, index) => {
                   const info = DASHBOARD_WIDGET_INFO[w.id];

@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
   ArchiveRestore,
-  ArrowLeft,
   Pencil,
   Plus,
   QrCode,
@@ -46,6 +45,7 @@ import { useActor } from '@/lib/session';
 import { useAsset, useAssets, useClient, useClients, useLayouts } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
 import { AppLink } from '@/components/AppLink';
+import { BackLink, DetailHeader } from '@/components/DetailHeader';
 import { cn } from '@/lib/cn';
 import { FavoriteStar } from '@/components/Favorites';
 import { RmmInsightPanel } from '@/components/RmmInsight';
@@ -493,62 +493,56 @@ export function AssetDetail() {
   const known = new Set(layout?.fields.map((f) => f.key));
   return (
     <>
-      <AppLink
-        to={`/clients/${asset.clientId}/assets`}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-text"
-      >
-        <ArrowLeft className="size-4" /> {asset.clientName} · Assets
-      </AppLink>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <ItemIcon type="asset" icon={asset.layoutIcon} className="size-12 rounded-xl [&_svg]:size-6" />
-          <div className="min-w-0">
-            <p className="text-xs font-bold tracking-[0.14em] text-muted uppercase">{asset.layoutName}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
-                {asset.name}
-                <Badge tone={statusTone[asset.status]} className="capitalize">
-                  {asset.status}
-                </Badge>
-                {asset.archived && <Badge tone="warning">Archived</Badge>}
-              </h1>
-              {!asset.archived && <FavoriteStar type="asset" id={asset.id} name={asset.name} />}
-            </div>
-            <p className="mt-1 text-sm text-muted">
-              Updated {relativeTime(asset.updatedAt)}
-              {asset.updatedByName && ` by ${asset.updatedByName}`} · Version {asset.version}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {!asset.archived && (
-            <AppLink
-              to="/assets/labels"
-              search={{ asset: asset.id }}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-semibold hover:bg-surface-3"
-            >
-              <QrCode className="size-4" aria-hidden /> QR label
-            </AppLink>
-          )}
-          {canEdit && (
-            <>
-              {canCheckWarranty && !asset.archived && (
-                <Button variant="secondary" loading={checking} onClick={() => void checkWarranty()}>
-                  <ShieldCheck /> Check warranty
+      <BackLink to={`/clients/${asset.clientId}/assets`}>{asset.clientName} · Assets</BackLink>
+      <DetailHeader
+        kind={asset.layoutName}
+        title={asset.name}
+        star={!asset.archived && <FavoriteStar type="asset" id={asset.id} name={asset.name} />}
+        status={
+          <>
+            <Badge tone={statusTone[asset.status]} className="capitalize">
+              {asset.status}
+            </Badge>
+            {asset.archived && <Badge tone="warning">Archived</Badge>}
+          </>
+        }
+        meta={
+          <>
+            Updated {relativeTime(asset.updatedAt)}
+            {asset.updatedByName && ` by ${asset.updatedByName}`} · Version {asset.version}
+          </>
+        }
+        actions={
+          <>
+            {!asset.archived && (
+              <AppLink
+                to="/assets/labels"
+                search={{ asset: asset.id }}
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-surface px-4 text-sm font-semibold hover:bg-surface-3 [&_svg]:size-4"
+              >
+                <QrCode aria-hidden /> QR label
+              </AppLink>
+            )}
+            {canEdit && (
+              <>
+                {canCheckWarranty && !asset.archived && (
+                  <Button variant="secondary" loading={checking} onClick={() => void checkWarranty()}>
+                    <ShieldCheck /> Check warranty
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={archive}>
+                  {asset.archived ? <ArchiveRestore /> : <Archive />} {asset.archived ? 'Restore' : 'Archive'}
                 </Button>
-              )}
-              <Button variant="secondary" onClick={archive}>
-                {asset.archived ? <ArchiveRestore /> : <Archive />} {asset.archived ? 'Restore' : 'Archive'}
-              </Button>
-              {!asset.archived && (
-                <Button onClick={() => setEditing(true)}>
-                  <Pencil /> Edit
-                </Button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+                {!asset.archived && (
+                  <Button onClick={() => setEditing(true)}>
+                    <Pencil /> Edit
+                  </Button>
+                )}
+              </>
+            )}
+          </>
+        }
+      />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
           <Card>

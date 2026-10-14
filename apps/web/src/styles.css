@@ -124,7 +124,7 @@
     outline-offset: 2px;
   }
   dialog::backdrop {
-    background: rgb(8 24 18 / 0.45);
+    background: rgb(5 8 12 / 0.62);
   }
   @media (prefers-reduced-motion: reduce) {
     *,
