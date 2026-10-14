@@ -133,6 +133,54 @@ public sealed class PreviewServer : HttpMessageHandler
 // The vault as you change it in the preview: the made-up entries to start with, then whatever is added or edited.
     private readonly List<Dictionary<string, object?>> passwords = [.. Passwords.Select(Mutable)];
     private readonly List<Dictionary<string, object?>> assets = [.. Assets.Select(Mutable)];
+    private readonly List<Dictionary<string, object?>> people = [.. Contacts.Select(Mutable)];
+    private readonly List<Dictionary<string, object?>> sites = [.. Locations.Select(Mutable)];
+
+    // Adding, changing, and deleting contacts and locations in the preview.
+    private async Task<HttpResponseMessage?> ChangePeopleAsync(HttpRequestMessage request, string tail, CancellationToken cancellationToken)
+    {
+        if (request.Method == HttpMethod.Get)
+            return null;
+        var adding = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)/(contacts|locations)$");
+        var one = System.Text.RegularExpressions.Regex.Match(tail, "^(contacts|locations)/([^/]+)$");
+        if (!adding.Success && !one.Success)
+            return null;
+        var kind = adding.Success ? adding.Groups[2].Value : one.Groups[1].Value;
+        var list = kind == "contacts" ? people : sites;
+        var raw = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var body = JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        Dictionary<string, object?> entry;
+        if (adding.Success)
+        {
+            entry = new Dictionary<string, object?> { ["id"] = $"{kind[..2]}-new-{++added}", ["clientId"] = adding.Groups[1].Value };
+            list.Add(entry);
+        }
+        else
+        {
+            var found = list.FirstOrDefault(e => (string?)e["id"] == one.Groups[2].Value);
+            if (found is null)
+                return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = Json(new { error = "That isn't here any more." }) };
+            if (request.Method == HttpMethod.Delete)
+            {
+                list.Remove(found);
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new { ok = true }) };
+            }
+            entry = found;
+        }
+        foreach (var property in body.EnumerateObject())
+            entry[property.Name] = property.Value.ValueKind switch
+            {
+                JsonValueKind.String => property.Value.GetString(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => null,
+            };
+        // Only one primary per client, as in Atlas.
+        if (entry.TryGetValue("primary", out var primary) && primary is true)
+            foreach (var other in list.Where(e => e != entry && (string?)e["clientId"] == (string?)entry["clientId"]))
+                other["primary"] = false;
+        return new HttpResponseMessage(adding.Success ? HttpStatusCode.Created : HttpStatusCode.OK) { Content = Json(entry) };
+    }
 
     private object[] Things() => [.. assets.Cast<object>()];
 
@@ -271,6 +319,8 @@ public sealed class PreviewServer : HttpMessageHandler
             return changed;
         if (await ChangeAssetsAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedAsset)
             return changedAsset;
+        if (await ChangePeopleAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedPerson)
+            return changedPerson;
         if (tail.EndsWith("/password-folders", StringComparison.Ordinal))
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Array.Empty<object>()) };
         var clientPage = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)(/contacts|/locations)?$");
@@ -278,9 +328,9 @@ public sealed class PreviewServer : HttpMessageHandler
         {
             var id = clientPage.Groups[1].Value;
             if (clientPage.Groups[2].Value == "/contacts")
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Filter(Contacts, id)) };
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Filter([.. people.Cast<object>()], id)) };
             if (clientPage.Groups[2].Value == "/locations")
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Filter(Locations, id)) };
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Filter([.. sites.Cast<object>()], id)) };
             if (request.Method == HttpMethod.Patch)
             {
                 var edit = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).RootElement;

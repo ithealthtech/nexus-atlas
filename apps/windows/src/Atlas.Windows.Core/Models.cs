@@ -179,6 +179,21 @@ public sealed record ClientDetail(
 
 public sealed record ContactInfo(string Id, string ClientId, string Name, string Title, string Email, string Phone, string Mobile, string Notes, bool Primary);
 
+/// <summary>A contact as typed into the form, for adding or changing one.</summary>
+public sealed record ContactDraft(string Name, string Title, string Email, string Phone, string Mobile, string Notes, bool Primary);
+
+/// <summary>A location as typed into the form, for adding or changing one.</summary>
+public sealed record LocationDraft(
+    string Name,
+    string Address,
+    string City,
+    string Region,
+    string PostalCode,
+    string Country,
+    string Phone,
+    string Notes,
+    bool Primary);
+
 public sealed record LocationInfo(
     string Id,
     string ClientId,

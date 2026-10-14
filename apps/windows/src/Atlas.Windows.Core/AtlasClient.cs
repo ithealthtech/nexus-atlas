@@ -263,6 +263,25 @@ public sealed class AtlasClient : IDisposable
     public Task<AssetSummary> ArchiveAssetAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
         SendAsync<AssetSummary>(HttpMethod.Post, $"assets/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
 
+    // ---------- contacts and locations ----------
+    public Task<ContactInfo> CreateContactAsync(string clientId, ContactDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<ContactInfo>(HttpMethod.Post, $"clients/{Uri.EscapeDataString(clientId)}/contacts", draft, cancellationToken);
+
+    public Task<ContactInfo> UpdateContactAsync(string id, ContactDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<ContactInfo>(HttpMethod.Patch, $"contacts/{Uri.EscapeDataString(id)}", draft, cancellationToken);
+
+    public Task DeleteContactAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<JsonElement>(HttpMethod.Delete, $"contacts/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    public Task<LocationInfo> CreateLocationAsync(string clientId, LocationDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<LocationInfo>(HttpMethod.Post, $"clients/{Uri.EscapeDataString(clientId)}/locations", draft, cancellationToken);
+
+    public Task<LocationInfo> UpdateLocationAsync(string id, LocationDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<LocationInfo>(HttpMethod.Patch, $"locations/{Uri.EscapeDataString(id)}", draft, cancellationToken);
+
+    public Task DeleteLocationAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<JsonElement>(HttpMethod.Delete, $"locations/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
     /// <summary>Stars or unstars a client, asset, document, or password: the person's own bookmark in Atlas.</summary>
     public Task<FavoriteState> SetFavoriteAsync(string kind, string id, bool favorite, CancellationToken cancellationToken = default)
     {

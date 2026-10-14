@@ -549,6 +549,21 @@ public class PreviewServerTests
         await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdateAssetAsync(asset.Id, asset.Version, "Old", "active", fields, "", ct));
         await client.ArchiveAssetAsync(asset.Id, cancellationToken: ct);
         Assert.DoesNotContain(await client.ListAssetsAsync("c-harbor", ct), a => a.Id == asset.Id);
+
+        // Adding, changing, and deleting a contact and a location.
+        var contact = await client.CreateContactAsync("c-harbor", new ContactDraft("Sam Ortiz", "Front desk", "sam@harbordental.demo", "", "", "", true), ct);
+        Assert.Equal(("Sam Ortiz", "c-harbor"), (contact.Name, contact.ClientId));
+        Assert.Equal("Sam Ortiz", (await client.ListContactsAsync("c-harbor", ct)).Single(c => c.Primary).Name);
+        var renamed = await client.UpdateContactAsync(contact.Id, new ContactDraft("Sam Ortiz", "Office lead", "sam@harbordental.demo", "(919) 555-0100", "", "", true), ct);
+        Assert.Equal(("Office lead", "(919) 555-0100"), (renamed.Title, renamed.Phone));
+        await client.DeleteContactAsync(contact.Id, ct);
+        Assert.DoesNotContain(await client.ListContactsAsync("c-harbor", ct), c => c.Id == contact.Id);
+        var site = await client.CreateLocationAsync("c-harbor", new LocationDraft("Durham office", "5 Main St", "Durham", "NC", "27701", "US", "", "", false), ct);
+        Assert.Equal("5 Main St, Durham, NC, 27701", site.OneLine);
+        var moved = await client.UpdateLocationAsync(site.Id, new LocationDraft("Durham office", "9 Main St", "Durham", "NC", "27701", "US", "", "", false), ct);
+        Assert.StartsWith("9 Main St", moved.OneLine, StringComparison.Ordinal);
+        await client.DeleteLocationAsync(site.Id, ct);
+        Assert.DoesNotContain(await client.ListLocationsAsync("c-harbor", ct), l => l.Id == site.Id);
         Assert.NotEmpty(await client.SearchAsync("hdg", cancellationToken: ct));
     }
 

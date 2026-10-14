@@ -35,7 +35,7 @@ public sealed partial class SearchWindow : Window
     /// One page: a sidebar place (home, clients, passwords, assets, documents), a client with one of its tabs, the
     /// results of a search, or an item. The pages you went through make the breadcrumb trail and the way back.
     /// </summary>
-    private sealed record Place(string Kind, string Title, string? ClientId = null, string Tab = "overview", Row? Item = null, string? Query = null, string Editing = "password");
+    private sealed record Place(string Kind, string Title, string? ClientId = null, string Tab = "overview", Row? Item = null, string? Query = null, string Editing = "password", object? Subject = null);
 
     private readonly App app;
     private readonly IntPtr hwnd;
@@ -370,7 +370,12 @@ public sealed partial class SearchWindow : Window
         if (isEditor)
         {
             PageInfo.Text = place.Item is null ? "Saved encrypted in the client's vault, and recorded under your name." : "Only what you change is saved. The old password is kept in the entry's history.";
-            if (place.Editing == "asset")
+            if (place.Editing is "contact" or "location")
+            {
+                PageInfo.Text = place.Editing == "contact" ? "Shown on the client's overview, and in Atlas." : "Shown on the client's overview, with a button to copy the address.";
+                ShowPersonEditor(place);
+            }
+            else if (place.Editing == "asset")
             {
                 PageInfo.Text = place.Item is null ? "Atlas checks each field against the asset's type when it's saved." : "Only what you change is saved. The previous version is kept in the asset's history.";
                 ShowAssetEditor(place);
@@ -837,6 +842,174 @@ public sealed partial class SearchWindow : Window
         }
     }
 
+    // ---------- adding and changing contacts and locations ----------
+    private UIElement AddRow(string text, string editing, string clientId)
+    {
+        var button = new Button { Content = text, Margin = new Thickness(12, 8, 12, 10) };
+        button.Click += (_, _) => Go(new Place("edit", text, ClientId: clientId, Editing: editing));
+        return button;
+    }
+
+    private Button[] PersonActions(string editing, string id, string name, object subject, string clientId) =>
+    [
+        IconButton("", $"Edit {name}", (_, _) => Go(new Place("edit", $"Edit {name}", ClientId: clientId, Editing: editing, Subject: subject))),
+        IconButton("", $"Delete {name}", (_, _) => DeletePerson(editing, id, name)),
+    ];
+
+    private async void DeletePerson(string editing, string id, string name)
+    {
+        if (app.Client is not { } client)
+            return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = $"Delete {name}?",
+            Content = editing == "contact" ? "The contact is removed from this client." : "The location is removed from this client.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+        try
+        {
+            if (editing == "contact")
+                await client.DeleteContactAsync(id);
+            else
+                await client.DeleteLocationAsync(id);
+            ShowPlace();
+            Show($"{name} deleted.", InfoBarSeverity.Success);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    /// <summary>The form for a contact or a location. Saving goes back to the client's overview.</summary>
+    private void ShowPersonEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        var isContact = place.Editing == "contact";
+        var contact = place.Subject as ContactInfo;
+        var location = place.Subject as LocationInfo;
+        var adding = place.Subject is null;
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var owner = clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+        form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
+        TextBox Box(string header, string text, int max, string hint = "")
+        {
+            var box = new TextBox { Header = header, Text = text, MaxLength = max, PlaceholderText = hint };
+            form.Children.Add(box);
+            return box;
+        }
+        var name = Box("Name", contact?.Name ?? location?.Name ?? "", 120, isContact ? "For example, Dana Morales" : "For example, Main office");
+        TextBox title = null!, email = null!, phone, mobile = null!, address = null!, city = null!, region = null!, postal = null!, country = null!;
+        if (isContact)
+        {
+            title = Box("Title", contact?.Title ?? "", 120, "For example, Office manager");
+            email = Box("Email", contact?.Email ?? "", 254);
+            email.InputScope = new InputScope { Names = { new InputScopeName(InputScopeNameValue.EmailSmtpAddress) } };
+            phone = Box("Phone", contact?.Phone ?? "", 40);
+            mobile = Box("Mobile", contact?.Mobile ?? "", 40);
+        }
+        else
+        {
+            address = Box("Address", location?.Address ?? "", 200);
+            var cityRow = new Grid { ColumnSpacing = 8 };
+            cityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+            cityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            cityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            city = new TextBox { Header = "City", Text = location?.City ?? "", MaxLength = 120 };
+            region = new TextBox { Header = "State or region", Text = location?.Region ?? "", MaxLength = 120 };
+            postal = new TextBox { Header = "Postal code", Text = location?.PostalCode ?? "", MaxLength = 20 };
+            Grid.SetColumn(region, 1);
+            Grid.SetColumn(postal, 2);
+            cityRow.Children.Add(city);
+            cityRow.Children.Add(region);
+            cityRow.Children.Add(postal);
+            form.Children.Add(cityRow);
+            country = Box("Country", location?.Country ?? "", 80);
+            phone = Box("Phone", location?.Phone ?? "", 40);
+        }
+        var notes = new TextBox { Header = "Notes", Text = contact?.Notes ?? location?.Notes ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxLength = 5000 };
+        var primary = new CheckBox
+        {
+            Content = isContact ? "Primary contact for this client" : "Primary location for this client",
+            IsChecked = contact?.Primary ?? location?.Primary ?? false,
+        };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button
+        {
+            Content = adding ? (isContact ? "Add contact" : "Add location") : "Save changes",
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+        };
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        foreach (var control in new UIElement[] { notes, primary, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        name.Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            if (app.Client is not { } client || place.ClientId is not { } clientId)
+                return;
+            if (name.Text.Trim().Length == 0)
+            {
+                error.Message = "Give it a name.";
+                error.IsOpen = true;
+                return;
+            }
+            if (isContact && email.Text.Trim() is { Length: > 0 } typed && !typed.Contains('@', StringComparison.Ordinal))
+            {
+                error.Message = "That email address doesn't look right.";
+                error.IsOpen = true;
+                return;
+            }
+            save.IsEnabled = false;
+            try
+            {
+                var isPrimary = primary.IsChecked == true;
+                if (isContact)
+                {
+                    var draft = new ContactDraft(name.Text.Trim(), title.Text.Trim(), email.Text.Trim(), phone.Text.Trim(), mobile.Text.Trim(), notes.Text.Trim(), isPrimary);
+                    _ = contact is null ? await client.CreateContactAsync(clientId, draft) : await client.UpdateContactAsync(contact.Id, draft);
+                }
+                else
+                {
+                    var draft = new LocationDraft(
+                        name.Text.Trim(), address.Text.Trim(), city.Text.Trim(), region.Text.Trim(), postal.Text.Trim(), country.Text.Trim(), phone.Text.Trim(), notes.Text.Trim(), isPrimary);
+                    _ = location is null ? await client.CreateLocationAsync(clientId, draft) : await client.UpdateLocationAsync(location.Id, draft);
+                }
+                Back();
+                Show(adding ? $"{name.Text.Trim()} added." : "Changes saved.", InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
+    }
+
     // ---------- a client's overview ----------
     /// <summary>The client at a glance: its quick note, hours, the people and places to know, editable where allowed.</summary>
     private async void ShowOverview(string clientId)
@@ -881,10 +1054,19 @@ public sealed partial class SearchWindow : Window
             if (facts.Count > 0)
                 Detail.Children.Add(Facts(facts));
 
-            if (contacts.Count > 0)
-                Detail.Children.Add(Card("Contacts", [.. contacts.Select(ContactRow)]));
-            if (locations.Count > 0)
-                Detail.Children.Add(Card("Locations", [.. locations.Select(LocationRow)]));
+            // Where the person may make changes, the cards show even when empty, so there's somewhere to add the first one.
+            var changeable = canWrite && detail.CanEdit;
+            var contactRows = contacts.Select(c => ContactRow(c, changeable)).ToList();
+            var locationRows = locations.Select(l => LocationRow(l, changeable)).ToList();
+            if (changeable)
+            {
+                contactRows.Add(AddRow("Add contact", "contact", clientId));
+                locationRows.Add(AddRow("Add location", "location", clientId));
+            }
+            if (contactRows.Count > 0)
+                Detail.Children.Add(Card("Contacts", [.. contactRows]));
+            if (locationRows.Count > 0)
+                Detail.Children.Add(Card("Locations", [.. locationRows]));
         }
         catch (OperationCanceledException)
         {
@@ -903,7 +1085,7 @@ public sealed partial class SearchWindow : Window
         _ => "",
     };
 
-    private UIElement ContactRow(ContactInfo contact)
+    private UIElement ContactRow(ContactInfo contact, bool changeable)
     {
         var actions = new List<Button>();
         if (contact.Email.Length > 0)
@@ -911,17 +1093,22 @@ public sealed partial class SearchWindow : Window
         var phone = contact.Phone.Length > 0 ? contact.Phone : contact.Mobile;
         if (phone.Length > 0)
             actions.Add(IconButton("", $"Copy {phone}", (_, _) => Copy(phone, "Phone number copied.")));
+        if (changeable)
+            actions.AddRange(PersonActions("contact", contact.Id, contact.Name, contact, contact.ClientId));
         var label = contact.Primary ? $"{contact.Name} · primary" : contact.Name;
         return Field(label, Value(Join(contact.Title, contact.Email, phone)), [.. actions]);
     }
 
-    private UIElement LocationRow(LocationInfo location)
+    private UIElement LocationRow(LocationInfo location, bool changeable)
     {
         var label = location.Primary ? $"{location.Name} · primary" : location.Name;
         var address = location.OneLine;
-        return address.Length > 0
-            ? Field(label, Value(Join(address, location.Phone)), IconButton("", "Copy address", (_, _) => Copy(address, "Address copied.")))
-            : Field(label, Value(location.Phone));
+        var actions = new List<Button>();
+        if (address.Length > 0)
+            actions.Add(IconButton("", "Copy address", (_, _) => Copy(address, "Address copied.")));
+        if (changeable)
+            actions.AddRange(PersonActions("location", location.Id, location.Name, location, location.ClientId));
+        return Field(label, Value(Join(address, location.Phone)), [.. actions]);
     }
 
     /// <summary>The quick note, with Edit where the person may change it. Saving says whose words won if two people edited.</summary>
