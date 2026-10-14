@@ -570,7 +570,7 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByLabel('Temporary password').fill('temporary pass 1234');
     await page.getByLabel('New password').fill('harbor reader pass 7');
     await page.getByRole('button', { name: 'Save password' }).click();
-    await expect(page.getByRole('heading', { name: /Morgan/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
     await nav(page, 'Clients');
     await expect(page.getByRole('main').getByRole('link', { name: /Harbor Dental Group/ })).toBeVisible();
     await expect(page.getByText('Northline Architecture')).toHaveCount(0);
