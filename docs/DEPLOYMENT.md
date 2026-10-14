@@ -113,7 +113,7 @@ sudo bash install-atlas.sh --public-url https://atlas.example.com
 - **Choosing a version:** `--version latest` (the default) picks the highest `vX.Y.Z` release tag; pre-releases such as `v1.3.0-rc1` are never picked automatically. `--version v1.0.2` installs that release. A branch name such as `main` works for testing. The installed version is recorded in `/etc/msp-atlas/installed-version`.
 - **Help:** `sudo bash install-atlas.sh --help` lists every option.
 
-- **HTTPS:** Caddy gets a certificate for a DNS name automatically. For an IP address or a single-label name it uses a self-signed certificate (`tls internal`).
+- **HTTPS:** Caddy gets a certificate for a DNS name automatically. For an IP address or a single-label name it acts as its own certificate authority (`tls internal`), which no computer trusts until you install that authority on it. **Administration → Certificate** in Atlas shows what is being served and lets an administrator download the authority's certificate. Atlas reads it from Caddy's admin address on the same server (`127.0.0.1:2019`), and offers it only after checking that it signed the certificate the portal actually serves.
 - **Where things go:** code in `/opt/msp-atlas` (read-only to the service), data and backups in `/var/lib/msp-atlas`, settings (`atlas.env`) and the master key in `/etc/msp-atlas`. The database password is generated on the server and kept only in `atlas.env`.
 - **Service:** `msp-atlas` runs as the `atlas` system user on `127.0.0.1:4318`. The script prints the setup code; it's also in `journalctl -u msp-atlas`.
 - **Upgrading:** from **Updates** in Atlas (below), or run `sudo atlas-install` (the installed copy of this script) to move to the newest release. Settings, key, and database are kept.

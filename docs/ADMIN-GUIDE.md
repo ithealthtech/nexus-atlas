@@ -221,6 +221,17 @@ A notification-area app for staff: quick search and audited copying from anywher
 - Atlas doesn't restart anything itself. It asks a small helper on the server, which only knows these four actions. See [Services](DEPLOYMENT.md#services).
 - If Atlas is down you can't reach the page. The same commands for the server's console are at the bottom of the page, and in the table below.
 
+## Certificate
+
+**Administration → Certificate** shows the certificate Atlas is served with, read the way a visitor's computer reads it: by connecting to Atlas's own address.
+
+- **Trusted everywhere** means a public certificate authority issued it, as happens when Atlas has a public DNS name. There is nothing to do.
+- **Not trusted until installed** is what you get when Atlas was installed at an IP address or a one-word name. No public authority can issue a certificate for those, so the installer has the web proxy act as its own certificate authority. The connection is encrypted, but browsers warn and Atlas for Windows refuses to connect until that authority is installed on the computer.
+- **Download** gives you the authority's certificate. It is a public certificate, not a key. The page lists the PowerShell command to install it for a whole computer (as an administrator) or only for yourself, and where it goes in Group Policy. Check the file's thumbprint against the one on the page before installing it; the page gives the command.
+- **Use the address on the certificate.** A certificate for `192.168.1.20` doesn't cover a name that points to the same server.
+- **Think before you install an authority.** A computer that trusts it accepts any certificate it issues, for any website. Its key is on your Atlas server and is used only for Atlas, but someone who took the server over could misuse it. Install it only on computers you manage. A public DNS name with a public certificate avoids the question altogether.
+- The page also says when the certificate has expired or is for another address. The web proxy renews its own certificates by itself; if one ever looks stale, restart the web proxy on the **Services** page.
+
 ## If something goes wrong
 
 | Problem | What to do |
@@ -228,6 +239,7 @@ A notification-area app for staff: quick search and audited copying from anywher
 | Someone is locked out after too many attempts | Wait 15 minutes, or use **Reset sign-in** on their account. |
 | The owner lost their phone and recovery codes | Another owner or admin can reset their sign-in. If there is none, contact whoever runs the server. |
 | Atlas says it can't read or write a file, or a service is stopped | **Administration → Services**: restart the service, or use **Repair**. If you can't reach Atlas at all, run `sudo systemctl restart msp-atlas` on the server, then `sudo journalctl -u msp-atlas -n 50` to see why it stopped. |
+| Browsers warn about Atlas's certificate, or Atlas for Windows says it doesn't trust it | **Administration → Certificate**: download the authority and install it on the computer, then open Atlas at the address the certificate covers. |
 | Backups are failing | Read the error on **System status**. Check that the backup folder exists and Atlas can write to it, and that the disk isn't full. |
 | **Verify now** reports a break | Someone changed the database directly. Keep the server as it is, export the security log, and investigate. Restore from a backup if needed. |
 | Restoring from a backup | Stop Atlas and follow [Restoring](DEPLOYMENT.md#restoring). You need the master key the backup was made with. |

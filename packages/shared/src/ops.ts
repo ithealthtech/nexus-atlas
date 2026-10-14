@@ -145,6 +145,47 @@ export interface SystemServicesView {
   run: ServiceRun;
 }
 
+// ---------- the portal's certificate ----------
+/**
+ * How a visitor's computer sees the certificate Atlas is served with.
+ * - `none`: Atlas isn't served over HTTPS at this address.
+ * - `unreachable`: Atlas couldn't connect to its own address to read it.
+ * - `trusted`: a public certificate authority vouches for it.
+ * - `private`: it comes from this server's own authority, or signs itself. Computers refuse it until that
+ *   authority's certificate is installed on them.
+ * - `expired`, `mismatch` (it doesn't cover this address), `untrusted` (refused for another reason).
+ */
+export type PortalCertificateStatus =
+  'none' | 'unreachable' | 'trusted' | 'private' | 'expired' | 'mismatch' | 'untrusted';
+
+export interface CertificateDates {
+  validFrom: string;
+  validTo: string;
+  /** Whole days until it stops being valid; negative once it has. */
+  daysLeft: number;
+  /** SHA-256, as browsers show it. */
+  fingerprint: string;
+  /** SHA-1 without separators, which is what Windows calls the thumbprint and shows when a certificate is installed. */
+  thumbprint: string;
+}
+
+export interface PortalCertificateView {
+  /** The address people use, which is where the certificate is read from. */
+  url: string;
+  host: string;
+  status: PortalCertificateStatus;
+  problem: string | null;
+  /** Whether the certificate is for this address at all. */
+  coversHost: boolean;
+  certificate: ({ name: string; issuer: string; names: string[] } & CertificateDates) | null;
+  /**
+   * The certificate to install on a computer so it trusts the portal, when there is one to offer.
+   * `isAuthority`: it can vouch for other certificates too, not just the portal's. `source`: sent along with the
+   * portal's certificate, or read from the web proxy on this server.
+   */
+  authority: ({ name: string; isAuthority: boolean; source: 'served' | 'proxy' } & CertificateDates) | null;
+}
+
 // ---------- erase all data (owner only) ----------
 export interface EraseStatus {
   pending: {
