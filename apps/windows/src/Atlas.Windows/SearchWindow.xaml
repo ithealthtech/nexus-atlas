@@ -83,6 +83,7 @@
 
         <!-- The vault. -->
         <NavigationView x:Name="Nav" Grid.Row="1" Visibility="Collapsed" PaneDisplayMode="Left" OpenPaneLength="232"
+                        CompactModeThresholdWidth="0" ExpandedModeThresholdWidth="0" IsPaneOpen="True"
                         IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="True"
                         SelectionChanged="Nav_SelectionChanged" AutomationProperties.Name="Show">
             <NavigationView.Resources>
@@ -126,7 +127,7 @@
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItemHeader Content="Clients" />
-                <NavigationViewItem x:Name="ClientsItem" Content="Clients" SelectsOnInvoked="False" IsExpanded="True">
+                <NavigationViewItem x:Name="ClientsItem" Content="All clients" SelectsOnInvoked="False">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE821;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

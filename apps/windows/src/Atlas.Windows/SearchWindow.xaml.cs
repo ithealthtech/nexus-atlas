@@ -207,6 +207,8 @@ public sealed partial class SearchWindow : Window
     // Each client is a place in the sidebar, under Clients, like a folder in a vault.
     private void ShowClients()
     {
+        // Collapsed while its children change, then opened, so the new ones are drawn.
+        ClientsItem.IsExpanded = false;
         ClientsItem.MenuItems.Clear();
         foreach (var c in clients)
             ClientsItem.MenuItems.Add(new NavigationViewItem
@@ -215,6 +217,7 @@ public sealed partial class SearchWindow : Window
                 Tag = "client:" + c.Id,
                 Icon = new FontIcon { Glyph = "" },
             });
+        ClientsItem.IsExpanded = true;
     }
 
     // ---------- sign-in ----------
