@@ -272,6 +272,19 @@ if [[ "$(read_field kind)" == access ]]; then
   [[ -s "$WORK/token" ]] && args+=(--token-file "$WORK/token")
   [[ -s "$WORK/authkey" ]] && args+=(--auth-key-file "$WORK/authkey")
   access_status running "Changing how Atlas is reached. Atlas restarts on its new address."
+  # An update is installed by the previous release's installer, which may not know about atlas-access yet. Take
+  # the copy shipped with the running release (root-owned, in the read-only program folder) when it's missing or
+  # differs, so the first update after the script was added can still use it.
+  SHIPPED="$APP_DIR/deploy/linux/atlas-access.sh"
+  if [[ -f "$SHIPPED" && ! -L "$SHIPPED" && "$(stat -c %U "$SHIPPED")" == root ]] \
+    && ! cmp -s "$SHIPPED" /usr/local/sbin/atlas-access; then
+    install -m 0755 -o root -g root "$SHIPPED" /usr/local/sbin/atlas-access
+  fi
+  if [[ ! -x /usr/local/sbin/atlas-access ]]; then
+    ACCESS_DONE=1
+    access_status failed "This server doesn't have atlas-access yet. Update Atlas, or run the installer again on the server." "$(date -u +%FT%TZ)"
+    exit 0
+  fi
   output=""
   if output="$(/usr/local/sbin/atlas-access "${args[@]}" 2>&1)"; then
     echo "$output" >> "$ACCESS_LOG"
