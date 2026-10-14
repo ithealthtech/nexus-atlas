@@ -27,3 +27,15 @@ public sealed record Row(string Kind, string Id, string Title, string Subtitle, 
         _ => "",
     };
 }
+
+/// <summary>Rows under one heading (a client, when the list spans every client).</summary>
+public sealed class RowGroup(string key, IEnumerable<Row> rows) : List<Row>(rows)
+{
+    public string Key { get; } = key;
+}
+
+/// <summary>An asset type in the list's filter, with how many there are.</summary>
+public sealed record TypeChoice(string? LayoutId, string Label)
+{
+    public override string ToString() => Label;
+}

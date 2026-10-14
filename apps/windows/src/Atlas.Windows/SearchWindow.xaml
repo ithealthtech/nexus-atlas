@@ -6,11 +6,7 @@
     xmlns:local="using:Atlas.Windows"
     Title="Atlas">
 
-    <Window.SystemBackdrop>
-        <MicaBackdrop />
-    </Window.SystemBackdrop>
-
-    <Grid x:Name="Root">
+    <Grid x:Name="Root" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
         <Grid.Resources>
             <!-- The same navy as the web app's menu. -->
             <SolidColorBrush x:Key="RailBrush" Color="#1B273B" />
@@ -90,7 +86,7 @@
                           AutomationProperties.Name="Show">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:Section">
-                            <StackPanel Orientation="Horizontal" Spacing="12" Padding="2,8">
+                            <StackPanel Orientation="Horizontal" Spacing="12" Padding="2,3">
                                 <FontIcon Glyph="{x:Bind Glyph}" FontSize="15" Foreground="{StaticResource RailMutedBrush}" />
                                 <TextBlock Text="{x:Bind Label}" Foreground="{StaticResource RailTextBrush}" />
                             </StackPanel>
@@ -104,8 +100,8 @@
                           AutomationProperties.Name="Clients">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:ClientChoice">
-                            <StackPanel Orientation="Horizontal" Spacing="10" Padding="0,5">
-                                <Border Width="24" Height="24" CornerRadius="5" Background="{StaticResource RailHoverBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="10" Padding="0,1">
+                                <Border Width="22" Height="22" CornerRadius="5" Background="{StaticResource RailHoverBrush}">
                                     <TextBlock Text="{x:Bind Initials}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource RailTextBrush}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
@@ -147,35 +143,57 @@
 
             <!-- The list -->
             <Grid Grid.Column="1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,1,0"
-                  Background="{ThemeResource LayerFillColorDefaultBrush}">
+                  Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <TextBox x:Name="QueryBox" Margin="16,14,16,10" PlaceholderText="Search Atlas   (Ctrl+F)"
+                <TextBox x:Name="QueryBox" Margin="14,12,14,8" PlaceholderText="Search Atlas   (Ctrl+F)"
                          TextChanged="QueryBox_TextChanged" KeyDown="QueryBox_KeyDown" AutomationProperties.Name="Search Atlas" />
-                <Grid Grid.Row="1" Margin="18,2,16,8">
-                    <TextBlock x:Name="ListTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,40,0" />
-                    <TextBlock x:Name="ListCount" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Grid.Row="1" Margin="16,0,14,6" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="ListTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="ListCount" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <ComboBox x:Name="TypeFilter" Grid.Column="1" MinWidth="130" MaxWidth="170" Visibility="Collapsed"
+                              SelectionChanged="TypeFilter_SelectionChanged" AutomationProperties.Name="Asset type" />
                 </Grid>
                 <ListView x:Name="Results" Grid.Row="2" SelectionMode="Single" SelectionChanged="Results_SelectionChanged"
                           KeyDown="Results_KeyDown" DoubleTapped="Results_DoubleTapped" AutomationProperties.Name="Items"
-                          Padding="6,0,6,6">
+                          Padding="4,0,4,8">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                            <Setter Property="MinHeight" Value="44" />
+                            <Setter Property="Padding" Value="10,0,8,0" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.GroupStyle>
+                        <GroupStyle HidesIfEmpty="True">
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="local:RowGroup">
+                                    <TextBlock Text="{x:Bind Key}" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:Row">
-                            <Grid ColumnSpacing="12" Padding="2,8">
+                            <Grid ColumnSpacing="10" Padding="0,5">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Border Width="32" Height="32" CornerRadius="6" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
-                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Border>
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind Subtitle}" Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Subtitle}" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
                             </Grid>
                         </DataTemplate>
@@ -185,7 +203,7 @@
                     <FontIcon Glyph="&#xE721;" FontSize="22" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                     <TextBlock x:Name="ListEmptyText" TextWrapping="Wrap" TextAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
-                <ProgressBar x:Name="ListLoading" Grid.Row="1" VerticalAlignment="Bottom" IsIndeterminate="True" Visibility="Collapsed" Margin="16,0" />
+                <ProgressBar x:Name="ListLoading" Grid.Row="1" VerticalAlignment="Bottom" IsIndeterminate="True" Visibility="Collapsed" Margin="14,0" />
             </Grid>
 
             <!-- The item -->

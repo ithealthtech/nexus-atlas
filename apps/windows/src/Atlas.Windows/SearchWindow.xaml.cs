@@ -37,6 +37,8 @@ public sealed partial class SearchWindow : Window
     private readonly List<Row> recent = [];
     private readonly Dictionary<string, LayoutInfo> layouts = [];
     private List<ClientChoice> clients = [];
+    private IReadOnlyList<AssetSummary> assetCache = [];
+    private bool fillingTypes;
     private CancellationTokenSource? listCancel;
     private CancellationTokenSource? detailCancel;
     private CancellationTokenSource? signInCancel;
@@ -179,6 +181,8 @@ public sealed partial class SearchWindow : Window
             AccountName.Text = session.User.Name;
             AccountInitials.Text = Initials(session.User.Name);
             TitleOrg.Text = session.Organization.Name;
+            foreach (var layout in await client.ListLayoutsAsync())
+                layouts[layout.Id] = layout;
             var list = await client.ListClientsAsync();
             clients = [new ClientChoice(null, "All clients"), .. list.Where(c => c.Status != "inactive").Select(c => new ClientChoice(c.Id, c.Name))];
             ShowClients();
@@ -275,7 +279,6 @@ public sealed partial class SearchWindow : Window
 
     private void Refresh_Click(object sender, RoutedEventArgs e)
     {
-        layouts.Clear();
         _ = LoadAccountAsync();
         _ = LoadListAsync();
     }
@@ -292,38 +295,52 @@ public sealed partial class SearchWindow : Window
         var clientName = clients.FirstOrDefault(c => c.Id is not null && c.Id == clientId)?.Name;
         var label = SectionList.First(s => s.Id == section).Label;
         ListTitle.Text = clientName is null || section is "favorites" or "recent" ? label : $"{label} · {clientName}";
+        TypeFilter.Visibility = section == "assets" ? Visibility.Visible : Visibility.Collapsed;
         ListLoading.Visibility = Visibility.Visible;
         try
         {
-            IReadOnlyList<Row> rows = section switch
+            IReadOnlyList<Row> rows;
+            switch (section)
             {
-                "favorites" => (await client.ListFavoritesAsync(cancel.Token))
-                    .Where(f => f.Type is "password" or "asset" or "document" or "client")
-                    .Select(f => new Row(f.Type, f.Id, f.Name, f.ClientName ?? (f.Type == "client" ? "Client" : "Knowledge base"), f.ClientId, f.ClientName))
-                    .ToList(),
-                "recent" => [.. recent],
-                "passwords" => (await client.ListPasswordsAsync(clientId, cancel.Token))
-                    .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
-                    .Select(p => new Row("password", p.Id, p.Name, Join(p.Username, clientId is null ? p.ClientName : null), p.ClientId, p.ClientName))
-                    .ToList(),
-                "assets" => (await client.ListAssetsAsync(clientId, cancel.Token))
-                    .OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
-                    .Select(a => new Row("asset", a.Id, a.Name, Join(a.LayoutName, clientId is null ? a.ClientName : null), a.ClientId, a.ClientName))
-                    .ToList(),
-                "documents" => (await client.ListDocumentsAsync(clientId, cancel.Token))
-                    .OrderBy(d => d.Title, StringComparer.CurrentCultureIgnoreCase)
-                    .Select(d => new Row("document", d.Id, d.Title, d.ClientName ?? "Knowledge base", d.ClientId, d.ClientName))
-                    .ToList(),
-                _ => [],
-            };
+                case "favorites":
+                    rows = (await client.ListFavoritesAsync(cancel.Token))
+                        .Where(f => f.Type is "password" or "asset" or "document" or "client")
+                        .Select(f => new Row(f.Type, f.Id, f.Name, Join(Kind(f.Type), f.ClientName), f.ClientId, f.ClientName))
+                        .ToList();
+                    break;
+                case "recent":
+                    rows = [.. recent];
+                    break;
+                case "passwords":
+                    rows = (await client.ListPasswordsAsync(clientId, cancel.Token))
+                        .Select(p => new Row("password", p.Id, p.Name, p.Username.Length > 0 ? p.Username : "No username", p.ClientId, p.ClientName))
+                        .ToList();
+                    break;
+                case "assets":
+                    assetCache = await client.ListAssetsAsync(clientId, cancel.Token);
+                    FillTypes();
+                    rows = AssetRows();
+                    break;
+                case "documents":
+                    rows = (await client.ListDocumentsAsync(clientId, cancel.Token))
+                        .Select(d => new Row("document", d.Id, d.Title, Kind("document"), d.ClientId, d.ClientName ?? "Knowledge base"))
+                        .ToList();
+                    break;
+                default:
+                    rows = [];
+                    break;
+            }
             if (cancel.IsCancellationRequested)
                 return;
-            ShowRows(rows, section switch
-            {
-                "favorites" => "Nothing starred yet. Star clients, assets, documents, and passwords in Atlas to keep them here.",
-                "recent" => "What you open here shows up in this list.",
-                _ => clientName is null ? "Nothing here yet." : $"{clientName} has nothing here yet.",
-            });
+            ShowRows(
+                rows,
+                section switch
+                {
+                    "favorites" => "Nothing starred yet. Star clients, assets, documents, and passwords in Atlas to keep them here.",
+                    "recent" => "What you open here shows up in this list.",
+                    _ => clientName is null ? "Nothing here yet." : $"{clientName} has nothing here yet.",
+                },
+                grouped: clientId is null && section is "passwords" or "assets" or "documents");
         }
         catch (OperationCanceledException)
         {
@@ -339,10 +356,70 @@ public sealed partial class SearchWindow : Window
         }
     }
 
-    private void ShowRows(IReadOnlyList<Row> rows, string emptyText)
+    // The asset types present in the list, for the filter.
+    private void FillTypes()
     {
-        Results.ItemsSource = rows;
-        ListCount.Text = rows.Count == 0 ? "" : rows.Count.ToString();
+        var previous = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
+        var choices = new List<TypeChoice> { new(null, "All types") };
+        choices.AddRange(assetCache
+            .GroupBy(a => a.LayoutId)
+            .Select(g => new TypeChoice(g.Key, $"{g.First().LayoutName} ({g.Count()})"))
+            .OrderBy(c => c.Label, StringComparer.CurrentCultureIgnoreCase));
+        fillingTypes = true;
+        TypeFilter.ItemsSource = choices;
+        TypeFilter.SelectedItem = choices.FirstOrDefault(c => c.LayoutId == previous) ?? choices[0];
+        fillingTypes = false;
+    }
+
+    private List<Row> AssetRows()
+    {
+        var layoutId = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
+        return assetCache
+            .Where(a => layoutId is null || a.LayoutId == layoutId)
+            .Select(a =>
+            {
+                var facts = KeyFacts(a).Where(f => f.Kind is "ip" or "os" or "seen").Select(f => f.Value);
+                return new Row("asset", a.Id, a.Name, Join([a.LayoutName, .. facts]), a.ClientId, a.ClientName);
+            })
+            .ToList();
+    }
+
+    private void TypeFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (fillingTypes || section != "assets" || QueryBox.Text.Trim().Length > 0)
+            return;
+        ShowRows(AssetRows(), "None of this type.", grouped: clientId is null);
+    }
+
+    /// <summary>
+    /// Shows rows sorted by name. Across every client they're grouped under each client's name, so hundreds of
+    /// machines read as a few dozen short lists.
+    /// </summary>
+    private void ShowRows(IReadOnlyList<Row> rows, string emptyText, bool grouped = false)
+    {
+        // Starred and recent keep their own order.
+        List<Row> sorted = section is "favorites" or "recent" && QueryBox.Text.Trim().Length == 0
+            ? [.. rows]
+            : [.. rows.OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
+        if (grouped)
+        {
+            var groups = sorted
+                .GroupBy(r => r.ClientName ?? "Knowledge base")
+                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new RowGroup(g.Key, g))
+                .ToList();
+            Results.ItemsSource = new Microsoft.UI.Xaml.Data.CollectionViewSource { IsSourceGrouped = true, Source = groups }.View;
+        }
+        else
+        {
+            Results.ItemsSource = sorted;
+        }
+        ListCount.Text = rows.Count switch
+        {
+            0 => "",
+            1 => "1 item",
+            _ => $"{rows.Count:N0} items",
+        };
         ListEmpty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ListEmptyText.Text = emptyText;
         if (rows.Count > 0)
@@ -350,6 +427,60 @@ public sealed partial class SearchWindow : Window
         else
             ShowItem(null);
     }
+
+    /// <summary>
+    /// The facts that tell one asset from another, picked by what each field is called: its address, name on the
+    /// network, operating system, serial number, model, maker, warranty, last check-in, protection, and user.
+    /// </summary>
+    private List<(string Kind, string Label, string Value)> KeyFacts(AssetSummary asset)
+    {
+        layouts.TryGetValue(asset.LayoutId, out var layout);
+        var fields = (layout?.Fields ?? []).ToList();
+        foreach (var key in asset.Fields.Keys)
+            if (!fields.Any(f => f.Key == key))
+                fields.Add(new LayoutField(key, Tidy(key), "text"));
+        var facts = new List<(string Kind, string Label, string Value)>();
+        foreach (var (kind, pattern) in FactKinds)
+        {
+            foreach (var field in fields)
+            {
+                var matches = (kind == "ip" && field.Type == "ip") ||
+                    System.Text.RegularExpressions.Regex.IsMatch($"{field.Key} {field.Label}", pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!matches || facts.Any(f => f.Label == Tidy(field.Label)))
+                    continue;
+                if (asset.Fields.TryGetValue(field.Key, out var value) && Display(value) is { Length: > 0 } text)
+                {
+                    facts.Add((kind, Tidy(field.Label), field.Type == "date" ? Day(text) : text));
+                    break;
+                }
+            }
+        }
+        return facts;
+    }
+
+    private static readonly (string Kind, string Pattern)[] FactKinds =
+    [
+        ("ip", @"\bip\b|ip.?address"),
+        ("host", @"host.?name|\bfqdn\b"),
+        ("os", @"operating.?system|\bos\b"),
+        ("serial", @"serial"),
+        ("model", @"\bmodel\b"),
+        ("maker", @"manufacturer|vendor"),
+        ("warranty", @"warranty"),
+        ("seen", @"last.?(check|seen|contact)|check.?in"),
+        ("protection", @"endpoint.?protection|anti.?virus"),
+        ("user", @"logged.?in|last.?user"),
+    ];
+
+    // Labels from synced devices ("anti_viruses_application_name") read as words.
+    private static string Tidy(string label)
+    {
+        var words = label.Replace('_', ' ').Trim();
+        return words.Length == 0 ? label : char.ToUpperInvariant(words[0]) + words[1..];
+    }
+
+    private static string Day(string iso) =>
+        DateTimeOffset.TryParse(iso, out var at) ? at.ToLocalTime().ToString("MMM d, yyyy") : iso;
 
     private static string Join(params string?[] parts) => string.Join(" · ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
 
@@ -374,8 +505,9 @@ public sealed partial class SearchWindow : Window
             var results = await client.SearchAsync(query, 30, cancel.Token);
             if (cancel.IsCancellationRequested)
                 return;
+            TypeFilter.Visibility = Visibility.Collapsed;
             ShowRows(
-                results.Select(r => new Row(r.Type, r.Id, r.Title, Join(r.Subtitle, r.ClientName == r.Subtitle ? null : r.ClientName), r.ClientId, r.ClientName)).ToList(),
+                results.Select(r => new Row(r.Type, r.Id, r.Title, Join(Kind(r.Type), r.ClientName), r.ClientId, r.ClientName)).ToList(),
                 "Nothing you can see matches that.");
         }
         catch (OperationCanceledException)
@@ -546,6 +678,10 @@ public sealed partial class SearchWindow : Window
 
     private void ShowAsset(AssetSummary asset)
     {
+        var facts = KeyFacts(asset);
+        if (facts.Count > 0)
+            Detail.Children.Add(Facts([.. facts.Take(6).Select(f => (f.Label, f.Value))]));
+
         var rows = new List<UIElement>();
         layouts.TryGetValue(asset.LayoutId, out var layout);
         var known = new HashSet<string>();
@@ -553,21 +689,74 @@ public sealed partial class SearchWindow : Window
         {
             known.Add(field.Key);
             if (asset.Fields.TryGetValue(field.Key, out var value) && Display(value) is { Length: > 0 } text)
-                rows.Add(CopyableField(field.Label, text, mono: field.Type is "ip" or "url"));
+                rows.Add(CopyableField(Tidy(field.Label), field.Type == "date" ? Day(text) : text, mono: field.Type is "ip" or "url"));
         }
         // Values a layout no longer lists (an import, say) are still shown.
         foreach (var (key, value) in asset.Fields)
             if (!known.Contains(key) && Display(value) is { Length: > 0 } text)
-                rows.Add(CopyableField(key, text));
-        Detail.Children.Add(rows.Count > 0 ? Card("Details", [.. rows]) : Card("Details", Text("No details filled in yet.")));
+                rows.Add(CopyableField(Tidy(key), text));
+        if (rows.Count == 0)
+            Detail.Children.Add(Card("Details", Text("No details filled in yet.")));
+        else if (facts.Count == 0 || rows.Count <= 6)
+            Detail.Children.Add(Card("Details", [.. rows]));
+        else
+        {
+            var all = new StackPanel();
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (i > 0)
+                    all.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
+                all.Children.Add(rows[i]);
+            }
+            Detail.Children.Add(new Expander
+            {
+                Header = $"All fields ({rows.Count})",
+                Content = all,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0, 16, 0, 0),
+            });
+        }
         if (asset.Notes.Trim().Length > 0)
             Detail.Children.Add(Card("Notes", Text(asset.Notes.Trim(), selectable: true)));
         Detail.Children.Add(Card(
             "About",
             Field("Client", Value(asset.ClientName)),
-            Field("Layout", Value(asset.LayoutName)),
-            Field("Status", Value(asset.Status.Length > 0 ? char.ToUpperInvariant(asset.Status[0]) + asset.Status[1..] : "")),
+            Field("Type", Value(asset.LayoutName)),
             Field("Updated", Value(Join(When(asset.UpdatedAt), asset.UpdatedByName)))));
+    }
+
+    /// <summary>The key facts as tiles across the top, three to a row; selecting one copies it.</summary>
+    private UIElement Facts(List<(string Label, string Value)> facts)
+    {
+        var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8, Margin = new Thickness(0, 16, 0, 0) };
+        const int columns = 3;
+        for (var c = 0; c < columns; c++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (var i = 0; i < facts.Count; i++)
+        {
+            if (i % columns == 0)
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var (label, value) = facts[i];
+            var content = new StackPanel { Spacing = 2 };
+            content.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = Secondary(), TextTrimming = TextTrimming.CharacterEllipsis });
+            content.Children.Add(new TextBlock { Text = value, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = FontWeights.SemiBold });
+            var tile = new Button
+            {
+                Content = content,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(12, 9, 12, 10),
+            };
+            ToolTipService.SetToolTip(tile, $"Copy {label.ToLowerInvariant()}");
+            AutomationProperties.SetName(tile, $"{label}: {value}. Copy");
+            tile.Click += (_, _) => Copy(value, $"{label} copied.");
+            Grid.SetRow(tile, i / columns);
+            Grid.SetColumn(tile, i % columns);
+            grid.Children.Add(tile);
+        }
+        return grid;
     }
 
     private void ShowDocument(DocumentDetail document)
