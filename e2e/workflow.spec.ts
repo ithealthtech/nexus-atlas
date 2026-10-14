@@ -997,6 +997,7 @@ test.describe.serial('accessibility sweep', () => {
       '/admin/updates',
       '/admin/services',
       '/admin/certificate',
+      '/admin/remote-access',
       '/admin/email',
       '/admin/monitoring',
       '/admin/sign-in',

@@ -38,7 +38,7 @@ The certificate is used only for the install step and is not stored in the image
 | `DATABASE_URL` | — (required) | PostgreSQL connection string |
 | `PUBLIC_URL` | `http://127.0.0.1:4318` | Public address. Drives Host/Origin checks, `Secure` cookies, and HSTS. |
 | `ATLAS_MASTER_KEY` / `ATLAS_MASTER_KEY_FILE` | — (required in production) | 32-byte base64url key(s) |
-| `TRUST_PROXY` | `false` | Set to `true` behind Caddy, IIS, or nginx so client IP addresses are correct |
+| `TRUST_PROXY` | `false` | Who may say which address a visitor came from: `true` (any proxy), or a comma-separated list such as `127.0.0.1,::1,10.0.0.5`. Set it behind Caddy, IIS, nginx, cloudflared or Tailscale so client IP addresses are correct. The Linux installer sets the list. |
 | `HOST`, `PORT` | `127.0.0.1`, `4318` | Listen address (the container uses `0.0.0.0`) |
 | `ATLAS_SETUP_CODE` | random | Fixed first-run code, for automated installs |
 | `ATLAS_REQUIRE_STAFF_MFA` | `true` | Require an authenticator app for staff |

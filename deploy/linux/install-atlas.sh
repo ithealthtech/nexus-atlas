@@ -23,10 +23,20 @@ Usage: sudo bash install-atlas.sh [options]
   --repo URL         Git repository to install from (default: the official Atlas repository).
   -h, --help         Show this help.
 
+How people reach Atlas (the same choices as Administration -> Remote access; kept across updates):
+  --access MODE                direct (default), cloudflare, tailscale, or proxy.
+  --tunnel-token-file FILE     cloudflare: a file holding the Cloudflare Tunnel's token. In the Cloudflare
+                               dashboard, point the tunnel's public hostname at http://localhost:4318.
+  --tailscale-key-file FILE    tailscale: a file holding a Tailscale auth key (not needed once signed in).
+  --funnel                     tailscale: serve Atlas on the internet with Funnel, not just your tailnet.
+  --trusted-proxy LIST         proxy: your reverse proxy's addresses or ranges, comma-separated. It sends
+                               requests to this server on port 80, keeping the Host header.
+
 Examples:
   sudo bash install-atlas.sh --public-url https://atlas.yourmsp.com   # first install, newest release
   sudo bash install-atlas.sh                                          # upgrade to the newest release
   sudo bash install-atlas.sh --version v1.0.2                         # a specific release
+  sudo bash install-atlas.sh --access tailscale --tailscale-key-file ./key   # reached over Tailscale
 EOF
 }
 
@@ -41,12 +51,22 @@ SERVICE_USER="atlas"
 DB_NAME="atlas"
 DB_USER="atlas"
 PORT="4318"
+ACCESS=""
+TUNNEL_TOKEN_FILE=""
+TAILSCALE_KEY_FILE=""
+FUNNEL=""
+TRUSTED_PROXY=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) ATLAS_VERSION="${2:?--version needs a value}"; shift 2 ;;
     --public-url) PUBLIC_URL="${2:?--public-url needs a value}"; shift 2 ;;
     --repo) REPO="${2:?--repo needs a value}"; shift 2 ;;
+    --access) ACCESS="${2:?--access needs a value}"; shift 2 ;;
+    --tunnel-token-file) TUNNEL_TOKEN_FILE="${2:?--tunnel-token-file needs a file}"; shift 2 ;;
+    --tailscale-key-file) TAILSCALE_KEY_FILE="${2:?--tailscale-key-file needs a file}"; shift 2 ;;
+    --funnel) FUNNEL=1; shift ;;
+    --trusted-proxy) TRUSTED_PROXY="${2:?--trusted-proxy needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -167,7 +187,8 @@ SETTINGS[DATABASE_URL]="$DATABASE_URL"
 SETTINGS[PUBLIC_URL]="$PUBLIC_URL"
 SETTINGS[HOST]=127.0.0.1
 SETTINGS[PORT]="$PORT"
-SETTINGS[TRUST_PROXY]=true
+# Only Caddy on this server is trusted to say who the visitor is. atlas-access widens this for a reverse proxy.
+[[ -z "${SETTINGS[TRUST_PROXY]:-}" || "${SETTINGS[TRUST_PROXY]}" == true ]] && SETTINGS[TRUST_PROXY]="127.0.0.1,::1"
 SETTINGS[ATLAS_MASTER_KEY_FILE]="$KEY_FILE"
 SETTINGS[ATLAS_DATA_DIR]="$DATA_DIR"
 SETTINGS[ATLAS_UPDATER_DIR]="$UPDATER_DIR"
@@ -254,8 +275,13 @@ systemctl daemon-reload
 systemctl enable --now msp-atlas
 systemctl enable --now msp-atlas-updater.path
 
-log "Caddy HTTPS proxy for $SITE_HOST"
+# A tunnel or reverse proxy chosen earlier keeps its own Caddy settings; atlas-access puts them back below.
+SAVED_MODE="$(grep -E '^MODE=' "$CONF_DIR/access.conf" 2>/dev/null | cut -d= -f2 || true)"
 TLS_LINE=""
+if [[ -n "$SAVED_MODE" && "$SAVED_MODE" != direct && -z "$ACCESS" ]]; then
+  log "Keeping the $SAVED_MODE settings for how Atlas is reached"
+else
+log "Caddy HTTPS proxy for $SITE_HOST"
 if [[ "$HOST_ONLY" =~ ^[0-9.]+$ || "$HOST_ONLY" != *.* ]]; then TLS_LINE="	tls internal"; fi
 cat > /etc/caddy/Caddyfile <<EOF
 $SITE_HOST {
@@ -265,6 +291,7 @@ $TLS_LINE
 	header -Server
 }
 EOF
+fi
 systemctl enable caddy >/dev/null
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
@@ -289,12 +316,30 @@ if [[ -f "$APP_DIR/deploy/linux/atlas-updater.sh" ]]; then
   INSTALL_SRC="$APP_DIR/deploy/linux/install-atlas.sh"
   UPDATER_SRC="$APP_DIR/deploy/linux/atlas-updater.sh"
 fi
+ACCESS_SRC="$SCRIPT_DIR/atlas-access.sh"
+[[ -f "$APP_DIR/deploy/linux/atlas-access.sh" ]] && ACCESS_SRC="$APP_DIR/deploy/linux/atlas-access.sh"
 # `install` replaces the file rather than rewriting it, so a running copy of this script isn't disturbed.
-for pair in "$INSTALL_SRC:/usr/local/sbin/atlas-install" "$UPDATER_SRC:/usr/local/sbin/atlas-updater"; do
+for pair in "$INSTALL_SRC:/usr/local/sbin/atlas-install" "$UPDATER_SRC:/usr/local/sbin/atlas-updater" \
+  "$ACCESS_SRC:/usr/local/sbin/atlas-access"; do
   src="${pair%%:*}"; dst="${pair#*:}"
+  [[ -f "$src" ]] || continue
   [[ "$(readlink -f "$src")" == "$(readlink -f "$dst")" ]] || install -m 0755 -o root -g root "$src" "$dst"
 done
 printf 'REPO=%q\n' "$REPO" > "$CONF_DIR/updater.conf"; chmod 0644 "$CONF_DIR/updater.conf"
+
+# How people reach Atlas: a choice made now, or the one saved before (Administration -> Remote access).
+if [[ -n "$ACCESS" ]]; then
+  log "Setting up $ACCESS access"
+  ACCESS_ARGS=(apply --mode "$ACCESS" --public-url "$PUBLIC_URL")
+  [[ -n "$TUNNEL_TOKEN_FILE" ]] && ACCESS_ARGS+=(--token-file "$TUNNEL_TOKEN_FILE")
+  [[ -n "$TAILSCALE_KEY_FILE" ]] && ACCESS_ARGS+=(--auth-key-file "$TAILSCALE_KEY_FILE")
+  [[ -n "$FUNNEL" ]] && ACCESS_ARGS+=(--funnel)
+  [[ -n "$TRUSTED_PROXY" ]] && ACCESS_ARGS+=(--trusted "$TRUSTED_PROXY")
+  /usr/local/sbin/atlas-access "${ACCESS_ARGS[@]}"
+  PUBLIC_URL="$(grep -E '^PUBLIC_URL=' "$ENV_FILE" | cut -d= -f2-)"
+elif [[ -n "$SAVED_MODE" && "$SAVED_MODE" != direct ]]; then
+  /usr/local/sbin/atlas-access reapply
+fi
 
 echo
 echo "$ATLAS_VERSION" > "$CONF_DIR/installed-version"; chmod 0644 "$CONF_DIR/installed-version"

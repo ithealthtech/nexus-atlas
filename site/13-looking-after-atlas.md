@@ -66,6 +66,19 @@ Docker and Windows installs see the page read-only, and update the way they were
 
 Every action asks for your password and is written to the security log. If Atlas itself is down, run `sudo systemctl restart msp-atlas` on the server, and `sudo journalctl -u msp-atlas -n 50` to see why it stopped.
 
+## Remote access
+
+**Admin → Remote access** chooses how people reach Atlas: from this server directly, through a **Cloudflare Tunnel**, through **Tailscale** (your tailnet, or the internet with Funnel), or behind **your own reverse proxy**. The page lists what to set up first for each, such as the tunnel's public hostname or turning on HTTPS certificates in Tailscale.
+
+1. Choose the way, and fill in the address and the token, auth key or proxy addresses it asks for.
+2. Choose **Review the change**. The dialog lists what moves with the address.
+3. Choose **Change it**. Atlas restarts on the new address; open it there.
+
+Only the owner can change it, after confirming their password. If Atlas doesn't answer at the new address, the server puts the previous settings back.
+
+> [!warning] What moves with the address
+> Everyone signs in again. Passkeys only work at the address they were added on, so people add them again. Microsoft and SAML sign-in, the browser extension and Atlas for Windows need the new address.
+
 ## The certificate
 
 ![Certificate](../images/manual/certificate.png "Admin → Certificate.")

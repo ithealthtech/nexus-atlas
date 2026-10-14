@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Does what an administrator asked for from Atlas that needs root: install an update (Settings -> Updates), or
-# restart a service or repair the installation (Administration -> Services).
+# Does what an administrator asked for from Atlas that needs root: install an update (Updates), restart a service or
+# repair the installation (Services), or change how Atlas is reached (Remote access, through atlas-access).
 # Run as root by msp-atlas-updater.service when Atlas drops a request in the inbox.
 #
 # Atlas (the unprivileged `atlas` user) can write only to $UPDATER_DIR/inbox. Everything read
@@ -219,6 +219,69 @@ service_action() {
 if [[ "$(read_field kind)" == service ]]; then
   ACTION="$(read_field action)"
   service_action
+  exit 0
+fi
+
+# ---------- remote access ----------
+# A request from Administration -> Remote access: how people reach Atlas (deploy/linux/atlas-access.sh does the
+# work). Each field is checked against a strict pattern here and again by atlas-access; secrets go to files only
+# root can read, never onto a command line.
+if [[ "$(read_field kind)" == access ]]; then
+  ACCESS_STATUS="$UPDATER_DIR/access.json"
+  ACCESS_LOG="$UPDATER_DIR/last-access.log"
+  ACCESS_DONE=""
+  access_status() { # state message [finished]
+    local tmp
+    tmp="$(mktemp "$UPDATER_DIR/.access.XXXXXX")"
+    STATE="$1" MESSAGE="$2" FINISHED="${3:-}" BY="$REQUESTED_BY" AT="$REQUESTED_AT" node -e '
+      const e = process.env;
+      process.stdout.write(JSON.stringify({
+        state: e.STATE, requestedBy: e.BY || null, requestedAt: e.AT || null,
+        finishedAt: e.FINISHED || null, message: e.MESSAGE || null, updatedAt: new Date().toISOString() }));' > "$tmp"
+    chmod 0640 "$tmp"; chown root:atlas "$tmp"
+    mv -f "$tmp" "$ACCESS_STATUS"
+  }
+  access_on_exit() {
+    local code=$?
+    rm -rf "$WORK"
+    if [[ -z "$ACCESS_DONE" ]]; then
+      access_status failed "That stopped before it finished (exit $code). See $ACCESS_LOG." "$(date -u +%FT%TZ)" || true
+    fi
+  }
+  trap access_on_exit EXIT
+  : > "$ACCESS_LOG"; chmod 0640 "$ACCESS_LOG"; chown root:atlas "$ACCESS_LOG"
+  # Writes each checked field to its own file in $WORK; anything that doesn't match is left out.
+  umask 077
+  node -e '
+    const fs = require("fs"); const dir = process.argv[1];
+    let r = {}; try { r = JSON.parse(fs.readFileSync(dir + "/request.json", "utf8")); } catch {}
+    const ok = (k, re) => (typeof r[k] === "string" && re.test(r[k]) ? r[k] : "");
+    const out = {
+      mode: ok("mode", /^(direct|cloudflare|tailscale|proxy)$/),
+      url: ok("publicUrl", /^https:\/\/[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:\d{1,5})?$/),
+      trusted: ok("trusted", /^[0-9A-Fa-f.:\/,]{2,400}$/),
+      funnel: r.funnel === true ? "yes" : "no",
+      token: ok("cloudflareToken", /^[A-Za-z0-9+\/=_-]{40,2048}$/),
+      authkey: ok("tailscaleAuthKey", /^tskey-[A-Za-z0-9_-]{10,200}$/),
+    };
+    for (const [k, v] of Object.entries(out)) fs.writeFileSync(dir + "/" + k, v, { mode: 0o600 });' "$WORK"
+  args=(apply --mode "$(cat "$WORK/mode")")
+  [[ -s "$WORK/url" ]] && args+=(--public-url "$(cat "$WORK/url")")
+  [[ -s "$WORK/trusted" ]] && args+=(--trusted "$(cat "$WORK/trusted")")
+  [[ "$(cat "$WORK/funnel")" == yes ]] && args+=(--funnel)
+  [[ -s "$WORK/token" ]] && args+=(--token-file "$WORK/token")
+  [[ -s "$WORK/authkey" ]] && args+=(--auth-key-file "$WORK/authkey")
+  access_status running "Changing how Atlas is reached. Atlas restarts on its new address."
+  output=""
+  if output="$(/usr/local/sbin/atlas-access "${args[@]}" 2>&1)"; then
+    echo "$output" >> "$ACCESS_LOG"
+    ACCESS_DONE=1
+    access_status succeeded "$(tail -n 1 <<<"$output")" "$(date -u +%FT%TZ)"
+  else
+    echo "$output" >> "$ACCESS_LOG"
+    ACCESS_DONE=1
+    access_status failed "$(grep -E '^ERROR:' <<<"$output" | sed 's/^ERROR: //' | tr '\n' ' ' | cut -c1-600)" "$(date -u +%FT%TZ)"
+  fi
   exit 0
 fi
 

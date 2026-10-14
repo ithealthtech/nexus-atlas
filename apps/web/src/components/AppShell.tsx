@@ -269,6 +269,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
             { to: '/admin/status', label: 'System status' },
             { to: '/admin/services', label: 'Services' },
             { to: '/admin/certificate', label: 'Certificate' },
+            { to: '/admin/remote-access', label: 'Remote access' },
             { to: '/admin/request-log', label: 'Request log' },
             { to: '/admin/webhooks', label: 'Webhooks' },
             { to: '/admin/updates', label: 'Updates' },
