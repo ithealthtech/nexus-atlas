@@ -586,7 +586,11 @@ public sealed partial class SearchWindow : Window
                 if (existing is not null && trail.Count > 1 && trail[^2] is { Kind: "item", Item: { } before } && before.Id == row.Id)
                     trail.RemoveAt(trail.Count - 2);
                 ShowPlace();
-                Show(existing is null ? $"{row.Title} added." : "Changes saved. The previous password is in the entry's history.", InfoBarSeverity.Success);
+                Show(
+                    existing is null ? $"{row.Title} added."
+                    : draft.Secret is not null ? "Saved. The previous password is in the entry's history."
+                    : "Changes saved.",
+                    InfoBarSeverity.Success);
             }
             catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
             {
