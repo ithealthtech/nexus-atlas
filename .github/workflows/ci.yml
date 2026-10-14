@@ -160,6 +160,16 @@ jobs:
       - name: Install, upgrade, and uninstall
         shell: pwsh
         run: apps/windows/installer/Test-Setup.ps1
+      # How the window looks, with made-up data, so a change can be checked without installing it.
+      - name: Screenshots
+        shell: pwsh
+        run: apps/windows/Take-Screenshots.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atlas-for-windows-screenshots
+          path: apps/windows/dist/screenshots
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: atlas-for-windows-setup

@@ -453,3 +453,83 @@ public class ConnectionProblemTests
     public void Says_Atlas_is_unreachable_for_anything_else() =>
         Assert.DoesNotContain("certificate", ConnectionProblem.Describe(new HttpRequestException("No such host is known.")), StringComparison.Ordinal);
 }
+
+public class RichTextPlainTests
+{
+    [Fact]
+    public void Reads_a_document_as_plain_text()
+    {
+        var doc = JsonDocument.Parse("""
+            {"type":"doc","content":[
+              {"type":"heading","content":[{"type":"text","text":"Steps"}]},
+              {"type":"paragraph","content":[{"type":"text","text":"Reboot after "},{"type":"text","text":"6 PM","marks":[{"type":"bold"}]},{"type":"text","text":"."}]},
+              {"type":"orderedList","content":[
+                {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Sign in"}]}]},
+                {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Reboot"}]}]}]},
+              {"type":"taskList","content":[
+                {"type":"taskItem","attrs":{"checked":true},"content":[{"type":"paragraph","content":[{"type":"text","text":"Backup checked"}]}]},
+                {"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"Tell the office"}]}]}]},
+              {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"One"}]}]}]},
+              {"type":"mystery","content":[{"type":"text","text":"Kept anyway"}]}
+            ]}
+            """).RootElement;
+        Assert.Equal(
+            "Steps\n\nReboot after 6 PM.\n\n1. Sign in\n2. Reboot\n\n☑ Backup checked\n☐ Tell the office\n\n• One\n\nKept anyway",
+            RichTextPlain.From(doc));
+    }
+
+    [Fact]
+    public void An_empty_or_odd_document_is_empty_text()
+    {
+        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("""{"type":"doc"}""").RootElement));
+        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("[1,2]").RootElement));
+    }
+}
+
+public class PreviewServerTests
+{
+    private static AtlasClient Client()
+    {
+        var client = new AtlasClient(PreviewServer.Address, new PreviewServer());
+        client.UseToken(PreviewServer.Token);
+        return client;
+    }
+
+    [Fact]
+    public async Task Serves_everything_the_window_lists()
+    {
+        using var client = Client();
+        Assert.Equal(3, (await client.ListClientsAsync()).Count);
+        var harbor = await client.ListPasswordsAsync("c-harbor");
+        Assert.All(harbor, p => Assert.Equal("Harbor Dental Group", p.ClientName));
+        Assert.Contains(harbor, p => p.HasTotp);
+        var assets = await client.ListAssetsAsync();
+        Assert.Equal("10.20.0.10", assets.First(a => a.Name == "HDG-DC-01").Fields["ip"].GetString());
+        Assert.NotEmpty((await client.ListLayoutsAsync()).First().Fields);
+        Assert.Equal(4, (await client.ListFavoritesAsync()).Count);
+        var doc = await client.GetDocumentAsync("d-reboot");
+        Assert.Contains("1. Sign in to the FortiGate", RichTextPlain.From(doc.Content));
+        Assert.Equal("482193", (await client.RevealToShowAsync("p-m365", SecretField.OneTimeCode)).Value);
+        Assert.Equal("Alex Rivera", (await client.GetSessionAsync()).User.Name);
+        Assert.NotEmpty(await client.SearchAsync("hdg"));
+    }
+
+    [Fact]
+    public async Task Asks_for_the_list_of_one_client_by_its_id()
+    {
+        string? asked = null;
+        var client = new AtlasClient(AtlasAddress.Parse("https://atlas.example.com"), new Recorder(uri => asked = uri.PathAndQuery));
+        client.UseToken("t");
+        await client.ListAssetsAsync("c 1&x");
+        Assert.Equal("/api/v1/assets?client=c%201%26x", asked);
+    }
+
+    private sealed class Recorder(Action<Uri> seen) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            seen(request.RequestUri!);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]", Encoding.UTF8, "application/json") });
+        }
+    }
+}

@@ -197,7 +197,9 @@ export class NativeAppService {
 
     const path = url.split('?')[0]!;
     if (path !== OWN_SESSION) {
-      if (!API_ROUTES.some((r) => r.test(path)))
+      // The desktop app also lists what the person starred, to show in its sidebar. Read only.
+      const favorites = path === '/api/favorites' && (method === 'GET' || method === 'HEAD');
+      if (!favorites && !API_ROUTES.some((r) => r.test(path)))
         throw new HttpError(403, 'This endpoint is not available to desktop apps.', 'api_scope');
       const scopes = session.scopes as AppScope[];
       const needed: AppScope = REVEAL_ROUTE.test(path)

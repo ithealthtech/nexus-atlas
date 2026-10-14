@@ -26,6 +26,9 @@ public partial class App : Application
     // Loads the window and the tray, reports whether that worked, and exits. Run by the build, never by people.
     private const string SelfTestArgument = "--self-test";
     private static readonly string SelfTestReport = Path.Combine(Path.GetTempPath(), "AtlasForWindows-selftest.txt");
+    // Opens the window against made-up data (PreviewServer), with no sign-in, settings, or tray. The build uses it to
+    // take screenshots; nothing it shows is real.
+    private const string PreviewArgument = "--preview";
 
     private readonly SecureStore store = new(SecureStore.DefaultFolder(), new DpapiProtector());
     private AppSettings settings = new();
@@ -62,6 +65,14 @@ public partial class App : Application
         if (HasArgument(arguments, SelfTestArgument))
         {
             RunSelfTest();
+            return;
+        }
+        if (HasArgument(arguments, PreviewArgument))
+        {
+            client = new AtlasClient(PreviewServer.Address, new PreviewServer());
+            client.UseToken(PreviewServer.Token);
+            window = new SearchWindow(this);
+            window.ShowSearch();
             return;
         }
 
@@ -157,7 +168,7 @@ public partial class App : Application
         window?.ShowSetup(settings.AtlasUrl, "You were signed out of Atlas. Sign in again to continue.");
     }
 
-    private async Task SignOutAsync()
+    internal async Task SignOutAsync()
     {
         if (client is not null)
         {

@@ -67,3 +67,65 @@ public enum SecretField
     Password,
     OneTimeCode,
 }
+
+// ---------- browsing ----------
+// What the desktop app lists in its three columns. None of these carry a secret: passwords and one-time codes are
+// only ever fetched to copy or briefly show, through RevealAsync, which Atlas records.
+
+public sealed record ClientSummary(string Id, string Name, string Type, string Status);
+
+/// <summary>A password entry as listed, without its secret.</summary>
+public sealed record PasswordSummary(
+    string Id,
+    string ClientId,
+    string ClientName,
+    string Kind,
+    string Name,
+    string Username,
+    string Url,
+    bool HasTotp,
+    bool HasNotes,
+    bool RequireReason,
+    bool CanReveal,
+    bool Restricted,
+    string UpdatedAt,
+    string? UpdatedByName = null);
+
+public sealed record LayoutField(string Key, string Label, string Type);
+
+public sealed record LayoutInfo(string Id, string Name, string Icon, LayoutField[] Fields);
+
+public sealed record AssetSummary(
+    string Id,
+    string ClientId,
+    string ClientName,
+    string LayoutId,
+    string LayoutName,
+    string Name,
+    string Status,
+    Dictionary<string, System.Text.Json.JsonElement> Fields,
+    string Notes,
+    string UpdatedAt,
+    string? UpdatedByName = null);
+
+public sealed record DocumentSummary(
+    string Id,
+    string? ClientId,
+    string? ClientName,
+    string Title,
+    string Status,
+    string UpdatedAt,
+    string? UpdatedByName = null);
+
+public sealed record DocumentDetail(
+    string Id,
+    string? ClientId,
+    string? ClientName,
+    string Title,
+    string Status,
+    string UpdatedAt,
+    System.Text.Json.JsonElement Content,
+    string? UpdatedByName = null);
+
+/// <summary>Something the person starred in Atlas.</summary>
+public sealed record FavoriteItem(string Type, string Id, string Name, string? ClientId, string? ClientName);

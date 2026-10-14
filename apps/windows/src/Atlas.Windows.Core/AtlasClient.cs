@@ -134,6 +134,46 @@ public sealed class AtlasClient : IDisposable
     public Task<IReadOnlyList<ExpirationItem>> GetExpirationsAsync(int days = 14, CancellationToken cancellationToken = default) =>
         SendAsync<IReadOnlyList<ExpirationItem>>(HttpMethod.Get, $"expirations?days={Math.Clamp(days, 1, 730)}", null, cancellationToken);
 
+    // ---------- browsing ----------
+    private static string ForClient(string? clientId) => clientId is null ? "" : $"?client={Uri.EscapeDataString(clientId)}";
+
+    public Task<IReadOnlyList<ClientSummary>> ListClientsAsync(CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<ClientSummary>>(HttpMethod.Get, "clients", null, cancellationToken);
+
+    /// <summary>The password entries the person can open, for one client or all of them. Never their secrets.</summary>
+    public Task<IReadOnlyList<PasswordSummary>> ListPasswordsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<PasswordSummary>>(HttpMethod.Get, "passwords" + ForClient(clientId), null, cancellationToken);
+
+    public Task<IReadOnlyList<AssetSummary>> ListAssetsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<AssetSummary>>(HttpMethod.Get, "assets" + ForClient(clientId), null, cancellationToken);
+
+    public Task<AssetSummary> GetAssetAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(HttpMethod.Get, $"assets/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    public Task<IReadOnlyList<LayoutInfo>> ListLayoutsAsync(CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<LayoutInfo>>(HttpMethod.Get, "layouts", null, cancellationToken);
+
+    public Task<IReadOnlyList<DocumentSummary>> ListDocumentsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<DocumentSummary>>(HttpMethod.Get, "documents" + ForClient(clientId), null, cancellationToken);
+
+    public Task<DocumentDetail> GetDocumentAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<DocumentDetail>(HttpMethod.Get, $"documents/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    /// <summary>What the person starred in Atlas.</summary>
+    public Task<IReadOnlyList<FavoriteItem>> ListFavoritesAsync(CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<FavoriteItem>>(HttpMethod.Get, "favorites", null, cancellationToken);
+
+    /// <summary>
+    /// Reads a password or the current one-time code to show it on screen for a moment. Recorded in the password's
+    /// access history like a reveal in the browser.
+    /// </summary>
+    public Task<RevealResult> RevealToShowAsync(string id, SecretField field, string reason = "", CancellationToken cancellationToken = default) =>
+        SendAsync<RevealResult>(
+            HttpMethod.Post,
+            $"passwords/{Uri.EscapeDataString(id)}/reveal",
+            new { field = field == SecretField.OneTimeCode ? "totp" : "secret", copy = false, reason },
+            cancellationToken);
+
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
     {
         if (token is null)
