@@ -56,11 +56,7 @@ export function Dialog({
             </Button>
           </div>
           <div className="overflow-y-auto px-6 py-5">{children}</div>
-          {footer && (
-            <div className="flex flex-wrap justify-end gap-2 border-t border-border px-6 py-4">
-              {footer}
-            </div>
-          )}
+          {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>}
         </div>
       )}
     </dialog>

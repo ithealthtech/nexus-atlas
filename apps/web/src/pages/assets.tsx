@@ -1,17 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  Archive,
-  ArchiveRestore,
-  Pencil,
-  Plus,
-  QrCode,
-  RefreshCw,
-  Search,
-  Server,
-  ShieldCheck,
-} from 'lucide-react';
+import { Archive, ArchiveRestore, Pencil, Plus, QrCode, RefreshCw, Search, Server, ShieldCheck } from 'lucide-react';
 import {
   ASSET_STATUSES,
   atLeast,
