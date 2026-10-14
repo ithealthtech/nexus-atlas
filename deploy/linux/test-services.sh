@@ -202,7 +202,11 @@ expect "a request with no kind is treated as an update" \
 expect "and refused by the updater's own check" "$(field "$UPDATER_DIR/status.json" message)" "The requested version isn't a release tag."
 
 echo "== Remote access: your own reverse proxy"
-install -m 0755 -o root -g root "$HERE/atlas-access.sh" /usr/local/sbin/atlas-access
+# As after an update by an installer that didn't know about atlas-access: the release ships it, nothing has
+# installed it yet, and the helper has to put it in place itself.
+install -d -m 0755 -o root -g root "$APP/deploy/linux"
+install -m 0644 -o root -g root "$HERE/atlas-access.sh" "$APP/deploy/linux/atlas-access.sh"
+rm -f /usr/local/sbin/atlas-access
 ACCESS_JSON="$UPDATER_DIR/access.json"
 access() { run "{\"kind\":\"access\",$1,\"requestedBy\":\"Test Owner\",\"requestedAt\":\"$(date -u +%FT%TZ)\"}" "$ACCESS_JSON"; }
 envget() { grep -E "^$1=" "$CONF/atlas.env" | cut -d= -f2-; }
@@ -219,6 +223,7 @@ grep -q 'trusted_proxies static 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile || fa
 grep -q '@proxy remote_ip 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile || failA "Caddy doesn't limit Atlas to the proxy"
 echo "ok: the web proxy only lets the reverse proxy through"
 grep -qx 'MODE=proxy' "$CONF/access.conf" || failA "the choice wasn't saved"
+expect "the helper installed atlas-access from the release" "$(owner /usr/local/sbin/atlas-access)" "root:root 755"
 expect "the settings file kept its owner" "$(owner "$CONF/atlas.env")" "root:atlas 640"
 
 echo "== Remote access: a bad address or a command is refused, and nothing changes"
