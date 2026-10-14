@@ -2,6 +2,25 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.27] - 2026-10-14
+
+### Added
+
+- **Services page.** **Administration → Services** shows Atlas, the web proxy, the database, and the updater with whether each is running and since when. An administrator can restart one, or **Repair the installation**, which puts the installer's owners and permissions back, re-enables the services, restarts them, and waits for Atlas to answer. Every action asks for your password again and is written to the security log. Atlas still never runs as root: it asks the updater's helper, which accepts only these four actions by name. This is for servers set up with the Linux installer; Docker and Windows installs get a note on restarting their own way. Tested against real systemd in CI with stand-in services, not yet on a real Atlas server. (#186)
+- **Certificate page.** **Administration → Certificate** shows the certificate Atlas is served with, checked the way a visitor's computer sees it: who issued it, the addresses it covers, when it runs out, and whether it is trusted. On an install at an IP address, where the portal uses its own certificate authority, the page offers that authority's certificate to download, with its thumbprint and the PowerShell commands to check and install it on a computer or through Group Policy. Install it only on computers you manage. Tested against a real Caddy in CI; importing the file into a Windows trust store has not been tried yet. (#187)
+- **Menu styles.** Choose how Atlas's menu looks under **Menu** on your account page: **Rail and panel** (the new default: icons for Home, Clients, Docs, Vault and Admin, with that area's pages beside them), **Sidebar** (one list, with Administration as its own menu), or **Top bar**. It's saved for each person. (#188)
+
+### Changed
+
+- **A calmer look throughout.** A new typeface (Instrument Sans), neutral greys, flatter cards without shadows or dividers under their titles, statuses as a small dot and a word instead of coloured pills, and fewer coloured icons. Client overviews are laid out in even rows. (#188)
+- **The dashboard heading is "Overview"**, with today's date, instead of a greeting. (#188)
+- **Detail pages share one header.** Assets, passwords, documents and checklist runs show what the record is, its name with the star beside it, one line of status and history, and the actions on the right. (#188)
+- **Long settings pages list their sections** down the left, marking the one you're reading: Import & export, Vault policies, Password rotation, and the new settings pages. (#188)
+- **Settings is split into separate pages** in a Settings group of the Admin menu: **Email & alerts**, **Monitoring** (RMM health, warranties, asset statistics, domain and SSL trackers), **Sign-in** (Microsoft and SAML), **API keys**, and **Theme**. Old links to Settings open Email & alerts. **Erase all data** has moved to the bottom of **Import & export**. (#188)
+- **Activity feeds group repeats.** Several changes in a row by the same person to the same kind of thing show as one line ending "and N more". (#188)
+- **Dialogs** have no grey footer band, and the screen behind them dims to a neutral grey. (#188)
+- **The installer raises the updater's start limit** (20 starts a minute), so a burst of actions can't stop it. An existing server gets this the next time the installer runs there, which is the update after this one; until then Atlas spaces service actions five seconds apart. (#186)
+
 ## [1.7.26] - 2026-10-13
 
 ### Added
