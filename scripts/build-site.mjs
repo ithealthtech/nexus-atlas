@@ -63,7 +63,7 @@ function inline(text, where) {
   const codes = [];
   let s = text.replace(/`([^`]+)`/g, (_, c) => {
     codes.push(`<code>${esc(c)}</code>`);
-    return `\u0000${codes.length - 1}\u0000`;
+    return `@@code${codes.length - 1}@@`;
   });
   s = esc(s)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -73,8 +73,9 @@ function inline(text, where) {
       return `<a href="${href}"${external ? ' rel="noopener"' : ''}>${label}</a>`;
     })
     .replace(/(^|\s)--(\s|$)/g, '$1&ndash;$2');
-  s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => codes[Number(i)]);
-  if (/\*\*|\]\(/.test(s.replace(/<code>[\s\S]*?<\/code>/g, ''))) throw new Error(`${where}: unclosed formatting in "${text}"`);
+  s = s.replace(/@@code(\d+)@@/g, (_, i) => codes[Number(i)]);
+  if (/\*\*|\]\(/.test(s.replace(/<code>[\s\S]*?<\/code>/g, '')))
+    throw new Error(`${where}: unclosed formatting in "${text}"`);
   return s;
 }
 
@@ -199,7 +200,8 @@ function render(page) {
       if (!/^\|[\s:|-]+\|$/.test(rows[1] ?? '')) throw new Error(`${where()}: table separator row missing`);
       const head = cells(rows[0]);
       const body = rows.slice(2).map(cells);
-      for (const r of body) if (r.length !== head.length) throw new Error(`${where()}: table row has ${r.length} cells`);
+      for (const r of body)
+        if (r.length !== head.length) throw new Error(`${where()}: table row has ${r.length} cells`);
       html.push(
         `<div class="table"><table><thead><tr>${head.map((c) => `<th>${inline(c, where())}</th>`).join('')}</tr></thead><tbody>` +
           body.map((r) => `<tr>${r.map((c) => `<td>${inline(c, where())}</td>`).join('')}</tr>`).join('') +
@@ -220,7 +222,8 @@ function render(page) {
         const m = lines[i].match(item);
         if (m && m[1].length === 0) top.push({ text: m[3], children: [] });
         else if (m) top.at(-1).children.push(m[3]);
-        else if (top.at(-1).children.length) top[top.length - 1].children[top.at(-1).children.length - 1] += ' ' + lines[i].trim();
+        else if (top.at(-1).children.length)
+          top[top.length - 1].children[top.at(-1).children.length - 1] += ' ' + lines[i].trim();
         else top.at(-1).text += ' ' + lines[i].trim();
         i++;
       }
@@ -231,7 +234,9 @@ function render(page) {
             .map(
               (t) =>
                 `<li>${inline(t.text, where())}` +
-                (t.children.length ? `<ul>${t.children.map((c) => `<li>${inline(c, where())}</li>`).join('')}</ul>` : '') +
+                (t.children.length
+                  ? `<ul>${t.children.map((c) => `<li>${inline(c, where())}</li>`).join('')}</ul>`
+                  : '') +
                 `</li>`,
             )
             .join('') +
@@ -243,7 +248,8 @@ function render(page) {
 
     // Paragraph: runs until a blank line or another block.
     const para = [];
-    while (i < lines.length && lines[i].trim() && !/^(#|```|>|\||- |\d+\. |!\[|<)/.test(lines[i])) para.push(lines[i++]);
+    while (i < lines.length && lines[i].trim() && !/^(#|```|>|\||- |\d+\. |!\[|<)/.test(lines[i]))
+      para.push(lines[i++]);
     if (!para.length) throw new Error(`${where()}: can't read "${line}"`);
     const p = para.join(' ');
     html.push(`<p>${inline(p, where())}</p>`);
@@ -355,7 +361,9 @@ function chapterPage(page, rendered) {
           .join('')}</ul></nav>`
       : '<div class="toc"></div>';
   const pager = `<nav class="pager" aria-label="Chapters">${
-    prev ? `<a class="prev" href="${root}${prev.out}"><span>Previous</span>${esc(prev.nav ?? prev.title)}</a>` : '<span></span>'
+    prev
+      ? `<a class="prev" href="${root}${prev.out}"><span>Previous</span>${esc(prev.nav ?? prev.title)}</a>`
+      : '<span></span>'
   }${next ? `<a class="next" href="${root}${next.out}"><span>Next</span>${esc(next.nav ?? next.title)}</a>` : ''}</nav>`;
   const eyebrow = page.number ? `Chapter ${page.number}` : page.group;
   const body = `<div class="layout">
@@ -400,7 +408,13 @@ for (const page of pages) {
     page.number = page.number || '';
     outputs.set(page.out, chapterPage(page, rendered));
     for (const s of rendered.sections)
-      index.push({ u: page.out, p: page.nav ?? page.title, s: s.title, h: s.id, t: s.text.join(' ').replace(/\s+/g, ' ') });
+      index.push({
+        u: page.out,
+        p: page.nav ?? page.title,
+        s: s.title,
+        h: s.id,
+        t: s.text.join(' ').replace(/\s+/g, ' '),
+      });
   } else {
     outputs.set(page.out, plainPage(page, rendered));
   }
@@ -410,9 +424,7 @@ outputs.set('assets/search.json', JSON.stringify(index));
 let stale = [];
 for (const [out, content] of outputs) {
   const file = join(OUT, out);
-  const formatted = out.endsWith('.json')
-    ? content + '\n'
-    : await prettier.format(content, { ...(await prettier.resolveConfig(file)), filepath: file });
+  const formatted = await prettier.format(content, { ...(await prettier.resolveConfig(file)), filepath: file });
   const before = existsSync(file) ? readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : null;
   if (before === formatted) continue;
   if (check) stale.push(out);
@@ -423,7 +435,9 @@ for (const [out, content] of outputs) {
   }
 }
 if (stale.length) {
-  console.error(`These pages are out of date. Run node scripts/build-site.mjs and commit the result:\n  ${stale.join('\n  ')}`);
+  console.error(
+    `These pages are out of date. Run node scripts/build-site.mjs and commit the result:\n  ${stale.join('\n  ')}`,
+  );
   process.exit(1);
 }
 if (check) console.log(`site is up to date (${outputs.size} files)`);
