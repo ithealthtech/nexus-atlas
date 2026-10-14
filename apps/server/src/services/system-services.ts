@@ -195,6 +195,10 @@ export class SystemServices {
     const update = await this.options.updates.run();
     if (update.state === 'requested' || update.state === 'running')
       throw new HttpError(409, 'An update is in progress. Wait for it to finish.');
+    // A change to how Atlas is reached may be waiting in the same inbox; writing now would replace it.
+    const waiting = await pendingRequest(dir);
+    if (waiting?.kind === 'access' && (ageOf(waiting.requestedAt, this.now()) ?? Infinity) < REQUEST_STALE_MS)
+      throw new HttpError(409, 'The server is changing how Atlas is reached. Wait for it to finish.');
     const run = await this.run();
     if (run.state === 'requested' || run.state === 'running')
       throw new HttpError(409, 'The server is already doing something. Wait for it to finish.');

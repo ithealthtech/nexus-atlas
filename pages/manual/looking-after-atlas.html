@@ -256,6 +256,29 @@ npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
           <code>sudo systemctl restart msp-atlas</code> on the server, and
           <code>sudo journalctl -u msp-atlas -n 50</code> to see why it stopped.
         </p>
+        <h2 id="remote-access"><a class="anchor" href="#remote-access">Remote access</a></h2>
+        <p>
+          <strong>Admin → Remote access</strong> chooses how people reach Atlas: from this server directly, through a
+          <strong>Cloudflare Tunnel</strong>, through <strong>Tailscale</strong> (your tailnet, or the internet with
+          Funnel), or behind <strong>your own reverse proxy</strong>. The page lists what to set up first for each, such
+          as the tunnel's public hostname or turning on HTTPS certificates in Tailscale.
+        </p>
+        <ol class="steps">
+          <li>Choose the way, and fill in the address and the token, auth key or proxy addresses it asks for.</li>
+          <li>Choose <strong>Review the change</strong>. The dialog lists what moves with the address.</li>
+          <li>Choose <strong>Change it</strong>. Atlas restarts on the new address; open it there.</li>
+        </ol>
+        <p>
+          Only the owner can change it, after confirming their password. If Atlas doesn't answer at the new address, the
+          server puts the previous settings back.
+        </p>
+        <aside class="callout callout-warning">
+          <p class="callout-title">What moves with the address</p>
+          <p>
+            Everyone signs in again. Passkeys only work at the address they were added on, so people add them again.
+            Microsoft and SAML sign-in, the browser extension and Atlas for Windows need the new address.
+          </p>
+        </aside>
         <h2 id="the-certificate"><a class="anchor" href="#the-certificate">The certificate</a></h2>
         <figure>
           <a href="../images/manual/certificate.png"
@@ -311,6 +334,7 @@ npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
           <li><a href="#backups">Backups</a></li>
           <li><a href="#updates">Updates</a></li>
           <li><a href="#services">Services</a></li>
+          <li><a href="#remote-access">Remote access</a></li>
           <li><a href="#the-certificate">The certificate</a></li>
         </ul>
       </nav>

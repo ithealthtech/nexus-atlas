@@ -1,6 +1,8 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  remoteAccessRequestSchema,
+  type RemoteAccessView,
   CHECKLIST_TEMPLATES,
   RUNBOOK_TEMPLATES,
   runbookContent,
@@ -2767,6 +2769,22 @@ on('GET', '/system/certificate', (): PortalCertificateView => {
   };
 });
 on('GET', '/system/certificate/authority', () => notInDemo('Downloading the certificate'));
+// How Atlas is reached: the installer's own setup at an IP address. The demo can't move itself, so changing it is
+// refused once the form has been checked.
+on('GET', '/system/access', (): RemoteAccessView => ({
+  canAct: true,
+  mode: 'direct',
+  publicUrl: 'https://192.168.1.220',
+  trusted: [],
+  funnel: false,
+  hasTunnelToken: false,
+  run: { state: 'idle', requestedBy: null, requestedAt: null, finishedAt: null, message: null },
+}));
+on('POST', '/system/access', (_m, b) => {
+  const parsed = remoteAccessRequestSchema.safeParse(b);
+  if (!parsed.success) throw new MockError(400, parsed.error.issues[0]?.message ?? 'Check the settings.');
+  return notInDemo('Changing how Atlas is reached');
+});
 on('GET', '/status', (): SystemStatus => ({
   version: '1.0.1',
   node: 'v22.12.0',

@@ -61,6 +61,7 @@ import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
 import { Services } from '@/pages/Services';
 import { Certificate } from '@/pages/Certificate';
+import { RemoteAccess } from '@/pages/RemoteAccess';
 import './styles.css';
 
 applyTheme(storedTheme());
@@ -283,6 +284,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/services', component: adminOnly(Services) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/certificate', component: adminOnly(Certificate) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/remote-access', component: adminOnly(RemoteAccess) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
   createRoute({ getParentRoute: () => appRoute, path: '/sends', component: Sends }),

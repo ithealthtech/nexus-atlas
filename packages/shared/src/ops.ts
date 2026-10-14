@@ -282,3 +282,92 @@ export interface RequestLogPage {
   /** Passed back as `before` for the next (older) page; null on the last page. */
   nextBefore: number | null;
 }
+
+// ---------- remote access ----------
+/**
+ * How people reach Atlas. Atlas has one address; each way sets it, and tells Atlas which proxy to believe about
+ * a visitor's address.
+ * - `direct`: the web proxy on this server serves Atlas (a public certificate for a DNS name, its own otherwise).
+ * - `cloudflare`: a Cloudflare Tunnel carries visitors to Atlas, with no inbound ports.
+ * - `tailscale`: Tailscale Serve (the tailnet) or Funnel (the internet), at the server's .ts.net name.
+ * - `proxy`: your own reverse proxy terminates HTTPS and sends requests to this server.
+ */
+export const ACCESS_MODES = ['direct', 'cloudflare', 'tailscale', 'proxy'] as const;
+export type AccessMode = (typeof ACCESS_MODES)[number];
+export const ACCESS_MODE_LABELS: Record<AccessMode, string> = {
+  direct: 'This server',
+  cloudflare: 'Cloudflare Tunnel',
+  tailscale: 'Tailscale',
+  proxy: 'Your own reverse proxy',
+};
+
+const httpsAddress = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/\/+$/, ''))
+  .pipe(
+    z
+      .string()
+      .regex(
+        /^https:\/\/[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:\d{1,5})?$/,
+        'Enter the address people will use, such as https://atlas.example.com, with nothing after the name.',
+      ),
+  );
+const proxyAddress = z
+  .string()
+  .trim()
+  .regex(
+    /^(\d{1,3}(\.\d{1,3}){3}(\/(\d|[12]\d|3[0-2]))?|[0-9A-Fa-f:]*:[0-9A-Fa-f:]*(\/\d{1,3})?)$/,
+    'Enter an IP address or a range such as 10.0.0.0/24.',
+  );
+
+export const remoteAccessRequestSchema = z
+  .object({
+    mode: z.enum(ACCESS_MODES),
+    publicUrl: httpsAddress.optional(),
+    trusted: z.array(proxyAddress).max(20).optional(),
+    funnel: z.boolean().optional(),
+    // Leave out to keep the token or key already on the server.
+    cloudflareToken: z
+      .string()
+      .trim()
+      .regex(
+        /^[A-Za-z0-9+/=_-]{40,2048}$/,
+        "That doesn't look like a tunnel token. Copy it from the Cloudflare dashboard.",
+      )
+      .optional(),
+    tailscaleAuthKey: z
+      .string()
+      .trim()
+      .regex(/^tskey-[A-Za-z0-9_-]{10,200}$/, 'A Tailscale auth key starts with tskey-.')
+      .optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.mode !== 'tailscale' && !v.publicUrl)
+      ctx.addIssue({ code: 'custom', path: ['publicUrl'], message: 'Enter the address people will use.' });
+    if (v.mode === 'proxy' && !v.trusted?.length)
+      ctx.addIssue({ code: 'custom', path: ['trusted'], message: "Enter your reverse proxy's address." });
+  });
+export type RemoteAccessRequest = z.infer<typeof remoteAccessRequestSchema>;
+
+export interface AccessRun {
+  state: UpdateState;
+  requestedBy: string | null;
+  requestedAt: string | null;
+  finishedAt: string | null;
+  message: string | null;
+}
+
+export interface RemoteAccessView {
+  /** Whether this server has the helper that can change it (Linux installs from deploy/linux). */
+  canAct: boolean;
+  /** The way chosen with the installer or this page; null where Atlas can't tell (Docker, Windows). */
+  mode: AccessMode | null;
+  publicUrl: string;
+  /** Your reverse proxy's addresses, for `proxy`. */
+  trusted: string[];
+  funnel: boolean;
+  /** Whether a tunnel token is already saved on the server, so it needn't be pasted again. */
+  hasTunnelToken: boolean;
+  run: AccessRun;
+}

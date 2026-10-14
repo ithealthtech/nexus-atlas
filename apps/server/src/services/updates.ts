@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { ReleaseView, UpdateInfo, UpdateRun } from '@atlas/shared';
 import { HttpError } from '../errors.js';
-import { ageOf, isServiceRequest, pendingRequest, readJson, writeRequest } from './helper-inbox.js';
+import { ageOf, isUpdateRequest, pendingRequest, readJson, writeRequest } from './helper-inbox.js';
 
 const TAG = /^v?(\d+)\.(\d+)\.(\d+)$/;
 const CACHE_MS = 60 * 60 * 1000;
@@ -99,9 +99,9 @@ export class UpdateService {
     const dir = this.options.dir;
     if (!dir) return IDLE;
     const status = await readJson(join(dir, 'status.json'));
-    // A request to restart or repair a service waits in the same inbox. It isn't an update.
+    // A service action or a change to how Atlas is reached waits in the same inbox. Neither is an update.
     const waiting = await pendingRequest(dir);
-    const request = isServiceRequest(waiting) ? null : waiting;
+    const request = isUpdateRequest(waiting) ? waiting : null;
     const text = (v: unknown) => (typeof v === 'string' ? v.slice(0, 2000) : null);
     const age = (v: unknown) => ageOf(v, this.now());
     const states = ['running', 'succeeded', 'failed'] as const;
@@ -170,10 +170,10 @@ export class UpdateService {
     const run = await this.run();
     if (run.state === 'requested' || run.state === 'running')
       throw new HttpError(409, 'An update is already in progress.');
-    // The helper takes one request at a time: writing this one would replace a service action that is waiting.
+    // The helper takes one request at a time: writing this one would replace another request that is waiting.
     const waiting = await pendingRequest(dir);
-    if (isServiceRequest(waiting) && (ageOf(waiting?.requestedAt, this.now()) ?? Infinity) < REQUEST_STALE_MS)
-      throw new HttpError(409, 'The server is busy restarting or repairing a service. Try again in a minute.');
+    if (waiting && !isUpdateRequest(waiting) && (ageOf(waiting.requestedAt, this.now()) ?? Infinity) < REQUEST_STALE_MS)
+      throw new HttpError(409, 'The server is busy with another change. Try again in a minute.');
     const { releases } = await this.releases(true);
     const release = releases.find((r) => r.tag === tag);
     if (!release || compareVersions(release.tag, this.options.current) <= 0)

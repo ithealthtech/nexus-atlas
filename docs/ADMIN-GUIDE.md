@@ -221,6 +221,23 @@ A notification-area app for staff: quick search and audited copying from anywher
 - Atlas doesn't restart anything itself. It asks a small helper on the server, which only knows these four actions. See [Services](DEPLOYMENT.md#services).
 - If Atlas is down you can't reach the page. The same commands for the server's console are at the bottom of the page, and in the table below.
 
+## Remote access
+
+**Administration → Remote access** chooses how people reach Atlas, on servers set up with the Linux installer. Atlas has one address, so each choice sets it. Everyone can see the page; only the owner can change it, after confirming their password.
+
+| Way | What the server does | Before you start |
+|---|---|---|
+| **This server** | The web proxy serves Atlas on 443: a public certificate for a DNS name, its own authority for an IP address. | Point the name at the server and open 80 and 443. |
+| **Cloudflare Tunnel** | Installs `cloudflared` and runs your tunnel. No inbound ports. Its own address redirects to the tunnel's. | Create a tunnel in **Zero Trust → Networks → Tunnels**, and give it a public hostname with the service `http://localhost:4318`. Paste its token. |
+| **Tailscale** | Installs Tailscale, joins the tailnet as `atlas`, and serves Atlas at its `.ts.net` name with Serve (the tailnet) or Funnel (the internet). | Turn on MagicDNS and HTTPS certificates. For Funnel, allow it in the policy file. Paste an auth key the first time. |
+| **Your own reverse proxy** | Listens on port 80 only for the proxy addresses you give, and believes only them about a visitor's address. | Point nginx, Traefik, IIS or Nginx Proxy Manager at `http://<server>:80`, keeping the Host header. |
+
+- **If Atlas doesn't answer at the new address, the previous settings are put back** and the page says why.
+- **Everyone signs in again at the new address.** Passkeys only work at the address they were added on, so people add them again. Update the redirect addresses for Microsoft and SAML sign-in, and give people the new address for the browser extension and Atlas for Windows.
+- **The tunnel token** is kept in `/etc/msp-atlas/cloudflared.env`, which only root can read. Neither it nor the auth key is logged.
+- The choice is saved in `/etc/msp-atlas/access.conf`, and every update keeps it. The installer takes the same choices: `--access cloudflare --tunnel-token-file FILE`, `--access tailscale [--funnel] [--tailscale-key-file FILE]`, or `--access proxy --trusted-proxy LIST`.
+- **Docker and Windows:** set `PUBLIC_URL` to the address your tunnel or proxy serves and `TRUST_PROXY` to the addresses that connect to Atlas, then restart it.
+
 ## Certificate
 
 **Administration → Certificate** shows the certificate Atlas is served with, read the way a visitor's computer reads it: by connecting to Atlas's own address.

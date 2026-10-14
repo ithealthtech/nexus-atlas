@@ -22,6 +22,10 @@ export const pendingRequest = (dir: string) => readJson(join(dir, 'inbox', 'requ
 /** Whether a request names a service action rather than an update. */
 export const isServiceRequest = (request: Record<string, unknown> | null) => request?.kind === 'service';
 
+/** Whether a request is an update. Updates came first, so theirs is the one request with no kind. */
+export const isUpdateRequest = (request: Record<string, unknown> | null) =>
+  Boolean(request) && request!.kind === undefined;
+
 /** How long ago a time in a request or result was, or null when it isn't a time. */
 export function ageOf(value: unknown, now: number): number | null {
   const at = typeof value === 'string' ? Date.parse(value) : NaN;

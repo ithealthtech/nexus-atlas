@@ -1,9 +1,27 @@
 import { z } from 'zod';
 
-const boolean = z
-  .enum(['true', 'false', '1', '0', ''])
+const ADDRESS = /^(\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?|[0-9a-f:]*:[0-9a-f:]*(\/\d{1,3})?)$/i;
+
+// Who may say which address a visitor came from: true (any proxy), false, or a comma-separated list of addresses
+// and ranges, such as 127.0.0.1,::1,10.0.0.5 (what deploy/linux/atlas-access.sh writes).
+const trustProxy = z
+  .string()
   .optional()
-  .transform((v) => v === 'true' || v === '1');
+  .transform((v, ctx): boolean | string[] => {
+    const value = (v ?? '').trim();
+    if (value === '' || value === 'false' || value === '0') return false;
+    if (value === 'true' || value === '1') return true;
+    const list = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const bad = list.find((s) => !ADDRESS.test(s));
+    if (bad) {
+      ctx.addIssue({ code: 'custom', message: `${bad} isn't an address or range.` });
+      return z.NEVER;
+    }
+    return list;
+  });
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -12,7 +30,7 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(4318),
   // The address people use to reach Atlas. Origin and Host checks, cookie security, and links derive from it.
   PUBLIC_URL: z.string().url().default('http://127.0.0.1:4318'),
-  TRUST_PROXY: boolean,
+  TRUST_PROXY: trustProxy,
   // Master key: 32 bytes, base64url. Provide one of these; in development a key file is created on first run.
   ATLAS_MASTER_KEY: z.string().optional(),
   ATLAS_MASTER_KEY_FILE: z.string().optional(),
@@ -40,6 +58,8 @@ const schema = z.object({
     .regex(/^[\w.-]+\/[\w.-]+$/, 'ATLAS_UPDATE_REPO must look like owner/repository.')
     .default('ithealthtech/nexus-atlas'),
   ATLAS_UPDATER_DIR: z.string().optional(),
+  // Where the Linux installer keeps settings; Remote access reads the saved choice (access.conf) there.
+  ATLAS_CONF_DIR: z.string().default('/etc/msp-atlas'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_DIST: z.string().optional(),
 });

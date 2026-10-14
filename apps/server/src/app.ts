@@ -71,6 +71,7 @@ import { StatusService } from './services/status.js';
 import { registerUpdateRoutes } from './routes/updates.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { SystemServices, type ShowUnit } from './services/system-services.js';
+import { RemoteAccess } from './services/remote-access.js';
 import {
   PortalCertificate,
   caddyAuthorities,
@@ -834,11 +835,19 @@ export async function buildApp({
     fetch: updateFetch,
   });
   registerUpdateRoutes(app, { db, authed, recent, updates });
+  const services = new SystemServices({ dir: config.ATLAS_UPDATER_DIR, updates, show: serviceShow });
   registerSystemRoutes(app, {
     db,
     authed,
     recent,
-    services: new SystemServices({ dir: config.ATLAS_UPDATER_DIR, updates, show: serviceShow }),
+    services,
+    access: new RemoteAccess({
+      dir: config.ATLAS_UPDATER_DIR,
+      confDir: config.ATLAS_CONF_DIR,
+      publicUrl: config.PUBLIC_URL,
+      updates,
+      services,
+    }),
     certificate: new PortalCertificate({
       publicUrl: config.PUBLIC_URL,
       probe: portalProbe,

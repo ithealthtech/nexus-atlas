@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { SERVICE_ACTION_LABELS, type ServiceAction } from '@atlas/shared';
+import { ACCESS_MODE_LABELS, SERVICE_ACTION_LABELS, type AccessMode, type ServiceAction } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import type { PortalCertificate } from '../services/portal-certificate.js';
 import type { SystemServices } from '../services/system-services.js';
+import type { RemoteAccess } from '../services/remote-access.js';
 
 /**
  * The Services page: the state of the services Atlas runs on, and asking the server's helper to restart one or
@@ -19,10 +20,11 @@ export function registerSystemRoutes(
     authed: { onRequest: onRequestHookHandler };
     recent: (req: FastifyRequest) => void;
     services: SystemServices;
+    access: RemoteAccess;
     certificate: PortalCertificate;
   },
 ) {
-  const { db, authed, recent, services, certificate } = deps;
+  const { db, authed, recent, services, access, certificate } = deps;
   const admin = (req: FastifyRequest) => {
     const actor = req.session!.actor;
     requireAdmin(actor);
@@ -40,6 +42,32 @@ export function registerSystemRoutes(
   app.get('/api/system/services', authed, async (req) => {
     admin(req);
     return services.overview(await databaseReachable());
+  });
+
+  app.get('/api/system/access', authed, async (req) => {
+    admin(req);
+    return access.view();
+  });
+
+  // Changing how Atlas is reached moves everyone to a new address and can open it to the internet, so only the
+  // owner may, with a fresh password confirmation. The tunnel token and auth key are never logged.
+  app.post('/api/system/access', authed, async (req, reply) => {
+    const actor = admin(req);
+    if (actor.role !== 'owner') throw new HttpError(403, 'Only the owner can change how Atlas is reached.');
+    recent(req);
+    const run = await access.request(req.body, actor.name);
+    const body = req.body as { mode?: unknown; publicUrl?: unknown };
+    await db.insert(schema.securityEvents).values({
+      orgId: actor.orgId,
+      userId: actor.id,
+      actor: actor.name,
+      action: 'Remote access change requested',
+      detail: [ACCESS_MODE_LABELS[body.mode as AccessMode], typeof body.publicUrl === 'string' ? body.publicUrl : null]
+        .filter(Boolean)
+        .join(': '),
+      ip: req.ip,
+    });
+    return reply.status(202).send(run);
   });
 
   app.get('/api/system/certificate', authed, async (req) => {

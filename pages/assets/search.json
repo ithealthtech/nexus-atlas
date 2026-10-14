@@ -598,6 +598,13 @@
   {
     "u": "manual/looking-after-atlas.html",
     "p": "Keeping Atlas healthy",
+    "s": "Remote access",
+    "h": "remote-access",
+    "t": "**Admin → Remote access** chooses how people reach Atlas: from this server directly, through a **Cloudflare Tunnel**, through **Tailscale** (your tailnet, or the internet with Funnel), or behind **your own reverse proxy**. The page lists what to set up first for each, such as the tunnel's public hostname or turning on HTTPS certificates in Tailscale. Choose the way, and fill in the address and the token, auth key or proxy addresses it asks for. Choose **Review the change**. The dialog lists what moves with the address. Choose **Change it**. Atlas restarts on the new address; open it there. Only the owner can change it, after confirming their password. If Atlas doesn't answer at the new address, the server puts the previous settings back. Everyone signs in again. Passkeys only work at the address they were added on, so people add them again. Microsoft and SAML sign-in, the browser extension and Atlas for Windows need the new address."
+  },
+  {
+    "u": "manual/looking-after-atlas.html",
+    "p": "Keeping Atlas healthy",
     "s": "The certificate",
     "h": "the-certificate",
     "t": "**Admin → Certificate** shows the certificate Atlas is served with, checked the way a visitor's computer sees it. **Trusted everywhere:** a public authority issued it, because Atlas has a public DNS name. Nothing to do. **Not trusted until installed:** Atlas was installed at an IP address or a one-word name, so the web proxy is its own certificate authority. The connection is encrypted, but browsers warn and Atlas for Windows refuses to connect until that authority is installed on the computer. To install the authority: Choose **Download**. It's a public certificate, not a key. Check its thumbprint against the one on the page, with the PowerShell command the page gives. Install it for the whole computer (as an administrator) or for yourself, with the commands on the page, or push it with Group Policy. Open Atlas at the address on the certificate. A certificate for an IP address doesn't cover a name that points to the same server. A computer that trusts this authority accepts any certificate it issues. Its key is on your Atlas server and only used for Atlas, but install it only on computers you manage. A public DNS name with a public certificate avoids the question."

@@ -34,9 +34,11 @@ install -m 0755 -o root -g root "$HERE/atlas-updater.sh" /usr/local/sbin/atlas-u
 
 # Answers /readyz only when asked by its public host name, as Atlas does.
 cat > "$APP/standin.js" <<'EOF'
+// One name never answers, to test that a change of address that doesn't come up is undone.
+const host = new URL(process.env.PUBLIC_URL).host;
 require('http')
   .createServer((req, res) => {
-    res.statusCode = req.url === '/readyz' && req.headers.host === 'atlas.test' ? 200 : 404;
+    res.statusCode = req.url === '/readyz' && req.headers.host === host && host !== 'broken.test' ? 200 : 404;
     res.end('{"ok":true}');
   })
   .listen(4318, '127.0.0.1');
@@ -49,6 +51,7 @@ Description=Stand-in for MSP Atlas (helper test)
 
 [Service]
 User=atlas
+EnvironmentFile=$CONF/atlas.env
 ExecStart=$NODE $APP/standin.js
 
 [Install]
@@ -197,6 +200,83 @@ echo "== An update request still goes to the updater"
 expect "a request with no kind is treated as an update" \
   "$(run '{"tag":"not-a-release","requestedBy":"Test Admin","requestedAt":"2026-01-01T00:00:00Z"}' "$UPDATER_DIR/status.json")" failed
 expect "and refused by the updater's own check" "$(field "$UPDATER_DIR/status.json" message)" "The requested version isn't a release tag."
+
+echo "== Remote access: your own reverse proxy"
+install -m 0755 -o root -g root "$HERE/atlas-access.sh" /usr/local/sbin/atlas-access
+ACCESS_JSON="$UPDATER_DIR/access.json"
+access() { run "{\"kind\":\"access\",$1,\"requestedBy\":\"Test Owner\",\"requestedAt\":\"$(date -u +%FT%TZ)\"}" "$ACCESS_JSON"; }
+envget() { grep -E "^$1=" "$CONF/atlas.env" | cut -d= -f2-; }
+failA() {
+  echo "--- access.json"; cat "$ACCESS_JSON" 2>/dev/null || true; echo
+  echo "--- last-access.log"; cat "$UPDATER_DIR/last-access.log" 2>/dev/null || true
+  fail "$@"
+}
+[[ "$(access '"mode":"proxy","publicUrl":"https://atlas.example.test","trusted":"10.0.0.5,10.1.0.0/24"')" == succeeded ]] \
+  || failA "proxy mode didn't succeed"
+expect "Atlas's address" "$(envget PUBLIC_URL)" "https://atlas.example.test"
+expect "who Atlas believes" "$(envget TRUST_PROXY)" "127.0.0.1,::1,10.0.0.5,10.1.0.0/24"
+grep -q 'trusted_proxies static 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile || failA "Caddy doesn't trust the proxy"
+grep -q '@proxy remote_ip 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile || failA "Caddy doesn't limit Atlas to the proxy"
+echo "ok: the web proxy only lets the reverse proxy through"
+grep -qx 'MODE=proxy' "$CONF/access.conf" || failA "the choice wasn't saved"
+expect "the settings file kept its owner" "$(owner "$CONF/atlas.env")" "root:atlas 640"
+
+echo "== Remote access: a bad address or a command is refused, and nothing changes"
+expect "a command in the proxy list fails" \
+  "$(access '"mode":"proxy","publicUrl":"https://atlas.example.test","trusted":"10.0.0.5;touch /tmp/atlas-access-was-here"')" failed
+expect "a command after the address fails" \
+  "$(access '"mode":"direct","publicUrl":"https://x.test/$(touch /tmp/atlas-access-was-here)"')" failed
+[[ ! -e /tmp/atlas-access-was-here ]] || fail "the helper ran a command from the request"
+echo "ok: nothing from the request was run"
+expect "the address is unchanged" "$(envget PUBLIC_URL)" "https://atlas.example.test"
+
+echo "== Remote access: an address Atlas doesn't answer at is undone"
+expect "the change fails" "$(access '"mode":"direct","publicUrl":"https://broken.test"')" failed
+expect "the address is back" "$(envget PUBLIC_URL)" "https://atlas.example.test"
+grep -qx 'MODE=proxy' "$CONF/access.conf" || failA "the saved choice wasn't put back"
+grep -q 'trusted_proxies' /etc/caddy/Caddyfile || failA "the web proxy's settings weren't put back"
+echo "ok: the previous settings are back"
+expect "Atlas is running" "$(systemctl is-active msp-atlas)" active
+
+echo "== Remote access: a Cloudflare Tunnel"
+# A stand-in for cloudflared: it runs until stopped, and says which token it was given.
+printf '#!/bin/sh\necho "token seen: $TUNNEL_TOKEN"\nexec sleep infinity\n' > /usr/local/bin/cloudflared
+chmod 0755 /usr/local/bin/cloudflared
+TOKEN="eyJhIjoiMTIzNDU2Nzg5MCIsInQiOiJhYmNkZWYiLCJzIjoiWm1Wa1pXTmhaR1ZsWm1ZeE1qTTBOVFkzT0RrdyJ9"
+[[ "$(access "\"mode\":\"cloudflare\",\"publicUrl\":\"https://atlas.cf.test\",\"cloudflareToken\":\"$TOKEN\"")" == succeeded ]] \
+  || failA "cloudflare mode didn't succeed"
+expect "the tunnel runs" "$(systemctl is-active msp-atlas-cloudflared)" active
+sleep 1
+journalctl -u msp-atlas-cloudflared --no-pager | grep -q "token seen: $TOKEN" || failA "the tunnel wasn't given the token"
+echo "ok: the tunnel was given the token"
+expect "only root can read the token" "$(owner "$CONF/cloudflared.env")" "root:root 600"
+expect "Atlas only believes the tunnel on this server" "$(envget TRUST_PROXY)" "127.0.0.1,::1"
+grep -q 'redir https://atlas.cf.test{uri} 308' /etc/caddy/Caddyfile || failA "this server's address doesn't lead to the tunnel's"
+echo "ok: this server's own address redirects to the tunnel's"
+for f in "$ACCESS_JSON" "$UPDATER_DIR/last-access.log" /etc/systemd/system/msp-atlas-cloudflared.service; do
+  if grep -q "$TOKEN" "$f"; then fail "the token is in $f"; fi
+done
+echo "ok: the token isn't in the result, the log, or the unit"
+expect "a saved token needn't be sent again" "$(access '"mode":"cloudflare","publicUrl":"https://atlas2.cf.test"')" succeeded
+
+echo "== Remote access: Tailscale Funnel"
+# A stand-in for tailscale: it records what it was asked, and names this server atlas.tail1234.ts.net.
+printf '#!/bin/sh\necho "$*" >> /run/tailscale-calls\n[ "$1" = status ] && echo %s\nexit 0\n' \
+  "'{\"Self\":{\"DNSName\":\"atlas.tail1234.ts.net.\"}}'" > /usr/local/bin/tailscale
+chmod 0755 /usr/local/bin/tailscale
+[[ "$(access '"mode":"tailscale","funnel":true')" == succeeded ]] || failA "tailscale mode didn't succeed"
+expect "Atlas's address is its .ts.net name" "$(envget PUBLIC_URL)" "https://atlas.tail1234.ts.net"
+grep -q '^funnel --bg --https=443 http://127.0.0.1:4318' /run/tailscale-calls || failA "Funnel wasn't asked to serve Atlas"
+echo "ok: Funnel serves Atlas"
+expect "the tunnel from before was stopped" "$(systemctl is-active msp-atlas-cloudflared || true)" inactive
+
+echo "== Remote access: back to this server"
+[[ "$(access '"mode":"direct","publicUrl":"https://atlas.test"')" == succeeded ]] || failA "direct mode didn't succeed"
+expect "Atlas's address" "$(envget PUBLIC_URL)" "https://atlas.test"
+grep -q '^atlas.test {' /etc/caddy/Caddyfile || failA "the web proxy doesn't serve Atlas"
+grep -q '^serve reset' /run/tailscale-calls || failA "Tailscale was left serving"
+echo "ok: the web proxy serves Atlas again, and Tailscale stopped"
+rm -f /usr/local/bin/cloudflared /usr/local/bin/tailscale
 
 echo "== Atlas can read service states from inside its sandbox"
 # The same restrictions msp-atlas.service runs under, since that is where Atlas asks from.
