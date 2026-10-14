@@ -81,7 +81,7 @@ test.describe.serial('first run to restricted client access', () => {
       await expect(page.getByRole('heading', { name })).toBeVisible();
       await nav(page, 'Clients');
     }
-    await expect(page.getByRole('link', { name: /Northline Architecture/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Northline Architecture/ })).toBeVisible();
     await accessible(page);
 
     await nav(page, 'People & access');
@@ -144,7 +144,12 @@ test.describe.serial('first run to restricted client access', () => {
     await page
       .getByLabel('Choose files to upload')
       .setInputFiles({ name: 'rack-diagram.txt', mimeType: 'text/plain', buffer: Buffer.from('Rack A, U12') });
-    await expect(page.getByRole('link', { name: /rack-diagram\.txt/ }).first()).toBeVisible();
+    await expect(
+      page
+        .getByRole('main')
+        .getByRole('link', { name: /rack-diagram\.txt/ })
+        .first(),
+    ).toBeVisible();
     await accessible(page);
     await page.screenshot({ path: 'test-results/screens/asset.png', fullPage: true });
   });
@@ -202,7 +207,7 @@ test.describe.serial('first run to restricted client access', () => {
       .getByRole('dialog')
       .getByRole('button', { name: /HDG-FW-01/ })
       .click();
-    await expect(page.getByRole('link', { name: /HDG-FW-01/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /HDG-FW-01/ })).toBeVisible();
     await accessible(page);
     await page.screenshot({ path: 'test-results/screens/document.png', fullPage: true });
 
@@ -213,7 +218,7 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(page.getByRole('option', { name: /HDG-FW-01/ })).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: /HDG-FW-01/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Internet outage response/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Internet outage response/ })).toBeVisible();
   });
 
   test('owner stars a client, leaves a quick note, and arranges their dashboard', async ({ page }) => {
@@ -534,7 +539,10 @@ test.describe.serial('first run to restricted client access', () => {
     await expect(page.getByText('Replaced-Firewall-Passphrase-2026!')).toBeVisible();
     await expect(page.getByText('Reason: Ticket 4411 firmware update')).toBeVisible();
 
-    await page.getByRole('link', { name: /Harbor Dental Group · Passwords/ }).click();
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /Harbor Dental Group · Passwords/ })
+      .click();
     await page.getByRole('button', { name: 'Add password' }).first().click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: 'BitLocker recovery key' }).click();
@@ -564,21 +572,27 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('button', { name: 'Save password' }).click();
     await expect(page.getByRole('heading', { name: /Morgan/ })).toBeVisible();
     await nav(page, 'Clients');
-    await expect(page.getByRole('link', { name: /Harbor Dental Group/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Harbor Dental Group/ })).toBeVisible();
     await expect(page.getByText('Northline Architecture')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add client' })).toHaveCount(0);
     await expect(
       page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'People & access' }),
     ).toHaveCount(0);
-    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .click();
     await expect(page.getByRole('button', { name: 'Edit client' })).toHaveCount(0);
     await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Assets' }).click();
     await expect(page.getByRole('button', { name: 'Add asset' })).toHaveCount(0);
-    await page.getByRole('link', { name: /HDG-FW-01/ }).click();
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /HDG-FW-01/ })
+      .click();
     await expect(page.getByText('FGT60F-123')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Choose files to upload')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /Internet outage response/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Internet outage response/ })).toBeVisible();
     await expect(
       page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge base' }),
     ).toHaveCount(0);
@@ -795,7 +809,10 @@ test.describe.serial('data in and out, and the client portal', () => {
     await expect(page.getByText('Theme saved.').last()).toBeVisible();
 
     await nav(page, 'Clients');
-    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .click();
     await page.getByRole('button', { name: 'Export' }).click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
@@ -913,7 +930,10 @@ test.describe.serial('data in and out, and the client portal', () => {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByText('Your documentation, kept by our team.')).toBeVisible();
     await nav(page, 'Clients');
-    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .click();
     await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
     await expect(page).toHaveURL(/\/passwords$/);
     await page
@@ -943,7 +963,10 @@ test.describe.serial('accessibility sweep', () => {
     watch(page);
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);
     await nav(page, 'Clients');
-    await page.getByRole('link', { name: /Harbor Dental Group/ }).click();
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /Harbor Dental Group/ })
+      .click();
     const client = new URL(page.url()).pathname;
     const screens = [
       '/',
@@ -1109,5 +1132,23 @@ async function signInFully(page: Page, email: string, password: string, given: s
   await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
 }
 
-const nav = (page: Page, name: string) =>
-  page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }).click();
+// The default menu is the rail: five areas, each showing its own pages beside it.
+const AREA: Record<string, string> = {
+  Dashboard: 'Home',
+  Expirations: 'Home',
+  Assets: 'Docs',
+  'Knowledge base': 'Docs',
+  Checklists: 'Docs',
+  Passwords: 'Vault',
+  'My vault': 'Vault',
+  'Password health': 'Vault',
+  Send: 'Vault',
+  'Password rotation': 'Vault',
+  'BitLocker collector': 'Vault',
+};
+const nav = async (page: Page, name: string) => {
+  const menu = page.getByRole('navigation', { name: 'Main' });
+  const area = name === 'Clients' ? 'Clients' : (AREA[name] ?? 'Admin');
+  await menu.getByRole('link', { name: area, exact: true }).click();
+  if (name !== 'Clients') await menu.getByRole('link', { name, exact: true }).click();
+};

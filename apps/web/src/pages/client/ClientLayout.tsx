@@ -214,7 +214,7 @@ function SectionsDialog({ prefs, onClose }: { prefs: WorkspacePrefs; onClose: ()
     try {
       const saved = await api<WorkspacePrefs>('/account/workspace', {
         method: 'PUT',
-        body: { widgets: prefs.widgets, hiddenSections: hidden },
+        body: { ...prefs, hiddenSections: hidden },
       });
       queryClient.setQueryData(['workspace'], saved);
       toast('Sections saved.');

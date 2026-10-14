@@ -3103,11 +3103,11 @@ on('DELETE', '/favorites/:type/:id', (m) => {
 });
 on('GET', '/account/workspace', () => resolveWorkspace(workspace));
 on('PUT', '/account/workspace', (_m, b) => {
-  workspace = b;
+  workspace = { ...b, menu: b.menu ?? resolveWorkspace(workspace).menu };
   return resolveWorkspace(workspace);
 });
 on('DELETE', '/account/workspace', () => {
-  workspace = {};
+  workspace = { menu: resolveWorkspace(workspace).menu };
   return resolveWorkspace(workspace);
 });
 on('GET', '/workspace/clients/:id/counts', (m) => {

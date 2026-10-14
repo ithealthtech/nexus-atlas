@@ -46,16 +46,20 @@ export function registerWorkspaceRoutes(
   app.get('/api/account/workspace', authed, async (req) => prefs(actorOf(req).id));
   app.put('/api/account/workspace', authed, async (req) => {
     const body = workspacePrefsSchema.parse(req.body);
+    // The dashboard and section editors don't send the menu style; keep the one already chosen.
+    const menu = body.menu ?? (await prefs(actorOf(req).id)).menu;
     await db
       .update(schema.users)
-      .set({ workspace: body })
+      .set({ workspace: { ...body, menu } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
+  // Resets the dashboard and sections. The menu style is a separate choice and stays.
   app.delete('/api/account/workspace', authed, async (req) => {
+    const { menu } = await prefs(actorOf(req).id);
     await db
       .update(schema.users)
-      .set({ workspace: {} })
+      .set({ workspace: { menu } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });

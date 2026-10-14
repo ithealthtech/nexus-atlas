@@ -466,7 +466,7 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void save({ widgets, hiddenSections: prefs.hiddenSections })} loading={saving}>
+          <Button onClick={() => void save({ ...prefs, widgets })} loading={saving}>
             Save
           </Button>
         </>

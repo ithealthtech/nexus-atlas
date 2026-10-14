@@ -71,6 +71,24 @@ export const CLIENT_SECTIONS = [
 ] as const;
 export type ClientSection = (typeof CLIENT_SECTIONS)[number];
 
+/** How the main menu is laid out. Each person chooses their own. */
+export const MENU_STYLES = ['rail', 'sidebar', 'top'] as const;
+export type MenuStyle = (typeof MENU_STYLES)[number];
+export const MENU_STYLE_INFO: Record<MenuStyle, { label: string; description: string }> = {
+  rail: {
+    label: 'Rail and panel',
+    description: 'Five areas down the left edge, with the pages of the one you’re in beside them.',
+  },
+  sidebar: {
+    label: 'Sidebar',
+    description: 'One short list of the pages you use every day, with administration a click away.',
+  },
+  top: {
+    label: 'Top bar',
+    description: 'Areas across the top, leaving the full width of the screen for the page.',
+  },
+};
+
 export const workspacePrefsSchema = z.object({
   // Every card in the order shown. Cards left out (for example ones added in a later version) use the default.
   widgets: z
@@ -78,12 +96,15 @@ export const workspacePrefsSchema = z.object({
     .max(DASHBOARD_WIDGETS.length)
     .refine((list) => new Set(list.map((w) => w.id)).size === list.length, 'Each card can appear once.'),
   hiddenSections: z.array(z.enum(CLIENT_SECTIONS)).max(CLIENT_SECTIONS.length),
+  // Left out by the dashboard and section editors, which then keep whatever is saved.
+  menu: z.enum(MENU_STYLES).optional(),
 });
-export type WorkspacePrefs = z.infer<typeof workspacePrefsSchema>;
+export type WorkspacePrefs = Omit<z.infer<typeof workspacePrefsSchema>, 'menu'> & { menu: MenuStyle };
 
 export const DEFAULT_WORKSPACE: WorkspacePrefs = {
   widgets: DASHBOARD_WIDGETS.map((id) => ({ id, visible: true })),
   hiddenSections: [],
+  menu: 'rail',
 };
 
 /**
@@ -106,7 +127,8 @@ export function resolveWorkspace(saved: unknown): WorkspacePrefs {
   const hiddenSections = [
     ...new Set((Array.isArray(raw.hiddenSections) ? raw.hiddenSections : []).filter((s) => sections.has(s))),
   ] as ClientSection[];
-  return { widgets, hiddenSections };
+  const menu = MENU_STYLES.includes(raw.menu as MenuStyle) ? (raw.menu as MenuStyle) : DEFAULT_WORKSPACE.menu;
+  return { widgets, hiddenSections, menu };
 }
 
 // ---------- client workspace ----------
