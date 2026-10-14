@@ -613,7 +613,7 @@ public sealed partial class SearchWindow : Window
         };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(new TextBlock { Text = row.Title, Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
-        text.Children.Add(new TextBlock { Text = subtitle, Foreground = Secondary(), Margin = new Thickness(0, 2, 0, 0) });
+        text.Children.Add(new TextBlock { Text = subtitle, Foreground = Secondary(), Margin = new Thickness(0, 2, 0, 0), TextWrapping = TextWrapping.Wrap });
         var open = new Button { Content = "Open in Atlas", VerticalAlignment = VerticalAlignment.Center };
         open.Click += (_, _) => _ = OpenInAtlasAsync(row);
         Grid.SetColumn(text, 1);
