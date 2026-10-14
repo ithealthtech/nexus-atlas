@@ -51,7 +51,7 @@ function Panel<T>({
   children: (data: T) => ReactNode;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-border px-4 py-3">
+    <section className="min-w-0 border-l border-border-strong py-0.5 pl-4">
       <h3 className="text-[13px] font-semibold text-text">{title}</h3>
       {section.state === 'ok' ? (
         <div className="mt-2 space-y-3 text-sm">{children(section.data)}</div>

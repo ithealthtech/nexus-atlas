@@ -14,6 +14,7 @@ import {
   type VaultPolicy,
   type VaultPolicyView,
 } from '@atlas/shared';
+import { PageSections } from '@/components/PageSections';
 import {
   Badge,
   Button,
@@ -664,7 +665,7 @@ export function VaultPolicies() {
         title="Vault policies"
         description="Organization-wide rules for passwords, emergency access to restricted ones, and where the audit logs go."
       />
-      <div className="grid gap-6">
+      <PageSections>
         {policy.data ? (
           <PoliciesCard key={JSON.stringify(policy.data)} current={policy.data} />
         ) : (
@@ -672,7 +673,7 @@ export function VaultPolicies() {
         )}
         <EmergencyAccessCard listedOnly={!!policy.data?.restrictedListedOnly} />
         {siem.data ? <SiemCard current={siem.data} /> : <Skeleton className="h-64" />}
-      </div>
+      </PageSections>
     </>
   );
 }

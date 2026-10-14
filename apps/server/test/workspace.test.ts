@@ -198,6 +198,27 @@ describe('favorites, quick notes, and workspace preferences', () => {
     });
   });
 
+  it('keeps each person’s menu style, whatever else they save or reset', async () => {
+    const get = async () => (await owner.call('GET', '/api/account/workspace')).data;
+    const current = await get();
+    expect(current.menu).toBe('rail');
+
+    expect((await owner.call('PUT', '/api/account/workspace', { ...current, menu: 'top' })).data.menu).toBe('top');
+    // The dashboard and section editors don't send the menu style.
+    const cards = { widgets: [{ id: 'stats', visible: false }], hiddenSections: ['map'] };
+    expect((await owner.call('PUT', '/api/account/workspace', cards)).data).toMatchObject({
+      menu: 'top',
+      hiddenSections: ['map'],
+    });
+    // Resetting the dashboard doesn't move the menu.
+    expect((await owner.call('DELETE', '/api/account/workspace')).data).toMatchObject({
+      menu: 'top',
+      hiddenSections: [],
+    });
+    expect((await owner.call('PUT', '/api/account/workspace', { ...current, menu: 'sideways' })).status).toBe(400);
+    expect((await get()).menu).toBe('top');
+  });
+
   it('saves dashboard cards and hidden sections per person', async () => {
     const defaults = (await owner.call('GET', '/api/account/workspace')).data;
     expect(defaults.widgets.map((w: { id: string }) => w.id)).toEqual([...DASHBOARD_WIDGETS]);

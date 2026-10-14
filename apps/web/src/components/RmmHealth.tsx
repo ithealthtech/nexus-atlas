@@ -211,15 +211,15 @@ export function RmmHealthCard({ clientId }: { clientId?: string }) {
           }
         />
       ) : (
-        <div className="@container space-y-4 p-5">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="@container space-y-7 p-5">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
             <Tile label="Devices" value={c.total} icon={Monitor} />
             <Tile label="Servers" value={c.servers} icon={Server} />
             <Tile label="Workstations" value={c.workstations} icon={Monitor} />
             <Tile label="Offline servers" value={c.offlineServers} icon={ServerOff} alert={c.offlineServers > 0} />
           </div>
           {/* Side by side only when the card is wide enough for three legends (not in a client's narrower column). */}
-          <div className="grid gap-4 @4xl:grid-cols-3">
+          <div className="grid gap-x-10 gap-y-7 @4xl:grid-cols-3">
             {charts(c, report.staleDays, report.veryStaleDays).map((chart) => (
               <StatusChart
                 key={chart.title}

@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Archive,
   ArchiveRestore,
-  ArrowLeft,
   Check,
   Copy,
   ExternalLink,
@@ -78,6 +77,7 @@ import {
   type Tone,
 } from '@/components/ui';
 import { AppLink, useGo } from '@/components/AppLink';
+import { BackLink, DetailHeader } from '@/components/DetailHeader';
 import { RelatedPanel } from '@/components/panels';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -1526,7 +1526,9 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
                       <td className="hidden px-5 py-3 sm:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {p.kind === 'login' && (
-                            <Badge tone={strengthTone[p.strength]}>{STRENGTH_LABELS[p.strength]}</Badge>
+                            <Badge tone={p.strength >= 3 ? 'quiet' : strengthTone[p.strength]}>
+                              {STRENGTH_LABELS[p.strength]}
+                            </Badge>
                           )}
                           {p.reused > 0 && <Badge tone="warning">Reused</Badge>}
                           {rotationOverdue(p) && <Badge tone="danger">Rotate</Badge>}
@@ -2258,7 +2260,7 @@ function AccessCard({ item }: { item: PasswordView }) {
           <>
             {!!groups.data?.length && (
               <fieldset className="space-y-2">
-                <legend className="mb-1 text-xs font-bold tracking-wide text-muted uppercase">Groups</legend>
+                <legend className="mb-1 text-[13px] font-medium text-muted">Groups</legend>
                 {groups.data.map((g) => (
                   <Checkbox
                     key={g.id}
@@ -2271,7 +2273,7 @@ function AccessCard({ item }: { item: PasswordView }) {
               </fieldset>
             )}
             <fieldset className="space-y-2">
-              <legend className="mb-1 text-xs font-bold tracking-wide text-muted uppercase">People</legend>
+              <legend className="mb-1 text-[13px] font-medium text-muted">People</legend>
               {!staff.length ? (
                 <p className="text-sm text-muted">There are no other staff accounts yet.</p>
               ) : (
@@ -2318,30 +2320,14 @@ export function PasswordDetail() {
   };
   return (
     <>
-      <AppLink
-        to={`/clients/${item.clientId}/passwords`}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-text"
-      >
-        <ArrowLeft className="size-4" /> {item.clientName} · Passwords
-      </AppLink>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-warning-soft text-warning">
-            {item.kind === 'bitlocker' ? (
-              <HardDrive className="size-6" aria-hidden />
-            ) : item.kind === 'note' ? (
-              <StickyNote className="size-6" aria-hidden />
-            ) : (
-              <KeyRound className="size-6" aria-hidden />
-            )}
-          </span>
-          <div className="min-w-0">
-            <p className="text-xs font-bold tracking-[0.14em] text-muted uppercase">
-              {item.kind === 'bitlocker' ? 'BitLocker recovery key' : item.kind === 'note' ? 'Secure note' : 'Password'}
-            </p>
-            <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
-              {actor.isStaff && <FavoriteButton item={item} />}
-              {item.name}
+      <BackLink to={`/clients/${item.clientId}/passwords`}>{item.clientName} · Passwords</BackLink>
+      <DetailHeader
+        kind={item.kind === 'bitlocker' ? 'BitLocker recovery key' : item.kind === 'note' ? 'Secure note' : 'Password'}
+        title={item.name}
+        star={actor.isStaff && <FavoriteButton item={item} />}
+        status={
+          (item.restricted || (actor.isStaff && item.clientVisible) || item.archived) && (
+            <>
               {item.restricted && (
                 <Badge>
                   <Lock /> Restricted
@@ -2353,26 +2339,30 @@ export function PasswordDetail() {
                 </Badge>
               )}
               {item.archived && <Badge tone="warning">Archived</Badge>}
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              Updated {relativeTime(item.updatedAt)}
-              {item.updatedByName && ` by ${item.updatedByName}`}
-            </p>
-          </div>
-        </div>
-        {actor.isStaff && (
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={archive}>
-              {item.archived ? <ArchiveRestore /> : <Archive />} {item.archived ? 'Restore' : 'Archive'}
-            </Button>
-            {!item.archived && (
-              <Button onClick={() => setEditing(true)}>
-                <Pencil /> Edit
+            </>
+          )
+        }
+        meta={
+          <>
+            Updated {relativeTime(item.updatedAt)}
+            {item.updatedByName && ` by ${item.updatedByName}`}
+          </>
+        }
+        actions={
+          actor.isStaff && (
+            <>
+              <Button variant="secondary" onClick={archive}>
+                {item.archived ? <ArchiveRestore /> : <Archive />} {item.archived ? 'Restore' : 'Archive'}
               </Button>
-            )}
-          </div>
-        )}
-      </div>
+              {!item.archived && (
+                <Button onClick={() => setEditing(true)}>
+                  <Pencil /> Edit
+                </Button>
+              )}
+            </>
+          )
+        }
+      />
       {actor.isStaff &&
         (item.reused > 0 || rotationOverdue(item) || expired(item) || (item.kind === 'login' && item.strength < 2)) && (
           <div className="mb-6 flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">

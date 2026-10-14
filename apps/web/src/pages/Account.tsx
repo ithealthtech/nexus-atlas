@@ -37,6 +37,7 @@ import { useAccountSecurity, useSave } from '@/lib/queries';
 import { describeDevice, formatDate, relativeTime } from '@/lib/format';
 import { addPasskey, passkeysSupported } from '@/lib/passkeys';
 import { EnrollMfa } from '@/auth/AuthScreen';
+import { MenuStylePicker } from '@/components/MenuStylePicker';
 import { RecoveryCodes } from '@/components/RecoveryCodes';
 
 function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -228,6 +229,8 @@ export function Account() {
           </div>
           <Badge tone="primary">{actor.roleLabel}</Badge>
         </Card>
+
+        <MenuStylePicker />
 
         <Card>
           <CardHeader title="Sign-in security" description="Protect the credentials and client data you can reach." />

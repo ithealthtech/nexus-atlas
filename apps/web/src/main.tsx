@@ -9,6 +9,7 @@ import {
   createHashHistory,
   createRouter,
   lazyRouteComponent,
+  redirect,
 } from '@tanstack/react-router';
 import { Loader2, Lock } from 'lucide-react';
 import type { ComponentType } from 'react';
@@ -35,7 +36,7 @@ import { PersonalVault } from '@/pages/PersonalVault';
 import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
 import { Groups } from '@/pages/Groups';
-import { Settings } from '@/pages/Settings';
+import { ApiKeysPage, EmailAlertsPage, MonitoringPage, SignInPage } from '@/pages/Settings';
 import { Theme } from '@/pages/Theme';
 import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
@@ -260,7 +261,17 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/security', component: adminOnly(Security) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/vault-policies', component: adminOnly(VaultPolicies) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/groups', component: adminOnly(Groups) }),
-  createRoute({ getParentRoute: () => appRoute, path: '/admin/settings', component: adminOnly(Settings) }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/admin/settings',
+    beforeLoad: () => {
+      throw redirect({ to: '/admin/email' });
+    },
+  }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/email', component: adminOnly(EmailAlertsPage) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/monitoring', component: adminOnly(MonitoringPage) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/sign-in', component: adminOnly(SignInPage) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/api-keys', component: adminOnly(ApiKeysPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/rotation', component: adminOnly(PasswordRotation) }),

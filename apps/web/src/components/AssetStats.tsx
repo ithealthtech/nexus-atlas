@@ -156,15 +156,15 @@ export function AssetStatsCard({ clientId }: { clientId?: string }) {
           description="Configurations and other device layouts are counted here, by their Type and operating system."
           action={
             actor.isAdmin ? (
-              <AppLink to="/admin/settings" className="text-sm font-semibold text-primary hover:underline">
+              <AppLink to="/admin/monitoring" className="text-sm font-semibold text-primary hover:underline">
                 Choose which layouts count
               </AppLink>
             ) : undefined
           }
         />
       ) : (
-        <div className="@container space-y-4 p-5">
-          <div className="grid grid-cols-2 gap-3 @xl:grid-cols-3 @4xl:grid-cols-6">
+        <div className="@container space-y-7 p-5">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 @xl:grid-cols-3 @4xl:grid-cols-6">
             {TILES.map((t) => (
               <Tile
                 key={t.kind}
@@ -189,7 +189,7 @@ export function AssetStatsCard({ clientId }: { clientId?: string }) {
             </p>
           )}
           {/* The client table sits beside the chart when the card is wide enough. */}
-          <div className="grid items-start gap-4 @4xl:grid-cols-2">
+          <div className="grid items-start gap-x-10 gap-y-7 @4xl:grid-cols-2">
             <StatusChart
               title="Operating systems"
               unit="Devices"

@@ -61,10 +61,8 @@ import {
 import { formatDate, relativeTime } from '@/lib/format';
 import { statusTone } from './Clients';
 
-function greeting() {
-  const hour = new Date().getHours();
-  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-}
+const longDate = () =>
+  new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
 // Layouts whose expiry dates the Domains and SSL card shows.
 const DOMAIN_LAYOUTS = ['domain', 'ssl_certificate'];
@@ -369,12 +367,8 @@ export function Dashboard() {
     <>
       <PageHeader
         eyebrow={actor.organization.name}
-        title={`${greeting()}, ${actor.name.split(' ')[0]}.`}
-        description={
-          actor.isStaff
-            ? "Here's what's happening across your client workspaces."
-            : 'Your documentation, kept by our team.'
-        }
+        title="Overview"
+        description={actor.isStaff ? longDate() : 'Your documentation, kept by our team.'}
         actions={
           <Button variant="secondary" size="sm" onClick={() => setCustomizing(true)}>
             <LayoutGrid /> Customize
@@ -472,7 +466,7 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void save({ widgets, hiddenSections: prefs.hiddenSections })} loading={saving}>
+          <Button onClick={() => void save({ ...prefs, widgets })} loading={saving}>
             Save
           </Button>
         </>
@@ -483,7 +477,7 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
           const inArea = widgets.filter((w) => DASHBOARD_WIDGET_INFO[w.id].area === area);
           return (
             <fieldset key={area}>
-              <legend className="mb-2 text-xs font-bold tracking-wide text-muted uppercase">{label}</legend>
+              <legend className="mb-2 text-[13px] font-medium text-muted">{label}</legend>
               <ul className="divide-y divide-border rounded-lg border border-border">
                 {inArea.map((w, index) => {
                   const info = DASHBOARD_WIDGET_INFO[w.id];

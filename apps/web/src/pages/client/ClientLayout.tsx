@@ -32,7 +32,7 @@ import { ExportButton } from '@/components/ExportButton';
 import { FavoriteStar } from '@/components/Favorites';
 import { QuickNote } from '@/components/QuickNote';
 import { TRACKER, useTrackers } from '@/components/Trackers';
-import { ClientForm, accessTone, statusTone } from '../Clients';
+import { ClientForm, statusTone } from '../Clients';
 
 const SECTION_LABELS: Record<ClientSection, string> = {
   assets: 'Assets',
@@ -81,21 +81,20 @@ export function ClientLayout() {
       </AppLink>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-primary-soft text-base font-bold text-primary">
-            {client.name.slice(0, 2).toUpperCase()}
-          </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="flex flex-wrap items-center gap-3 text-[26px] leading-tight font-semibold tracking-tight">
                 {client.name}
-                <Badge tone={statusTone[client.status]} className="capitalize">
-                  {client.status}
-                </Badge>
+                {client.status !== 'active' && (
+                  <Badge tone={statusTone[client.status]} className="capitalize">
+                    {client.status}
+                  </Badge>
+                )}
               </h1>
               <FavoriteStar type="client" id={client.id} name={client.name} />
             </div>
             <p className="mt-1 text-sm text-muted">
-              {client.type} · <Badge tone={accessTone(client.access)}>{LEVEL_INFO[client.access].label}</Badge>
+              {client.type} · {LEVEL_INFO[client.access].label}
             </p>
           </div>
         </div>
@@ -103,7 +102,7 @@ export function ClientLayout() {
           {actor.isStaff && (
             <AppLink
               to={`/client-report/${client.id}`}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3.5 text-sm font-semibold hover:bg-surface-2"
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-surface px-4 text-sm font-semibold hover:bg-surface-3"
             >
               <FileText className="size-4" aria-hidden /> Monthly report
             </AppLink>
@@ -122,8 +121,8 @@ export function ClientLayout() {
         </div>
       </div>
       <QuickNote client={client} />
-      <nav aria-label="Client sections" className="mb-7 flex items-center gap-1 border-b border-border">
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+      <nav aria-label="Client sections" className="mb-7 flex items-end gap-1 border-b border-border">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-x-1">
           {(['', ...CLIENT_SECTIONS] as const)
             .filter((s) => s === '' || !prefs?.hiddenSections.includes(s))
             .filter((s) => s !== 'passwords' || client.access === 'edit_passwords' || !actor.isStaff)
@@ -136,11 +135,11 @@ export function ClientLayout() {
                   aria-label={typeof count === 'number' ? `${label} (${count})` : undefined}
                   to={`/clients/${clientId}${s ? `/${s}` : ''}`}
                   activeOptions={{ exact: s === '' }}
-                  className="-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
+                  className="-mb-px flex items-baseline gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
                 >
                   {label}
                   {typeof count === 'number' && (
-                    <span aria-hidden className="rounded-full bg-surface-3 px-1.5 text-xs text-text-2 tabular-nums">
+                    <span aria-hidden className="text-xs font-normal text-muted tabular-nums">
                       {count}
                     </span>
                   )}
@@ -152,10 +151,7 @@ export function ClientLayout() {
             aria-labelledby="client-trackers"
             className="ml-2 flex shrink-0 items-center border-l border-border pl-2"
           >
-            <span
-              id="client-trackers"
-              className="px-1.5 text-xs font-semibold tracking-wide whitespace-nowrap text-muted uppercase"
-            >
+            <span id="client-trackers" className="px-1.5 text-xs whitespace-nowrap text-muted">
               Trackers
             </span>
             {(['domain', 'ssl'] as const).map((kind) => {
@@ -165,14 +161,14 @@ export function ClientLayout() {
                 <AppLink
                   key={kind}
                   to={`/clients/${clientId}/trackers/${TRACKER[kind].path}`}
-                  className="relative -mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
+                  className="relative -mb-px flex items-baseline gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
                 >
                   {TRACKER[kind].title}
                   {tracked && (
                     <span
                       className={cn(
-                        'rounded-full px-1.5 text-xs tabular-nums',
-                        attention ? 'bg-warning-soft text-warning' : 'bg-surface-3 text-text-2',
+                        'text-xs tabular-nums',
+                        attention ? 'font-semibold text-warning' : 'font-normal text-muted',
                       )}
                     >
                       {tracked.total}
@@ -218,7 +214,7 @@ function SectionsDialog({ prefs, onClose }: { prefs: WorkspacePrefs; onClose: ()
     try {
       const saved = await api<WorkspacePrefs>('/account/workspace', {
         method: 'PUT',
-        body: { widgets: prefs.widgets, hiddenSections: hidden },
+        body: { ...prefs, hiddenSections: hidden },
       });
       queryClient.setQueryData(['workspace'], saved);
       toast('Sections saved.');

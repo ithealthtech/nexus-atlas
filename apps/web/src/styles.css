@@ -1,19 +1,19 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/inter';
+@import '@fontsource-variable/instrument-sans';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Semantic colour tokens. Components use these names, so light and dark themes only change values here. */
 :root {
-  --bg: #f5f7f6;
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --surface-2: #f8faf9;
-  --surface-3: #eef3f0;
-  --border: #e3e9e5;
-  --border-strong: #cfdad3;
-  --text: #1e3129;
-  --text-2: #4d6358;
-  --muted: #5f7168;
+  --surface-2: #f7f8fa;
+  --surface-3: #eceff3;
+  --border: #e0e4ea;
+  --border-strong: #c8cfd8;
+  --text: #151b23;
+  --text-2: #414c5a;
+  --muted: #5a6573;
   --primary: #205843;
   --primary-hover: #17442f;
   --primary-fg: #ffffff;
@@ -42,15 +42,15 @@
   --shadow: 0 1px 2px rgb(20 50 38 / 0.05), 0 4px 16px rgb(20 50 38 / 0.04);
 }
 .dark {
-  --bg: #0e1714;
-  --surface: #14201c;
-  --surface-2: #182622;
-  --surface-3: #1e2f29;
-  --border: #253830;
-  --border-strong: #33493f;
-  --text: #e4ede7;
-  --text-2: #b4c4bb;
-  --muted: #869a8f;
+  --bg: #0d1015;
+  --surface: #13181f;
+  --surface-2: #171d25;
+  --surface-3: #202732;
+  --border: #242c37;
+  --border-strong: #36414f;
+  --text: #e7ebf0;
+  --text-2: #b8c1cc;
+  --muted: #8a95a3;
   --primary: #6fb68f;
   --primary-hover: #86c7a3;
   --primary-fg: #0c1a14;
@@ -74,7 +74,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Instrument Sans Variable', 'Segoe UI', system-ui, sans-serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -112,7 +112,6 @@
 @layer base {
   html {
     font-family: var(--font-sans);
-    font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
   }
   body {
@@ -125,8 +124,7 @@
     outline-offset: 2px;
   }
   dialog::backdrop {
-    background: rgb(8 24 18 / 0.45);
-    backdrop-filter: blur(2px);
+    background: rgb(5 8 12 / 0.62);
   }
   @media (prefers-reduced-motion: reduce) {
     *,

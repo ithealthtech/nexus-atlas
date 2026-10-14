@@ -255,12 +255,12 @@ export function Clients() {
                       </Link>
                     </td>
                     <td className="px-5 py-3.5">
-                      <Badge tone={statusTone[c.status]} className="capitalize">
+                      <Badge tone={c.status === 'active' ? 'quiet' : statusTone[c.status]} className="capitalize">
                         {c.status}
                       </Badge>
                     </td>
                     <td className="hidden px-5 py-3.5 sm:table-cell">
-                      <Badge tone={accessTone(c.access)}>{LEVEL_INFO[c.access].label}</Badge>
+                      <Badge tone="quiet">{LEVEL_INFO[c.access].label}</Badge>
                     </td>
                     <td className="hidden px-5 py-3.5 whitespace-nowrap text-muted md:table-cell">
                       {relativeTime(c.updatedAt)}

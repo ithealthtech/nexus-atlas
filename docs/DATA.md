@@ -1,11 +1,11 @@
 # Data in and out
 
-Everything on this page is under **Import & export** (administrators) and **Settings** in the app.
+Everything on this page is under **Import & export** (administrators) and **API keys** in the app.
 
 ## REST API
 
 - **Address:** `https://<atlas>/api/v1/…`, using the same paths as the web app without the `/api` prefix (for example `GET /api/v1/clients`). The OpenAPI 3.1 description is at `/api/openapi.json`.
-- **API keys:** administrators create them under **Settings → API keys**, which needs a recent password confirmation. A key is shown once. It looks like `atlas_<prefix>_<secret>`, and only its SHA-256 hash is stored. Send it as `Authorization: Bearer <key>`.
+- **API keys:** administrators create them under **Administration → API keys**, which needs a recent password confirmation. A key is shown once. It looks like `atlas_<prefix>_<secret>`, and only its SHA-256 hash is stored. Send it as `Authorization: Bearer <key>`.
 - **Scopes:**
   - `read` allows GET requests.
   - `write` allows changes.
@@ -79,7 +79,7 @@ npm run migrate-legacy -w @atlas/server -- /path/to/atlas.sqlite [--legacy-key /
 
 ## Branding and the client portal
 
-- **Branding:** **Settings → Branding** sets a logo (up to 150 KB), an accent colour (text on it switches between light and dark to stay readable), and a welcome message that client accounts see on their dashboard.
+- **Branding:** **Administration → Theme** sets a logo (up to 150 KB), an accent colour (text on it switches between light and dark to stay readable), and a welcome message that client accounts see on their dashboard.
 - **Client portal:** client accounts (Client editor and Client viewer) sign in to the same address and see only their own clients.
   - **Passwords:** they can't see the vault unless a technician ticks **Share with the client's own accounts** on an entry. Shared entries are read-only for them.
   - **Rules still apply:** reveals are recorded in the access history, and the client's "require a reason" setting applies to them too. Restricted entries are never shared.

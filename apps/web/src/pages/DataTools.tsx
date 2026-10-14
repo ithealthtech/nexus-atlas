@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CloudDownload, Factory, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
 import type { CsvImportResult, CsvTarget, HuduImportOptions, HuduPreview, ImportJobView } from '@atlas/shared';
+import { PageSections } from '@/components/PageSections';
+import { DangerZone } from './DangerZone';
+import { useActor } from '@/lib/session';
 import {
   Badge,
   Button,
@@ -611,6 +614,7 @@ function ImportHistory() {
 }
 
 export function DataTools() {
+  const actor = useActor();
   return (
     <>
       <PageHeader
@@ -618,7 +622,7 @@ export function DataTools() {
         title="Import & export"
         description="Sync devices and tickets from ConnectWise and tenants from Microsoft 365, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
       />
-      <div className="grid max-w-4xl gap-6">
+      <PageSections>
         <CwRmmSync />
         <M365Sync />
         <HuduImport />
@@ -635,7 +639,8 @@ export function DataTools() {
             on the server. People keep their passwords; see the deployment guide for details.
           </p>
         </div>
-      </div>
+        {actor.isAdmin && <DangerZone />}
+      </PageSections>
     </>
   );
 }

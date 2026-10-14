@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'link';
 type Size = 'sm' | 'md' | 'lg' | 'icon';
 const variants: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-fg hover:bg-primary-hover shadow-sm',
+  primary: 'bg-primary text-primary-fg hover:bg-primary-hover',
   secondary: 'bg-surface text-text border border-border hover:bg-surface-3',
   ghost: 'text-text-2 hover:bg-surface-3 hover:text-text',
   danger: 'bg-danger text-danger-fg hover:opacity-90',
@@ -35,7 +35,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        'inline-flex items-center justify-center rounded-lg font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60 [&_svg]:size-4 [&_svg]:shrink-0',
+        'inline-flex items-center justify-center rounded-md font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60 [&_svg]:size-4 [&_svg]:shrink-0',
         variants[variant],
         variant !== 'link' && sizes[size],
         className,

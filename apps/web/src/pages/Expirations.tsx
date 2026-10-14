@@ -123,7 +123,7 @@ export function Expirations() {
                 <h2
                   id={`exp-${g.key}`}
                   className={cn(
-                    'border-b border-border bg-surface-2 px-5 py-2 text-xs font-bold tracking-wide uppercase',
+                    'border-b border-border bg-surface-2 px-5 py-2 text-[13px] font-semibold',
                     g.key === 'overdue' ? 'text-danger' : 'text-muted',
                   )}
                 >

@@ -128,7 +128,7 @@ export function ClientRelationshipMap() {
             {layout.columns.map((c, ci) => (
               <p
                 key={c.type}
-                className="absolute text-xs font-semibold tracking-wide text-muted uppercase"
+                className="absolute text-[13px] font-medium text-muted"
                 style={{ left: ci * COL_W, top: 0 }}
               >
                 {c.label}

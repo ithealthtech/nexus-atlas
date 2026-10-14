@@ -7,7 +7,7 @@ This guide is for the people who set up and run Atlas for an MSP. Installing the
 1. **Create the owner account.** Open Atlas, enter the setup code from the server console (or `MSPAtlas.out.log` on Windows), and fill in your company and your own account. Set up two-step verification when asked. An authenticator app or a passkey both work.
 2. **Save your recovery codes.** They're shown once. Keep them somewhere other than Atlas.
 3. **Back up the master key.** It's what protects every password in Atlas and every backup file. See [the master key](DEPLOYMENT.md#the-master-key).
-4. **Set up email** under **Settings → Email** (Microsoft 365 or any SMTP server) and choose **Send test**. Email is needed for password resets, expiry alerts, and the weekly digest.
+4. **Set up email** under **Administration → Email & alerts** (Microsoft 365 or any SMTP server) and choose **Send test**. Email is needed for password resets, expiry alerts, and the weekly digest.
 5. **Check System status.** It lists anything that still needs attention, for example backups kept on the same disk as Atlas.
 6. **Bring your data in** from Hudu or spreadsheets under **Import & export**. See [Data in and out](DATA.md).
 
@@ -31,7 +31,7 @@ Changes to access apply to people who are already signed in, straight away.
 
 ## Single sign-on
 
-Staff can sign in through **Microsoft Entra ID** or any **SAML 2.0** identity provider (Okta, Google Workspace, Duo, JumpCloud, and others). Both are set up under **Administration → Settings**, and both follow the same rules:
+Staff can sign in through **Microsoft Entra ID** or any **SAML 2.0** identity provider (Okta, Google Workspace, Duo, JumpCloud, and others). Both are set up under **Administration → Sign-in**, and both follow the same rules:
 
 - **Signing in never creates an account.** Add the person in Atlas first, with the same email address they have at the provider.
 - **An administrator confirms each person's first link.** The first time someone signs in, Atlas matches them by email and stops. Open them under **People & access → Manage**, check the name, email, and ID shown, and choose **Confirm**. After that Atlas recognizes them by the provider's own ID for the account, not the email, so a changed address still works and a look-alike address gets nowhere.
@@ -143,16 +143,16 @@ Check **System status** every week or so. It shows:
 
 - **Security log** records sign-ins, failures, lockouts, account and access changes, API key use, exports, and backups, with the address each came from.
 - **Export** the security log and the vault access history as CSV from the same page. Exporting needs your password again.
-- **Retention:** by default everything is kept forever. You can choose 1–7 years under **Settings → Alerts and logs**.
+- **Retention:** by default everything is kept forever. You can choose 1–7 years under **Email & alerts → Alerts and logs**.
 
 ## Branding and the client portal
 
-- **Settings → Branding** sets your logo, an accent colour, and a welcome message for client accounts.
+- **Administration → Theme** sets your logo, an accent colour, and a welcome message for client accounts.
 - **Client accounts** sign in at the same address and see only their own clients. They see documentation you've given them, and only the passwords shared with them.
 
 ## API keys
 
-**Settings → API keys** creates keys for PSA, RMM, and scripts.
+**Administration → API keys** creates keys for PSA, RMM, and scripts.
 
 - **Scopes:** each key gets `read`, `write`, and optionally `passwords`.
 - **The key acts as you:** it acts with your access, is shown once, and expires after a year unless you choose otherwise.

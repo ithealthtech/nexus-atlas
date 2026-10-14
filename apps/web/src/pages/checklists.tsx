@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Download, ListChecks, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
+import { Download, ListChecks, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
 import type { ChecklistView, RunView } from '@atlas/shared';
 import { AppLink } from '@/components/AppLink';
+import { BackLink, DetailHeader } from '@/components/DetailHeader';
 import { TemplateLibrary } from '@/components/TemplateLibrary';
 import {
   Badge,
@@ -569,24 +570,20 @@ export function RunPage() {
 
   return (
     <>
-      <AppLink
-        to={`/clients/${run.clientId}/checklists`}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-text print:hidden"
-      >
-        <ArrowLeft className="size-4" /> {run.clientName}
-      </AppLink>
-      <PageHeader
-        eyebrow={run.clientName}
+      <BackLink to={`/clients/${run.clientId}/checklists`}>{run.clientName} · Checklists</BackLink>
+      <DetailHeader
+        kind="Checklist"
         title={run.title}
-        description={
+        status={run.completedAt ? <Badge tone="success">Completed</Badge> : undefined}
+        meta={
           <>
             Started {formatDate(run.createdAt)}
-            {run.createdByName && ` by ${run.createdByName}`}.{' '}
-            {run.completedAt ? `Completed ${formatDate(run.completedAt)}.` : `${run.done} of ${run.total} steps done.`}
+            {run.createdByName && ` by ${run.createdByName}`} ·{' '}
+            {run.completedAt ? `completed ${formatDate(run.completedAt)}` : `${run.done} of ${run.total} steps done`}
           </>
         }
         actions={
-          <div className="flex flex-wrap gap-2 print:hidden">
+          <>
             <Button variant="secondary" onClick={download}>
               <Download /> Markdown
             </Button>
@@ -596,6 +593,7 @@ export function RunPage() {
             {run.canEdit && (
               <Button
                 variant="ghost"
+                size="icon"
                 aria-label="Delete this run"
                 onClick={async () => {
                   if (!window.confirm(`Delete “${run.title}”? Its record of who did what goes with it.`)) return;
@@ -608,10 +606,10 @@ export function RunPage() {
                 <Trash2 />
               </Button>
             )}
-          </div>
+          </>
         }
       />
-      <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <Card>
           <ol className="divide-y divide-border">
             {run.steps.map((s, i) => (

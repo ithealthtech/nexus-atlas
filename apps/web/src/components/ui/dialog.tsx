@@ -38,15 +38,15 @@ export function Dialog({
       }}
       aria-labelledby="dialog-title"
       className={cn(
-        'animate-dialog m-auto max-h-[90vh] w-[calc(100%-2rem)] overflow-hidden rounded-2xl border border-border bg-surface p-0 text-text shadow-2xl',
+        'animate-dialog m-auto max-h-[90vh] w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-border-strong bg-surface p-0 text-text shadow-2xl',
         size === 'sm' ? 'max-w-md' : size === 'lg' ? 'max-w-3xl' : 'max-w-xl',
       )}
     >
       {open && (
         <div className="flex max-h-[90vh] flex-col">
-          <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+          <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-1">
             <div>
-              <h2 id="dialog-title" className="text-lg font-semibold">
+              <h2 id="dialog-title" className="text-lg font-semibold tracking-[-0.01em]">
                 {title}
               </h2>
               {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
@@ -56,11 +56,7 @@ export function Dialog({
             </Button>
           </div>
           <div className="overflow-y-auto px-6 py-5">{children}</div>
-          {footer && (
-            <div className="flex flex-wrap justify-end gap-2 border-t border-border bg-surface-2 px-6 py-3.5">
-              {footer}
-            </div>
-          )}
+          {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>}
         </div>
       )}
     </dialog>
