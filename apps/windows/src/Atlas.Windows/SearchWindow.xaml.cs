@@ -303,7 +303,17 @@ public sealed partial class SearchWindow : Window
             switch (section)
             {
                 case "favorites":
-                    rows = (await client.ListFavoritesAsync(cancel.Token))
+                    IReadOnlyList<FavoriteItem> starred;
+                    try
+                    {
+                        starred = await client.ListFavoritesAsync(cancel.Token);
+                    }
+                    catch (AtlasApiException ex) when (ex.Code == "api_scope")
+                    {
+                        ShowRows([], "Favorites show here once your Atlas server is updated. Until then, use Recent, or search.");
+                        return;
+                    }
+                    rows = starred
                         .Where(f => f.Type is "password" or "asset" or "document" or "client")
                         .Select(f => new Row(f.Type, f.Id, f.Name, Join(Kind(f.Type), f.ClientName), f.ClientId, f.ClientName))
                         .ToList();
@@ -482,6 +492,16 @@ public sealed partial class SearchWindow : Window
     private static string Day(string iso) =>
         DateTimeOffset.TryParse(iso, out var at) ? at.ToLocalTime().ToString("MMM d, yyyy") : iso;
 
+    // What search matched besides the name (an address, a serial number), so same-named results differ.
+    private static string? Snippet(string snippet, string title)
+    {
+        var text = snippet.Replace('
+', ' ').Trim();
+        if (text.StartsWith(title, StringComparison.OrdinalIgnoreCase))
+            text = text[title.Length..].TrimStart(' ', '—', '-', '·');
+        return text.Length > 0 ? text : null;
+    }
+
     private static string Join(params string?[] parts) => string.Join(" · ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
 
     private async void QueryBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -507,7 +527,7 @@ public sealed partial class SearchWindow : Window
                 return;
             TypeFilter.Visibility = Visibility.Collapsed;
             ShowRows(
-                results.Select(r => new Row(r.Type, r.Id, r.Title, Join(Kind(r.Type), r.ClientName), r.ClientId, r.ClientName)).ToList(),
+                results.Select(r => new Row(r.Type, r.Id, r.Title, Join(Kind(r.Type), r.ClientName, Snippet(r.Snippet, r.Title)), r.ClientId, r.ClientName)).ToList(),
                 "Nothing you can see matches that.");
         }
         catch (OperationCanceledException)
@@ -727,11 +747,11 @@ public sealed partial class SearchWindow : Window
             Field("Updated", Value(Join(When(asset.UpdatedAt), asset.UpdatedByName)))));
     }
 
-    /// <summary>The key facts as tiles across the top, three to a row; selecting one copies it.</summary>
+    /// <summary>The key facts as tiles across the top, two to a row; selecting one copies it.</summary>
     private UIElement Facts(List<(string Label, string Value)> facts)
     {
         var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8, Margin = new Thickness(0, 16, 0, 0) };
-        const int columns = 3;
+        const int columns = 2;
         for (var c = 0; c < columns; c++)
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         for (var i = 0; i < facts.Count; i++)
@@ -741,7 +761,7 @@ public sealed partial class SearchWindow : Window
             var (label, value) = facts[i];
             var content = new StackPanel { Spacing = 2 };
             content.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = Secondary(), TextTrimming = TextTrimming.CharacterEllipsis });
-            content.Children.Add(new TextBlock { Text = value, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = FontWeights.SemiBold });
+            content.Children.Add(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = FontWeights.SemiBold });
             var tile = new Button
             {
                 Content = content,
