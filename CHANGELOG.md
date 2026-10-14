@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.28] - 2026-10-14
+
+### Added
+
+- **Remote access.** **Administration → Remote access** chooses how people reach Atlas: from this server directly, through a **Cloudflare Tunnel** (no inbound ports), through **Tailscale** (your tailnet, or the internet with Funnel, at the server's .ts.net name with a trusted certificate), or behind **your own reverse proxy** (nginx, Traefik, IIS, Nginx Proxy Manager). The server installs and runs cloudflared or Tailscale itself, and if Atlas doesn't answer at the new address it puts the previous settings back. Only the owner can change it, after confirming their password; the tunnel token and auth key are kept where only root can read them and are never logged. The installer takes the same choices (`--access`), and updates keep them. Tested in CI against real systemd with stand-ins for cloudflared and Tailscale, not yet against real accounts. (#191)
+- **A full manual on the documentation site**, with 16 chapters, screenshots of the current look, search, and light and dark. (#190)
+
+### Changed
+
+- **Atlas trusts only its own web proxy about visitors' addresses.** The Linux installer now sets `TRUST_PROXY` to `127.0.0.1,::1` instead of trusting every proxy, and `TRUST_PROXY` accepts a list of addresses. (#191)
+
 ## [1.7.27] - 2026-10-14
 
 ### Added
