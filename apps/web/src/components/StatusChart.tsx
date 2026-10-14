@@ -170,15 +170,17 @@ export function StatusChart<F extends string>({
   return (
     <section aria-label={title} className={cn('flex min-w-0 flex-col', !bare && 'py-1')}>
       <h3 className={cn('text-sm font-semibold text-text', bare && 'sr-only')}>{title}</h3>
-      <div className={cn('flex flex-wrap items-center gap-4', !bare && 'mt-3')}>
+      <div className={cn('flex items-center gap-4', !bare && 'mt-3')}>
         <div className="relative">
           <Donut slices={slices} total={total} active={active} />
           <div className="absolute inset-0 grid place-content-center text-center">
-            <span className="text-lg leading-tight font-semibold text-text tabular-nums">{pct(headline.count, total)}%</span>
+            <span className="text-lg leading-tight font-semibold text-text tabular-nums">
+              {pct(headline.count, total)}%
+            </span>
             <span className="text-[11px] text-muted">{headline.label}</span>
           </div>
         </div>
-        <table className="min-w-40 flex-1 text-sm">
+        <table className="min-w-0 flex-1 text-sm">
           <caption className="sr-only">{title}</caption>
           <thead className="sr-only">
             <tr>

@@ -67,7 +67,7 @@ export function ClientOverview() {
           ))}
         </dl>
       </Card>
-      <div className="grid items-start gap-6 lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
+      <div className="grid items-stretch gap-6 *:h-full lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
         <Card>
           <CardHeader
             title="Assets"
@@ -167,14 +167,12 @@ export function ClientOverview() {
       {/* Full width, so its three charts sit side by side instead of stacking. */}
       <RmmHealthCard clientId={clientId} />
       <ClientSecurityCard clientId={clientId} />
-      <div className="grid items-start gap-6 lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
-        <TrackerCard clientId={clientId} />
-        <AssetStatsCard clientId={clientId} />
-      </div>
+      <TrackerCard clientId={clientId} />
+      <AssetStatsCard clientId={clientId} />
       <TicketsCard clientId={clientId} />
       <TicketDetails clientId={clientId} />
       <SoftwareCard clientId={clientId} />
-      <div className="grid items-start gap-6 lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
+      <div className="grid items-stretch gap-6 *:h-full lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
         <Card>
           <CardHeader
             title="Recently updated documents"

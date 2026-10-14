@@ -245,7 +245,7 @@ export function TrackerCard({ clientId }: { clientId?: string }) {
           description="Add Domains assets, and the SSL certificates their sites serve are tracked too."
         />
       ) : (
-        <div className="grid gap-4 p-5 md:grid-cols-2">
+        <div className="grid gap-x-10 gap-y-7 p-5 md:grid-cols-2">
           {(['domain', 'ssl'] as const).map((kind) => (
             <StatusChart
               key={kind}
