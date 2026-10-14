@@ -498,29 +498,30 @@ public class PreviewServerTests
     [Fact]
     public async Task Serves_everything_the_window_lists()
     {
+        var ct = TestContext.Current.CancellationToken;
         using var client = Client();
-        Assert.Equal(3, (await client.ListClientsAsync()).Count);
-        var harbor = await client.ListPasswordsAsync("c-harbor");
+        Assert.Equal(3, (await client.ListClientsAsync(ct)).Count);
+        var harbor = await client.ListPasswordsAsync("c-harbor", ct);
         Assert.All(harbor, p => Assert.Equal("Harbor Dental Group", p.ClientName));
         Assert.Contains(harbor, p => p.HasTotp);
-        var assets = await client.ListAssetsAsync();
+        var assets = await client.ListAssetsAsync(cancellationToken: ct);
         Assert.Equal("10.20.0.10", assets.First(a => a.Name == "HDG-DC-01").Fields["ip"].GetString());
-        Assert.NotEmpty((await client.ListLayoutsAsync()).First().Fields);
-        Assert.Equal(4, (await client.ListFavoritesAsync()).Count);
-        var doc = await client.GetDocumentAsync("d-reboot");
+        Assert.NotEmpty((await client.ListLayoutsAsync(ct))[0].Fields);
+        Assert.Equal(4, (await client.ListFavoritesAsync(ct)).Count);
+        var doc = await client.GetDocumentAsync("d-reboot", ct);
         Assert.Contains("1. Sign in to the FortiGate", RichTextPlain.From(doc.Content));
-        Assert.Equal("482193", (await client.RevealToShowAsync("p-m365", SecretField.OneTimeCode)).Value);
-        Assert.Equal("Alex Rivera", (await client.GetSessionAsync()).User.Name);
-        Assert.NotEmpty(await client.SearchAsync("hdg"));
+        Assert.Equal("482193", (await client.RevealToShowAsync("p-m365", SecretField.OneTimeCode, cancellationToken: ct)).Value);
+        Assert.Equal("Alex Rivera", (await client.GetSessionAsync(ct)).User.Name);
+        Assert.NotEmpty(await client.SearchAsync("hdg", cancellationToken: ct));
     }
 
     [Fact]
     public async Task Asks_for_the_list_of_one_client_by_its_id()
     {
         string? asked = null;
-        var client = new AtlasClient(AtlasAddress.Parse("https://atlas.example.com"), new Recorder(uri => asked = uri.PathAndQuery));
+        using var client = new AtlasClient(AtlasAddress.Parse("https://atlas.example.com"), new Recorder(uri => asked = uri.PathAndQuery));
         client.UseToken("t");
-        await client.ListAssetsAsync("c 1&x");
+        await client.ListAssetsAsync("c 1&x", TestContext.Current.CancellationToken);
         Assert.Equal("/api/v1/assets?client=c%201%26x", asked);
     }
 
