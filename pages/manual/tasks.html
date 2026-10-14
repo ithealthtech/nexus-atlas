@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Everyday tasks at a glance · MSP Atlas manual</title>
+    <meta name="description" content="The common jobs in one table, with where to go for each." />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html" aria-current="page"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 14</p>
+        <h1>Everyday tasks at a glance</h1>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>I want to</th>
+                <th>Go to</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Find anything</td>
+                <td><strong>Ctrl+K</strong>, anywhere</td>
+              </tr>
+              <tr>
+                <td>See what's coming due</td>
+                <td><strong>Home → Expirations</strong></td>
+              </tr>
+              <tr>
+                <td>Open a client</td>
+                <td><strong>Clients</strong>, or <strong>Ctrl+K</strong> and the client's name</td>
+              </tr>
+              <tr>
+                <td>Leave a note everyone sees on a client</td>
+                <td><strong>Edit</strong> on the client's quick note</td>
+              </tr>
+              <tr>
+                <td>Add a device</td>
+                <td>The client's <strong>Assets</strong> tab → <strong>Add asset</strong></td>
+              </tr>
+              <tr>
+                <td>Write a procedure</td>
+                <td>
+                  The client's <strong>Documents</strong> tab, or <strong>Docs → Knowledge base</strong> →
+                  <strong>New document</strong>
+                </td>
+              </tr>
+              <tr>
+                <td>Work through onboarding</td>
+                <td>The client's <strong>Checklists</strong> tab → <strong>Start a checklist</strong></td>
+              </tr>
+              <tr>
+                <td>See a password</td>
+                <td>The client's <strong>Passwords</strong> tab, then the eye</td>
+              </tr>
+              <tr>
+                <td>Give a password to someone outside</td>
+                <td>The password → <strong>Quick share</strong></td>
+              </tr>
+              <tr>
+                <td>Hand over a file once</td>
+                <td><strong>Vault → Send</strong> → <strong>New Send</strong></td>
+              </tr>
+              <tr>
+                <td>Keep my own login</td>
+                <td><strong>Vault → My vault</strong> → <strong>Add</strong></td>
+              </tr>
+              <tr>
+                <td>Find weak or reused passwords</td>
+                <td><strong>Vault → Password health</strong></td>
+              </tr>
+              <tr>
+                <td>Print a QR label</td>
+                <td>The asset → <strong>QR label</strong></td>
+              </tr>
+              <tr>
+                <td>Send a client their report</td>
+                <td>Client header → <strong>Monthly report</strong>, then print to PDF</td>
+              </tr>
+              <tr>
+                <td>Change my menu layout</td>
+                <td><strong>Profile &amp; sign-in → Menu</strong></td>
+              </tr>
+              <tr>
+                <td>Add a technician</td>
+                <td><strong>Admin → People &amp; access</strong> → <strong>Add person</strong></td>
+              </tr>
+              <tr>
+                <td>Reset someone's two-step sign-in</td>
+                <td><strong>People &amp; access → Manage → Reset sign-in</strong></td>
+              </tr>
+              <tr>
+                <td>Turn off a leaver</td>
+                <td><strong>People &amp; access → Manage →</strong> tick <strong>Disable this account</strong></td>
+              </tr>
+              <tr>
+                <td>Set up email</td>
+                <td><strong>Admin → Email &amp; alerts</strong></td>
+              </tr>
+              <tr>
+                <td>Bring in Hudu or ConnectWise</td>
+                <td><strong>Admin → Import &amp; export</strong></td>
+              </tr>
+              <tr>
+                <td>Make a backup now</td>
+                <td><strong>Admin → System status → Back up now</strong></td>
+              </tr>
+              <tr>
+                <td>Install an update</td>
+                <td><strong>Admin → Updates</strong></td>
+              </tr>
+              <tr>
+                <td>Restart a service</td>
+                <td><strong>Admin → Services</strong></td>
+              </tr>
+              <tr>
+                <td>Stop the certificate warning</td>
+                <td><strong>Admin → Certificate → Download</strong>, then install it</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../manual/looking-after-atlas.html"><span>Previous</span>Keeping Atlas healthy</a
+          ><a class="next" href="../support.html"><span>Next</span>Troubleshooting</a>
+        </nav>
+      </main>
+      <div class="toc"></div>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

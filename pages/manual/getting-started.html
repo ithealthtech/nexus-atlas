@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Getting started · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="Signing in for the first time, two-step verification, finding your way around, and what your role lets you do."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html" aria-current="page"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 2</p>
+        <h1>Getting started</h1>
+        <p>
+          This chapter takes you from the email with your temporary password to knowing your way around. It takes about
+          ten minutes.
+        </p>
+        <h2 id="sign-in-for-the-first-time">
+          <a class="anchor" href="#sign-in-for-the-first-time">Sign in for the first time</a>
+        </h2>
+        <p>Your administrator gives you the Atlas address, your email, and a temporary password.</p>
+        <ol class="steps">
+          <li>Open the Atlas address in your browser and sign in with your email and the temporary password.</li>
+          <li>Choose your own password. It must be at least 12 characters; a few unrelated words work well.</li>
+          <li>
+            Set up two-step verification. Staff can't do anything else until it's on. Scan the QR code with an
+            authenticator app (Microsoft Authenticator, Google Authenticator, 1Password and so on) and enter the
+            six-digit code, or add a passkey instead.
+          </li>
+          <li>
+            Save your recovery codes. They are shown once. Each one gets you in once if you lose your phone. Keep them
+            somewhere other than Atlas.
+          </li>
+        </ol>
+        <aside class="callout callout-tip">
+          <p class="callout-title">Remember this browser</p>
+          <p>
+            At the second step you can tick <strong>Remember this browser for 30 days</strong> so your own computer
+            doesn't ask for a code every time. Only do this on a device that is yours.
+          </p>
+        </aside>
+        <h3 id="passkeys"><a class="anchor" href="#passkeys">Passkeys</a></h3>
+        <p>
+          A passkey is Windows Hello, Touch ID, your phone, or a security key. Add one under
+          <strong>Profile &amp; sign-in → Passkeys</strong> (open the account menu with your initials at the bottom of
+          the menu). After that, <strong>Sign in with a passkey</strong> on the sign-in page signs you in without typing
+          a password, and can't be phished.
+        </p>
+        <h3 id="signing-in-with-microsoft-or-your-identity-provider">
+          <a class="anchor" href="#signing-in-with-microsoft-or-your-identity-provider"
+            >Signing in with Microsoft or your identity provider</a
+          >
+        </h3>
+        <p>
+          If your company has set it up, the sign-in page shows <strong>Sign in with Microsoft</strong> or
+          <strong>Sign in with</strong> your provider's name. Your account must already exist in Atlas. The first time
+          you use it, an administrator confirms that the Microsoft or provider account is really yours, and until they
+          do, Atlas asks you to wait.
+        </p>
+        <h3 id="forgot-your-password"><a class="anchor" href="#forgot-your-password">Forgot your password</a></h3>
+        <p>
+          Choose <strong>Forgot your password?</strong> on the sign-in page. The link in the email works once, for an
+          hour. If you have also lost your phone and recovery codes, an administrator can reset your sign-in.
+        </p>
+        <h2 id="find-your-way-around"><a class="anchor" href="#find-your-way-around">Find your way around</a></h2>
+        <figure>
+          <a href="../images/manual/dashboard.png"
+            ><img src="../images/manual/dashboard.png" alt="The dashboard with the rail and panel menu" loading="lazy"
+          /></a>
+          <figcaption>
+            The dashboard. The rail on the far left switches between areas; the panel beside it lists the pages in the
+            area you're in.
+          </figcaption>
+        </figure>
+        <p>Atlas is organized into five areas. Each area has a handful of pages.</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Pages</th>
+                <th>Who sees it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Home</strong></td>
+                <td>Dashboard, Expirations</td>
+                <td>Everyone</td>
+              </tr>
+              <tr>
+                <td><strong>Clients</strong></td>
+                <td>All clients, and a shortcut to each client</td>
+                <td>Everyone</td>
+              </tr>
+              <tr>
+                <td><strong>Docs</strong></td>
+                <td>Assets, Knowledge base, Checklists</td>
+                <td>Everyone; the knowledge base and checklists are for staff</td>
+              </tr>
+              <tr>
+                <td><strong>Vault</strong></td>
+                <td>
+                  Passwords, My vault, Password health, Send; Password rotation and BitLocker collector for
+                  administrators
+                </td>
+                <td>Staff</td>
+              </tr>
+              <tr>
+                <td><strong>Admin</strong></td>
+                <td>People and security, data, system, and settings pages</td>
+                <td>Administrators</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Your account menu, with your initials, is at the bottom of the menu (or at the right of the top bar). It has
+          <strong>Profile &amp; sign-in</strong>, light and dark appearance, and <strong>Sign out</strong>.
+        </p>
+        <h3 id="search-everything-with-ctrl-k">
+          <a class="anchor" href="#search-everything-with-ctrl-k">Search everything with Ctrl+K</a>
+        </h3>
+        <figure>
+          <a href="../images/manual/search.png"
+            ><img src="../images/manual/search.png" alt="The search window open over the dashboard" loading="lazy"
+          /></a>
+          <figcaption>
+            Ctrl+K searches clients, assets, documents, passwords, contacts and locations you can see.
+          </figcaption>
+        </figure>
+        <p>
+          Press <strong>Ctrl+K</strong> (or <strong>⌘K</strong> on a Mac) anywhere in Atlas, or click
+          <strong>Search</strong> in the menu. Type a client, an asset name, an IP address, a serial number, a contact,
+          or words from a document. Use the arrow keys and <strong>Enter</strong> to open a result, or
+          <strong>Esc</strong> to close. Results only include what you have access to.
+        </p>
+        <h3 id="choose-a-menu-style"><a class="anchor" href="#choose-a-menu-style">Choose a menu style</a></h3>
+        <p>
+          Atlas has three menu layouts. Everyone picks their own under <strong>Profile &amp; sign-in → Menu</strong>,
+          and it follows you to any computer. On a phone the menu always slides out from the side.
+        </p>
+        <figure>
+          <a href="../images/manual/menu-picker.png"
+            ><img src="../images/manual/menu-picker.png" alt="The three menu styles to choose from" loading="lazy"
+          /></a>
+          <figcaption>The Menu card on your account page.</figcaption>
+        </figure>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Style</th>
+                <th>What it looks like</th>
+                <th>Good for</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Rail and panel</strong> (the default)</td>
+                <td>Five area icons down the left edge, with the pages of the area you're in beside them.</td>
+                <td>Getting around quickly once you know where things are.</td>
+              </tr>
+              <tr>
+                <td><strong>Sidebar</strong></td>
+                <td>
+                  One list of the pages you use every day, plus your starred clients.
+                  <strong>Administration</strong> opens its own list, with <strong>Back to Atlas</strong> at the top.
+                </td>
+                <td>People who mostly work in a few pages.</td>
+              </tr>
+              <tr>
+                <td><strong>Top bar</strong></td>
+                <td>The areas across the top, and the pages of the current area in a second row beneath.</td>
+                <td>Wide tables and long pages, because the page gets the full width of the screen.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figure>
+          <a href="../images/manual/menu-top.png"
+            ><img src="../images/manual/menu-top.png" alt="The top bar menu style" loading="lazy"
+          /></a>
+          <figcaption>The top bar style, on the client list.</figcaption>
+        </figure>
+        <h3 id="favourites-and-the-dashboard">
+          <a class="anchor" href="#favourites-and-the-dashboard">Favourites and the dashboard</a>
+        </h3>
+        <p>
+          Click the star beside a client, asset or document to add it to the <strong>Favorites</strong> card on your
+          dashboard. In the rail and sidebar styles, starred clients also appear in the menu.
+        </p>
+        <p>
+          Choose <strong>Customize</strong> on the dashboard to show, hide and reorder its cards. Your layout is yours
+          alone. <strong>Reset to default</strong> puts the standard layout back.
+        </p>
+        <h3 id="light-and-dark"><a class="anchor" href="#light-and-dark">Light and dark</a></h3>
+        <p>Choose the appearance in the account menu. Atlas remembers it per browser.</p>
+        <h2 id="what-you-can-do-depends-on-your-role">
+          <a class="anchor" href="#what-you-can-do-depends-on-your-role">What you can do depends on your role</a>
+        </h2>
+        <p>Everyone in Atlas has one role, plus an access level for each client.</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Who it's for</th>
+                <th>Clients</th>
+                <th>Administration</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Owner</strong></td>
+                <td>The person responsible for Atlas</td>
+                <td>Every client, including passwords</td>
+                <td>Everything, including other owners and vault policies</td>
+              </tr>
+              <tr>
+                <td><strong>Admin</strong></td>
+                <td>Service managers, senior technicians</td>
+                <td>Every client, including passwords</td>
+                <td>People, settings, imports, system</td>
+              </tr>
+              <tr>
+                <td><strong>Technician</strong></td>
+                <td>Your technicians</td>
+                <td>The clients they're given, up to editing passwords</td>
+                <td>None</td>
+              </tr>
+              <tr>
+                <td><strong>Read-only technician</strong></td>
+                <td>Trainees, auditors</td>
+                <td>The clients they're given, read-only</td>
+                <td>None</td>
+              </tr>
+              <tr>
+                <td><strong>Client editor</strong></td>
+                <td>A client's own staff who keep their documentation</td>
+                <td>Their own organization, can edit</td>
+                <td>None</td>
+              </tr>
+              <tr>
+                <td><strong>Client viewer</strong></td>
+                <td>A client's own staff</td>
+                <td>Their own organization, read-only</td>
+                <td>None</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          For each client, a person's access is one of <strong>No access</strong>, <strong>Read</strong>,
+          <strong>Edit</strong>, or <strong>Edit + passwords</strong>. Only <strong>Edit + passwords</strong> shows the
+          client's vault. Your access to a client is shown under its name.
+        </p>
+        <aside class="callout callout-note">
+          <p class="callout-title">Can't see a client?</p>
+          <p>
+            A client you have no access to looks exactly like one that doesn't exist, on purpose. Ask an administrator
+            to give you access under <strong>Admin → People &amp; access</strong> or through a group.
+          </p>
+        </aside>
+        <h2 id="look-after-your-own-account">
+          <a class="anchor" href="#look-after-your-own-account">Look after your own account</a>
+        </h2>
+        <p><strong>Profile &amp; sign-in</strong> is where you manage your own security:</p>
+        <ul>
+          <li><strong>Change password.</strong> Changing it signs out your other devices.</li>
+          <li>
+            <strong>Two-step verification</strong>, <strong>Authenticator app</strong>, <strong>Passkeys</strong> and
+            <strong>Recovery codes.</strong> Add a second method so losing your phone doesn't lock you out.
+          </li>
+          <li>
+            <strong>Where you're signed in.</strong> Every browser session, with <strong>Sign out</strong> for each one
+            you don't recognize.
+          </li>
+          <li><strong>Remembered browsers.</strong> Forget any browser that no longer needs to skip the code.</li>
+          <li>
+            <strong>Signed-in apps</strong> and <strong>Desktop apps.</strong> The browser extension and Atlas for
+            Windows, with <strong>Sign out</strong> for each.
+          </li>
+          <li>
+            <strong>Email notifications.</strong> Tick <strong>Email me about expirations</strong> for alerts when
+            certificates, domains, licences, warranties, password rotations and document reviews come due, plus a Monday
+            digest.
+          </li>
+        </ul>
+        <figure>
+          <a href="../images/manual/account.png"
+            ><img src="../images/manual/account.png" alt="Your Profile &amp; sign-in page" loading="lazy"
+          /></a>
+          <figcaption>Profile &amp; sign-in, with the Menu card and Sign-in security.</figcaption>
+        </figure>
+        <h2 id="keyboard-and-accessibility">
+          <a class="anchor" href="#keyboard-and-accessibility">Keyboard and accessibility</a>
+        </h2>
+        <ul>
+          <li><strong>Tab</strong> from the top of any page reaches <strong>Skip to content</strong> first.</li>
+          <li>
+            <strong>Ctrl+K</strong> opens search anywhere. <strong>Esc</strong> closes dialogs and menus, and focus
+            returns to where you were.
+          </li>
+          <li>Every screen is tested against WCAG 2.2 AA in light and dark, and at phone width.</li>
+        </ul>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../manual/how-atlas-works.html"><span>Previous</span>How Atlas fits together</a
+          ><a class="next" href="../manual/clients.html"><span>Next</span>Clients</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#sign-in-for-the-first-time">Sign in for the first time</a></li>
+          <li><a href="#find-your-way-around">Find your way around</a></li>
+          <li><a href="#what-you-can-do-depends-on-your-role">What you can do depends on your role</a></li>
+          <li><a href="#look-after-your-own-account">Look after your own account</a></li>
+          <li><a href="#keyboard-and-accessibility">Keyboard and accessibility</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

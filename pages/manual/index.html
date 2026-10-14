@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>MSP Atlas manual · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="The complete guide to MSP Atlas, for technicians, administrators, and the people who run the server."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html" aria-current="page">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Start here</p>
+        <h1>MSP Atlas manual</h1>
+        <p>
+          This manual shows you how to use MSP Atlas day to day: finding a client's documentation, keeping passwords
+          safe, watching the health of the devices you look after, and running Atlas itself. It covers version 1.7.27.
+        </p>
+        <aside class="callout callout-note">
+          <p class="callout-title">How to read this manual</p>
+          <p>
+            Menu paths are written in bold with arrows, for example <strong>Admin → People &amp; access</strong>. Atlas
+            has three menu styles (chapter 2 shows them), and every page is in the same place in each. Numbered steps
+            are things to do in order. What you can see depends on your role, so some pages in this manual may not be in
+            your menu.
+          </p>
+        </aside>
+        <h2 id="who-this-manual-is-for"><a class="anchor" href="#who-this-manual-is-for">Who this manual is for</a></h2>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>If you are</th>
+                <th>Start with</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>A technician</td>
+                <td>
+                  <a href="getting-started.html">Getting started</a>, then <a href="clients.html">Clients</a>,
+                  <a href="documentation.html">Documentation</a> and <a href="passwords.html">Passwords</a>
+                </td>
+              </tr>
+              <tr>
+                <td>An administrator</td>
+                <td>
+                  <a href="people-and-access.html">People and access</a> and <a href="settings.html">Settings</a>, then
+                  the chapters for technicians
+                </td>
+              </tr>
+              <tr>
+                <td>The person who runs the server</td>
+                <td>
+                  <a href="../install.html">Installing Atlas</a> and
+                  <a href="looking-after-atlas.html">Keeping Atlas healthy</a>
+                </td>
+              </tr>
+              <tr>
+                <td>A client's own staff</td>
+                <td><a href="client-portal.html">For your clients</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h2 id="chapters"><a class="anchor" href="#chapters">Chapters</a></h2>
+        <ul class="chapters">
+          <li>
+            <a href="../manual/how-atlas-works.html"
+              ><b>1</b
+              ><span
+                ><strong>How Atlas fits together</strong>What Atlas is, the parts it is made of, and how the apps and
+                integrations connect to it.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"
+              ><b>2</b
+              ><span
+                ><strong>Getting started</strong>Signing in for the first time, two-step verification, finding your way
+                around, and what your role lets you do.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/clients.html"
+              ><b>3</b
+              ><span
+                ><strong>Clients</strong>The client list, a client's workspace and overview, quick notes, the monthly
+                report, and exporting a client.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/documentation.html"
+              ><b>4</b
+              ><span
+                ><strong>Documentation</strong>Assets and layouts, documents and the knowledge base, checklists, links,
+                files, version history, sharing and QR labels.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/passwords.html"
+              ><b>5</b
+              ><span
+                ><strong>Passwords</strong>The client vault, revealing and copying, the generator, rotation, sharing,
+                Send, your personal vault, password health and BitLocker keys.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"
+              ><b>6</b
+              ><span
+                ><strong>Monitoring and alerts</strong>Expirations, RMM health, warranties, domain and SSL trackers,
+                asset statistics, security and tickets, and the alerts Atlas emails.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/apps.html"
+              ><b>7</b
+              ><span
+                ><strong>Browser extension and Windows app</strong>Filling logins in Edge and Chrome with the Atlas
+                extension, and quick search and copying from anywhere in Windows with Atlas for Windows.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"
+              ><b>8</b
+              ><span
+                ><strong>For your clients</strong>What client accounts see, how to give a client's staff access, and
+                what to share with them.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../install.html"
+              ><b>9</b
+              ><span
+                ><strong>Installing Atlas</strong>Install Atlas on Ubuntu or Debian, with Docker, or on Windows Server,
+                then create the owner account and get through the first day.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"
+              ><b>10</b
+              ><span
+                ><strong>People and access</strong>Adding people, roles and client access, groups, single sign-on, vault
+                policies, emergency access, and the security log.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/settings.html"
+              ><b>11</b
+              ><span
+                ><strong>Settings</strong>Email and alerts, monitoring rules, sign-in, API keys, webhooks, and your logo
+                and colours.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/integrations.html"
+              ><b>12</b
+              ><span
+                ><strong>Data and integrations</strong>Importing from Hudu and spreadsheets, ConnectWise RMM and
+                Microsoft 365 syncs, the BitLocker collector, and automatic password rotation.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"
+              ><b>13</b
+              ><span
+                ><strong>Keeping Atlas healthy</strong>System status, backups and restores, updates, restarting and
+                repairing services, and the portal's certificate.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../manual/tasks.html"
+              ><b>14</b
+              ><span
+                ><strong>Everyday tasks at a glance</strong>The common jobs in one table, with where to go for
+                each.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../support.html"
+              ><b>15</b
+              ><span
+                ><strong>When something isn't working</strong>Symptoms and fixes, from sign-in problems to failed
+                backups, syncs and rotations, and how to ask for help.</span
+              ></a
+            >
+          </li>
+          <li>
+            <a href="../security.html"
+              ><b>16</b
+              ><span
+                ><strong>Security model</strong>What Atlas protects, from whom, and where its protections end.</span
+              ></a
+            >
+          </li>
+        </ul>
+        <h2 id="other-versions-of-this-information">
+          <a class="anchor" href="#other-versions-of-this-information">Other versions of this information</a>
+        </h2>
+        <p>
+          The manual is written from the guides kept beside the code: the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md" rel="noopener"
+            >administrator guide</a
+          >, the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/USER-GUIDE.md" rel="noopener"
+            >user guide</a
+          >, the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DEPLOYMENT.md" rel="noopener"
+            >deployment guide</a
+          >, and
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DATA.md" rel="noopener">data in and out</a
+          >. Those go deeper into settings and file formats. What changed in each release is in the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">changelog</a>.
+        </p>
+        <p>
+          The screenshots show a demonstration organization with made-up clients. Your Atlas shows your own logo and
+          colour.
+        </p>
+        <nav class="pager" aria-label="Chapters">
+          <span></span
+          ><a class="next" href="../manual/how-atlas-works.html"><span>Next</span>How Atlas fits together</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#who-this-manual-is-for">Who this manual is for</a></li>
+          <li><a href="#chapters">Chapters</a></li>
+          <li><a href="#other-versions-of-this-information">Other versions of this information</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

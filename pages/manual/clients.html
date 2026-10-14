@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Clients · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="The client list, a client's workspace and overview, quick notes, the monthly report, and exporting a client."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html" aria-current="page"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 3</p>
+        <h1>Clients</h1>
+        <p>
+          Every organization you support is a client in Atlas, with its own workspace. This chapter covers finding a
+          client, what its workspace shows, and the everyday changes you make to it.
+        </p>
+        <h2 id="the-client-list"><a class="anchor" href="#the-client-list">The client list</a></h2>
+        <figure>
+          <a href="../images/manual/clients.png"
+            ><img src="../images/manual/clients.png" alt="The client list" loading="lazy"
+          /></a>
+          <figcaption>Clients → All clients. Type to filter, or narrow by status.</figcaption>
+        </figure>
+        <p>
+          <strong>Clients → All clients</strong> lists every client you can open, with its status, your access, and when
+          it last changed. Type in <strong>Search clients</strong> to filter, or choose <strong>All</strong>,
+          <strong>Active</strong>, <strong>Prospect</strong> or <strong>Inactive</strong>.
+        </p>
+        <p>
+          In the rail menu style, the <strong>Go to</strong> list in the Clients panel jumps straight to any client.
+        </p>
+        <h3 id="add-a-client"><a class="anchor" href="#add-a-client">Add a client</a></h3>
+        <p>You need edit access to every client to add one. Administrators always have it.</p>
+        <ol class="steps">
+          <li>Choose <strong>Add client</strong> on the client list.</li>
+          <li>
+            Enter the <strong>Client name</strong>, and choose its <strong>Type</strong> and <strong>Status</strong>.
+          </li>
+          <li>
+            Optionally fill in <strong>Hours of operation</strong> and <strong>Maintenance window</strong>. They show on
+            the client's overview, where technicians look before scheduling work.
+          </li>
+          <li>
+            Tick <strong>Require a reason to view passwords</strong> if this client wants every password reveal
+            explained. See <a href="passwords.html#reveal-and-copy-a-password">Passwords</a>.
+          </li>
+          <li>Choose <strong>Save</strong>.</li>
+        </ol>
+        <aside class="callout callout-tip">
+          <p class="callout-title">Bringing many clients in at once</p>
+          <p>
+            Importing from Hudu or a spreadsheet, or syncing ConnectWise RMM companies, creates clients for you. An
+            imported company is matched to an existing client with the same name rather than creating a second one. See
+            <a href="integrations.html">Data and integrations</a>.
+          </p>
+        </aside>
+        <h2 id="a-client-s-workspace"><a class="anchor" href="#a-client-s-workspace">A client's workspace</a></h2>
+        <figure>
+          <a href="../images/manual/client-overview.png"
+            ><img src="../images/manual/client-overview.png" alt="A client's overview" loading="lazy"
+          /></a>
+          <figcaption>A client workspace: the header, the quick note, the tabs, and the overview.</figcaption>
+        </figure>
+        <p>Opening a client shows:</p>
+        <ul>
+          <li>
+            <strong>The header:</strong> the client's name and type, your access, and the star to add it to your
+            favourites. <strong>Monthly report</strong>, <strong>Export</strong>, <strong>Edit client</strong>, and for
+            administrators <strong>Delete</strong>, are on the right.
+          </li>
+          <li>
+            <strong>The quick note:</strong> a short note at the top of every page for this client, for the thing
+            everyone should know before they touch anything.
+          </li>
+          <li>
+            <strong>The tabs:</strong> <strong>Overview</strong>, <strong>Assets</strong>, <strong>Documents</strong>,
+            <strong>Passwords</strong>, <strong>Contacts</strong>, <strong>Locations</strong>,
+            <strong>Checklists</strong>, <strong>Map</strong> and <strong>Activity</strong>, each with a count. The
+            <strong>Trackers</strong> row underneath has <strong>Domain Tracker</strong> and
+            <strong>SSL Tracker</strong>. A tracker count turns amber when something needs attention.
+          </li>
+        </ul>
+        <h3 id="hide-tabs-you-don-t-use">
+          <a class="anchor" href="#hide-tabs-you-don-t-use">Hide tabs you don't use</a>
+        </h3>
+        <p>
+          Choose <strong>Choose which sections show</strong> (the sliders at the right of the tabs) and untick the
+          sections you don't need. This only changes your own view; other people still see every tab.
+        </p>
+        <h2 id="the-overview"><a class="anchor" href="#the-overview">The overview</a></h2>
+        <p>The overview is the client at a glance. Scroll down for the detail.</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Part</th>
+                <th>What it shows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Facts</strong></td>
+                <td>Primary contact, phone, hours of operation and maintenance window.</td>
+              </tr>
+              <tr>
+                <td><strong>Assets</strong></td>
+                <td>How many assets the client has in each layout. Choose one to open the list.</td>
+              </tr>
+              <tr>
+                <td><strong>Contact and location</strong></td>
+                <td>The primary contact's details and the primary location's address.</td>
+              </tr>
+              <tr>
+                <td><strong>Asset warranty</strong></td>
+                <td>Hardware by when its warranty ends: expired, ending soon, active, unknown.</td>
+              </tr>
+              <tr>
+                <td><strong>RMM health</strong></td>
+                <td>From ConnectWise RMM: devices online, stale agents, and endpoint protection.</td>
+              </tr>
+              <tr>
+                <td><strong>Security and compliance</strong></td>
+                <td>
+                  From ConnectWise: patch compliance, backup and DR readiness, vulnerabilities and MDR incidents. A part
+                  the client doesn't use says <em>Not available</em>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Domain and SSL expiry</strong></td>
+                <td>What is expired or expiring among the client's domains and certificates.</td>
+              </tr>
+              <tr>
+                <td><strong>Asset statistics</strong></td>
+                <td>
+                  Servers, workstations, network devices, printers and phones, and a chart of operating systems that
+                  marks the ones out of support.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Tickets</strong> and <strong>Ticket details</strong></td>
+                <td>
+                  Tickets opened and closed per day, and the open tickets that have gone longest without an update.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Installed software</strong></td>
+                <td>Applications reported by ConnectWise RMM across the client's devices.</td>
+              </tr>
+              <tr>
+                <td><strong>Recently updated documents</strong> and <strong>Recent activity</strong></td>
+                <td>
+                  What changed lately, and who changed it. Several changes in a row by one person show as one line.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Cards that rely on ConnectWise only appear once the client is linked to a ConnectWise company. Chapter 6,
+          <a href="monitoring.html">Monitoring and alerts</a>, explains each card in detail.
+        </p>
+        <figure>
+          <a href="../images/manual/client-overview-full.png"
+            ><img src="../images/manual/client-overview-full.png" alt="The whole overview, scrolled" loading="lazy"
+          /></a>
+          <figcaption>The full overview of a client linked to ConnectWise RMM.</figcaption>
+        </figure>
+        <h2 id="quick-notes"><a class="anchor" href="#quick-notes">Quick notes</a></h2>
+        <p>
+          The quick note is for one or two lines everyone must see: &quot;Practice management runs on-prem, never reboot
+          the server before 6 PM&quot;, or &quot;New firewall going in next week.&quot;
+        </p>
+        <ul>
+          <li>Choose <strong>Edit</strong> on the note to change it.</li>
+          <li><strong>History</strong> shows every earlier version, lets you compare two, and restore one.</li>
+        </ul>
+        <h2 id="contacts-and-locations"><a class="anchor" href="#contacts-and-locations">Contacts and locations</a></h2>
+        <p>
+          The <strong>Contacts</strong> and <strong>Locations</strong> tabs list the people and sites for this client.
+        </p>
+        <ul>
+          <li>
+            <strong>Add contact</strong> or <strong>Add location</strong> opens a form. Tick
+            <strong>Primary contact</strong> or <strong>Primary location</strong> to show it on the overview.
+          </li>
+          <li>A contact's email and phone numbers are links, so you can call or write from the page.</li>
+          <li>
+            Link a contact or location to the assets and documents it relates to from the item's
+            <strong>Related</strong> section. See <a href="documentation.html#link-related-items">Documentation</a>.
+          </li>
+        </ul>
+        <h2 id="the-relationship-map"><a class="anchor" href="#the-relationship-map">The relationship map</a></h2>
+        <p>
+          The <strong>Map</strong> tab draws how the client's assets, passwords, documents, contacts and locations link
+          together, with the same links as a list below for keyboard and screen-reader use. It's built from the links
+          you make under <strong>Related</strong> on each item.
+        </p>
+        <h2 id="the-monthly-report"><a class="anchor" href="#the-monthly-report">The monthly report</a></h2>
+        <p>
+          <strong>Monthly report</strong> in the client header opens a printable page with the client's assets and
+          documents. Use your browser's <strong>Print</strong>, and choose <strong>Save as PDF</strong> to send it to
+          the client.
+        </p>
+        <h2 id="export-a-client"><a class="anchor" href="#export-a-client">Export a client</a></h2>
+        <p><strong>Export</strong> downloads a zip of everything you can see for the client:</p>
+        <ul>
+          <li>
+            <code>client.json</code>, with the client, contacts, locations, assets and their fields, documents and
+            links.
+          </li>
+          <li>The documents as plain text.</li>
+          <li>The attached files.</li>
+        </ul>
+        <p>
+          Administrators can tick <strong>Include decrypted passwords</strong>. Atlas asks for your password again
+          first, and every password exported is logged. Keep such an export encrypted, and delete it when you're done.
+        </p>
+        <h2 id="change-or-delete-a-client">
+          <a class="anchor" href="#change-or-delete-a-client">Change or delete a client</a>
+        </h2>
+        <ul>
+          <li>
+            <strong>Edit client</strong> changes the name, type, status, hours, maintenance window and the reason
+            requirement.
+          </li>
+          <li>
+            <strong>Delete</strong> (administrators only) removes the client and everything in it. You must type the
+            client's name exactly. The deletion is recorded in the security log. It can't be undone except by restoring
+            a backup.
+          </li>
+        </ul>
+        <aside class="callout callout-warning">
+          <p class="callout-title">Deleting is permanent</p>
+          <p>
+            A deleted client's assets, documents, passwords and history are gone. If you only stopped working with them,
+            set the status to <strong>Inactive</strong> instead.
+          </p>
+        </aside>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../manual/getting-started.html"><span>Previous</span>Getting started</a
+          ><a class="next" href="../manual/documentation.html"><span>Next</span>Documentation</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#the-client-list">The client list</a></li>
+          <li><a href="#a-client-s-workspace">A client's workspace</a></li>
+          <li><a href="#the-overview">The overview</a></li>
+          <li><a href="#quick-notes">Quick notes</a></li>
+          <li><a href="#contacts-and-locations">Contacts and locations</a></li>
+          <li><a href="#the-relationship-map">The relationship map</a></li>
+          <li><a href="#the-monthly-report">The monthly report</a></li>
+          <li><a href="#export-a-client">Export a client</a></li>
+          <li><a href="#change-or-delete-a-client">Change or delete a client</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

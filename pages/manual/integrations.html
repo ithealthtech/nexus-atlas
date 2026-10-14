@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Data and integrations · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="Importing from Hudu and spreadsheets, ConnectWise RMM and Microsoft 365 syncs, the BitLocker collector, and automatic password rotation."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html" aria-current="page"
+              ><span class="num">12</span>Data and integrations</a
+            >
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 12</p>
+        <h1>Data and integrations</h1>
+        <p>
+          Everything on this page is under <strong>Admin → Import &amp; export</strong>, except the BitLocker collector
+          and password rotation, which are in the Vault area.
+        </p>
+        <figure>
+          <a href="../images/manual/import-export.png"
+            ><img src="../images/manual/import-export.png" alt="Import &amp; export" loading="lazy"
+          /></a>
+          <figcaption>Admin → Import &amp; export.</figcaption>
+        </figure>
+        <h2 id="import-from-hudu"><a class="anchor" href="#import-from-hudu">Import from Hudu</a></h2>
+        <ol class="steps">
+          <li>
+            In Hudu, go to <strong>Admin → API Keys</strong> and create a key. A key without password access imports
+            everything except passwords.
+          </li>
+          <li>
+            In Atlas, open <strong>Import &amp; export → Hudu</strong>, enter the Hudu address (https only) and the key,
+            and choose <strong>Connect</strong>. The key is encrypted with the master key.
+          </li>
+          <li>
+            Choose what to bring in: kinds of data, companies, and asset layouts. The choices are saved for next time.
+          </li>
+          <li>
+            <strong>Preview</strong> counts what Hudu has. <strong>Start import</strong> runs it in the background, with
+            progress and a summary per type.
+          </li>
+        </ol>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Hudu</th>
+                <th>Atlas</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Companies</td>
+                <td>Clients. A company is matched to an existing client with the same name.</td>
+              </tr>
+              <tr>
+                <td>Asset layouts and assets</td>
+                <td>Layouts and assets under the matching client.</td>
+              </tr>
+              <tr>
+                <td>Knowledge base articles</td>
+                <td>Documents for the client, or the MSP knowledge base.</td>
+              </tr>
+              <tr>
+                <td>Passwords</td>
+                <td>The client's vault, including one-time code keys.</td>
+              </tr>
+              <tr>
+                <td>Processes</td>
+                <td>Checklists.</td>
+              </tr>
+              <tr>
+                <td>Networks</td>
+                <td>Networks assets.</td>
+              </tr>
+              <tr>
+                <td>Relations</td>
+                <td>Links between the imported items.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Running it again is safe.</strong> Atlas remembers which Hudu item became which record and updates it
+          rather than creating a duplicate. Archived Hudu items are skipped.
+        </p>
+        <h2 id="import-a-spreadsheet-csv">
+          <a class="anchor" href="#import-a-spreadsheet-csv">Import a spreadsheet (CSV)</a>
+        </h2>
+        <p>
+          <strong>Import &amp; export → CSV</strong> brings in clients, contacts, locations, assets (into a chosen
+          layout) or passwords.
+        </p>
+        <ol class="steps">
+          <li>
+            Choose the kind of data and the file (comma, semicolon or tab separated, up to 10 MB, with a header row).
+          </li>
+          <li>
+            Check the column matching. Atlas matches columns by name, including common alternatives such as
+            &quot;Company&quot;, and any column can be reassigned.
+          </li>
+          <li>
+            Choose <strong>Check the file first</strong>. It reports every problem with its row number and saves
+            nothing.
+          </li>
+          <li>Choose <strong>Import</strong>.</li>
+        </ol>
+        <p>
+          Importing passwords needs <strong>Edit + passwords</strong> on each client involved, and is recorded in the
+          security log.
+        </p>
+        <h2 id="connectwise-rmm"><a class="anchor" href="#connectwise-rmm">ConnectWise RMM</a></h2>
+        <p>Atlas reads devices, their health and tickets from the ConnectWise platform API.</p>
+        <ol class="steps">
+          <li>
+            In ConnectWise RMM, open <strong>Integrations → API Access</strong> and create a client ID and secret. Add
+            the tickets read permission for tickets, and <strong>Automation read</strong> and
+            <strong>Automation create</strong> if you'll use password rotation.
+          </li>
+          <li>In Atlas, enter them under <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
+          <li>Link each ConnectWise company to a client, or let Atlas create the client.</li>
+          <li>Choose what to sync: devices, tickets, and optionally BitLocker keys, by site or device.</li>
+        </ol>
+        <p>The sync runs every hour, and <strong>Sync now</strong> runs it straight away.</p>
+        <ul>
+          <li>
+            <strong>Devices</strong> become device assets with manufacturer, model, serial number, operating system,
+            last check-in, online status and endpoint protection. Fields you add yourself are kept on each sync. A
+            device the RMM no longer has is archived.
+          </li>
+          <li><strong>Tickets</strong> are read-only and feed the Tickets cards.</li>
+          <li><strong>Warranty dates</strong> for Dell, Lenovo and HP are looked up when ConnectWise has none.</li>
+          <li>
+            <strong>BitLocker keys</strong> in a device custom field are saved to the client's vault, linked to the
+            device.
+          </li>
+        </ul>
+        <h2 id="microsoft-365"><a class="anchor" href="#microsoft-365">Microsoft 365</a></h2>
+        <p>
+          <strong>Import &amp; export → Microsoft 365</strong> documents each client's tenant from one multi-tenant app
+          registration with <code>Directory.Read.All</code>, consented once per tenant. Users become contacts (with
+          their licences and admin roles), paid subscriptions become License assets with seats bought and assigned,
+          custom domains become Domain assets, and a Microsoft 365 asset lists the tenant's domains, subscriptions and
+          administrators.
+        </p>
+        <h2 id="export"><a class="anchor" href="#export">Export</a></h2>
+        <ul>
+          <li>
+            <strong>One client:</strong> <strong>Export</strong> on the client's page. See
+            <a href="clients.html#export-a-client">Clients</a>.
+          </li>
+          <li>
+            <strong>Everything:</strong> System status → <strong>Back up now</strong> makes a full encrypted backup. See
+            <a href="looking-after-atlas.html#backups">Keeping Atlas healthy</a>.
+          </li>
+          <li><strong>The API:</strong> with an API key, <code>/api/openapi.json</code> describes every endpoint.</li>
+        </ul>
+        <h2 id="bitlocker-collector"><a class="anchor" href="#bitlocker-collector">BitLocker collector</a></h2>
+        <p>
+          <strong>Vault → BitLocker collector</strong> gives you a script for your RMM that reads each Windows machine's
+          BitLocker status and recovery keys and sends them to Atlas.
+        </p>
+        <ol class="steps">
+          <li>
+            <strong>Make an enrollment.</strong> Choose the client, a name, and whether it covers all of the client's
+            devices or one. The script downloads at once. Keep the file as you would a password: it holds an upload
+            token, and Atlas can't show it again.
+          </li>
+          <li>
+            <strong>Add it to your RMM</strong> as a PowerShell script for that client, run as <strong>SYSTEM</strong>.
+            It needs no parameters.
+          </li>
+          <li>
+            <strong>Try it on one machine.</strong> It prints one line of counts (never keys) and exits 0 when the
+            report was uploaded.
+          </li>
+          <li><strong>Schedule it</strong> every 6 hours, and after a recovery key is rotated.</li>
+        </ol>
+        <p>
+          Machines are matched to assets by serial number, then by name. <strong>Revoke</strong> an enrollment, or
+          <strong>Block</strong> one machine, to stop uploads; keys already saved stay in the vault. The script only
+          reads: it can't turn BitLocker on or off or change a key.
+        </p>
+        <h2 id="automatic-password-rotation">
+          <a class="anchor" href="#automatic-password-rotation">Automatic password rotation</a>
+        </h2>
+        <figure>
+          <a href="../images/manual/rotation.png"
+            ><img src="../images/manual/rotation.png" alt="Password rotation" loading="lazy"
+          /></a>
+          <figcaption>Vault → Password rotation.</figcaption>
+        </figure>
+        <p>
+          <strong>Vault → Password rotation</strong> changes local administrator and Active Directory service account
+          passwords on a schedule, through ConnectWise RMM.
+        </p>
+        <ol class="steps">
+          <li>
+            Connect ConnectWise RMM, with <strong>Automation read</strong> and <strong>Automation create</strong> on its
+            API key.
+          </li>
+          <li>
+            Import <code>deploy/rmm/Invoke-AtlasPasswordRotation.ps1</code> into ConnectWise RMM as a PowerShell script,
+            enter its ID on the page, and tick <strong>Rotate passwords automatically</strong>.
+          </li>
+          <li>
+            Add a policy for each account type: how often, and the password rules. A policy for
+            <strong>All clients</strong> is the default; a client's own policy replaces it.
+          </li>
+          <li>
+            Choose the passwords: the client, the vault entry, and the device the script runs on. For an AD service
+            account, choose a domain controller.
+          </li>
+        </ol>
+        <p>
+          <strong>How it stays safe.</strong> The script sends the new password to Atlas before changing anything, using
+          a token good for that one rotation for two hours. Only a confirmed change replaces the password in the vault;
+          the old one moves to its history. A failure keeps the old password, is recorded in the access history and
+          security log, emails administrators, and is tried again after a day.
+        </p>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../manual/settings.html"><span>Previous</span>Settings</a
+          ><a class="next" href="../manual/looking-after-atlas.html"><span>Next</span>Keeping Atlas healthy</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#import-from-hudu">Import from Hudu</a></li>
+          <li><a href="#import-a-spreadsheet-csv">Import a spreadsheet (CSV)</a></li>
+          <li><a href="#connectwise-rmm">ConnectWise RMM</a></li>
+          <li><a href="#microsoft-365">Microsoft 365</a></li>
+          <li><a href="#export">Export</a></li>
+          <li><a href="#bitlocker-collector">BitLocker collector</a></li>
+          <li><a href="#automatic-password-rotation">Automatic password rotation</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

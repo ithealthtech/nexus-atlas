@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Documentation · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="Assets and layouts, documents and the knowledge base, checklists, links, files, version history, sharing and QR labels."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html" aria-current="page"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 4</p>
+        <h1>Documentation</h1>
+        <p>
+          Documentation is what Atlas is for: every device, procedure and fact a technician needs, kept where the next
+          person will find it. This chapter covers assets, documents, the knowledge base and checklists, and the
+          features they share.
+        </p>
+        <h2 id="assets"><a class="anchor" href="#assets">Assets</a></h2>
+        <p>
+          An asset is anything you look after: a server, a workstation, a firewall, a switch, a domain name, an SSL
+          certificate, a software licence. Each asset uses a <strong>layout</strong> that decides its fields. Atlas
+          comes with layouts such as Configurations, Endpoints, Networks, Domains, SSL certificates and Licenses, and
+          administrators can add their own.
+        </p>
+        <figure>
+          <a href="../images/manual/assets.png"
+            ><img src="../images/manual/assets.png" alt="The assets list" loading="lazy"
+          /></a>
+          <figcaption>Docs → Assets lists every asset you can see, across all your clients.</figcaption>
+        </figure>
+        <p>
+          <strong>Docs → Assets</strong> lists assets across every client you can see. A client's
+          <strong>Assets</strong> tab lists just theirs, grouped by layout.
+        </p>
+        <h3 id="add-an-asset"><a class="anchor" href="#add-an-asset">Add an asset</a></h3>
+        <ol class="steps">
+          <li>Open the client and go to its <strong>Assets</strong> tab, then choose <strong>Add asset</strong>.</li>
+          <li>Pick the layout.</li>
+          <li>
+            Fill in the fields. Atlas checks them as you save: an IP address, date, email address or web address in the
+            wrong format is pointed out before anything is saved.
+          </li>
+          <li>Choose <strong>Save</strong>.</li>
+        </ol>
+        <p>
+          Devices from ConnectWise RMM and tenants from Microsoft 365 arrive as assets on their own; you don't need to
+          add them by hand. Fields filled by a sync are kept up to date by the sync, and fields you add yourself are
+          left alone.
+        </p>
+        <h3 id="an-asset-s-page"><a class="anchor" href="#an-asset-s-page">An asset's page</a></h3>
+        <figure>
+          <a href="../images/manual/asset.png"
+            ><img src="../images/manual/asset.png" alt="An asset's page" loading="lazy"
+          /></a>
+          <figcaption>
+            An asset: its details on the left; BitLocker, related items, files and version history on the right.
+          </figcaption>
+        </figure>
+        <p>
+          An asset's page shows its <strong>Details</strong> (every field in its layout), <strong>Notes</strong> and
+          <strong>Activity</strong>. Down the right are:
+        </p>
+        <ul>
+          <li>
+            <strong>BitLocker</strong>, for Windows machines that report through the BitLocker collector or ConnectWise
+            RMM. See <a href="passwords.html#bitlocker-recovery-keys">Passwords</a>.
+          </li>
+          <li><strong>Related</strong>, the passwords, documents, contacts and locations linked to it.</li>
+          <li><strong>Files</strong>, anything attached.</li>
+          <li><strong>Version history</strong>, every saved version.</li>
+        </ul>
+        <p>
+          The buttons at the top are <strong>QR label</strong>, <strong>Check warranty</strong> (for hardware with a
+          serial number), <strong>Archive</strong> and <strong>Edit</strong>.
+        </p>
+        <h3 id="archive-instead-of-deleting">
+          <a class="anchor" href="#archive-instead-of-deleting">Archive instead of deleting</a>
+        </h3>
+        <p>
+          <strong>Archive</strong> takes an asset out of lists and counts without losing it.
+          <strong>Show archived</strong> on the assets list shows them, and <strong>Restore</strong> on an archived
+          asset brings it back. Assets that a ConnectWise RMM sync no longer finds are archived for you.
+        </p>
+        <h3 id="warranty-dates"><a class="anchor" href="#warranty-dates">Warranty dates</a></h3>
+        <p>
+          For Dell, Lenovo and HP hardware with a serial number, Atlas looks up the warranty end date from the vendor's
+          public warranty check when the asset is saved, and during each ConnectWise RMM sync.
+          <strong>Check warranty</strong> looks it up again now. A date someone typed in is never replaced.
+        </p>
+        <h3 id="qr-labels"><a class="anchor" href="#qr-labels">QR labels</a></h3>
+        <p>
+          Choose <strong>QR label</strong> on an asset, or <strong>QR labels</strong> on a client's Assets tab for
+          everything shown. Pick a label size and print. Scanning a label with a phone opens that asset in Atlas after
+          signing in. The label itself shows only the name, the client and the serial number, so nothing sensitive is
+          printed.
+        </p>
+        <h2 id="documents"><a class="anchor" href="#documents">Documents</a></h2>
+        <p>
+          Documents are runbooks, procedures, how-tos and notes. They live in a client's <strong>Documents</strong> tab,
+          or in the MSP <strong>Knowledge base</strong> for procedures that apply to every client.
+        </p>
+        <figure>
+          <a href="../images/manual/document.png"
+            ><img src="../images/manual/document.png" alt="A document" loading="lazy"
+          /></a>
+          <figcaption>
+            A document from the knowledge base, with Related, Files and Version history beside it.
+          </figcaption>
+        </figure>
+        <h3 id="write-a-document"><a class="anchor" href="#write-a-document">Write a document</a></h3>
+        <ol class="steps">
+          <li>
+            Choose <strong>New document</strong>, on a client's Documents tab or in
+            <strong>Docs → Knowledge base</strong>.
+          </li>
+          <li>Give it a <strong>Title</strong>, and choose a <strong>Folder</strong> if you use them.</li>
+          <li>
+            Write it. The editor has headings, bulleted and numbered lists, checklists, tables, code blocks and links.
+          </li>
+          <li>
+            Set its <strong>Status</strong>: <strong>Current</strong>, <strong>Needs review</strong> or
+            <strong>Draft</strong>.
+          </li>
+          <li>
+            Optionally set <strong>Review by</strong>. Atlas reminds you on the Expirations page when the date comes, so
+            procedures don't quietly go out of date.
+          </li>
+          <li>Choose <strong>Save</strong>.</li>
+        </ol>
+        <h3 id="the-knowledge-base"><a class="anchor" href="#the-knowledge-base">The knowledge base</a></h3>
+        <p>
+          <strong>Docs → Knowledge base</strong> is your team's own library: procedures, standards and how-tos that
+          aren't about one client. Client accounts never see it. <strong>New folder</strong> keeps it organized.
+        </p>
+        <p>
+          <strong>Template library</strong> offers ready-made runbooks to start from. They go into a Runbooks folder,
+          and you edit them like any other document.
+        </p>
+        <h3 id="share-a-document-with-a-link">
+          <a class="anchor" href="#share-a-document-with-a-link">Share a document with a link</a>
+        </h3>
+        <p>
+          <strong>Share</strong> on a document makes a link anyone can open without signing in, for a how-to you want to
+          send to a client's staff.
+        </p>
+        <ul>
+          <li>They see that one document, always as it is now, and nothing else in Atlas.</li>
+          <li>Choose how long the link works. Atlas shows how often it has been opened.</li>
+          <li><strong>Revoke</strong> stops the link working at once.</li>
+        </ul>
+        <aside class="callout callout-warning">
+          <p class="callout-title">Check before you share</p>
+          <p>
+            Anyone with the link can read the document. Don't share one that contains passwords or anything about
+            another client.
+          </p>
+        </aside>
+        <h2 id="checklists"><a class="anchor" href="#checklists">Checklists</a></h2>
+        <p>
+          Checklists are procedures you work through step by step: onboarding a new user, decommissioning a laptop,
+          patching a server. A checklist is the reusable template; a <strong>run</strong> is one time you work through
+          it for a client.
+        </p>
+        <figure>
+          <a href="../images/manual/checklist-run.png"
+            ><img src="../images/manual/checklist-run.png" alt="A checklist run" loading="lazy"
+          /></a>
+          <figcaption>A run: tick steps as you go, add notes, and assign it to someone with a due date.</figcaption>
+        </figure>
+        <h3 id="make-a-checklist"><a class="anchor" href="#make-a-checklist">Make a checklist</a></h3>
+        <ol class="steps">
+          <li>
+            Go to <strong>Docs → Checklists</strong> and choose <strong>New checklist</strong>, or
+            <strong>Template library</strong> to start from one of 13 ready-made checklists (client and user onboarding
+            and offboarding, endpoint setup and decommission, server patching, backup verification, Microsoft 365 setup,
+            firewall change, password rotation, incident response, SSL and domain renewal).
+          </li>
+          <li>Give it a <strong>Title</strong> and choose <strong>Add a step</strong> for each step.</li>
+          <li>Make it available to every client, or to one.</li>
+        </ol>
+        <p>
+          Steps are copied into each run when it starts, so changing a checklist later doesn't change work already under
+          way.
+        </p>
+        <h3 id="run-a-checklist-for-a-client">
+          <a class="anchor" href="#run-a-checklist-for-a-client">Run a checklist for a client</a>
+        </h3>
+        <ol class="steps">
+          <li>On the client's <strong>Checklists</strong> tab, choose <strong>Start a checklist</strong>.</li>
+          <li>
+            Pick the <strong>Checklist</strong> (or write a one-off list of <strong>Steps</strong>), and choose who to
+            <strong>Assign to</strong>.
+          </li>
+          <li>
+            Tick each step as you do it. Atlas records who ticked it and when. <strong>Add a note</strong> records what
+            you found.
+          </li>
+          <li>Set a <strong>Due</strong> date if it has one. An overdue run is marked.</li>
+        </ol>
+        <p>
+          <strong>Markdown</strong> downloads the run as a text file, and <strong>Print or PDF</strong> gives you a
+          printed record for the client.
+        </p>
+        <h2 id="link-related-items"><a class="anchor" href="#link-related-items">Link related items</a></h2>
+        <p>
+          Every asset, document, password, contact and location has a <strong>Related</strong> section. Choose
+          <strong>Link</strong> to connect it to others: the firewall to its runbook, its admin password and the site
+          it's in. Links work both ways, so the runbook shows the firewall too, and the client's
+          <strong>Map</strong> tab draws them all.
+        </p>
+        <h2 id="files"><a class="anchor" href="#files">Files</a></h2>
+        <p>
+          Drag files onto the <strong>Files</strong> section of any asset or document to attach them, or choose
+          <strong>Upload</strong>. Images that pass a content check show inline; other files download. Files are stored
+          outside the web server's reach under random names.
+        </p>
+        <h2 id="version-history"><a class="anchor" href="#version-history">Version history</a></h2>
+        <p>Every save keeps the previous version.</p>
+        <ul>
+          <li><strong>Version history</strong> lists every version with who saved it and when.</li>
+          <li>
+            <strong>Compare</strong> shows what changed between two versions, line by line, and
+            <strong>Restore version</strong> puts an old one back as a new version.
+          </li>
+          <li>
+            If someone else saved while you were editing, Atlas tells you instead of overwriting their work. Copy your
+            changes, reload, and apply them again.
+          </li>
+        </ul>
+        <h2 id="asset-layouts"><a class="anchor" href="#asset-layouts">Asset layouts</a></h2>
+        <p>
+          Administrators manage layouts under <strong>Admin → Asset layouts</strong>. A layout has a name, an icon and
+          fields. Each field has a type: <strong>Text</strong>, <strong>Long text</strong>, <strong>Number</strong>,
+          <strong>Date</strong>, <strong>Choice</strong>, <strong>Multiple choice</strong>, <strong>Yes / no</strong>,
+          <strong>Web address</strong>, <strong>Email</strong>, <strong>Phone</strong>, or
+          <strong>IP address or subnet</strong>. A date field can be ticked as an <strong>Expiry date</strong>, which
+          puts it on the Expirations page and in expiry alerts.
+        </p>
+        <h2 id="duplicates"><a class="anchor" href="#duplicates">Duplicates</a></h2>
+        <p>
+          Imports and syncs sometimes create the same thing twice. <strong>Admin → Duplicates</strong> lists assets,
+          contacts and locations with the same name in the same client, and clients with the same name. Choose the
+          record to keep and merge the rest into it: blank fields are filled in, links and files move over, and merged
+          assets are archived so they can be restored.
+        </p>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../manual/clients.html"><span>Previous</span>Clients</a
+          ><a class="next" href="../manual/passwords.html"><span>Next</span>Passwords</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#assets">Assets</a></li>
+          <li><a href="#documents">Documents</a></li>
+          <li><a href="#checklists">Checklists</a></li>
+          <li><a href="#link-related-items">Link related items</a></li>
+          <li><a href="#files">Files</a></li>
+          <li><a href="#version-history">Version history</a></li>
+          <li><a href="#asset-layouts">Asset layouts</a></li>
+          <li><a href="#duplicates">Duplicates</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

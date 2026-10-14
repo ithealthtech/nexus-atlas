@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Settings · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="Email and alerts, monitoring rules, sign-in, API keys, webhooks, and your logo and colours."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html" aria-current="page"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 11</p>
+        <h1>Settings</h1>
+        <p>Settings has its own group in the Admin menu, one page per job. This chapter goes through each one.</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Page</th>
+                <th>What you set there</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Email &amp; alerts</strong></td>
+                <td>How Atlas sends email, when expiry alerts go out, and how long logs are kept.</td>
+              </tr>
+              <tr>
+                <td><strong>Monitoring</strong></td>
+                <td>What counts as healthy: RMM health, warranties, asset statistics, domain and SSL trackers.</td>
+              </tr>
+              <tr>
+                <td><strong>Sign-in</strong></td>
+                <td>Microsoft Entra ID and SAML single sign-on for staff.</td>
+              </tr>
+              <tr>
+                <td><strong>API keys</strong></td>
+                <td>Keys for your RMM and scripts.</td>
+              </tr>
+              <tr>
+                <td><strong>Theme</strong></td>
+                <td>Your logo, colours and the welcome message for client accounts.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>Webhooks</strong> is in the System group, and is covered at the end of this chapter.</p>
+        <h2 id="email-alerts"><a class="anchor" href="#email-alerts">Email &amp; alerts</a></h2>
+        <figure>
+          <a href="../images/manual/email.png"
+            ><img src="../images/manual/email.png" alt="The Email &amp; alerts page" loading="lazy"
+          /></a>
+          <figcaption>Admin → Email &amp; alerts.</figcaption>
+        </figure>
+        <p>
+          Atlas sends password reset links, expiry alerts and a Monday digest. Tick
+          <strong>Send email from Atlas</strong>, then choose a mail service.
+        </p>
+        <h3 id="microsoft-365-app-registration-recommended">
+          <a class="anchor" href="#microsoft-365-app-registration-recommended"
+            >Microsoft 365 (app registration), recommended</a
+          >
+        </h3>
+        <p>
+          Atlas signs in as an app registration and sends through Microsoft Graph. No mailbox password or SMTP sign-in
+          is involved.
+        </p>
+        <ol class="steps">
+          <li>
+            In the Microsoft Entra admin center, open <strong>App registrations → New registration</strong> (single
+            tenant, no redirect address).
+          </li>
+          <li>
+            Under <strong>API permissions</strong>, add
+            <strong>Microsoft Graph → Application permissions → Mail.Send</strong>, then
+            <strong>Grant admin consent</strong>.
+          </li>
+          <li>
+            Under <strong>Certificates &amp; secrets</strong>, create a client secret and copy its value. Note when it
+            expires.
+          </li>
+          <li>
+            In Atlas, enter the <strong>Directory (tenant) ID</strong>, <strong>Application (client) ID</strong> and
+            <strong>Client secret</strong>, then the <strong>From address</strong> and <strong>From name</strong>.
+          </li>
+          <li>Choose <strong>Save</strong>, then <strong>Send test</strong>.</li>
+        </ol>
+        <aside class="callout callout-tip">
+          <p class="callout-title">Limit what the app can send as</p>
+          <p>
+            An Exchange Online application access policy, or RBAC for Applications, can limit the app to the From
+            mailbox so it can't send as anyone else.
+          </p>
+        </aside>
+        <h3 id="other-mail-services"><a class="anchor" href="#other-mail-services">Other mail services</a></h3>
+        <ul>
+          <li>
+            <strong>Microsoft 365 SMTP (legacy)</strong> fills in Office 365's server and port. Microsoft is retiring
+            basic authentication for SMTP, so prefer the app registration.
+          </li>
+          <li>
+            <strong>Other SMTP server</strong> takes an <strong>SMTP server</strong>, <strong>Port</strong>,
+            <strong>Encryption</strong>, <strong>Username</strong> and <strong>Password</strong>.
+          </li>
+        </ul>
+        <p><strong>Send test</strong> shows the mail server's own error if something is wrong.</p>
+        <h3 id="alerts-and-logs"><a class="anchor" href="#alerts-and-logs">Alerts and logs</a></h3>
+        <ul>
+          <li>
+            <strong>Email an alert this many days before something is due.</strong> For example, 30, 14 and 7 days.
+          </li>
+          <li>
+            <strong>Send a weekly digest on Monday mornings,</strong> listing everything overdue or due in the coming
+            weeks.
+          </li>
+          <li><strong>Keep security and password logs for</strong> a number of years, or forever (the default).</li>
+        </ul>
+        <p>
+          People choose whether they receive alerts with <strong>Email me about expirations</strong> on their own
+          account page.
+        </p>
+        <h2 id="monitoring"><a class="anchor" href="#monitoring">Monitoring</a></h2>
+        <figure>
+          <a href="../images/manual/monitoring.png"
+            ><img src="../images/manual/monitoring.png" alt="The Monitoring settings page" loading="lazy"
+          /></a>
+          <figcaption>Admin → Monitoring.</figcaption>
+        </figure>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Section</th>
+                <th>Settings</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>RMM health</strong></td>
+                <td>
+                  <strong>Stale after (days)</strong> and <strong>Very stale after (days)</strong>: when an agent that
+                  hasn't checked in counts as stale.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Asset warranty</strong></td>
+                <td>
+                  <strong>Expiring soon within (days)</strong>, and
+                  <strong>Look up warranties automatically</strong> for Dell, Lenovo and HP.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Asset statistics</strong></td>
+                <td>Which asset layouts count as servers, workstations and other devices.</td>
+              </tr>
+              <tr>
+                <td><strong>Domain and SSL trackers</strong></td>
+                <td>
+                  <strong>Check on a schedule</strong> (domains weekly, daily within 60 days of expiry; certificates
+                  daily), and <strong>Add SSL certificates for domains</strong>.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h2 id="sign-in"><a class="anchor" href="#sign-in">Sign-in</a></h2>
+        <p>
+          Single sign-on with Microsoft Entra ID and SAML is described in
+          <a href="people-and-access.html#single-sign-on">People and access</a>.
+        </p>
+        <h2 id="api-keys"><a class="anchor" href="#api-keys">API keys</a></h2>
+        <figure>
+          <a href="../images/manual/api-keys.png"
+            ><img src="../images/manual/api-keys.png" alt="The API keys page" loading="lazy"
+          /></a>
+          <figcaption>Admin → API keys.</figcaption>
+        </figure>
+        <p>API keys let your RMM, PSA or scripts read and update Atlas through its REST API.</p>
+        <ol class="steps">
+          <li>Choose <strong>New key</strong>. Atlas asks for your password again.</li>
+          <li>
+            Give it a <strong>Name</strong>, choose its scopes (<code>read</code>, <code>write</code>, and optionally
+            <code>passwords</code>), and when it <strong>Expires</strong> (a year unless you choose otherwise).
+          </li>
+          <li>Copy the key. It's shown once; Atlas keeps only a hash of it.</li>
+        </ol>
+        <ul>
+          <li><strong>The key acts as you,</strong> with your access, limited to its scopes.</li>
+          <li>
+            Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs.
+          </li>
+          <li>Every use is in the security log. <strong>Revoke</strong> keys you no longer use.</li>
+          <li>The API is described at <code>/api/openapi.json</code> on your Atlas.</li>
+        </ul>
+        <h2 id="theme"><a class="anchor" href="#theme">Theme</a></h2>
+        <figure>
+          <a href="../images/manual/theme.png"
+            ><img src="../images/manual/theme.png" alt="The Theme page" loading="lazy"
+          /></a>
+          <figcaption>Admin → Theme. Changes preview as you make them, and apply for everyone once saved.</figcaption>
+        </figure>
+        <p>
+          <strong>Admin → Theme</strong> sets the <strong>Brand name</strong>, <strong>Tagline</strong>,
+          <strong>Browser tab title</strong>, <strong>Favicon</strong>, a <strong>Logo</strong> (and one for dark mode),
+          the <strong>Accent</strong> colour (and one for dark mode), and the <strong>Welcome message</strong> client
+          accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes
+          preview as you make them, and apply for everyone once you save.
+        </p>
+        <h2 id="webhooks"><a class="anchor" href="#webhooks">Webhooks</a></h2>
+        <figure>
+          <a href="../images/manual/webhooks.png"
+            ><img src="../images/manual/webhooks.png" alt="The Webhooks page" loading="lazy"
+          /></a>
+          <figcaption>Admin → Webhooks.</figcaption>
+        </figure>
+        <p>
+          <strong>Admin → Webhooks</strong> makes Atlas post a short message to an address of yours whenever something
+          changes, so a chat channel, an automation or another tool can react.
+        </p>
+        <ol class="steps">
+          <li>
+            Choose <strong>New webhook</strong>, give it a name and an <code>https://</code> address, and tick the kinds
+            of item it should hear about: clients, assets, documents, passwords, contacts, locations, checklists.
+          </li>
+          <li>
+            Copy the <strong>signing secret</strong>, shown once. The receiver uses it to check a message came from
+            Atlas.
+          </li>
+          <li>Choose <strong>Send test</strong> to post a <code>ping</code>.</li>
+        </ol>
+        <p>
+          A message names the event (such as <code>asset.updated</code> or <code>password.rotated</code>), who did it,
+          the client, and the item's name and address. It never carries the item's contents, and a password message
+          gives only the entry's name.
+        </p>
+        <p>
+          <strong>Delivery.</strong> Anything other than a 2xx answer within 10 seconds is a failure, tried again after
+          1 minute, 5 minutes, 30 minutes, 2 hours and 6 hours. After ten messages in a row have been given up on, the
+          webhook is paused; fix the receiver and choose <strong>Resume</strong>. <strong>Deliveries</strong> shows the
+          latest 50 and why any failed.
+        </p>
+        <aside class="callout callout-tip">
+          <p class="callout-title">Keep chat channels quiet</p>
+          <p>
+            An RMM sync changes many assets at once, and each change is a message. Leave
+            <strong>Assets</strong> unticked on a webhook that posts to a chat channel.
+          </p>
+        </aside>
+        <p>
+          The signature format and headers are in the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md#webhooks" rel="noopener"
+            >administrator guide</a
+          >.
+        </p>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../manual/people-and-access.html"><span>Previous</span>People and access</a
+          ><a class="next" href="../manual/integrations.html"><span>Next</span>Data and integrations</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#email-alerts">Email &amp; alerts</a></li>
+          <li><a href="#monitoring">Monitoring</a></li>
+          <li><a href="#sign-in">Sign-in</a></li>
+          <li><a href="#api-keys">API keys</a></li>
+          <li><a href="#theme">Theme</a></li>
+          <li><a href="#webhooks">Webhooks</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

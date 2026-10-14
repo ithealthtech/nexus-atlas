@@ -4,512 +4,169 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
-      name="description"
-      content="MSP Atlas: self-hosted IT documentation and an encrypted password vault for managed service providers, with per-client access and a read-only client portal."
-    />
-    <meta name="theme-color" content="#0b1714" />
-    <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
     />
-    <title>MSP Atlas</title>
+    <title>MSP Atlas · documentation and passwords for MSPs</title>
+    <meta
+      name="description"
+      content="MSP Atlas is client documentation, a password vault and device monitoring for managed service providers, on a server you own."
+    />
     <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="assets/site.css" />
+    <script src="assets/theme.js"></script>
     <script src="assets/site.js" defer></script>
   </head>
-  <body>
-    <a class="skip-link" href="#main">Skip to content</a>
-    <header class="site-header">
-      <div class="nav-shell">
-        <a class="brand" href="index.html" aria-label="MSP Atlas home">
-          <span class="brand-mark" aria-hidden="true">A</span>
-          <span>MSP Atlas</span>
-        </a>
-        <nav class="site-nav" data-site-nav aria-label="Primary navigation">
-          <a href="index.html" aria-current="page">Overview</a>
+  <body class="landing">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="manual/index.html">Manual</a>
           <a href="install.html">Install</a>
           <a href="security.html">Security</a>
           <a href="support.html">Support</a>
-          <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
         </nav>
-        <div class="nav-actions">
-          <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">
-            &#9728;
+        <div class="topbar-tools">
+          <div class="search" data-root="">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
           </button>
-          <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">
-            &#9776;
-          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
         </div>
       </div>
     </header>
-
-    <main id="main">
+    <main id="content" class="landing">
       <section class="hero">
-        <div class="container hero-grid">
+        <p class="eyebrow">MSP Atlas 1.7.27</p>
+        <h1>Your clients' documentation and passwords, on a server you own.</h1>
+        <p class="lead">
+          Atlas keeps every device, procedure, contact and password your team needs in one place, watches the dates and
+          device health that are easy to miss, and records every time a password is seen.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="install.html">Install Atlas</a
+          ><a class="button" href="manual/index.html">Read the manual</a
+          ><span class="version"
+            >Version 1.7.27 ·
+            <a href="https://github.com/ithealthtech/nexus-atlas/releases/tag/v1.7.27">Release notes</a></span
+          >
+        </div>
+        <figure class="shot">
+          <img
+            src="images/manual/dashboard.png"
+            alt="The Atlas dashboard: totals across clients and RMM health charts"
+          />
+        </figure>
+      </section>
+      <section class="band split">
+        <div>
+          <h2>Everything about a client, in one workspace</h2>
+          <p>
+            Assets, documents, passwords, contacts, locations and checklists, with a quick note at the top and an
+            overview of warranty, device health, security and tickets.
+          </p>
+          <p><a href="manual/clients.html">Clients in the manual</a></p>
+        </div>
+        <figure class="shot">
+          <img src="images/manual/client-overview.png" alt="A client workspace overview" loading="lazy" />
+        </figure>
+      </section>
+      <section class="band split">
+        <div>
+          <h2>A vault that records every reveal</h2>
+          <ul class="list">
+            <li><strong>Per-client access</strong>, restricted entries and required reasons.</li>
+            <li><strong>One-time links and Send</strong>, encrypted in the browser.</li>
+            <li>
+              <strong>A browser extension and a Windows app</strong> that fill and copy without storing passwords.
+            </li>
+            <li><strong>Automatic rotation</strong> of local admin and AD passwords through ConnectWise RMM.</li>
+          </ul>
+          <p><a href="manual/passwords.html">Passwords in the manual</a></p>
+        </div>
+        <figure class="shot">
+          <img
+            src="images/manual/password.png"
+            alt="A password entry with its health and access history"
+            loading="lazy"
+          />
+        </figure>
+      </section>
+      <section class="band">
+        <h2>Runs on your server, and stays there</h2>
+        <div class="grid3">
           <div>
-            <p class="eyebrow">MSP Atlas 1.7.27</p>
-            <h1>Your documentation and your passwords, on a server you own.</h1>
-            <p class="hero-copy">
-              Client workspaces, flexible assets, runbooks, and an encrypted credential vault in one self-hosted
-              application &mdash; with per-client access for technicians and read-only access for the clients you
-              support.
-            </p>
-            <div class="button-row">
-              <a class="button button-primary" href="install.html">Install it</a>
-              <a class="button" href="security.html">Read the security model</a>
-              <a class="button" href="https://github.com/ithealthtech/nexus-atlas">View on GitHub</a>
-            </div>
+            <h3>One command to install</h3>
+            <p>Ubuntu, Debian, Docker or Windows Server. Updates install from inside Atlas.</p>
+            <a href="install.html">Installing Atlas</a>
           </div>
-          <aside class="hero-panel" aria-label="At a glance">
-            <div class="release-line">
-              <div>
-                <span class="status-dot" aria-hidden="true"></span>
-                <span class="badge badge-success">Current release</span>
-              </div>
-              <strong>v1.7.27</strong>
-            </div>
-            <dl class="meta-list">
-              <div class="meta-row">
-                <dt>Runs on</dt>
-                <dd>Docker (Linux) or Windows Server</dd>
-              </div>
-              <div class="meta-row">
-                <dt>Runtime</dt>
-                <dd>Node.js 22+</dd>
-              </div>
-              <div class="meta-row">
-                <dt>Database</dt>
-                <dd>PostgreSQL 16</dd>
-              </div>
-              <div class="meta-row">
-                <dt>Vault</dt>
-                <dd>AES-256-GCM envelope encryption</dd>
-              </div>
-              <div class="meta-row">
-                <dt>Accessibility</dt>
-                <dd>WCAG 2.2 AA, tested</dd>
-              </div>
-            </dl>
-            <div class="notice notice-warning">
-              <span aria-hidden="true">!</span>
-              <p>
-                <strong>The master key is the vault.</strong> Lose it and passwords and backups can't be decrypted. Keep
-                it somewhere other than your database backups.
-              </p>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <section class="section-compact">
-        <div class="container grid-4" aria-label="Highlights">
-          <article class="card">
-            <div class="card-icon" aria-hidden="true">01</div>
-            <h3>Documentation that stays current</h3>
-            <p>
-              Assets built from layouts, runbooks with checklists and review dates, and version history with
-              line-by-line comparison and restore.
-            </p>
-          </article>
-          <article class="card">
-            <div class="card-icon" aria-hidden="true">02</div>
-            <h3>A vault with a record</h3>
-            <p>
-              Every reveal, copy, change, and share is recorded. Restrict entries to named people, and require a reason
-              for each reveal.
-            </p>
-          </article>
-          <article class="card">
-            <div class="card-icon" aria-hidden="true">03</div>
-            <h3>Clients kept apart</h3>
-            <p>
-              Per-client access levels and groups. A client you can't access looks exactly like one that doesn't exist.
-            </p>
-          </article>
-          <article class="card">
-            <div class="card-icon" aria-hidden="true">04</div>
-            <h3>Bring your data</h3>
-            <p>
-              Import from Hudu or CSV, sync devices and tickets from the ConnectWise platform, export any client as a
-              zip, and automate with a REST API and scoped API keys.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-heading">
-            <p class="section-kicker">New in 1.7</p>
-            <h2>A dashboard that runs your day, and a vault that goes where you work</h2>
-            <p>
-              The 1.7 releases add ConnectWise platform sync with security and compliance, ticket and expiry dashboards,
-              automated password rotation, and apps for the browser and Windows.
-            </p>
+          <div>
+            <h3>Encrypted, backed up, verified</h3>
+            <p>Secrets under a master key you keep, nightly encrypted backups, and a tamper-evident security log.</p>
+            <a href="security.html">Security model</a>
           </div>
-          <div class="grid-3">
-            <article class="card">
-              <h3>Customizable dashboard</h3>
-              <p>
-                Show, hide, and reorder cards, and star clients, documents, and assets as Favorites. Client pages open
-                with quick notes, primary contact, hours, and maintenance window.
-              </p>
-            </article>
-            <article class="card">
-              <h3>ConnectWise platform sync</h3>
-              <p>
-                Devices sync from ConnectWise RMM as device assets with manufacturer, last check-in, online status from
-                the heartbeat, and endpoint protection, feeding the RMM health charts.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Ticket dashboard</h3>
-              <p>
-                Tickets from the ConnectWise platform with opened and closed per day, a tile per status, and a ticket
-                table on each client. In North America, tickets link to their page in ConnectWise.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Asset statistics</h3>
-              <p>
-                Servers, workstations, switches, network devices, printers, and phones at a glance, with an operating
-                system chart that marks the ones out of support.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Domain and SSL tracking</h3>
-              <p>
-                Domains are re-checked with their registry and certificates read from each site on a schedule, so
-                expirations and alerts stay accurate. Each client has its own trackers.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Warranty lookup</h3>
-              <p>
-                Dell, Lenovo, and HP warranty end dates are filled in from the serial number, with no vendor API keys to
-                set up. Dates you typed in are never replaced.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Automated password rotation</h3>
-              <p>
-                Local administrator and service account passwords change on a schedule through ConnectWise RMM. The
-                vault updates only after the device confirms.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Browser extension and Windows app</h3>
-              <p>
-                Fill saved logins in Edge and Chrome, or press Ctrl+Shift+Space in the Atlas for Windows tray app
-                (preview). Neither stores passwords, and every fill or copy is recorded.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Security and compliance</h3>
-              <p>
-                Patch compliance, backup and DR readiness, vulnerabilities by severity, and open MDR cases from
-                ConnectWise on each client and device. Areas you don't license show as not available.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Software, sign-ins, and live device data</h3>
-              <p>
-                Installed software with out-of-support, unlicensed, and over-seat flags; who signs in to each device; VM
-                hosts; disk, CPU, and memory use; device groups and policies; and contacts synced from ConnectWise.
-              </p>
-            </article>
-            <article class="card">
-              <h3>ConnectWise write-back</h3>
-              <p>
-                Optional &ldquo;Atlas link&rdquo; fields on ConnectWise devices and companies, and ticket notes you can
-                read and add from Atlas. A reveal that names a ticket notes it there, without the password.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Vault policies and emergency access</h3>
-              <p>
-                Set generator rules, require reveal reasons everywhere, name trusted administrators for emergency
-                access, stream logs to a SIEM, and keep secure notes, encrypted files, and Send links.
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-heading">
-            <p class="section-kicker">Product tour</p>
-            <h2>Everything a technician needs for a client, in one place</h2>
-            <p>
-              Each client has its own assets, documents, passwords, contacts, locations, and activity. Ctrl+K search
-              finds any of them &mdash; including by IP address or serial number &mdash; and returns only what you're
-              allowed to see.
-            </p>
-          </div>
-          <figure class="panel">
-            <img
-              src="images/dashboard.png"
-              alt="The MSP Atlas dashboard with client, asset, document, and password health totals above the RMM health card"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>Dashboard.</strong> Totals for clients, assets, documents, and password health, then the cards you
-              choose to show: RMM health, tickets, asset statistics, domain and SSL expiry, favorites, and what expires
-              next. Customize shows, hides, and reorders them.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/rmm-health.png"
-              alt="RMM health card with agent online, stale agent, and endpoint protection charts and a per-client table"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>RMM health.</strong> Devices synced from ConnectWise RMM, with agents online from the heartbeat,
-              stale check-ins, and endpoint protection, plus the clients with the most trouble first.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/tickets.png"
-              alt="Tickets card with opened and closed tickets per day for 30 days and a count per status"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>Tickets.</strong> Read-only from the ConnectWise platform: opened and closed per day over 7, 30,
-              or 90 days, a tile per status, and a ticket table on each client. North American connections link each
-              ticket to ConnectWise.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/asset-stats.png"
-              alt="Asset statistics card with device counts by kind and an operating system chart marking versions out of support"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>Asset statistics.</strong> Servers, workstations, network devices, printers, and phones, with an
-              operating system chart that flags the ones past end of support.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/trackers.png"
-              alt="Domain Tracker for a client listing each domain, its expiry status, and when it was last checked"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>Domain and SSL trackers.</strong> Registrations are re-checked with the registry and certificates
-              read from each site on a schedule, so expirations and alerts use real dates.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/asset.png"
-              alt="An asset page showing a firewall's fields, a Check warranty button, related runbook and password, and version history"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>Assets.</strong> Thirteen built-in layouts plus your own, with related items, safe attachments,
-              full version history, and Check warranty for Dell, Lenovo, and HP.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/document.png"
-              alt="A runbook with a checklist and an escalation section, linked to the firewall it describes"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>Runbooks and knowledge base.</strong> Checklists, tables, and code blocks; templates for runbooks
-              and onboarding; links to the assets they describe.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/password.png"
-              alt="A password entry with reveal and copy, a hidden one-time code, health, rotation date, share links, and access history"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>Password vault.</strong> Logins with live one-time codes, secure notes and encrypted files, health
-              and rotation, one-time share links encrypted in the browser, and a record of every reveal.
-            </figcaption>
-          </figure>
-          <figure class="panel">
-            <img
-              src="images/people.png"
-              alt="The people and access page listing roles, client access, sign-in status, and two-step verification"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>People and access.</strong> Six roles, per-client access levels, and groups. Changes apply
-              immediately, even to people already signed in.
-            </figcaption>
-          </figure>
-          <figure class="panel panel-phone">
-            <img
-              src="images/mobile-dark.png"
-              alt="A password entry on a phone in the dark theme, with copy buttons and a hidden one-time code"
-              loading="lazy"
-            />
-            <figcaption>
-              <strong>On any screen.</strong> The same app on a phone or tablet, in light or dark, tested to WCAG 2.2
-              AA.
-            </figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-heading">
-            <p class="section-kicker">How it works</p>
-            <h2>One service, one database, one key you keep</h2>
-          </div>
-          <div class="grid-2">
-            <ol class="step-list">
-              <li>
-                <strong>Host and origin checks</strong>Requests must match your public address; cross-site requests are
-                refused.
-              </li>
-              <li>
-                <strong>A real session</strong><code>HttpOnly</code>, <code>Secure</code>,
-                <code>SameSite=Strict</code> cookies, plus a CSRF token on every change.
-              </li>
-              <li><strong>Two-step sign-in</strong>Required for staff: an authenticator app or a passkey.</li>
-              <li>
-                <strong>Per-client access</strong>The highest of your baseline, grants, and groups, capped by your role.
-              </li>
-              <li>
-                <strong>Passwords need more</strong>Edit-and-passwords access, the restriction list, and a reason when
-                the client requires one. Every reveal is recorded.
-              </li>
-            </ol>
-            <div>
-              <div class="code-block">
-                <pre><code>Browser (React, strict CSP)
-        |
-        v
-apps/server  Fastify   checks, sessions, MFA,
-                       per-client authorization
-        |
-        +--> vault     envelope encryption
-        +--> backups   encrypted .atlasbak files
-        +--> KeyProvider  master key, never
-                          stored in the database
-        |
-        v
-PostgreSQL 16  +  attachments folder</code></pre>
-              </div>
-              <div class="notice">
-                <span aria-hidden="true">i</span>
-                <p>Full detail in the <a href="security.html">security model</a>.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="roadmap">
-        <div class="container">
-          <div class="section-heading">
-            <p class="section-kicker">Roadmap</p>
-            <h2>What's coming next</h2>
-            <p>Planned work, not yet released. Most of the earlier ConnectWise list shipped in 1.7.7.</p>
-          </div>
-          <div class="grid-3">
-            <article class="card">
-              <span class="badge badge-warning">Planned</span>
-              <h3>Signed Windows app</h3>
-              <p>
-                A signed MSIX installer and automatic updates for Atlas for Windows, waiting on a code-signing
-                certificate.
-              </p>
-            </article>
-            <article class="card">
-              <span class="badge badge-warning">Planned</span>
-              <h3>IT Glue and ITBoost importers</h3>
-              <p>
-                Bring documentation and passwords over from IT Glue and ITBoost, the way the Hudu importer does today.
-              </p>
-            </article>
-            <article class="card">
-              <span class="badge badge-warning">Planned</span>
-              <h3>More ConnectWise write-back</h3>
-              <p>
-                Open a ConnectWise ticket when a certificate, domain, or license is about to expire, and note a ticket
-                when a document is opened for it.
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="cta-panel">
-            <div>
-              <p class="section-kicker">Before you store client credentials</p>
-              <h2>Know the current boundary.</h2>
-              <p>
-                Version 1.7.27 covers documentation, the vault with secure notes, encrypted files, and Send, vault
-                policies with emergency access and SIEM streaming, accounts and security, sign-in with Microsoft Entra
-                ID, the REST API, Hudu and CSV import, ConnectWise RMM device, contact, and software sync, security and
-                compliance, tickets, and optional write-back from the ConnectWise platform, Microsoft 365 sync, keyless
-                warranty lookup for Dell, Lenovo, and HP, domain and SSL tracking, automated password rotation, a
-                browser extension for Edge and Chrome, a preview Windows app, a customizable dashboard with asset
-                statistics, runnable checklists, relationship maps, password health reports, per-client exports,
-                encrypted backups with verified restore, a system status page, a read-only client portal, and Docker or
-                Windows hosting. Not yet included: a signed Windows app installer, IT Glue or ITBoost importers, and
-                ConnectWise tickets opened for expiring certificates, domains, or licenses.
-              </p>
-            </div>
-            <div class="button-row">
-              <a class="button button-primary" href="install.html">Install guide</a>
-              <a class="button" href="#roadmap">Roadmap</a>
-            </div>
+          <div>
+            <h3>Brings your data with it</h3>
+            <p>Import from Hudu and spreadsheets, sync ConnectWise RMM and Microsoft 365.</p>
+            <a href="manual/integrations.html">Data and integrations</a>
           </div>
         </div>
       </section>
     </main>
-
-    <footer class="site-footer">
-      <div class="container footer-grid">
-        <div>
-          <a class="brand" href="index.html" aria-label="MSP Atlas home"
-            ><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a
-          >
-          <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
-        </div>
-        <div>
-          <h3>Learn</h3>
-          <a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a>
-        </div>
-        <div>
-          <h3>Project</h3>
-          <a href="https://github.com/ithealthtech/nexus-atlas">Repository</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a>
-        </div>
-        <div>
-          <h3>Policy</h3>
-          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a>
-          <p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p>
-        </div>
-      </div>
-      <div class="container">
-        <p class="footer-note">
-          Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365,
-          Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or
-          endorsed by any of them.
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
         </p>
       </div>
     </footer>
-
-    <div class="sr-only" aria-live="polite" data-live-region></div>
   </body>
 </html>
