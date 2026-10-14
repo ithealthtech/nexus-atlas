@@ -8,11 +8,12 @@
 
     <Grid x:Name="Root" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
         <Grid.Resources>
-            <!-- Atlas blue, as in the web app. The sidebar is solid blue with white text. -->
-            <SolidColorBrush x:Key="BrandBrush" Color="#1F64B8" />
-            <SolidColorBrush x:Key="BrandDarkBrush" Color="#18518F" />
-            <SolidColorBrush x:Key="OnBrandBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="OnBrandMutedBrush" Color="#C9DDF4" />
+            <!-- The same navy as the web app's menu. -->
+            <SolidColorBrush x:Key="RailBrush" Color="#1B273B" />
+            <SolidColorBrush x:Key="RailHoverBrush" Color="#263449" />
+            <SolidColorBrush x:Key="RailTextBrush" Color="#E7EBF0" />
+            <SolidColorBrush x:Key="RailMutedBrush" Color="#9AA7B8" />
+            <SolidColorBrush x:Key="AccentTileBrush" Color="#287AD2" />
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -20,25 +21,24 @@
         </Grid.RowDefinitions>
 
         <!-- Title bar: search across the middle, the account on the right; the system keeps the window buttons. -->
-        <TitleBar x:Name="AppTitleBar" Title="Atlas" Height="48" Background="{StaticResource BrandDarkBrush}"
-                  Foreground="{StaticResource OnBrandBrush}">
+        <TitleBar x:Name="AppTitleBar" Title="Atlas" Height="48">
             <TitleBar.IconSource>
                 <FontIconSource Glyph="&#xE72E;" />
             </TitleBar.IconSource>
             <TitleBar.Content>
                 <TextBox x:Name="QueryBox" MinWidth="320" MaxWidth="560" HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                         PlaceholderText="Search Atlas   (Ctrl+F)" TextChanged="QueryBox_TextChanged" KeyDown="QueryBox_KeyDown"
-                         AutomationProperties.Name="Search Atlas" />
+                         PlaceholderText="Search all of Atlas   (Ctrl+F)" TextChanged="QueryBox_TextChanged" KeyDown="QueryBox_KeyDown"
+                         AutomationProperties.Name="Search all of Atlas" />
             </TitleBar.Content>
             <TitleBar.RightHeader>
                 <Button x:Name="AccountButton" Background="Transparent" BorderThickness="0" Padding="6,4" Margin="0,0,8,0"
                         AutomationProperties.Name="Account">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource BrandBrush}">
-                            <TextBlock x:Name="AccountInitials" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource OnBrandBrush}"
+                        <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource AccentTileBrush}">
+                            <TextBlock x:Name="AccountInitials" FontSize="11" FontWeight="SemiBold" Foreground="White"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
-                        <FontIcon Glyph="&#xE70D;" FontSize="10" Foreground="{StaticResource OnBrandMutedBrush}" />
+                        <FontIcon Glyph="&#xE70D;" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -81,158 +81,144 @@
             </Border>
         </Grid>
 
-        <!-- The vault. -->
-        <NavigationView x:Name="Nav" Grid.Row="1" Visibility="Collapsed" PaneDisplayMode="Left" OpenPaneLength="232"
-                        CompactModeThresholdWidth="0" ExpandedModeThresholdWidth="0" IsPaneOpen="True"
-                        IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="True"
-                        SelectionChanged="Nav_SelectionChanged" AutomationProperties.Name="Show">
-            <NavigationView.Resources>
-                <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="#1F64B8" />
-                <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="#1F64B8" />
-                <SolidColorBrush x:Key="NavigationViewTopPaneBackground" Color="#1F64B8" />
-                <SolidColorBrush x:Key="NavigationViewItemForeground" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemForegroundPointerOver" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemForegroundPressed" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#2B74C8" />
-                <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#18518F" />
-                <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#18518F" />
-                <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemHeaderForeground" Color="#C9DDF4" />
-                <SolidColorBrush x:Key="NavigationViewButtonForeground" Color="#FFFFFF" />
-                <SolidColorBrush x:Key="NavigationViewItemSeparatorForeground" Color="#4F86C9" />
-                <Thickness x:Key="NavigationViewContentGridBorderThickness">0</Thickness>
-                <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
-            </NavigationView.Resources>
-            <NavigationView.MenuItems>
-                <NavigationViewItem Content="All items" Tag="all" IsSelected="True">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8F1;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Favorites" Tag="favorites">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE734;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Recent" Tag="recent">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItemHeader Content="Types" />
-                <NavigationViewItem Content="Passwords" Tag="passwords">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8D7;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Assets" Tag="assets">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE977;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Documents" Tag="documents">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItemHeader Content="Clients" />
-                <NavigationViewItem x:Name="ClientsItem" Content="All clients" SelectsOnInvoked="False">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE821;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.MenuItems>
+        <!-- Atlas: the sidebar, and one page at a time beside it. -->
+        <Grid x:Name="MainPanel" Grid.Row="1" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <!-- List, and the item. -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="250" MaxWidth="340" />
-                    <ColumnDefinition Width="2*" />
-                </Grid.ColumnDefinitions>
+            <!-- Sidebar: the same places as the web app. -->
+            <Grid Background="{StaticResource RailBrush}" Padding="10,12,10,10">
+                <ListView x:Name="Sections" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Sections_ItemClick"
+                          AutomationProperties.Name="Go to">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:Section">
+                            <StackPanel Orientation="Horizontal" Spacing="12" Padding="2,6">
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="16" Foreground="{StaticResource RailMutedBrush}" />
+                                <TextBlock Text="{x:Bind Label}" Foreground="{StaticResource RailTextBrush}" FontSize="15" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
 
-                <Grid Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                      BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,1,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <Grid Margin="16,12,12,6" ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock x:Name="ListTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                            <TextBlock x:Name="ListCount" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        <ComboBox x:Name="TypeFilter" Grid.Column="1" MinWidth="120" MaxWidth="160" Visibility="Collapsed"
-                                  SelectionChanged="TypeFilter_SelectionChanged" AutomationProperties.Name="Asset type" />
-                    </Grid>
-                    <ProgressBar x:Name="ListLoading" VerticalAlignment="Bottom" IsIndeterminate="True" Visibility="Collapsed" Margin="12,0" />
-                    <ListView x:Name="Results" Grid.Row="1" SelectionMode="Single" SelectionChanged="Results_SelectionChanged"
-                              KeyDown="Results_KeyDown" DoubleTapped="Results_DoubleTapped" AutomationProperties.Name="Items"
-                              Padding="0,0,0,8">
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Where you are, and the way back. -->
+                <Grid Padding="20,14,24,0" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="BackButton" Click="Back_Click" Width="36" Height="32" Padding="0" Background="Transparent" BorderThickness="0"
+                            ToolTipService.ToolTip="Back (Alt+Left)" AutomationProperties.Name="Back">
+                        <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                    </Button>
+                    <BreadcrumbBar x:Name="Crumbs" Grid.Column="1" VerticalAlignment="Center" ItemClicked="Crumbs_ItemClicked" />
+                </Grid>
+
+                <!-- The page's title, and ways to narrow it down. -->
+                <Grid Grid.Row="1" Padding="24,10,24,8" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="PageTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="PageInfo" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <ComboBox x:Name="TypeFilter" Grid.Column="1" MinWidth="150" VerticalAlignment="Center" Visibility="Collapsed"
+                              SelectionChanged="TypeFilter_SelectionChanged" AutomationProperties.Name="Asset type" />
+                    <TextBox x:Name="FilterBox" Grid.Column="2" Width="240" VerticalAlignment="Center" PlaceholderText="Filter this list"
+                             TextChanged="FilterBox_TextChanged" AutomationProperties.Name="Filter this list" />
+                </Grid>
+
+                <!-- A client's things, one kind per tab. -->
+                <SelectorBar x:Name="Tabs" Grid.Row="2" Margin="18,0,24,4" Visibility="Collapsed" SelectionChanged="Tabs_SelectionChanged">
+                    <SelectorBarItem x:Name="PasswordsTab" Text="Passwords" Tag="passwords" />
+                    <SelectorBarItem x:Name="AssetsTab" Text="Assets" Tag="assets" />
+                    <SelectorBarItem x:Name="DocumentsTab" Text="Documents" Tag="documents" />
+                </SelectorBar>
+
+                <!-- A list page. -->
+                <Grid x:Name="ListPanel" Grid.Row="3" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+                    <ListView x:Name="Results" SelectionMode="None" IsItemClickEnabled="True" ItemClick="Results_ItemClick"
+                              AutomationProperties.Name="Items" Padding="12,4,12,12">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
-                                <Setter Property="MinHeight" Value="40" />
-                                <Setter Property="Padding" Value="12,0,8,0" />
+                                <Setter Property="MinHeight" Value="48" />
+                                <Setter Property="Padding" Value="12,0,12,0" />
                             </Style>
                         </ListView.ItemContainerStyle>
                         <ListView.GroupStyle>
                             <GroupStyle HidesIfEmpty="True">
                                 <GroupStyle.HeaderTemplate>
                                     <DataTemplate x:DataType="local:RowGroup">
-                                        <TextBlock Text="{x:Bind Key}" FontSize="12" FontWeight="SemiBold"
-                                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind Key}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                     </DataTemplate>
                                 </GroupStyle.HeaderTemplate>
                             </GroupStyle>
                         </ListView.GroupStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="local:Row">
-                                <Grid ColumnSpacing="10" Padding="0,5">
+                                <Grid ColumnSpacing="14" Padding="0,6">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="15" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="{x:Bind Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{x:Bind Subtitle}" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
+                                    <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
-                    <StackPanel x:Name="ListEmpty" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="24" Visibility="Collapsed">
+                    <StackPanel x:Name="ListEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="24" Visibility="Collapsed">
                         <FontIcon Glyph="&#xE721;" FontSize="22" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                        <TextBlock x:Name="ListEmptyText" TextWrapping="Wrap" TextAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="ListEmptyText" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
+                    <ProgressBar x:Name="ListLoading" VerticalAlignment="Top" IsIndeterminate="True" Visibility="Collapsed" />
                 </Grid>
 
-                <Grid Grid.Column="1">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <ScrollViewer x:Name="DetailScroll" Padding="24,18,24,24">
-                        <StackPanel x:Name="Detail" MaxWidth="680" HorizontalAlignment="Stretch" />
-                    </ScrollViewer>
-                    <StackPanel x:Name="DetailEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-                        <FontIcon Glyph="&#xE8A1;" FontSize="28" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                        <TextBlock Text="Choose something on the left to see it here." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Text="Ctrl+Shift+Space opens Atlas from anywhere." HorizontalAlignment="Center"
-                                   Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                    </StackPanel>
-                    <!-- Actions for the item, along the bottom as in a desktop vault. -->
-                    <Border x:Name="DetailBar" Grid.Row="1" Visibility="Collapsed" Padding="16,8"
-                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
-                            Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="EditButton" Click="Edit_Click" ToolTipService.ToolTip="Edit in Atlas" AutomationProperties.Name="Edit in Atlas">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE70F;" FontSize="14" />
-                                    <TextBlock Text="Edit in Atlas" />
-                                </StackPanel>
-                            </Button>
-                            <Button Click="CopyLink_Click" ToolTipService.ToolTip="Copy a link to this in Atlas" AutomationProperties.Name="Copy link">
+                <!-- An item page. -->
+                <ScrollViewer x:Name="DetailScroll" Grid.Row="3" Padding="24,8,24,24" Visibility="Collapsed">
+                    <StackPanel x:Name="Detail" MaxWidth="760" HorizontalAlignment="Left" />
+                </ScrollViewer>
+                
+                <Border x:Name="DetailBar" Grid.Row="4" Visibility="Collapsed" Padding="24,10"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
+                        Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Click="Edit_Click" Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Edit in Atlas">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                <TextBlock Text="Edit in Atlas" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="CopyLink_Click" AutomationProperties.Name="Copy link">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE71B;" FontSize="14" />
-                            </Button>
-                        </StackPanel>
-                    </Border>
-                    <InfoBar x:Name="StatusBar" VerticalAlignment="Bottom" Margin="20,20,20,64" IsClosable="True" MaxWidth="560" />
-                </Grid>
+                                <TextBlock Text="Copy link" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+                <InfoBar x:Name="StatusBar" Grid.Row="3" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="20" IsClosable="True" MaxWidth="480" />
             </Grid>
-        </NavigationView>
+        </Grid>
     </Grid>
 </Window>
