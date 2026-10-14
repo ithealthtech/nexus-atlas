@@ -159,7 +159,7 @@ public class AtlasClientTests
         Assert.Equal(pkce.Challenge, query["code_challenge"]);
         Assert.Equal("S256", query["code_challenge_method"]);
         Assert.Equal(pkce.State, query["state"]);
-        Assert.Equal("read reveal", query["scope"]);
+        Assert.Equal("read write reveal", query["scope"]);
         Assert.Equal("TECH-LAPTOP 07", query["device_name"]);
         Assert.DoesNotContain("verifier", uri.ToString(), StringComparison.OrdinalIgnoreCase);
     }
