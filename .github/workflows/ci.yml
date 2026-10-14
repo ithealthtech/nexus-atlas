@@ -149,6 +149,16 @@ jobs:
             apps/windows/dist/AtlasForWindowsSetup.exe.sha256
           retention-days: 30
 
+  # The root helper's service actions (deploy/linux/atlas-updater.sh), run against real systemd with stand-ins for
+  # Atlas and its web proxy: restarts, a repair, refusals, and reading service states from inside Atlas's sandbox.
+  linux-helper:
+    name: Linux service helper
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo CI=true bash deploy/linux/test-services.sh
+
   docker:
     name: Docker image
     runs-on: ubuntu-latest

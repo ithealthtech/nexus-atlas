@@ -96,6 +96,55 @@ export interface UpdateInfo {
   run: UpdateRun;
 }
 
+// ---------- services: restarting and repairing what Atlas runs on ----------
+/**
+ * What an administrator may ask the server's root helper to do. The helper carries out these and nothing else
+ * (deploy/linux/atlas-updater.sh has the same list).
+ */
+export const SERVICE_ACTIONS = ['restart-atlas', 'restart-proxy', 'restart-database', 'repair'] as const;
+export type ServiceAction = (typeof SERVICE_ACTIONS)[number];
+export const SERVICE_ACTION_LABELS: Record<ServiceAction, string> = {
+  'restart-atlas': 'Restart Atlas',
+  'restart-proxy': 'Restart the web proxy',
+  'restart-database': 'Restart the database',
+  repair: 'Repair the installation',
+};
+
+export type SystemServiceId = 'atlas' | 'proxy' | 'database' | 'updater';
+/** `missing`: the server has no such service. `unknown`: Atlas couldn't ask. */
+export type SystemServiceState = 'running' | 'starting' | 'stopped' | 'failed' | 'missing' | 'unknown';
+
+export interface SystemServiceView {
+  id: SystemServiceId;
+  name: string;
+  /** The systemd unit, for anyone working on the server itself. */
+  unit: string;
+  state: SystemServiceState;
+  /** When it last started, if it is running. */
+  since: string | null;
+  /** The action that restarts it, or null when it has none. */
+  restart: ServiceAction | null;
+}
+
+export interface ServiceRun {
+  state: UpdateState;
+  action: ServiceAction | null;
+  requestedBy: string | null;
+  requestedAt: string | null;
+  finishedAt: string | null;
+  message: string | null;
+}
+
+export interface SystemServicesView {
+  /** Whether this server has the helper that carries the actions out (Linux installs from deploy/linux). */
+  canAct: boolean;
+  /** Whether Atlas can reach its database right now. */
+  databaseReachable: boolean;
+  /** Empty where there is no helper. */
+  services: SystemServiceView[];
+  run: ServiceRun;
+}
+
 // ---------- erase all data (owner only) ----------
 export interface EraseStatus {
   pending: {

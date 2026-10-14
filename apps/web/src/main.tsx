@@ -58,6 +58,7 @@ import { PasswordHealth } from '@/pages/PasswordHealth';
 import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
 import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
+import { Services } from '@/pages/Services';
 import './styles.css';
 
 applyTheme(storedTheme());
@@ -268,6 +269,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/request-log', component: adminOnly(RequestLog) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/webhooks', component: adminOnly(Webhooks) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/updates', component: adminOnly(Updates) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/services', component: adminOnly(Services) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
   createRoute({ getParentRoute: () => appRoute, path: '/sends', component: Sends }),

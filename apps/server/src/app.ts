@@ -69,6 +69,8 @@ import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
 import { StatusService } from './services/status.js';
 import { registerUpdateRoutes } from './routes/updates.js';
+import { registerSystemRoutes } from './routes/system.js';
+import { SystemServices, type ShowUnit } from './services/system-services.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
@@ -108,6 +110,8 @@ export interface AppOptions {
   domainLookup?: DomainLookup;
   /** Replaces reading served certificates for the SSL tracker. Tests leave it out, so nothing is connected to. */
   certProbe?: CertProbe;
+  /** Replaces asking systemd about the services Atlas runs on (tests use a fake). */
+  serviceShow?: ShowUnit;
   /** Replaces fetch for the GitHub release check (tests use fake releases). */
   updateFetch?: typeof fetch;
   /** Replaces SIEM delivery (tests capture events instead of sending them). */
@@ -172,6 +176,7 @@ export async function buildApp({
   domainLookup,
   certProbe,
   updateFetch,
+  serviceShow,
   siemSender,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
@@ -810,16 +815,18 @@ export async function buildApp({
     currentSession: (req) => identity.resolve(req.cookies[cookieName]),
   });
   registerEraseRoutes(app, { db, authed, recent, identity, settings, mail, backups, storage: files });
-  registerUpdateRoutes(app, {
+  const updates = new UpdateService({
+    repo: config.ATLAS_UPDATE_REPO,
+    current: APP_VERSION,
+    dir: config.ATLAS_UPDATER_DIR,
+    fetch: updateFetch,
+  });
+  registerUpdateRoutes(app, { db, authed, recent, updates });
+  registerSystemRoutes(app, {
     db,
     authed,
     recent,
-    updates: new UpdateService({
-      repo: config.ATLAS_UPDATE_REPO,
-      current: APP_VERSION,
-      dir: config.ATLAS_UPDATER_DIR,
-      fetch: updateFetch,
-    }),
+    services: new SystemServices({ dir: config.ATLAS_UPDATER_DIR, updates, show: serviceShow }),
   });
   if (config.NODE_ENV !== 'test') {
     // Nothing is running yet, so an import still marked running was cut off by the restart (an update, say).

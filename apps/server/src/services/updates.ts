@@ -1,7 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ReleaseView, UpdateInfo, UpdateRun } from '@atlas/shared';
 import { HttpError } from '../errors.js';
+import { ageOf, isServiceRequest, pendingRequest, readJson, writeRequest } from './helper-inbox.js';
 
 const TAG = /^v?(\d+)\.(\d+)\.(\d+)$/;
 const CACHE_MS = 60 * 60 * 1000;
@@ -99,12 +99,11 @@ export class UpdateService {
     const dir = this.options.dir;
     if (!dir) return IDLE;
     const status = await readJson(join(dir, 'status.json'));
-    const request = await readJson(join(dir, 'inbox', 'request.json'));
+    // A request to restart or repair a service waits in the same inbox. It isn't an update.
+    const waiting = await pendingRequest(dir);
+    const request = isServiceRequest(waiting) ? null : waiting;
     const text = (v: unknown) => (typeof v === 'string' ? v.slice(0, 2000) : null);
-    const age = (v: unknown) => {
-      const at = typeof v === 'string' ? Date.parse(v) : NaN;
-      return Number.isNaN(at) ? null : this.now() - at;
-    };
+    const age = (v: unknown) => ageOf(v, this.now());
     const states = ['running', 'succeeded', 'failed'] as const;
     // The updater refreshes updatedAt as it goes and never runs longer than its systemd timeout, so a
     // "running" status this old was left by a run that was killed outright (for example by a reboot).
@@ -171,26 +170,17 @@ export class UpdateService {
     const run = await this.run();
     if (run.state === 'requested' || run.state === 'running')
       throw new HttpError(409, 'An update is already in progress.');
+    // The helper takes one request at a time: writing this one would replace a service action that is waiting.
+    const waiting = await pendingRequest(dir);
+    if (isServiceRequest(waiting) && (ageOf(waiting?.requestedAt, this.now()) ?? Infinity) < REQUEST_STALE_MS)
+      throw new HttpError(409, 'The server is busy restarting or repairing a service. Try again in a minute.');
     const { releases } = await this.releases(true);
     const release = releases.find((r) => r.tag === tag);
     if (!release || compareVersions(release.tag, this.options.current) <= 0)
       throw new HttpError(400, 'Choose a published release newer than this version.');
     const body = { tag: release.tag, requestedBy, requestedAt: new Date(this.now()).toISOString() };
     // Atlas can write only to inbox/; status.json is the updater's, in a folder Atlas can only read.
-    const inbox = join(dir, 'inbox');
-    await mkdir(inbox, { recursive: true });
-    const tmp = join(inbox, `.request-${process.pid}.json`);
-    await writeFile(tmp, JSON.stringify(body), { mode: 0o640 });
-    await rename(tmp, join(inbox, 'request.json'));
+    await writeRequest(dir, body);
     return { ...IDLE, state: 'requested', tag: body.tag, requestedBy, requestedAt: body.requestedAt };
-  }
-}
-
-async function readJson(path: string): Promise<Record<string, unknown> | null> {
-  try {
-    const value: unknown = JSON.parse(await readFile(path, 'utf8'));
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-  } catch {
-    return null;
   }
 }

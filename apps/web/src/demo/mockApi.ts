@@ -7,6 +7,8 @@ import {
   DEFAULT_BRANDING,
   DEFAULT_VAULT_POLICY,
   PERSONAL_EXPORT_COLUMNS,
+  SERVICE_ACTIONS,
+  SERVICE_ACTION_LABELS,
   WINDOWS_APP_VERSION,
   windowsAppDownload,
   type SiemSettingsView,
@@ -23,6 +25,9 @@ import {
   type ActivityView,
   type ApiKeyView,
   type BackupRunView,
+  type ServiceAction,
+  type ServiceRun,
+  type SystemServicesView,
   type SystemStatus,
   type Branding,
   type CsvImportResult,
@@ -2653,6 +2658,75 @@ on('POST', '/backups', () => {
   return run;
 });
 on('GET', '/backups/:id/download', () => notInDemo('Downloading a backup'));
+// Services: an action takes a few seconds, as it does on a real server.
+const serviceStarted: Record<string, string> = {
+  atlas: ago(3 * 24 * 60),
+  proxy: ago(12 * 24 * 60),
+  database: ago(12 * 24 * 60),
+  updater: ago(12 * 24 * 60),
+};
+let serviceAsked: { action: ServiceAction; at: number; requestedAt: string } | null = null;
+const SERVICE_DONE: Record<ServiceAction, string> = {
+  'restart-atlas': 'Atlas was restarted and is answering.',
+  'restart-proxy': 'The web proxy was restarted.',
+  'restart-database': 'The database was restarted, and Atlas is answering.',
+  repair: 'Permissions and services were repaired, and Atlas is answering.',
+};
+const SERVICE_RESTARTS: Record<ServiceAction, string[]> = {
+  'restart-atlas': ['atlas'],
+  'restart-proxy': ['proxy'],
+  'restart-database': ['database', 'atlas'],
+  repair: ['proxy', 'atlas'],
+};
+const serviceRun = (): ServiceRun => {
+  const idle = { action: null, requestedBy: null, requestedAt: null, finishedAt: null, message: null };
+  if (!serviceAsked) return { state: 'idle', ...idle };
+  const { action, at, requestedAt } = serviceAsked;
+  const elapsed = Date.now() - at;
+  const run = { ...idle, action, requestedBy: db.owner.name, requestedAt };
+  if (elapsed < 1500) return { state: 'requested', ...run };
+  if (elapsed < 5000) return { state: 'running', ...run, message: `${SERVICE_ACTION_LABELS[action]}…` };
+  for (const id of SERVICE_RESTARTS[action])
+    if (serviceStarted[id]! < requestedAt) serviceStarted[id] = new Date(at + 4000).toISOString();
+  return { state: 'succeeded', ...run, finishedAt: new Date(at + 5000).toISOString(), message: SERVICE_DONE[action] };
+};
+on('GET', '/system/services', (): SystemServicesView => {
+  const run = serviceRun();
+  const unit = { atlas: 'msp-atlas.service', proxy: 'caddy.service', database: 'postgresql.service' } as const;
+  return {
+    canAct: true,
+    databaseReachable: true,
+    services: [
+      ...(['atlas', 'proxy', 'database'] as const).map((id) => ({
+        id,
+        name: { atlas: 'Atlas', proxy: 'Web proxy', database: 'Database' }[id],
+        unit: unit[id],
+        state: 'running' as const,
+        since: serviceStarted[id]!,
+        restart: `restart-${id}` as ServiceAction,
+      })),
+      {
+        id: 'updater',
+        name: 'Updater',
+        unit: 'msp-atlas-updater.path',
+        state: 'running',
+        since: serviceStarted.updater!,
+        restart: null,
+      },
+    ],
+    run,
+  };
+});
+on('POST', '/system/services/run', (_m, b) => {
+  const action = b.action as ServiceAction;
+  if (!SERVICE_ACTIONS.includes(action)) throw new MockError(400, 'Choose what to do.');
+  const state = serviceRun().state;
+  if (state === 'requested' || state === 'running')
+    throw new MockError(409, 'The server is already doing something. Wait for it to finish.');
+  serviceAsked = { action, at: Date.now(), requestedAt: now() };
+  event('Service action requested', SERVICE_ACTION_LABELS[action]);
+  return serviceRun();
+});
 on('GET', '/status', (): SystemStatus => ({
   version: '1.0.1',
   node: 'v22.12.0',

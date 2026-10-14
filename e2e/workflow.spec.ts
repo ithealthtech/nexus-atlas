@@ -972,6 +972,7 @@ test.describe.serial('accessibility sweep', () => {
       '/admin/status',
       '/admin/request-log',
       '/admin/updates',
+      '/admin/services',
       '/admin/settings',
     ];
     for (const theme of ['light', 'dark'] as const) {

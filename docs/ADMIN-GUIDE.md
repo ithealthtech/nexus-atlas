@@ -211,12 +211,23 @@ A notification-area app for staff: quick search and audited copying from anywher
 - **Taking it away:** the person's own **Desktop apps** list, **Sign out everywhere** on the Users page, disabling the account, and resetting its sign-in all end the app's session at once. A lost laptop needs nothing more.
 - **Updates:** the app has its own version number. When the Atlas you're running carries a newer one, signed-in copies say so, and people run the new setup program themselves. Nothing installs on its own.
 
+## Services
+
+**Administration → Services** shows the services Atlas runs on (Atlas itself, the web proxy, the database, and the updater), whether each is running, and since when. It works on servers set up with the Linux installer. Docker and Windows installs see a note about restarting their own way.
+
+- **Restart** restarts one service. Restarting Atlas takes a few seconds and signs nobody out. Restarting the web proxy drops everyone's connection for a moment. Restarting the database restarts Atlas with it.
+- **Repair** is for when something won't start or can't read or write its files. It puts the owners and permissions of Atlas's settings, master key, program, and data folders back as the installer sets them, hands files created as root in the data folder back to Atlas, turns the services back on at startup, restarts them, and checks that Atlas answers. It doesn't touch your settings, your data, or the version of Atlas.
+- Every action asks for your password first and is written to the security log as *Service action requested*.
+- Atlas doesn't restart anything itself. It asks a small helper on the server, which only knows these four actions. See [Services](DEPLOYMENT.md#services).
+- If Atlas is down you can't reach the page. The same commands for the server's console are at the bottom of the page, and in the table below.
+
 ## If something goes wrong
 
 | Problem | What to do |
 |---|---|
 | Someone is locked out after too many attempts | Wait 15 minutes, or use **Reset sign-in** on their account. |
 | The owner lost their phone and recovery codes | Another owner or admin can reset their sign-in. If there is none, contact whoever runs the server. |
+| Atlas says it can't read or write a file, or a service is stopped | **Administration → Services**: restart the service, or use **Repair**. If you can't reach Atlas at all, run `sudo systemctl restart msp-atlas` on the server, then `sudo journalctl -u msp-atlas -n 50` to see why it stopped. |
 | Backups are failing | Read the error on **System status**. Check that the backup folder exists and Atlas can write to it, and that the disk isn't full. |
 | **Verify now** reports a break | Someone changed the database directly. Keep the server as it is, export the security log, and investigate. Restore from a backup if needed. |
 | Restoring from a backup | Stop Atlas and follow [Restoring](DEPLOYMENT.md#restoring). You need the master key the backup was made with. |
