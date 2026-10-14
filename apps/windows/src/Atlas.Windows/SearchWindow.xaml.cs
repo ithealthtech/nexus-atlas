@@ -495,8 +495,7 @@ public sealed partial class SearchWindow : Window
     // What search matched besides the name (an address, a serial number), so same-named results differ.
     private static string? Snippet(string snippet, string title)
     {
-        var text = snippet.Replace('
-', ' ').Trim();
+        var text = string.Join(' ', snippet.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Trim();
         if (text.StartsWith(title, StringComparison.OrdinalIgnoreCase))
             text = text[title.Length..].TrimStart(' ', '—', '-', '·');
         return text.Length > 0 ? text : null;
