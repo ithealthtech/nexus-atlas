@@ -21,14 +21,15 @@ public sealed partial class SearchWindow : Window
 {
     private const int HotkeyId = 0xA71A;
     private static readonly TimeSpan ShowFor = TimeSpan.FromSeconds(30);
-    private static readonly Section[] SectionList =
-    [
-        new("favorites", "Favorites", ""),
-        new("recent", "Recent", ""),
-        new("passwords", "Passwords", ""),
-        new("assets", "Assets", ""),
-        new("documents", "Documents", ""),
-    ];
+    private static readonly Dictionary<string, string> SectionLabels = new()
+    {
+        ["all"] = "All items",
+        ["favorites"] = "Favorites",
+        ["recent"] = "Recent",
+        ["passwords"] = "Passwords",
+        ["assets"] = "Assets",
+        ["documents"] = "Documents",
+    };
 
     private readonly App app;
     private readonly IntPtr hwnd;
@@ -44,7 +45,8 @@ public sealed partial class SearchWindow : Window
     private CancellationTokenSource? signInCancel;
     private DispatcherTimer? hideTimer;
     private (TextBlock Target, string Masked)? shown;
-    private string section = "favorites";
+    private string section = "all";
+    private Row? current;
     private string? clientId;
     private PasswordEntry? password;
     private bool loaded;
@@ -85,7 +87,6 @@ public sealed partial class SearchWindow : Window
         };
         Native.SetWindowSubclass(hwnd, subclass, 1, 0);
 
-        Sections.ItemsSource = SectionList;
         Accelerator(VirtualKey.F, VirtualKeyModifiers.Control, FocusSearch);
         Accelerator(VirtualKey.P, VirtualKeyModifiers.Control, () => _ = CopySecretAsync(SecretField.Password));
         Accelerator(VirtualKey.T, VirtualKeyModifiers.Control, () => _ = CopySecretAsync(SecretField.OneTimeCode));
@@ -128,9 +129,11 @@ public sealed partial class SearchWindow : Window
     // ---------- showing ----------
     public void ShowSetup(string? address, string? message = null)
     {
-        SearchPanel.Visibility = Visibility.Collapsed;
+        Nav.Visibility = Visibility.Collapsed;
         SetupPanel.Visibility = Visibility.Visible;
-        TitleOrg.Text = "";
+        QueryBox.Visibility = Visibility.Collapsed;
+        AccountButton.Visibility = Visibility.Collapsed;
+        AppTitleBar.Subtitle = "";
         loaded = false;
         recent.Clear();
         layouts.Clear();
@@ -146,13 +149,17 @@ public sealed partial class SearchWindow : Window
     public void ShowSearch()
     {
         SetupPanel.Visibility = Visibility.Collapsed;
-        SearchPanel.Visibility = Visibility.Visible;
+        Nav.Visibility = Visibility.Visible;
+        QueryBox.Visibility = Visibility.Visible;
+        AccountButton.Visibility = Visibility.Visible;
         Bring();
         if (!loaded)
         {
             loaded = true;
             _ = LoadAccountAsync();
-            Sections.SelectedIndex = 0;
+            section = "all";
+            clientId = null;
+            _ = LoadListAsync();
         }
         FocusSearch();
     }
@@ -179,12 +186,13 @@ public sealed partial class SearchWindow : Window
         {
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
+            ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
             AccountInitials.Text = Initials(session.User.Name);
-            TitleOrg.Text = session.Organization.Name;
+            AppTitleBar.Subtitle = session.Organization.Name;
             foreach (var layout in await client.ListLayoutsAsync())
                 layouts[layout.Id] = layout;
             var list = await client.ListClientsAsync();
-            clients = [new ClientChoice(null, "All clients"), .. list.Where(c => c.Status != "inactive").Select(c => new ClientChoice(c.Id, c.Name))];
+            clients = [.. list.Where(c => c.Status != "inactive").Select(c => new ClientChoice(c.Id, c.Name))];
             ShowClients();
         }
         catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
@@ -196,13 +204,17 @@ public sealed partial class SearchWindow : Window
     private static string Initials(string name) =>
         string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
 
+    // Each client is a place in the sidebar, under Clients, like a folder in a vault.
     private void ShowClients()
     {
-        var filter = ClientFilter.Text.Trim();
-        ClientList.SelectionChanged -= ClientList_SelectionChanged;
-        ClientList.ItemsSource = clients.Where(c => c.Id is null || c.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
-        ClientList.SelectedItem = clients.FirstOrDefault(c => c.Id == clientId);
-        ClientList.SelectionChanged += ClientList_SelectionChanged;
+        ClientsItem.MenuItems.Clear();
+        foreach (var c in clients)
+            ClientsItem.MenuItems.Add(new NavigationViewItem
+            {
+                Content = c.Name,
+                Tag = "client:" + c.Id,
+                Icon = new FontIcon { Glyph = "" },
+            });
     }
 
     // ---------- sign-in ----------
@@ -247,29 +259,23 @@ public sealed partial class SearchWindow : Window
     }
 
     // ---------- the sidebar ----------
-    private void Sections_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
     {
-        if (Sections.SelectedItem is not Section chosen)
+        if (e.SelectedItem is not NavigationViewItem { Tag: string tag })
             return;
-        section = chosen.Id;
+        if (tag.StartsWith("client:", StringComparison.Ordinal))
+        {
+            section = "client";
+            clientId = tag["client:".Length..];
+        }
+        else
+        {
+            section = tag;
+            clientId = null;
+        }
         QueryBox.Text = "";
         _ = LoadListAsync();
     }
-
-    private void ClientList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ClientList.SelectedItem is not ClientChoice chosen)
-            return;
-        clientId = chosen.Id;
-        QueryBox.Text = "";
-        // A client's things are its passwords, assets, and documents; starred and recent span every client.
-        if (clientId is not null && section is "favorites" or "recent")
-            Sections.SelectedIndex = 2;
-        else
-            _ = LoadListAsync();
-    }
-
-    private void ClientFilter_TextChanged(object sender, TextChangedEventArgs e) => ShowClients();
 
     private void OpenAtlas_Click(object sender, RoutedEventArgs e)
     {
@@ -293,8 +299,7 @@ public sealed partial class SearchWindow : Window
         listCancel?.Cancel();
         var cancel = listCancel = new CancellationTokenSource();
         var clientName = clients.FirstOrDefault(c => c.Id is not null && c.Id == clientId)?.Name;
-        var label = SectionList.First(s => s.Id == section).Label;
-        ListTitle.Text = clientName is null || section is "favorites" or "recent" ? label : $"{label} · {clientName}";
+        ListTitle.Text = section == "client" ? clientName ?? "Client" : SectionLabels[section];
         TypeFilter.Visibility = section == "assets" ? Visibility.Visible : Visibility.Collapsed;
         ListLoading.Visibility = Visibility.Visible;
         try
@@ -302,6 +307,21 @@ public sealed partial class SearchWindow : Window
             IReadOnlyList<Row> rows;
             switch (section)
             {
+                case "all":
+                case "client":
+                    var passwordsTask = client.ListPasswordsAsync(clientId, cancel.Token);
+                    var assetsTask = client.ListAssetsAsync(clientId, cancel.Token);
+                    var documentsTask = client.ListDocumentsAsync(clientId, cancel.Token);
+                    await Task.WhenAll(passwordsTask, assetsTask, documentsTask);
+                    assetCache = assetsTask.Result;
+                    var named = clientId is null;
+                    rows =
+                    [
+                        .. passwordsTask.Result.Select(p => new Row("password", p.Id, p.Name, Join(p.Username, named ? p.ClientName : null), p.ClientId, p.ClientName)),
+                        .. AssetRows(all: true).Select(a => named ? a with { Subtitle = Join(a.ClientName, a.Subtitle) } : a),
+                        .. documentsTask.Result.Select(d => new Row("document", d.Id, d.Title, d.ClientName ?? "Knowledge base", d.ClientId, d.ClientName ?? "Knowledge base")),
+                    ];
+                    break;
                 case "favorites":
                     IReadOnlyList<FavoriteItem> starred;
                     try
@@ -322,17 +342,17 @@ public sealed partial class SearchWindow : Window
                     rows = [.. recent];
                     break;
                 case "passwords":
-                    rows = (await client.ListPasswordsAsync(clientId, cancel.Token))
+                    rows = (await client.ListPasswordsAsync(null, cancel.Token))
                         .Select(p => new Row("password", p.Id, p.Name, p.Username.Length > 0 ? p.Username : "No username", p.ClientId, p.ClientName))
                         .ToList();
                     break;
                 case "assets":
-                    assetCache = await client.ListAssetsAsync(clientId, cancel.Token);
+                    assetCache = await client.ListAssetsAsync(null, cancel.Token);
                     FillTypes();
                     rows = AssetRows();
                     break;
                 case "documents":
-                    rows = (await client.ListDocumentsAsync(clientId, cancel.Token))
+                    rows = (await client.ListDocumentsAsync(null, cancel.Token))
                         .Select(d => new Row("document", d.Id, d.Title, Kind("document"), d.ClientId, d.ClientName ?? "Knowledge base"))
                         .ToList();
                     break;
@@ -348,9 +368,15 @@ public sealed partial class SearchWindow : Window
                 {
                     "favorites" => "Nothing starred yet. Star clients, assets, documents, and passwords in Atlas to keep them here.",
                     "recent" => "What you open here shows up in this list.",
-                    _ => clientName is null ? "Nothing here yet." : $"{clientName} has nothing here yet.",
+                    "client" => $"{clientName} has nothing in Atlas yet.",
+                    _ => "Nothing here yet.",
                 },
-                grouped: clientId is null && section is "passwords" or "assets" or "documents");
+                section switch
+                {
+                    "all" or "client" => ByKind,
+                    "passwords" or "assets" or "documents" => ByClient,
+                    _ => null,
+                });
         }
         catch (OperationCanceledException)
         {
@@ -381,9 +407,9 @@ public sealed partial class SearchWindow : Window
         fillingTypes = false;
     }
 
-    private List<Row> AssetRows()
+    private List<Row> AssetRows(bool all = false)
     {
-        var layoutId = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
+        var layoutId = all ? null : (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
         return assetCache
             .Where(a => layoutId is null || a.LayoutId == layoutId)
             .Select(a =>
@@ -398,24 +424,35 @@ public sealed partial class SearchWindow : Window
     {
         if (fillingTypes || section != "assets" || QueryBox.Text.Trim().Length > 0)
             return;
-        ShowRows(AssetRows(), "None of this type.", grouped: clientId is null);
+        ShowRows(AssetRows(), "None of this type.", ByClient);
     }
 
+    private static string ByClient(Row row) => row.ClientName ?? "Knowledge base";
+
+    private static string ByKind(Row row) => row.Kind switch
+    {
+        "password" => "Passwords",
+        "asset" => "Assets",
+        "document" => "Documents",
+        _ => "Other",
+    };
+
     /// <summary>
-    /// Shows rows sorted by name. Across every client they're grouped under each client's name, so hundreds of
-    /// machines read as a few dozen short lists.
+    /// Shows rows sorted by name, under headings when there are many (each client, or each kind of thing), so
+    /// hundreds of machines read as short lists.
     /// </summary>
-    private void ShowRows(IReadOnlyList<Row> rows, string emptyText, bool grouped = false)
+    private void ShowRows(IReadOnlyList<Row> rows, string emptyText, Func<Row, string>? groupBy = null)
     {
         // Starred and recent keep their own order.
         List<Row> sorted = section is "favorites" or "recent" && QueryBox.Text.Trim().Length == 0
             ? [.. rows]
             : [.. rows.OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
-        if (grouped)
+        if (groupBy is not null)
         {
+            var order = new[] { "Passwords", "Assets", "Documents" };
             var groups = sorted
-                .GroupBy(r => r.ClientName ?? "Knowledge base")
-                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                .GroupBy(groupBy)
+                .OrderBy(g => Array.IndexOf(order, g.Key) is var i and >= 0 ? i.ToString() : "9" + g.Key, StringComparer.CurrentCultureIgnoreCase)
                 .Select(g => new RowGroup(g.Key, g))
                 .ToList();
             Results.ItemsSource = new Microsoft.UI.Xaml.Data.CollectionViewSource { IsSourceGrouped = true, Source = groups }.View;
@@ -595,10 +632,14 @@ public sealed partial class SearchWindow : Window
         password = null;
         Detail.Children.Clear();
         DetailEmpty.Visibility = row is null ? Visibility.Visible : Visibility.Collapsed;
+        current = null;
+        DetailBar.Visibility = Visibility.Collapsed;
         if (row is null || app.Client is not { } client)
             return;
         DetailScroll.ChangeView(null, 0, null, true);
-        Detail.Children.Add(Header(row, Join(Kind(row.Kind), row.ClientName)));
+        current = row;
+        DetailBar.Visibility = Visibility.Visible;
+        Detail.Children.Add(HeaderCard(row));
         try
         {
             switch (row.Kind)
@@ -805,31 +846,37 @@ public sealed partial class SearchWindow : Window
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
     // ---------- building the cards ----------
-    private UIElement Header(Row row, string subtitle)
+    /// <summary>The first card: what it is, its name, and the client it belongs to.</summary>
+    private static UIElement HeaderCard(Row row)
     {
-        var grid = new Grid { ColumnSpacing = 14, Margin = new Thickness(0, 0, 0, 6) };
+        var grid = new Grid { ColumnSpacing = 14, Padding = new Thickness(16, 14, 16, 14) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var tile = new Border
         {
-            Width = 44,
-            Height = 44,
-            CornerRadius = new CornerRadius(10),
-            Background = (Brush)Root.Resources["AccentTileBrush"],
-            Child = new FontIcon { Glyph = row.Glyph, FontSize = 20, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) },
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(8),
+            Background = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"],
+            Child = new FontIcon { Glyph = row.Glyph, FontSize = 18, Foreground = (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"] },
         };
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock { Text = row.Title, Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
-        text.Children.Add(new TextBlock { Text = subtitle, Foreground = Secondary(), Margin = new Thickness(0, 2, 0, 0), TextWrapping = TextWrapping.Wrap });
-        var open = new Button { Content = "Open in Atlas", VerticalAlignment = VerticalAlignment.Center };
-        open.Click += (_, _) => _ = OpenInAtlasAsync(row);
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 3 };
+        text.Children.Add(new TextBlock { Text = row.Title, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        var where = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        where.Children.Add(new FontIcon { Glyph = "", FontSize = 12, Foreground = Secondary() });
+        where.Children.Add(new TextBlock { Text = Join(Kind(row.Kind), row.ClientName), FontSize = 12, Foreground = Secondary(), TextWrapping = TextWrapping.Wrap });
+        text.Children.Add(where);
         Grid.SetColumn(text, 1);
-        Grid.SetColumn(open, 2);
         grid.Children.Add(tile);
         grid.Children.Add(text);
-        grid.Children.Add(open);
-        return grid;
+        return new Border
+        {
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Child = grid,
+        };
     }
 
     private static UIElement Card(string label, params UIElement[] rows)
@@ -867,7 +914,7 @@ public sealed partial class SearchWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = Secondary() });
+        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = (Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"] });
         text.Children.Add(value);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         foreach (var action in actions)
@@ -914,6 +961,19 @@ public sealed partial class SearchWindow : Window
     }
 
     private static Brush Secondary() => (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
+    // ---------- the bar under the item ----------
+    private void Edit_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is { } row)
+            _ = OpenInAtlasAsync(row);
+    }
+
+    private void CopyLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is { } row && app.Client is { } client)
+            Copy(client.Address.WebLink(row.Kind, row.Id, row.ClientId).ToString(), "Link copied.");
+    }
 
     // ---------- actions ----------
     private Task OpenInAtlasAsync(Row row) =>
