@@ -54,13 +54,12 @@ try {
 
   # Favorites opens first, with its first item (a password) chosen.
   Shot 'favorites-password'
-  # The starred asset, then the starred document: down the list from the search box.
-  Keys '{DOWN}'; Keys '{DOWN}'
-  Shot 'favorites-asset'
-  Keys '{DOWN}'; Keys '{DOWN}'
-  Shot 'favorites-document'
-  # Show a password, then search.
-  Keys '^f'; Keys 'hdg'
+  # Each of the others is found by searching, which chooses the first result.
+  Keys '^f'; Keys 'HDG-DC'
+  Shot 'asset'
+  Keys '^f'; Keys 'reboot'
+  Shot 'document'
+  Keys '^f'; Keys 'admin'
   Shot 'search'
   Keys '{ESC}'
 }

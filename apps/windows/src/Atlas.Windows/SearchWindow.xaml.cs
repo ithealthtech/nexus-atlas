@@ -58,7 +58,12 @@ public sealed partial class SearchWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        AppWindow.Resize(new global::Windows.Graphics.SizeInt32(1180, 740));
+        // As big as it's comfortable, but never bigger than the screen it opens on, and centred there.
+        var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary).WorkArea;
+        var width = Math.Min(1180, area.Width - 32);
+        var height = Math.Min(760, area.Height - 32);
+        AppWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(
+            area.X + (area.Width - width) / 2, area.Y + (area.Height - height) / 2, width, height));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico"));
         // Closing hides the window; the app keeps running in the tray.
         AppWindow.Closing += (_, e) =>
