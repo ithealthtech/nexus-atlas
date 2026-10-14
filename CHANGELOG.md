@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.29] - 2026-10-14
+
+### Fixed
+
+- **Remote access works after updating.** The update to 1.7.28 was installed by the previous release's installer, which didn't know about the new `atlas-access` script, so choosing Cloudflare Tunnel, Tailscale, or a reverse proxy failed with "atlas-access: No such file or directory". The server's helper now installs the script from the running release when it is missing. (#194)
+
 ## [1.7.28] - 2026-10-14
 
 ### Added
