@@ -14,6 +14,7 @@ import {
   type SmtpSecurity,
   type SmtpSettingsView,
 } from '@atlas/shared';
+import { PageSections } from '@/components/PageSections';
 import {
   Button,
   Card,
@@ -759,7 +760,7 @@ export function Settings() {
         title="Settings"
         description="Email, alerts, log retention, RMM health, warranty, asset statistics, domain and SSL trackers, branding, and API keys."
       />
-      <div className="grid max-w-3xl gap-6">
+      <PageSections>
         {email.data ? (
           <EmailSettings key={JSON.stringify(email.data)} current={email.data} />
         ) : (
@@ -798,7 +799,7 @@ export function Settings() {
         <SamlSettings />
         <ApiKeysCard />
         {actor.isAdmin && <DangerZone />}
-      </div>
+      </PageSections>
     </>
   );
 }

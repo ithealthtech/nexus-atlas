@@ -510,7 +510,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const menu = useWorkspacePrefs().data?.menu ?? 'rail';
   const Drawer = menu === 'rail' ? RailMenu : SidebarMenu;
   return (
-    <div className={cn('min-h-screen print:p-0', menu === 'top' ? 'lg:pt-24' : 'lg:pl-(--sidebar-width)')}>
+    <div
+      data-menu={menu}
+      className={cn('min-h-screen print:p-0', menu === 'top' ? 'lg:pt-24' : 'lg:pl-(--sidebar-width)')}
+    >
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:shadow"

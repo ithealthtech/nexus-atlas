@@ -13,6 +13,7 @@ import {
   type RotationSettings,
   type RotationTargetView,
 } from '@atlas/shared';
+import { PageSections } from '@/components/PageSections';
 import { AppLink } from '@/components/AppLink';
 import {
   Badge,
@@ -606,12 +607,12 @@ export function PasswordRotation() {
         title="Password rotation"
         description="Change local administrator and AD service account passwords on a schedule, and keep the new ones in the vault. Every rotation is in the password's history and access log."
       />
-      <div className="grid max-w-5xl gap-6">
+      <PageSections>
         <RotationSettingsCard />
         <Policies />
         <Accounts onChange={runs.refetch} />
         <Attempts />
-      </div>
+      </PageSections>
     </>
   );
 }
