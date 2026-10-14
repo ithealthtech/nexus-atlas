@@ -4,306 +4,344 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
-      name="description"
-      content="Troubleshooting MSP Atlas: setup codes, sign-in, access, email, backups, restore, and imports."
-    />
-    <meta name="theme-color" content="#0b1714" />
-    <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
     />
-    <title>Support &middot; MSP Atlas</title>
+    <title>When something isn't working · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="Symptoms and fixes, from sign-in problems to failed backups, syncs and rotations, and how to ask for help."
+    />
     <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="assets/site.css" />
+    <script src="assets/theme.js"></script>
     <script src="assets/site.js" defer></script>
   </head>
-  <body>
-    <a class="skip-link" href="#main">Skip to content</a>
-    <header class="site-header">
-      <div class="nav-shell">
-        <a class="brand" href="index.html" aria-label="MSP Atlas home">
-          <span class="brand-mark" aria-hidden="true">A</span>
-          <span>MSP Atlas</span>
-        </a>
-        <nav class="site-nav" data-site-nav aria-label="Primary navigation">
-          <a href="index.html">Overview</a>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="manual/index.html">Manual</a>
           <a href="install.html">Install</a>
           <a href="security.html">Security</a>
           <a href="support.html" aria-current="page">Support</a>
-          <a href="https://github.com/ithealthtech/nexus-atlas">GitHub</a>
         </nav>
-        <div class="nav-actions">
-          <button class="icon-button" type="button" data-doc-theme-toggle aria-label="Use light documentation theme">
-            &#9728;
+        <div class="topbar-tools">
+          <div class="search" data-root="">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
           </button>
-          <button class="menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-expanded="false">
-            &#9776;
-          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
         </div>
       </div>
     </header>
-
-    <main id="main">
-      <section class="page-hero">
-        <div class="container">
-          <p class="eyebrow">Support</p>
-          <h1>Troubleshooting</h1>
-          <p class="hero-copy">
-            Most problems show up on <strong>System status</strong> first. Start there, then search below.
-          </p>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container" data-filter-list>
-          <div class="section-heading">
-            <p class="section-kicker">Symptom finder</p>
-            <h2>Search troubleshooting</h2>
-            <p>Type a symptom, a setting, or a screen name.</p>
-          </div>
-          <div class="filter-bar">
-            <label class="sr-only" for="support-search">Search troubleshooting</label>
-            <input
-              class="search-input"
-              id="support-search"
-              type="search"
-              data-filter-input
-              placeholder='Try "setup code", "backup", or "email"'
-            />
-          </div>
-          <div class="accordion">
-            <details data-filter-item>
-              <summary>I lost the setup code</summary>
-              <div>
-                <p>
-                  With Docker, read it from the log:
-                  <code>docker compose -f deploy/docker-compose.yml logs app | grep "setup code"</code>. On Windows it
-                  is in <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>. It works only until the first
-                  account exists. To choose your own, set <code>ATLAS_SETUP_CODE</code> before first start.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>Atlas refuses to start in production</summary>
-              <div>
-                <p>
-                  Production needs an <code>https://</code> <code>PUBLIC_URL</code> and a master key (<code
-                    >ATLAS_MASTER_KEY</code
-                  >
-                  or <code>ATLAS_MASTER_KEY_FILE</code>). The log names the missing setting.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>Someone is locked out after too many attempts</summary>
-              <div>
-                <p>Wait 15 minutes, or an administrator can use <strong>Reset sign-in</strong> on their account.</p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>The owner lost their phone and recovery codes</summary>
-              <div>
-                <p>
-                  Another owner or administrator can reset their sign-in. If there is none, contact whoever runs the
-                  server.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>A technician can't see a client</summary>
-              <div>
-                <p>
-                  By design, a client someone can't access looks exactly like a missing one. Check their access level
-                  for that client, their groups, and their role under <strong>People &amp; access</strong>.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>A password shows but can't be revealed</summary>
-              <div>
-                <p>
-                  Revealing needs edit-and-passwords access for the client, a place on the entry's restriction list if
-                  it has one, and a reason if the client requires reasons.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>Email isn't sending</summary>
-              <div>
-                <p>
-                  Use <strong>Settings &rarr; Email &rarr; Send test</strong>; it shows the mail server's error. For
-                  Microsoft 365, turn on <strong>Authenticated SMTP</strong> for the mailbox, and use an app password if
-                  it has MFA.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>Backups are failing or on the same disk</summary>
-              <div>
-                <p>
-                  Read the error on <strong>System status</strong>. Check that the backup folder exists, Atlas can write
-                  to it, and the disk isn't full. Point <code>ATLAS_BACKUP_DIR</code> at a network share to clear the
-                  same-disk warning.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>Restoring a backup fails with a key error</summary>
-              <div>
-                <p>
-                  A backup can only be read with the master key it was made with. After a rotation, list the old key
-                  after the new one and try again.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>Verify now reports a break in the security log</summary>
-              <div>
-                <p>
-                  Someone changed the database directly. Keep the server as it is, export the security log, and
-                  investigate. Restore from a backup if needed.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>A Hudu import stopped partway</summary>
-              <div>
-                <p>
-                  Run it again. The importer updates what it already brought in rather than duplicating it, and a stuck
-                  run is picked up again automatically. Clients duplicated by an import before 1.7.3 can be merged on
-                  the
-                  <strong>Duplicates</strong> page.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>ConnectWise devices or tickets are missing</summary>
-              <div>
-                <p>
-                  Open <strong>Import &amp; export &rarr; ConnectWise RMM</strong> and check that the company is linked
-                  to a client, that Devices and Tickets are ticked under <em>What to sync</em>, and read the last sync's
-                  messages. Tickets need the tickets read permission on the API key. Choose <strong>Sync now</strong>
-                  after a change.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>Manufacturer, check-in, or protection is blank on a synced device</summary>
-              <div>
-                <p>
-                  Update to 1.7.6 or later and sync again: earlier versions didn't ask ConnectWise for the hardware and
-                  antivirus details. A device ConnectWise has no antivirus data for shows as not reported.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>A warranty date is missing</summary>
-              <div>
-                <p>
-                  Automatic lookups cover Dell, Lenovo, and HP devices that have a serial number. Choose
-                  <strong>Check warranty</strong> on the asset to try again now, or type the date in; a date someone
-                  entered is never replaced. Lookups can be turned off under
-                  <strong>Settings &rarr; Asset warranty</strong>.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>A domain or certificate shows as unknown</summary>
-              <div>
-                <p>
-                  Choose <strong>Check now</strong> on the client's Domain Tracker or SSL Tracker. Some registries don't
-                  publish an expiry date, and a certificate can only be read from a site Atlas can reach on port 443;
-                  for those, enter the date on the asset.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>A password rotation failed</summary>
-              <div>
-                <p>
-                  The old password is still in the vault. Read the reason under
-                  <strong>Administration &rarr; Password rotation &rarr; Recent attempts</strong> or in the entry's
-                  access history. Check the script ID, that the device is online in ConnectWise, and that the API key
-                  has Automation read and create. Failed accounts are tried again after a day.
-                </p>
-              </div>
-            </details>
-            <details data-filter-item>
-              <summary>The browser extension won't sign in</summary>
-              <div>
-                <p>
-                  Enter your Atlas address in the extension, then approve the browser in Atlas after checking that the
-                  codes match. Its session ends after 7 days unused, 30 days in total, or when your password changes;
-                  sign in again the same way. Client accounts can't use it.
-                </p>
-              </div>
-            </details>
-          </div>
-          <p class="empty-state" data-filter-empty>No troubleshooting entry matches that search.</p>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="cta-panel">
-            <div>
-              <p class="section-kicker">Still stuck?</p>
-              <h2>Open an issue.</h2>
-              <p>
-                Use <a href="https://github.com/ithealthtech/nexus-atlas/issues">GitHub Issues</a> for verified defects.
-                Never include passwords, master keys, API keys, client data, or screenshots containing secrets. Report
-                suspected vulnerabilities privately through the
-                <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">security policy</a>.
-              </p>
-            </div>
-            <div class="button-row">
-              <a class="button button-primary" href="https://github.com/ithealthtech/nexus-atlas/issues/new"
-                >Report a problem</a
-              >
-              <a class="button" href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/USER-GUIDE.md"
-                >User guide</a
-              >
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="site-footer">
-      <div class="container footer-grid">
-        <div>
-          <a class="brand" href="index.html" aria-label="MSP Atlas home"
-            ><span class="brand-mark" aria-hidden="true">A</span><span>MSP Atlas</span></a
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="support.html" aria-current="page"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 15</p>
+        <h1>When something isn't working</h1>
+        <p>
+          Most problems show up on <strong>Admin → System status</strong> first. Start there, then find the symptom
+          below.
+        </p>
+        <p>
+          <label class="sr-only" for="filter">Filter troubleshooting</label
+          ><input id="filter" class="filter" type="search" placeholder="Type a symptom, setting or page" data-filter />
+        </p>
+        <p class="filter-empty" data-filter-empty hidden>
+          Nothing here matches that. Try the search at the top, which covers the whole manual.
+        </p>
+        <h2 id="signing-in"><a class="anchor" href="#signing-in">Signing in</a></h2>
+        <h3 id="i-lost-the-setup-code"><a class="anchor" href="#i-lost-the-setup-code">I lost the setup code</a></h3>
+        <p>
+          With Docker: <code>docker compose -f deploy/docker-compose.yml logs app | grep &quot;setup code&quot;</code>.
+          With the Linux installer: <code>journalctl -u msp-atlas</code>. On Windows:
+          <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>. It only works until the first account exists.
+        </p>
+        <h3 id="someone-is-locked-out-after-too-many-attempts">
+          <a class="anchor" href="#someone-is-locked-out-after-too-many-attempts"
+            >Someone is locked out after too many attempts</a
           >
-          <p class="footer-note">Self-hosted IT documentation and password management for managed service providers.</p>
-        </div>
-        <div>
-          <h3>Learn</h3>
-          <a href="install.html">Install</a><a href="security.html">Security model</a><a href="support.html">Support</a>
-        </div>
-        <div>
-          <h3>Project</h3>
-          <a href="https://github.com/ithealthtech/nexus-atlas">Repository</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/releases/latest">Latest release</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md">Changelog</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/issues">Issues</a>
-        </div>
-        <div>
-          <h3>Policy</h3>
-          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md">Security policy</a
-          ><a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CONTRIBUTING.md">Contributing</a>
-          <p class="footer-note">&copy; <span data-current-year></span> IT Health Tech LLC</p>
-        </div>
-      </div>
-      <div class="container">
-        <p class="footer-note">
-          Hudu, IT Glue, ITBoost, and ConnectWise are trademarks of their respective owners. Microsoft, Microsoft 365,
-          Windows, and BitLocker are trademarks of the Microsoft group of companies. MSP Atlas is not affiliated with or
-          endorsed by any of them.
+        </h3>
+        <p>Wait 15 minutes, or an administrator can use <strong>Reset sign-in</strong> on their account.</p>
+        <h3 id="someone-lost-their-phone">
+          <a class="anchor" href="#someone-lost-their-phone">Someone lost their phone</a>
+        </h3>
+        <p>
+          An administrator uses <strong>Reset sign-in</strong> and ticks
+          <strong>Also reset two-step verification</strong>. If the owner lost their phone and recovery codes, another
+          owner or administrator can do it; if there's none, whoever runs the server must help.
+        </p>
+        <h3 id="sign-in-with-microsoft-or-saml-says-to-wait">
+          <a class="anchor" href="#sign-in-with-microsoft-or-saml-says-to-wait"
+            >Sign in with Microsoft or SAML says to wait</a
+          >
+        </h3>
+        <p>
+          The first sign-in waits for an administrator to confirm the link under
+          <strong>People &amp; access → Manage</strong>.
+        </p>
+        <h2 id="access"><a class="anchor" href="#access">Access</a></h2>
+        <h3 id="a-technician-can-t-see-a-client">
+          <a class="anchor" href="#a-technician-can-t-see-a-client">A technician can't see a client</a>
+        </h3>
+        <p>
+          A client someone can't access looks exactly like a missing one. Check their access for that client, their
+          groups and their role under <strong>People &amp; access</strong>.
+        </p>
+        <h3 id="a-password-shows-but-can-t-be-revealed">
+          <a class="anchor" href="#a-password-shows-but-can-t-be-revealed">A password shows but can't be revealed</a>
+        </h3>
+        <p>
+          Revealing needs <strong>Edit + passwords</strong> for the client, a place on the entry's list if it's
+          restricted, and a reason if the client requires one.
+        </p>
+        <h2 id="email"><a class="anchor" href="#email">Email</a></h2>
+        <h3 id="email-isn-t-sending"><a class="anchor" href="#email-isn-t-sending">Email isn't sending</a></h3>
+        <p>
+          <strong>Admin → Email &amp; alerts → Send test</strong> shows the mail server's error. Prefer
+          <strong>Microsoft 365 (app registration)</strong>; for legacy SMTP, Authenticated SMTP must be on for the
+          mailbox.
+        </p>
+        <h2 id="backups-and-the-server"><a class="anchor" href="#backups-and-the-server">Backups and the server</a></h2>
+        <h3 id="backups-are-failing-or-on-the-same-disk">
+          <a class="anchor" href="#backups-are-failing-or-on-the-same-disk">Backups are failing, or on the same disk</a>
+        </h3>
+        <p>
+          Read the error on <strong>System status</strong>. Check the backup folder exists, Atlas can write to it, and
+          the disk isn't full. Point <code>ATLAS_BACKUP_DIR</code> at a network share to clear the same-disk warning.
+        </p>
+        <h3 id="a-restore-fails-with-a-key-error">
+          <a class="anchor" href="#a-restore-fails-with-a-key-error">A restore fails with a key error</a>
+        </h3>
+        <p>
+          A backup can only be read with the master key it was made with. After a rotation, list the old key after the
+          new one and try again.
+        </p>
+        <h3 id="atlas-says-it-can-t-read-or-write-a-file-or-a-service-is-stopped">
+          <a class="anchor" href="#atlas-says-it-can-t-read-or-write-a-file-or-a-service-is-stopped"
+            >Atlas says it can't read or write a file, or a service is stopped</a
+          >
+        </h3>
+        <p>
+          <strong>Admin → Services</strong>: restart the service, or use <strong>Repair</strong>. If you can't reach
+          Atlas at all, run <code>sudo systemctl restart msp-atlas</code> on the server.
+        </p>
+        <h3 id="browsers-warn-about-the-certificate">
+          <a class="anchor" href="#browsers-warn-about-the-certificate">Browsers warn about the certificate</a>
+        </h3>
+        <p>
+          <strong>Admin → Certificate</strong>: download the authority, install it, and open Atlas at the address on the
+          certificate.
+        </p>
+        <h3 id="verify-now-reports-a-break-in-the-security-log">
+          <a class="anchor" href="#verify-now-reports-a-break-in-the-security-log"
+            >Verify now reports a break in the security log</a
+          >
+        </h3>
+        <p>
+          Someone changed the database directly. Keep the server as it is, export the security log, and investigate.
+          Restore from a backup if needed.
+        </p>
+        <h2 id="imports-and-syncs"><a class="anchor" href="#imports-and-syncs">Imports and syncs</a></h2>
+        <h3 id="a-hudu-import-stopped-partway">
+          <a class="anchor" href="#a-hudu-import-stopped-partway">A Hudu import stopped partway</a>
+        </h3>
+        <p>
+          Run it again. It updates what it already brought in rather than duplicating it. Duplicates can be merged under
+          <strong>Admin → Duplicates</strong>.
+        </p>
+        <h3 id="connectwise-devices-or-tickets-are-missing">
+          <a class="anchor" href="#connectwise-devices-or-tickets-are-missing"
+            >ConnectWise devices or tickets are missing</a
+          >
+        </h3>
+        <p>
+          Under <strong>Import &amp; export → ConnectWise RMM</strong>, check the company is linked to a client, that
+          devices and tickets are ticked, and read the last sync's messages. Tickets need the tickets read permission.
+          Choose <strong>Sync now</strong> after a change.
+        </p>
+        <h3 id="a-warranty-date-is-missing">
+          <a class="anchor" href="#a-warranty-date-is-missing">A warranty date is missing</a>
+        </h3>
+        <p>
+          Lookups cover Dell, Lenovo and HP devices with a serial number. Choose <strong>Check warranty</strong> on the
+          asset, or type the date in.
+        </p>
+        <h3 id="a-domain-or-certificate-shows-as-unknown">
+          <a class="anchor" href="#a-domain-or-certificate-shows-as-unknown"
+            >A domain or certificate shows as unknown</a
+          >
+        </h3>
+        <p>
+          Choose <strong>Check now</strong> on the client's tracker tab. Some registries don't publish an expiry date,
+          and a certificate can only be read from a site Atlas reaches on port 443. Enter the date on the asset for
+          those.
+        </p>
+        <h3 id="a-password-rotation-failed">
+          <a class="anchor" href="#a-password-rotation-failed">A password rotation failed</a>
+        </h3>
+        <p>
+          The old password is still in the vault. Read the reason under
+          <strong>Password rotation → Recent attempts</strong>. Check the script ID, that the device is online, and that
+          the API key has Automation read and create.
+        </p>
+        <h2 id="apps"><a class="anchor" href="#apps">Apps</a></h2>
+        <h3 id="the-browser-extension-won-t-sign-in">
+          <a class="anchor" href="#the-browser-extension-won-t-sign-in">The browser extension won't sign in</a>
+        </h3>
+        <p>
+          Enter your Atlas address, then approve the browser in Atlas after checking the codes match. Its session ends
+          after 7 days unused, 30 days in all, or when your password changes.
+        </p>
+        <h3 id="atlas-for-windows-won-t-connect">
+          <a class="anchor" href="#atlas-for-windows-won-t-connect">Atlas for Windows won't connect</a>
+        </h3>
+        <p>
+          It refuses a certificate Windows doesn't trust. Install the certificate authority (above) and use the address
+          on the certificate.
+        </p>
+        <h2 id="still-stuck"><a class="anchor" href="#still-stuck">Still stuck</a></h2>
+        <p>
+          Open an issue on <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">GitHub</a> for a
+          verified defect. Never include passwords, master keys, API keys, client data, or screenshots with secrets in
+          them. Report suspected vulnerabilities privately, as described in the
+          <a href="security.html#reporting-a-vulnerability">security model</a>.
+        </p>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="manual/tasks.html"><span>Previous</span>Tasks at a glance</a
+          ><a class="next" href="security.html"><span>Next</span>Security model</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#signing-in">Signing in</a></li>
+          <li><a href="#access">Access</a></li>
+          <li><a href="#email">Email</a></li>
+          <li><a href="#backups-and-the-server">Backups and the server</a></li>
+          <li><a href="#imports-and-syncs">Imports and syncs</a></li>
+          <li><a href="#apps">Apps</a></li>
+          <li><a href="#still-stuck">Still stuck</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
         </p>
       </div>
     </footer>
-
-    <div class="sr-only" aria-live="polite" data-live-region></div>
   </body>
 </html>

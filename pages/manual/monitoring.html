@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Monitoring and alerts · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="Expirations, RMM health, warranties, domain and SSL trackers, asset statistics, security and tickets, and the alerts Atlas emails."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html" aria-current="page"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 6</p>
+        <h1>Monitoring and alerts</h1>
+        <p>
+          Atlas keeps an eye on the dates and device health that are easy to miss: a certificate about to run out, a
+          server that stopped checking in, a warranty that ended last month. This chapter explains each card and where
+          its numbers come from.
+        </p>
+        <h2 id="the-dashboard"><a class="anchor" href="#the-dashboard">The dashboard</a></h2>
+        <p>
+          The dashboard on <strong>Home</strong> puts it all on one page: totals across your clients, then the cards
+          below, for every client you can see. Each client's overview has the same cards for that client alone. Choose
+          any tile, slice or row to list the devices or items behind it.
+        </p>
+        <figure>
+          <a href="../images/manual/dashboard-dark.png"
+            ><img src="../images/manual/dashboard-dark.png" alt="The dashboard in dark mode" loading="lazy"
+          /></a>
+          <figcaption>The dashboard, in dark mode.</figcaption>
+        </figure>
+        <h2 id="expirations"><a class="anchor" href="#expirations">Expirations</a></h2>
+        <figure>
+          <a href="../images/manual/expirations.png"
+            ><img src="../images/manual/expirations.png" alt="The Expirations page" loading="lazy"
+          /></a>
+          <figcaption>Home → Expirations.</figcaption>
+        </figure>
+        <p>
+          <strong>Home → Expirations</strong> lists everything coming due, grouped by when: overdue, then the coming
+          weeks. It includes:
+        </p>
+        <ul>
+          <li>
+            Asset date fields marked as expiry dates, such as certificate and domain expiry, licence renewals and
+            warranties.
+          </li>
+          <li>Password rotations that are due.</li>
+          <li>Documents whose <strong>Review by</strong> date has come.</li>
+        </ul>
+        <p>
+          If something is missing, check that its layout's date field is ticked as an <strong>Expiry date</strong> (see
+          <a href="documentation.html#asset-layouts">Asset layouts</a>).
+        </p>
+        <h2 id="email-alerts"><a class="anchor" href="#email-alerts">Email alerts</a></h2>
+        <p>Atlas emails people who tick <strong>Email me about expirations</strong> on their account page:</p>
+        <ul>
+          <li><strong>An alert</strong> the chosen number of days before each thing is due.</li>
+          <li>
+            <strong>A weekly digest</strong> on Monday mornings, listing everything overdue or due in the coming weeks.
+          </li>
+        </ul>
+        <p>
+          Administrators choose the alert days and the digest under
+          <strong>Admin → Email &amp; alerts → Alerts and logs</strong>. Email itself must be set up first, on the same
+          page.
+        </p>
+        <h2 id="rmm-health"><a class="anchor" href="#rmm-health">RMM health</a></h2>
+        <p>From ConnectWise RMM, for clients linked to a ConnectWise company.</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Part</th>
+                <th>What it shows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Devices, Servers, Workstations, Offline servers</strong></td>
+                <td>Counts across the synced devices. An offline server is marked.</td>
+              </tr>
+              <tr>
+                <td><strong>Agent online</strong></td>
+                <td>Devices online, offline, and unknown right now.</td>
+              </tr>
+              <tr>
+                <td><strong>Stale agents</strong></td>
+                <td>
+                  How long since each agent last checked in: current (under 7 days), stale, very stale (30 days or
+                  more), and never reported.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Endpoint protection</strong></td>
+                <td>Whether the antivirus is running, not running, missing, or not reported.</td>
+              </tr>
+              <tr>
+                <td><strong>Last 30 days</strong></td>
+                <td>How each percentage has moved over the month.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Administrators change when an agent counts as stale under <strong>Admin → Monitoring → RMM health</strong>.
+        </p>
+        <h2 id="asset-warranty"><a class="anchor" href="#asset-warranty">Asset warranty</a></h2>
+        <p>
+          Hardware assets by when their warranty ends: expired, expiring soon, active, and unknown. For Dell, Lenovo and
+          HP devices with a serial number, Atlas looks the date up from the vendor's public warranty check, with no API
+          keys to set up. A date someone typed in is never replaced.
+        </p>
+        <p>
+          Under <strong>Admin → Monitoring → Asset warranty</strong>, administrators choose how many days count as
+          expiring soon, and can untick <strong>Look up warranties automatically</strong>.
+        </p>
+        <h2 id="domain-and-ssl-trackers">
+          <a class="anchor" href="#domain-and-ssl-trackers">Domain and SSL trackers</a>
+        </h2>
+        <p>
+          Each client's <strong>Domain Tracker</strong> and <strong>SSL Tracker</strong> tabs list its domains and
+          certificates with their expiry dates. The <strong>Domain and SSL expiry</strong> card shows what is expired or
+          expiring.
+        </p>
+        <ul>
+          <li>
+            <strong>Domains</strong> are re-checked with their registry weekly, and daily once they're within 60 days of
+            expiring.
+          </li>
+          <li><strong>Certificates</strong> are read from each website daily.</li>
+          <li><strong>Check now</strong> on a tracker tab checks straight away.</li>
+          <li>The dates are saved on the asset, so they appear on Expirations and in alerts.</li>
+        </ul>
+        <p>
+          Some registries don't publish an expiry date, and a certificate can only be read from a site Atlas can reach
+          on port 443. For those, type the date on the asset.
+        </p>
+        <p>
+          Under <strong>Admin → Monitoring → Domain and SSL trackers</strong>, administrators can turn the schedule off,
+          and choose whether to <strong>Add SSL certificates for domains</strong> automatically when a domain's website
+          serves a certificate the client has no asset for.
+        </p>
+        <h2 id="asset-statistics"><a class="anchor" href="#asset-statistics">Asset statistics</a></h2>
+        <p>
+          Servers, workstations, switches, network devices, printers and phones, and a chart of operating systems that
+          marks the ones out of support. Choose a tile or a slice to list the devices.
+        </p>
+        <p>
+          Administrators decide which asset layouts count as which kind of device under
+          <strong>Admin → Monitoring → Asset statistics</strong>.
+        </p>
+        <h2 id="security-and-compliance">
+          <a class="anchor" href="#security-and-compliance">Security and compliance</a>
+        </h2>
+        <p>For clients linked to a ConnectWise company:</p>
+        <ul>
+          <li><strong>Patch compliance</strong> for Windows and third-party software.</li>
+          <li><strong>Backup and DR readiness.</strong></li>
+          <li><strong>Vulnerabilities</strong> by severity.</li>
+          <li><strong>Security incidents (MDR)</strong> that are open.</li>
+        </ul>
+        <p>
+          A synced device's asset page has its own card with missing patches, backup jobs and vulnerabilities. Areas
+          your ConnectWise partner account doesn't use show <em>Not available</em>.
+        </p>
+        <h2 id="tickets"><a class="anchor" href="#tickets">Tickets</a></h2>
+        <p>
+          When ticket sync is on, the <strong>Tickets</strong> card shows tickets opened and closed per day and a tile
+          for each status, and <strong>Ticket details</strong> on each client's overview lists the open tickets that
+          have gone longest without an update. Ticket numbers match the ConnectWise portal, and each one links to the
+          ticket there. Tickets are read-only in Atlas.
+        </p>
+        <h2 id="activity"><a class="anchor" href="#activity">Activity</a></h2>
+        <p>
+          Every client has an <strong>Activity</strong> tab, and the dashboard and overview have
+          <strong>Recent activity</strong>: who created, changed, archived or linked what, and when. Several changes in
+          a row by the same person to the same kind of thing show as one line ending &quot;and N more&quot;.
+        </p>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../manual/passwords.html"><span>Previous</span>Passwords</a
+          ><a class="next" href="../manual/apps.html"><span>Next</span>Extension and Windows app</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#the-dashboard">The dashboard</a></li>
+          <li><a href="#expirations">Expirations</a></li>
+          <li><a href="#email-alerts">Email alerts</a></li>
+          <li><a href="#rmm-health">RMM health</a></li>
+          <li><a href="#asset-warranty">Asset warranty</a></li>
+          <li><a href="#domain-and-ssl-trackers">Domain and SSL trackers</a></li>
+          <li><a href="#asset-statistics">Asset statistics</a></li>
+          <li><a href="#security-and-compliance">Security and compliance</a></li>
+          <li><a href="#tickets">Tickets</a></li>
+          <li><a href="#activity">Activity</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

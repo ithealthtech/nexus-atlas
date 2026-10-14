@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>People and access · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="Adding people, roles and client access, groups, single sign-on, vault policies, emergency access, and the security log."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html" aria-current="page"
+              ><span class="num">10</span>People and access</a
+            >
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 10</p>
+        <h1>People and access</h1>
+        <p>
+          This chapter is for administrators. It covers who can sign in, what each person can reach, and the rules that
+          protect the vault.
+        </p>
+        <h2 id="people-access"><a class="anchor" href="#people-access">People &amp; access</a></h2>
+        <figure>
+          <a href="../images/manual/people.png"
+            ><img src="../images/manual/people.png" alt="People &amp; access" loading="lazy"
+          /></a>
+          <figcaption>Admin → People &amp; access lists everyone who can sign in.</figcaption>
+        </figure>
+        <p>
+          <strong>Admin → People &amp; access</strong> lists everyone who can sign in, with their role, their access,
+          whether two-step verification is on, and when they last signed in. Choose <strong>Manage</strong> to change
+          someone.
+        </p>
+        <h3 id="add-a-person"><a class="anchor" href="#add-a-person">Add a person</a></h3>
+        <figure>
+          <a href="../images/manual/add-person.png"
+            ><img src="../images/manual/add-person.png" alt="The Add a person dialog" loading="lazy"
+          /></a>
+          <figcaption>Choose a role, then the access for every client and for individual clients.</figcaption>
+        </figure>
+        <ol class="steps">
+          <li>Choose <strong>Add person</strong>.</li>
+          <li>Enter their <strong>Name</strong> and <strong>Email</strong>.</li>
+          <li>
+            Choose their <strong>Role</strong>. See
+            <a href="getting-started.html#what-you-can-do-depends-on-your-role">the roles table</a>.
+          </li>
+          <li>
+            Under <strong>Client access</strong>, choose a level for <strong>Every client (including new ones)</strong>,
+            then raise it for individual clients if you need to.
+          </li>
+          <li>
+            Choose <strong>Create account</strong>. Atlas shows a temporary password for them to change at first
+            sign-in.
+          </li>
+        </ol>
+        <p>Staff must set up two-step verification before they can do anything else.</p>
+        <h3 id="access-levels"><a class="anchor" href="#access-levels">Access levels</a></h3>
+        <p>
+          For each client, a person has one of <strong>No access</strong>, <strong>Read</strong>,
+          <strong>Edit</strong> or <strong>Edit + passwords</strong>.
+        </p>
+        <ul>
+          <li>The <strong>Every client</strong> level applies to every client, including clients added later.</li>
+          <li>A per-client level can raise it for one client.</li>
+          <li>
+            A person's access is the highest of their own levels and their groups' levels, but never more than their
+            role allows.
+          </li>
+        </ul>
+        <p>Changes apply straight away, even to people who are signed in.</p>
+        <h3 id="when-someone-loses-their-phone">
+          <a class="anchor" href="#when-someone-loses-their-phone">When someone loses their phone</a>
+        </h3>
+        <p>
+          Choose <strong>Manage</strong>, then <strong>Reset sign-in</strong>, and tick
+          <strong>Also reset two-step verification</strong>. They set it up again next time they sign in.
+        </p>
+        <h3 id="when-someone-leaves"><a class="anchor" href="#when-someone-leaves">When someone leaves</a></h3>
+        <p>
+          Edit them and tick <strong>Disable this account</strong>. Their sessions end at once, the browser extension
+          and Atlas for Windows are signed out, and their history stays. Ask them first to move anything in their
+          personal vault that the company needs.
+        </p>
+        <p>
+          <strong>Sign out everywhere</strong> ends every session for a person without disabling them, for example if a
+          laptop is lost.
+        </p>
+        <h3 id="safeguards"><a class="anchor" href="#safeguards">Safeguards</a></h3>
+        <ul>
+          <li>You can't change your own role or disable yourself.</li>
+          <li>Administrators can't create, change or reset owners. At least one active owner must remain.</li>
+          <li>Changing someone's role lowers their client access to what the new role allows.</li>
+        </ul>
+        <h2 id="groups"><a class="anchor" href="#groups">Groups</a></h2>
+        <p>
+          <strong>Admin → Groups</strong> gives a team access to a set of clients in one place. Add people to a group
+          and give the group a level for each client. Someone in several groups gets the highest level any of them
+          gives. Groups can also be listed on restricted passwords.
+        </p>
+        <figure>
+          <a href="../images/manual/groups.png"
+            ><img src="../images/manual/groups.png" alt="Groups" loading="lazy"
+          /></a>
+          <figcaption>Admin → Groups.</figcaption>
+        </figure>
+        <h2 id="single-sign-on"><a class="anchor" href="#single-sign-on">Single sign-on</a></h2>
+        <p>
+          Staff can sign in with <strong>Microsoft Entra ID</strong> or any <strong>SAML 2.0</strong> identity provider
+          (Okta, Google Workspace, Duo, JumpCloud and others). Both are set up under <strong>Admin → Sign-in</strong>,
+          and both follow the same rules:
+        </p>
+        <ul>
+          <li>
+            <strong>Signing in never creates an account.</strong> Add the person in Atlas first, with the same email
+            address they have at the provider.
+          </li>
+          <li>
+            <strong>An administrator confirms each person's first link.</strong> The first time someone signs in, Atlas
+            matches them by email and stops. Open them under <strong>People &amp; access → Manage</strong>, check the
+            name, email and ID shown, and choose <strong>Confirm Microsoft account</strong> or
+            <strong>Confirm SAML account</strong>. After that Atlas recognizes them by the provider's own ID, so a
+            changed address still works and a look-alike address gets nowhere.
+          </li>
+          <li>
+            <strong>The owner can always use a password.</strong> With
+            <strong>Require single sign-on for staff</strong> on, other staff can't sign in with a password or passkey,
+            but the owner can, so a problem at the provider never locks everyone out.
+          </li>
+          <li>
+            <strong>Atlas's own two-step verification still applies</strong> unless you choose to trust the provider's.
+          </li>
+        </ul>
+        <figure>
+          <a href="../images/manual/sign-in.png"
+            ><img src="../images/manual/sign-in.png" alt="The Sign-in settings page" loading="lazy"
+          /></a>
+          <figcaption>Admin → Sign-in, with Microsoft and SAML.</figcaption>
+        </figure>
+        <h3 id="microsoft-entra-id"><a class="anchor" href="#microsoft-entra-id">Microsoft Entra ID</a></h3>
+        <ol class="steps">
+          <li>
+            In the Microsoft Entra admin center, under <strong>App registrations</strong>, make a separate app for
+            sign-in, and add the <strong>Web</strong> redirect address shown on the
+            <strong>Microsoft sign-in</strong> card.
+          </li>
+          <li>Create a client secret and copy its <strong>Value</strong>.</li>
+          <li>
+            In Atlas, enter the <strong>Sign-in tenant ID</strong>, <strong>Sign-in app ID</strong> and
+            <strong>Sign-in secret</strong>.
+          </li>
+          <li>
+            Tick <strong>Show “Sign in with Microsoft” on the sign-in page</strong> and choose
+            <strong>Save Microsoft sign-in</strong>.
+          </li>
+          <li>Try it in a private window before you tick <strong>Require Microsoft sign-in for staff</strong>.</li>
+        </ol>
+        <p>
+          <strong>Trust Microsoft's multi-factor sign-in</strong> skips the Atlas code when Microsoft already asked for
+          more than a password (through conditional access or Security Defaults).
+        </p>
+        <h3 id="saml"><a class="anchor" href="#saml">SAML</a></h3>
+        <ol class="steps">
+          <li>
+            In your identity provider, add a SAML app using the <strong>Single sign-on (ACS) URL</strong> and
+            <strong>Audience (SP entity ID)</strong> shown on the <strong>SAML sign-in</strong> card. Send the person's
+            email as an attribute named <code>email</code>, and choose a name ID that never changes for a person. The
+            provider must sign the assertion.
+          </li>
+          <li>
+            In Atlas, enter the <strong>Identity provider name</strong> (it goes on the button), its
+            <strong>Provider issuer (entity ID)</strong>, its <strong>Provider sign-on URL</strong>, and paste its
+            <strong>Provider signing certificate</strong>.
+          </li>
+          <li>
+            Tick <strong>Show “Sign in with your provider” on the sign-in page</strong>, choose
+            <strong>Save SAML sign-in</strong>, and try it in a private window before requiring it.
+          </li>
+        </ol>
+        <p>
+          Start from the Atlas sign-in page, not the provider's app tile: Atlas refuses a response it didn't ask for.
+          When the provider issues a new certificate, paste the old and new together, then remove the old one once the
+          provider has switched.
+        </p>
+        <h2 id="vault-policies"><a class="anchor" href="#vault-policies">Vault policies</a></h2>
+        <figure>
+          <a href="../images/manual/vault-policies.png"
+            ><img src="../images/manual/vault-policies.png" alt="Vault policies" loading="lazy"
+          /></a>
+          <figcaption>
+            Admin → Vault policies. Every administrator can read them; only the owner can change them.
+          </figcaption>
+        </figure>
+        <p>
+          <strong>Admin → Vault policies</strong> holds the rules for the whole vault. Every administrator can see them;
+          only the owner can change them.
+        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Policy</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>MFA</strong></td>
+                <td>
+                  Lists every active account that can reach passwords without two-step verification, such as client
+                  accounts.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Generator</strong></td>
+                <td>
+                  The shortest password the generator makes, whether it always includes numbers or symbols, and whether
+                  it offers PINs.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Require a reason for every reveal, copy, and share</strong></td>
+                <td>Applies to every client, on top of each client's own setting.</td>
+              </tr>
+              <tr>
+                <td><strong>Don't let read-only accounts reveal passwords</strong></td>
+                <td>Client viewers still see which passwords are shared with them, but can't reveal or copy them.</td>
+              </tr>
+              <tr>
+                <td><strong>Restricted passwords are for the people listed on them</strong></td>
+                <td>Administrators need a place on an entry's list like everyone else. The owner always has access.</td>
+              </tr>
+              <tr>
+                <td><strong>Give each staff member a personal vault</strong></td>
+                <td>
+                  Turns My vault on or off for everyone. Turning it off hides the vaults without deleting anything.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="emergency-access"><a class="anchor" href="#emergency-access">Emergency access</a></h3>
+        <p>For when the owner can't be reached and a restricted password is needed.</p>
+        <ol class="steps">
+          <li>
+            The owner adds trusted administrators under <strong>Emergency access</strong>, each with a wait between one
+            hour and a week.
+          </li>
+          <li>A trusted administrator requests access and says why. The owner is emailed at once.</li>
+          <li>
+            During the wait the owner can <strong>Deny</strong> it or <strong>Approve now</strong>. Otherwise access
+            starts when the wait ends, and everyone involved is emailed.
+          </li>
+          <li>Access covers every restricted password for 24 hours. The owner can end it early.</li>
+        </ol>
+        <p>
+          Every step is in the security log, and each password used this way says <em>Emergency access</em> in its
+          access history.
+        </p>
+        <h3 id="streaming-logs-to-a-siem">
+          <a class="anchor" href="#streaming-logs-to-a-siem">Streaming logs to a SIEM</a>
+        </h3>
+        <p>
+          <strong>Stream logs to a SIEM</strong> sends new security events and password access as they happen, about
+          every 30 seconds, by HTTPS webhook (JSON, optionally signed with HMAC-SHA256) or syslog (RFC 5424 over TLS,
+          TCP or UDP). If the SIEM can't be reached, Atlas records the error on the page and tries again from the same
+          place, so nothing is skipped. <strong>Send a test event</strong> checks the connection.
+        </p>
+        <h2 id="the-security-log"><a class="anchor" href="#the-security-log">The security log</a></h2>
+        <figure>
+          <a href="../images/manual/security-log.png"
+            ><img src="../images/manual/security-log.png" alt="The security log" loading="lazy"
+          /></a>
+          <figcaption>Admin → Security log.</figcaption>
+        </figure>
+        <p>
+          <strong>Admin → Security log</strong> records sign-ins, failures, lockouts, account and access changes, API
+          key use, exports, backups, service actions and updates, each with the address it came from.
+          <strong>Vault access</strong> lists every password reveal, copy, change and share.
+        </p>
+        <ul>
+          <li><strong>Export</strong> either log as CSV. Atlas asks for your password again first.</li>
+          <li>
+            <strong>Verify now</strong> checks that no event has been changed, reordered or removed since it was
+            written. Events are chained together by the database, with a signed checkpoint.
+          </li>
+          <li>
+            Logs are kept forever by default. Choose 1 to 7 years under
+            <strong>Admin → Email &amp; alerts → Alerts and logs</strong>.
+          </li>
+        </ul>
+        <aside class="callout callout-warning">
+          <p class="callout-title">If Verify now reports a break</p>
+          <p>
+            Someone changed the database directly. Keep the server as it is, export the security log, and investigate.
+            Restore from a backup if you need to.
+          </p>
+        </aside>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../install.html"><span>Previous</span>Installing Atlas</a
+          ><a class="next" href="../manual/settings.html"><span>Next</span>Settings</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#people-access">People &amp; access</a></li>
+          <li><a href="#groups">Groups</a></li>
+          <li><a href="#single-sign-on">Single sign-on</a></li>
+          <li><a href="#vault-policies">Vault policies</a></li>
+          <li><a href="#the-security-log">The security log</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.7.27. Documentation, passwords and client operations for managed service providers, on a server
+          you own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

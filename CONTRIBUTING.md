@@ -99,8 +99,8 @@ labelled controls, no colour-only meaning, and no sideways scrolling at 390 px.
 ## Releasing
 
 1. Set the new version in every `package.json` (the root and each workspace, including the
-   internal `@atlas/*` dependencies), run `npm install`, and add a `## [x.y.z]` section to
-   [CHANGELOG.md](CHANGELOG.md).
+   internal `@atlas/*` dependencies), run `npm install` and `npm run build:site` (the site shows
+   the version), and add a `## [x.y.z]` section to [CHANGELOG.md](CHANGELOG.md).
 2. Merge to `main` with CI green.
 3. Push a tag `vx.y.z` on that commit, or run the **Release** workflow from the Actions tab on
    `main`, which creates the tag.
@@ -116,3 +116,7 @@ job fails, use **Re-run failed jobs** rather than starting a new run.
 <https://ithealthtech.github.io/nexus-atlas/>, deployed by `.github/workflows/pages.yml` when
 it changes on `main`. It is plain HTML, CSS, and JavaScript with a strict Content Security
 Policy: no inline scripts or styles, and no third-party assets.
+
+The pages are built from the Markdown in `site/` by `npm run build:site`. Edit those, not the
+HTML, and commit both; CI fails if the HTML is out of date. Screenshots are in
+`pages/images/manual/`.

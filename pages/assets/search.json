@@ -1,0 +1,689 @@
+[
+  {
+    "u": "manual/index.html",
+    "p": "About this manual",
+    "s": "Who this manual is for",
+    "h": "who-this-manual-is-for",
+    "t": "A technician [Getting started](getting-started.html), then [Clients](clients.html), [Documentation](documentation.html) and [Passwords](passwords.html) An administrator [People and access](people-and-access.html) and [Settings](settings.html), then the chapters for technicians The person who runs the server [Installing Atlas](../install.html) and [Keeping Atlas healthy](looking-after-atlas.html) A client's own staff [For your clients](client-portal.html)"
+  },
+  { "u": "manual/index.html", "p": "About this manual", "s": "Chapters", "h": "chapters", "t": "" },
+  {
+    "u": "manual/index.html",
+    "p": "About this manual",
+    "s": "Other versions of this information",
+    "h": "other-versions-of-this-information",
+    "t": "The manual is written from the guides kept beside the code: the [administrator guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md), the [user guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/USER-GUIDE.md), the [deployment guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DEPLOYMENT.md), and [data in and out](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DATA.md). Those go deeper into settings and file formats. What changed in each release is in the [changelog](https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md). The screenshots show a demonstration organization with made-up clients. Your Atlas shows your own logo and colour."
+  },
+  {
+    "u": "manual/how-atlas-works.html",
+    "p": "How Atlas fits together",
+    "s": "The parts",
+    "h": "the-parts",
+    "t": "**Atlas** The application. One service that serves the web pages and the API, runs scheduled jobs (syncs, checks, backups, alerts), and holds the vault key while it runs. **PostgreSQL** The database. Every client, asset, document, password and log entry is stored here. Passwords and other secrets are encrypted before they reach it. **Web proxy** Caddy on Linux installs. It serves Atlas over HTTPS and keeps its certificate up to date. **The master key** A key kept outside the database. It protects the vault key and every backup. Without it, encrypted data can't be read, so the person who runs the server keeps a copy offline. **The updater** A small helper on Linux installs. It installs new releases and carries out restarts and repairs when an administrator asks from the web page."
+  },
+  {
+    "u": "manual/how-atlas-works.html",
+    "p": "How Atlas fits together",
+    "s": "What a client workspace holds",
+    "h": "what-a-client-workspace-holds",
+    "t": "Every client you support gets a workspace. Its tabs are the same for every client: **Overview** The client at a glance: primary contact, hours, maintenance window, asset counts, warranty, device health, security, trackers, tickets and recent activity. **Assets** Servers, workstations, firewalls, switches, domains, SSL certificates, licences and anything else, each in a layout with its own fields. **Documents** Runbooks, procedures and notes for this client. **Passwords** The client's vault: logins, secure notes, one-time codes and BitLocker keys. **Contacts** and **Locations** The people you deal with and the sites you visit. **Checklists** Onboarding, offboarding and maintenance procedures worked through step by step. **Map** How the client's assets, passwords, documents, contacts and locations link together. **Activity** Every change, by whom and when. **Trackers** Domain and SSL certificate expiry for the client's websites."
+  },
+  {
+    "u": "manual/how-atlas-works.html",
+    "p": "How Atlas fits together",
+    "s": "Where your data comes from",
+    "h": "where-your-data-comes-from",
+    "t": "You can type everything in, but most teams start by bringing it in: **Hudu** companies, layouts, assets, articles, passwords, processes and relations import in one run, and running it again updates rather than duplicates. **Spreadsheets** (CSV) bring in clients, contacts, locations, assets and passwords. **ConnectWise RMM** keeps devices, their health and their tickets up to date every hour. **Microsoft 365** turns each client's tenant into contacts, licences and domains. **Vendors** fill in warranty dates for Dell, Lenovo and HP devices, and domain registries and websites fill in expiry dates for domains and certificates. Chapter 12, [Data and integrations](integrations.html), explains each one."
+  },
+  {
+    "u": "manual/how-atlas-works.html",
+    "p": "How Atlas fits together",
+    "s": "Who sees what",
+    "h": "who-sees-what",
+    "t": "Atlas decides everything by role and by client. A technician sees only the clients they have been given, and a client they can't open looks the same as one that doesn't exist. Passwords need a higher level of access than documentation. Client accounts see only their own organization. [Getting started](getting-started.html#what-you-can-do-depends-on-your-role) has the full table."
+  },
+  {
+    "u": "manual/getting-started.html",
+    "p": "Getting started",
+    "s": "Sign in for the first time",
+    "h": "sign-in-for-the-first-time",
+    "t": "Your administrator gives you the Atlas address, your email, and a temporary password. Open the Atlas address in your browser and sign in with your email and the temporary password. Choose your own password. It must be at least 12 characters; a few unrelated words work well. Set up two-step verification. Staff can't do anything else until it's on. Scan the QR code with an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password and so on) and enter the six-digit code, or add a passkey instead. Save your recovery codes. They are shown once. Each one gets you in once if you lose your phone. Keep them somewhere other than Atlas. At the second step you can tick **Remember this browser for 30 days** so your own computer doesn't ask for a code every time. Only do this on a device that is yours. Passkeys A passkey is Windows Hello, Touch ID, your phone, or a security key. Add one under **Profile & sign-in → Passkeys** (open the account menu with your initials at the bottom of the menu). After that, **Sign in with a passkey** on the sign-in page signs you in without typing a password, and can't be phished. Signing in with Microsoft or your identity provider If your company has set it up, the sign-in page shows **Sign in with Microsoft** or **Sign in with** your provider's name. Your account must already exist in Atlas. The first time you use it, an administrator confirms that the Microsoft or provider account is really yours, and until they do, Atlas asks you to wait. Forgot your password Choose **Forgot your password?** on the sign-in page. The link in the email works once, for an hour. If you have also lost your phone and recovery codes, an administrator can reset your sign-in."
+  },
+  {
+    "u": "manual/getting-started.html",
+    "p": "Getting started",
+    "s": "Find your way around",
+    "h": "find-your-way-around",
+    "t": "Atlas is organized into five areas. Each area has a handful of pages. **Home** Dashboard, Expirations Everyone **Clients** All clients, and a shortcut to each client Everyone **Docs** Assets, Knowledge base, Checklists Everyone; the knowledge base and checklists are for staff **Vault** Passwords, My vault, Password health, Send; Password rotation and BitLocker collector for administrators Staff **Admin** People and security, data, system, and settings pages Administrators Your account menu, with your initials, is at the bottom of the menu (or at the right of the top bar). It has **Profile & sign-in**, light and dark appearance, and **Sign out**. Search everything with Ctrl+K Press **Ctrl+K** (or **⌘K** on a Mac) anywhere in Atlas, or click **Search** in the menu. Type a client, an asset name, an IP address, a serial number, a contact, or words from a document. Use the arrow keys and **Enter** to open a result, or **Esc** to close. Results only include what you have access to. Choose a menu style Atlas has three menu layouts. Everyone picks their own under **Profile & sign-in → Menu**, and it follows you to any computer. On a phone the menu always slides out from the side. **Rail and panel** (the default) Five area icons down the left edge, with the pages of the area you're in beside them. Getting around quickly once you know where things are. **Sidebar** One list of the pages you use every day, plus your starred clients. **Administration** opens its own list, with **Back to Atlas** at the top. People who mostly work in a few pages. **Top bar** The areas across the top, and the pages of the current area in a second row beneath. Wide tables and long pages, because the page gets the full width of the screen. Favourites and the dashboard Click the star beside a client, asset or document to add it to the **Favorites** card on your dashboard. In the rail and sidebar styles, starred clients also appear in the menu. Choose **Customize** on the dashboard to show, hide and reorder its cards. Your layout is yours alone. **Reset to default** puts the standard layout back. Light and dark Choose the appearance in the account menu. Atlas remembers it per browser."
+  },
+  {
+    "u": "manual/getting-started.html",
+    "p": "Getting started",
+    "s": "What you can do depends on your role",
+    "h": "what-you-can-do-depends-on-your-role",
+    "t": "Everyone in Atlas has one role, plus an access level for each client. **Owner** The person responsible for Atlas Every client, including passwords Everything, including other owners and vault policies **Admin** Service managers, senior technicians Every client, including passwords People, settings, imports, system **Technician** Your technicians The clients they're given, up to editing passwords None **Read-only technician** Trainees, auditors The clients they're given, read-only None **Client editor** A client's own staff who keep their documentation Their own organization, can edit None **Client viewer** A client's own staff Their own organization, read-only None For each client, a person's access is one of **No access**, **Read**, **Edit**, or **Edit + passwords**. Only **Edit + passwords** shows the client's vault. Your access to a client is shown under its name. A client you have no access to looks exactly like one that doesn't exist, on purpose. Ask an administrator to give you access under **Admin → People & access** or through a group."
+  },
+  {
+    "u": "manual/getting-started.html",
+    "p": "Getting started",
+    "s": "Look after your own account",
+    "h": "look-after-your-own-account",
+    "t": "**Profile & sign-in** is where you manage your own security: **Change password.** Changing it signs out your other devices. **Two-step verification**, **Authenticator app**, **Passkeys** and **Recovery codes.** Add a second method so losing your phone doesn't lock you out. **Where you're signed in.** Every browser session, with **Sign out** for each one you don't recognize. **Remembered browsers.** Forget any browser that no longer needs to skip the code. **Signed-in apps** and **Desktop apps.** The browser extension and Atlas for Windows, with **Sign out** for each. **Email notifications.** Tick **Email me about expirations** for alerts when certificates, domains, licences, warranties, password rotations and document reviews come due, plus a Monday digest."
+  },
+  {
+    "u": "manual/getting-started.html",
+    "p": "Getting started",
+    "s": "Keyboard and accessibility",
+    "h": "keyboard-and-accessibility",
+    "t": "**Tab** from the top of any page reaches **Skip to content** first. **Ctrl+K** opens search anywhere. **Esc** closes dialogs and menus, and focus returns to where you were. Every screen is tested against WCAG 2.2 AA in light and dark, and at phone width."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "The client list",
+    "h": "the-client-list",
+    "t": "**Clients → All clients** lists every client you can open, with its status, your access, and when it last changed. Type in **Search clients** to filter, or choose **All**, **Active**, **Prospect** or **Inactive**. In the rail menu style, the **Go to** list in the Clients panel jumps straight to any client. Add a client You need edit access to every client to add one. Administrators always have it. Choose **Add client** on the client list. Enter the **Client name**, and choose its **Type** and **Status**. Optionally fill in **Hours of operation** and **Maintenance window**. They show on the client's overview, where technicians look before scheduling work. Tick **Require a reason to view passwords** if this client wants every password reveal explained. See [Passwords](passwords.html#reveal-and-copy-a-password). Choose **Save**. Importing from Hudu or a spreadsheet, or syncing ConnectWise RMM companies, creates clients for you. An imported company is matched to an existing client with the same name rather than creating a second one. See [Data and integrations](integrations.html)."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "A client's workspace",
+    "h": "a-client-s-workspace",
+    "t": "Opening a client shows: **The header:** the client's name and type, your access, and the star to add it to your favourites. **Monthly report**, **Export**, **Edit client**, and for administrators **Delete**, are on the right. **The quick note:** a short note at the top of every page for this client, for the thing everyone should know before they touch anything. **The tabs:** **Overview**, **Assets**, **Documents**, **Passwords**, **Contacts**, **Locations**, **Checklists**, **Map** and **Activity**, each with a count. The **Trackers** row underneath has **Domain Tracker** and **SSL Tracker**. A tracker count turns amber when something needs attention. Hide tabs you don't use Choose **Choose which sections show** (the sliders at the right of the tabs) and untick the sections you don't need. This only changes your own view; other people still see every tab."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "The overview",
+    "h": "the-overview",
+    "t": "The overview is the client at a glance. Scroll down for the detail. **Facts** Primary contact, phone, hours of operation and maintenance window. **Assets** How many assets the client has in each layout. Choose one to open the list. **Contact and location** The primary contact's details and the primary location's address. **Asset warranty** Hardware by when its warranty ends: expired, ending soon, active, unknown. **RMM health** From ConnectWise RMM: devices online, stale agents, and endpoint protection. **Security and compliance** From ConnectWise: patch compliance, backup and DR readiness, vulnerabilities and MDR incidents. A part the client doesn't use says *Not available*. **Domain and SSL expiry** What is expired or expiring among the client's domains and certificates. **Asset statistics** Servers, workstations, network devices, printers and phones, and a chart of operating systems that marks the ones out of support. **Tickets** and **Ticket details** Tickets opened and closed per day, and the open tickets that have gone longest without an update. **Installed software** Applications reported by ConnectWise RMM across the client's devices. **Recently updated documents** and **Recent activity** What changed lately, and who changed it. Several changes in a row by one person show as one line. Cards that rely on ConnectWise only appear once the client is linked to a ConnectWise company. Chapter 6, [Monitoring and alerts](monitoring.html), explains each card in detail."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "Quick notes",
+    "h": "quick-notes",
+    "t": "The quick note is for one or two lines everyone must see: \"Practice management runs on-prem, never reboot the server before 6 PM\", or \"New firewall going in next week.\" Choose **Edit** on the note to change it. **History** shows every earlier version, lets you compare two, and restore one."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "Contacts and locations",
+    "h": "contacts-and-locations",
+    "t": "The **Contacts** and **Locations** tabs list the people and sites for this client. **Add contact** or **Add location** opens a form. Tick **Primary contact** or **Primary location** to show it on the overview. A contact's email and phone numbers are links, so you can call or write from the page. Link a contact or location to the assets and documents it relates to from the item's **Related** section. See [Documentation](documentation.html#link-related-items)."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "The relationship map",
+    "h": "the-relationship-map",
+    "t": "The **Map** tab draws how the client's assets, passwords, documents, contacts and locations link together, with the same links as a list below for keyboard and screen-reader use. It's built from the links you make under **Related** on each item."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "The monthly report",
+    "h": "the-monthly-report",
+    "t": "**Monthly report** in the client header opens a printable page with the client's assets and documents. Use your browser's **Print**, and choose **Save as PDF** to send it to the client."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "Export a client",
+    "h": "export-a-client",
+    "t": "**Export** downloads a zip of everything you can see for the client: `client.json`, with the client, contacts, locations, assets and their fields, documents and links. The documents as plain text. The attached files. Administrators can tick **Include decrypted passwords**. Atlas asks for your password again first, and every password exported is logged. Keep such an export encrypted, and delete it when you're done."
+  },
+  {
+    "u": "manual/clients.html",
+    "p": "Clients",
+    "s": "Change or delete a client",
+    "h": "change-or-delete-a-client",
+    "t": "**Edit client** changes the name, type, status, hours, maintenance window and the reason requirement. **Delete** (administrators only) removes the client and everything in it. You must type the client's name exactly. The deletion is recorded in the security log. It can't be undone except by restoring a backup. A deleted client's assets, documents, passwords and history are gone. If you only stopped working with them, set the status to **Inactive** instead."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Assets",
+    "h": "assets",
+    "t": "An asset is anything you look after: a server, a workstation, a firewall, a switch, a domain name, an SSL certificate, a software licence. Each asset uses a **layout** that decides its fields. Atlas comes with layouts such as Configurations, Endpoints, Networks, Domains, SSL certificates and Licenses, and administrators can add their own. **Docs → Assets** lists assets across every client you can see. A client's **Assets** tab lists just theirs, grouped by layout. Add an asset Open the client and go to its **Assets** tab, then choose **Add asset**. Pick the layout. Fill in the fields. Atlas checks them as you save: an IP address, date, email address or web address in the wrong format is pointed out before anything is saved. Choose **Save**. Devices from ConnectWise RMM and tenants from Microsoft 365 arrive as assets on their own; you don't need to add them by hand. Fields filled by a sync are kept up to date by the sync, and fields you add yourself are left alone. An asset's page An asset's page shows its **Details** (every field in its layout), **Notes** and **Activity**. Down the right are: **BitLocker**, for Windows machines that report through the BitLocker collector or ConnectWise RMM. See [Passwords](passwords.html#bitlocker-recovery-keys). **Related**, the passwords, documents, contacts and locations linked to it. **Files**, anything attached. **Version history**, every saved version. The buttons at the top are **QR label**, **Check warranty** (for hardware with a serial number), **Archive** and **Edit**. Archive instead of deleting **Archive** takes an asset out of lists and counts without losing it. **Show archived** on the assets list shows them, and **Restore** on an archived asset brings it back. Assets that a ConnectWise RMM sync no longer finds are archived for you. Warranty dates For Dell, Lenovo and HP hardware with a serial number, Atlas looks up the warranty end date from the vendor's public warranty check when the asset is saved, and during each ConnectWise RMM sync. **Check warranty** looks it up again now. A date someone typed in is never replaced. QR labels Choose **QR label** on an asset, or **QR labels** on a client's Assets tab for everything shown. Pick a label size and print. Scanning a label with a phone opens that asset in Atlas after signing in. The label itself shows only the name, the client and the serial number, so nothing sensitive is printed."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Documents",
+    "h": "documents",
+    "t": "Documents are runbooks, procedures, how-tos and notes. They live in a client's **Documents** tab, or in the MSP **Knowledge base** for procedures that apply to every client. Write a document Choose **New document**, on a client's Documents tab or in **Docs → Knowledge base**. Give it a **Title**, and choose a **Folder** if you use them. Write it. The editor has headings, bulleted and numbered lists, checklists, tables, code blocks and links. Set its **Status**: **Current**, **Needs review** or **Draft**. Optionally set **Review by**. Atlas reminds you on the Expirations page when the date comes, so procedures don't quietly go out of date. Choose **Save**. The knowledge base **Docs → Knowledge base** is your team's own library: procedures, standards and how-tos that aren't about one client. Client accounts never see it. **New folder** keeps it organized. **Template library** offers ready-made runbooks to start from. They go into a Runbooks folder, and you edit them like any other document. Share a document with a link **Share** on a document makes a link anyone can open without signing in, for a how-to you want to send to a client's staff. They see that one document, always as it is now, and nothing else in Atlas. Choose how long the link works. Atlas shows how often it has been opened. **Revoke** stops the link working at once. Anyone with the link can read the document. Don't share one that contains passwords or anything about another client."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Checklists",
+    "h": "checklists",
+    "t": "Checklists are procedures you work through step by step: onboarding a new user, decommissioning a laptop, patching a server. A checklist is the reusable template; a **run** is one time you work through it for a client. Make a checklist Go to **Docs → Checklists** and choose **New checklist**, or **Template library** to start from one of 13 ready-made checklists (client and user onboarding and offboarding, endpoint setup and decommission, server patching, backup verification, Microsoft 365 setup, firewall change, password rotation, incident response, SSL and domain renewal). Give it a **Title** and choose **Add a step** for each step. Make it available to every client, or to one. Steps are copied into each run when it starts, so changing a checklist later doesn't change work already under way. Run a checklist for a client On the client's **Checklists** tab, choose **Start a checklist**. Pick the **Checklist** (or write a one-off list of **Steps**), and choose who to **Assign to**. Tick each step as you do it. Atlas records who ticked it and when. **Add a note** records what you found. Set a **Due** date if it has one. An overdue run is marked. **Markdown** downloads the run as a text file, and **Print or PDF** gives you a printed record for the client."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Link related items",
+    "h": "link-related-items",
+    "t": "Every asset, document, password, contact and location has a **Related** section. Choose **Link** to connect it to others: the firewall to its runbook, its admin password and the site it's in. Links work both ways, so the runbook shows the firewall too, and the client's **Map** tab draws them all."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Files",
+    "h": "files",
+    "t": "Drag files onto the **Files** section of any asset or document to attach them, or choose **Upload**. Images that pass a content check show inline; other files download. Files are stored outside the web server's reach under random names."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Version history",
+    "h": "version-history",
+    "t": "Every save keeps the previous version. **Version history** lists every version with who saved it and when. **Compare** shows what changed between two versions, line by line, and **Restore version** puts an old one back as a new version. If someone else saved while you were editing, Atlas tells you instead of overwriting their work. Copy your changes, reload, and apply them again."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Asset layouts",
+    "h": "asset-layouts",
+    "t": "Administrators manage layouts under **Admin → Asset layouts**. A layout has a name, an icon and fields. Each field has a type: **Text**, **Long text**, **Number**, **Date**, **Choice**, **Multiple choice**, **Yes / no**, **Web address**, **Email**, **Phone**, or **IP address or subnet**. A date field can be ticked as an **Expiry date**, which puts it on the Expirations page and in expiry alerts."
+  },
+  {
+    "u": "manual/documentation.html",
+    "p": "Documentation",
+    "s": "Duplicates",
+    "h": "duplicates",
+    "t": "Imports and syncs sometimes create the same thing twice. **Admin → Duplicates** lists assets, contacts and locations with the same name in the same client, and clients with the same name. Choose the record to keep and merge the rest into it: blank fields are filled in, links and files move over, and merged assets are archived so they can be restored."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "The vault",
+    "h": "the-vault",
+    "t": "**Vault → Passwords** lists every password you can open. A client's **Passwords** tab lists just theirs, with **Folders** down the side. On each row you can copy the username, the password or the one-time code without opening the entry. The star keeps a password at the top of the list. Tick several entries to archive or restore them together, change how often they rotate, or start or stop sharing them with the client."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Reveal and copy a password",
+    "h": "reveal-and-copy-a-password",
+    "t": "The eye shows the password. **Copy password** puts it on the clipboard, and Atlas clears the clipboard after 30 seconds. The six-digit one-time code for accounts with an authenticator updates live. **Copy one-time code** copies it. Some clients require a reason first. Atlas asks *Why do you need this password?* and keeps your answer with the record of the reveal. A ticket number is a good reason. Every reveal, copy, change and share appears under **Access history** on the entry, and in **Admin → Security log → Vault access**."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Add a password",
+    "h": "add-a-password",
+    "t": "On the client's **Passwords** tab, choose **Add password**. Choose the **Type**: a login, a secure note, or a BitLocker recovery key. Fill in the **Name**, username, password and **Website or address**. The address is what the browser extension matches against. Use the generator for a random password or a passphrase. **Presets** remember the lengths and character sets your team uses. If the account has two-step sign-in, paste its **Authenticator setup key (TOTP)** so Atlas can show the one-time code. Optionally set **Rotate every** (how often it should change), **Account expires**, a **Folder**, **Notes (encrypted)**, extra fields with **Add a field**, and the assets it belongs to under **Linked assets**. Choose **Save**. Atlas warns you when a password is weak or already used elsewhere."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Change a password and its history",
+    "h": "change-a-password-and-its-history",
+    "t": "Edit the entry and enter the new password. The old one moves to **Previous passwords**, with when it changed, so you can still find it if the change didn't take everywhere. If the entry has **Rotate every** set, it appears on the Expirations page when the change is due, and in expiry alerts."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Restrict an entry to named people",
+    "h": "restrict-an-entry-to-named-people",
+    "t": "Some passwords should only be open to a few people: a domain admin, a payroll login. Edit the entry and tick **Restricted**, then tick the groups and people under **Who can use it**. Everyone else can't see the entry exists. By default, administrators still see restricted entries. The owner can change that in **Vault policies**, so restricted means only the people listed. See [People and access](people-and-access.html#vault-policies)."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Share with the client's own staff",
+    "h": "share-with-the-client-s-own-staff",
+    "t": "Tick **Share with the client's own accounts** on an entry so the client's own contacts can see it when they sign in to Atlas, read-only. Each view is recorded for you."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Share with a one-time link",
+    "h": "share-with-a-one-time-link",
+    "t": "For someone outside Atlas, send a link instead of pasting a password into email or chat. **Quick share** makes a link that opens once, within 24 hours, and copies it. **More options** lets you choose how many times it **Can be opened** and when it **Expires after**. The password is encrypted in your browser, and the key is only in the part of the link after the `#`, which never reaches the server. Send the link through a different channel from the username. **Share links** on the entry lists the links you've made, and you can revoke any of them."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Send text or a file once",
+    "h": "send-text-or-a-file-once",
+    "t": "**Vault → Send** is for anything else you need to hand over once: a licence key, a config file, instructions. Choose **New Send**, then text or a file. Give it a **Name** (only you see it), choose how many times it **Can be opened** and when it **Expires after**. Copy the **Send link** and give it to the recipient. Like share links, it's encrypted in your browser before it's uploaded, and Atlas never has the key. Administrators can tick **Show everyone's Sends** to see what's outstanding."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "My vault",
+    "h": "my-vault",
+    "t": "**Vault → My vault** is a private place for logins and notes that are yours alone: your own vendor portal account, your payroll login, a door code. **Only you can see it.** Not administrators, not the owner. It isn't attached to any client and doesn't appear in search, reports, password health, exports or the audit log. **Add** a login or a secure note. The generator and one-time codes work the same as in a client's vault. **In the browser extension,** your own logins are offered on matching sites, marked *My vault*. **Deleting is permanent.** There is no archive and no history. **Move to a client** turns an entry that belongs to the team into one of a client's passwords. It leaves your vault and can't be moved back. **Export** downloads your vault as a CSV file in the layout Bitwarden uses. Atlas asks for your password first. The file holds every password in plain text, so import it and delete it. Nobody can open your personal vault after your account is closed. Move what the company needs to its client, and export the rest, before you go. The owner can turn personal vaults off for everyone in Vault policies. Nothing is deleted, and everything comes back if they're turned on again."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Password health",
+    "h": "password-health",
+    "t": "**Vault → Password health** reports weak, reused, overdue, expired, old and breached passwords across the clients you can open, with a score for each client, lowest first. Filter by problem, open an entry to fix it, or export the list as CSV. Nothing on the page shows a password. **Breached** passwords are found with Have I Been Pwned. Only the first five characters of a scrambled (SHA-1) fingerprint leave the server, and Atlas stores only a count. An administrator can untick **Check passwords against known breaches** on the same page for servers without internet access."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "BitLocker recovery keys",
+    "h": "bitlocker-recovery-keys",
+    "t": "BitLocker keys are kept as their own type of entry, and the 48-digit key is checked for typos as you type it. They arrive in three ways: **By hand:** **Add password**, then the BitLocker type. **The BitLocker collector:** a script your RMM runs on each Windows machine reads its BitLocker status and recovery keys and sends them to Atlas. See [Data and integrations](integrations.html#bitlocker-collector). **ConnectWise RMM:** if your keys are already in a device custom field, the sync's **BitLocker keys** option saves them to the vault. A machine's asset page shows a **BitLocker** panel with each drive's protection, and its keys are under **Related**."
+  },
+  {
+    "u": "manual/passwords.html",
+    "p": "Passwords",
+    "s": "Automatic password rotation",
+    "h": "automatic-password-rotation",
+    "t": "Administrators can have Atlas change local administrator and Active Directory service account passwords on a schedule, through ConnectWise RMM. The vault only changes after the device confirms the new password. See [Data and integrations](integrations.html#automatic-password-rotation)."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "The dashboard",
+    "h": "the-dashboard",
+    "t": "The dashboard on **Home** puts it all on one page: totals across your clients, then the cards below, for every client you can see. Each client's overview has the same cards for that client alone. Choose any tile, slice or row to list the devices or items behind it."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Expirations",
+    "h": "expirations",
+    "t": "**Home → Expirations** lists everything coming due, grouped by when: overdue, then the coming weeks. It includes: Asset date fields marked as expiry dates, such as certificate and domain expiry, licence renewals and warranties. Password rotations that are due. Documents whose **Review by** date has come. If something is missing, check that its layout's date field is ticked as an **Expiry date** (see [Asset layouts](documentation.html#asset-layouts))."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Email alerts",
+    "h": "email-alerts",
+    "t": "Atlas emails people who tick **Email me about expirations** on their account page: **An alert** the chosen number of days before each thing is due. **A weekly digest** on Monday mornings, listing everything overdue or due in the coming weeks. Administrators choose the alert days and the digest under **Admin → Email & alerts → Alerts and logs**. Email itself must be set up first, on the same page."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "RMM health",
+    "h": "rmm-health",
+    "t": "From ConnectWise RMM, for clients linked to a ConnectWise company. **Devices, Servers, Workstations, Offline servers** Counts across the synced devices. An offline server is marked. **Agent online** Devices online, offline, and unknown right now. **Stale agents** How long since each agent last checked in: current (under 7 days), stale, very stale (30 days or more), and never reported. **Endpoint protection** Whether the antivirus is running, not running, missing, or not reported. **Last 30 days** How each percentage has moved over the month. Administrators change when an agent counts as stale under **Admin → Monitoring → RMM health**."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Asset warranty",
+    "h": "asset-warranty",
+    "t": "Hardware assets by when their warranty ends: expired, expiring soon, active, and unknown. For Dell, Lenovo and HP devices with a serial number, Atlas looks the date up from the vendor's public warranty check, with no API keys to set up. A date someone typed in is never replaced. Under **Admin → Monitoring → Asset warranty**, administrators choose how many days count as expiring soon, and can untick **Look up warranties automatically**."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Domain and SSL trackers",
+    "h": "domain-and-ssl-trackers",
+    "t": "Each client's **Domain Tracker** and **SSL Tracker** tabs list its domains and certificates with their expiry dates. The **Domain and SSL expiry** card shows what is expired or expiring. **Domains** are re-checked with their registry weekly, and daily once they're within 60 days of expiring. **Certificates** are read from each website daily. **Check now** on a tracker tab checks straight away. The dates are saved on the asset, so they appear on Expirations and in alerts. Some registries don't publish an expiry date, and a certificate can only be read from a site Atlas can reach on port 443. For those, type the date on the asset. Under **Admin → Monitoring → Domain and SSL trackers**, administrators can turn the schedule off, and choose whether to **Add SSL certificates for domains** automatically when a domain's website serves a certificate the client has no asset for."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Asset statistics",
+    "h": "asset-statistics",
+    "t": "Servers, workstations, switches, network devices, printers and phones, and a chart of operating systems that marks the ones out of support. Choose a tile or a slice to list the devices. Administrators decide which asset layouts count as which kind of device under **Admin → Monitoring → Asset statistics**."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Security and compliance",
+    "h": "security-and-compliance",
+    "t": "For clients linked to a ConnectWise company: **Patch compliance** for Windows and third-party software. **Backup and DR readiness.** **Vulnerabilities** by severity. **Security incidents (MDR)** that are open. A synced device's asset page has its own card with missing patches, backup jobs and vulnerabilities. Areas your ConnectWise partner account doesn't use show *Not available*."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Tickets",
+    "h": "tickets",
+    "t": "When ticket sync is on, the **Tickets** card shows tickets opened and closed per day and a tile for each status, and **Ticket details** on each client's overview lists the open tickets that have gone longest without an update. Ticket numbers match the ConnectWise portal, and each one links to the ticket there. Tickets are read-only in Atlas."
+  },
+  {
+    "u": "manual/monitoring.html",
+    "p": "Monitoring and alerts",
+    "s": "Activity",
+    "h": "activity",
+    "t": "Every client has an **Activity** tab, and the dashboard and overview have **Recent activity**: who created, changed, archived or linked what, and when. Several changes in a row by the same person to the same kind of thing show as one line ending \"and N more\"."
+  },
+  {
+    "u": "manual/apps.html",
+    "p": "Extension and Windows app",
+    "s": "The browser extension",
+    "h": "the-browser-extension",
+    "t": "The Atlas extension for Microsoft Edge and Google Chrome fills logins from the vault on the site you're on. Sign the extension in Click the Atlas button in the browser toolbar. Enter your Atlas address and choose **Sign in through Atlas**. Atlas opens in a new tab. Check it shows the same code as the extension, then choose **Allow**. You may be asked for your password. You never type a password into the extension itself. Fill a login On a sign-in page, click the Atlas button, or press **Alt+Shift+A**. Logins saved for that site are listed first, then logins elsewhere on the same domain, marked *Same domain*. Your own logins from My vault are marked *My vault*. Choose **Fill**. The username and password go into the page. On sites that ask for the username first, fill once for the username and again on the password page. Clients that require a reason ask for one first. Copy instead Search by name, username, address or client to copy a password, username or one-time code for any login you can use. The extension can't clear the clipboard after it closes, so prefer **Fill** when you can. Which logins match a site A login matches when its **Website or address** has the same host as the page, or the same domain, so a login saved for `login.example.com` is offered on `portal.example.com`. Addresses on shared hosting, such as `*.github.io`, and IP addresses only match exactly. An `https://` login is never offered on a plain `http://` page. Signing out Use **Sign out** in the extension, or **Signed-in apps** on your account page. The extension also signs itself out after 7 days unused, 30 days after signing in, and whenever your password changes or an administrator signs you out. For administrators: installing the extension `npm run build:extension` builds it. The unpacked extension goes to `apps/extension/dist`, and a zip to `apps/extension/package`. To try it, open `edge://extensions` or `chrome://extensions`, turn on developer mode, and **Load unpacked** with the `dist` folder. For your team, publish the zip privately in the Edge Add-ons or Chrome Web Store dashboard, or host it and force-install it with the `ExtensionInstallForcelist` group policy. It can only read and fill the tab you open it on, and it asks to reach one address: your Atlas. It stores the Atlas address, a session token and a signing key the browser won't let it export. No passwords, codes or lists of logins."
+  },
+  {
+    "u": "manual/apps.html",
+    "p": "Extension and Windows app",
+    "s": "Atlas for Windows",
+    "h": "atlas-for-windows",
+    "t": "A small app in the notification area, for looking things up without opening a browser tab. Install it Open your account page in Atlas and find **Desktop apps**. Choose **Download** and run `AtlasForWindowsSetup.exe`. Windows may say it doesn't recognize the publisher, because the app isn't code-signed yet. Choose **More info**, then **Run anyway**. It installs for you only and doesn't need an administrator. The `.sha256` file beside each download in the GitHub release lets you check the file. Atlas for Windows refuses a certificate Windows doesn't trust, and has no way to override that. If your Atlas was installed at an IP address, install its certificate authority first. See [Keeping Atlas healthy](looking-after-atlas.html#the-certificate). Sign in Enter your Atlas address and choose **Sign in with your browser**. Your browser opens, you sign in as usual, and you approve the app. The app never sees your password. Search and copy Press **Ctrl+Shift+Space** anywhere in Windows, or click the Atlas icon in the notification area. Type. It searches the clients, assets, documents, contacts, locations and passwords you can see. With a password selected, **Enter** copies it. The buttons copy the username or the one-time code, or open the sign-in address. A copy is recorded like a reveal in the browser, asks for a reason where the client requires one, is kept out of Windows clipboard history, and is cleared from the clipboard after 30 seconds. Your personal vault isn't available in the app. Updates When a newer version is out, the app tells you once and adds **Get version …** to its menu, which opens the download in your browser. Run the new setup program over the old one; you stay signed in. The app never downloads or installs anything by itself. Sign out **Sign out** in the app's menu, or **Desktop apps** on your account page. Use the account page if the computer is lost: it ends the app's session at once. For administrators: rolling it out Run `AtlasForWindowsSetup.exe /VERYSILENT /SUPPRESSMSGBOXES` from your RMM as the signed-in person, not as SYSTEM, because it installs per person. **Sign out everywhere** on the People & access page, disabling an account, or resetting its sign-in also ends the app's session."
+  },
+  {
+    "u": "manual/client-portal.html",
+    "p": "For your clients",
+    "s": "What a client account sees",
+    "h": "what-a-client-account-sees",
+    "t": "A client account sees only its own organization, and only what you give it: The documentation you've shared: assets, documents, contacts and locations. The passwords you've marked **Share with the client's own accounts**, read-only. Your logo, colour and welcome message. They never see the MSP knowledge base, other clients, your checklists, the vault for anything you haven't shared, or any administration page. They can't use the browser extension or Atlas for Windows."
+  },
+  {
+    "u": "manual/client-portal.html",
+    "p": "For your clients",
+    "s": "Give a client's staff access",
+    "h": "give-a-client-s-staff-access",
+    "t": "Go to **Admin → People & access** and choose **Add person**. Enter their name and email. Choose the role: **Client viewer** to read their documentation. **Client editor** to also keep it up to date themselves. Under **Client access**, give them their own organization. Choose **Create account**. Atlas gives you a temporary password for them to change at first sign-in."
+  },
+  {
+    "u": "manual/client-portal.html",
+    "p": "For your clients",
+    "s": "Share passwords with the client",
+    "h": "share-passwords-with-the-client",
+    "t": "Open a password and tick **Share with the client's own accounts**. Their contacts can then see it when they sign in. To share several at once, tick them on the client's Passwords tab and change their client portal sharing together. Every view is recorded for you in the password's access history. If the client requires reasons, they're asked too. If you'd rather client viewers could see which passwords exist but not reveal them, the owner can tick **Don't let read-only accounts reveal passwords** in Vault policies."
+  },
+  {
+    "u": "manual/client-portal.html",
+    "p": "For your clients",
+    "s": "The welcome message and branding",
+    "h": "the-welcome-message-and-branding",
+    "t": "**Admin → Theme** sets your logo, accent colour, and a welcome message that client accounts see at the top of their dashboard. Use it for how to reach your help desk."
+  },
+  {
+    "u": "manual/client-portal.html",
+    "p": "For your clients",
+    "s": "For client contacts: using Atlas",
+    "h": "for-client-contacts-using-atlas",
+    "t": "If your IT provider gave you an account: **Sign in** at the address they gave you with your email and the temporary password, then choose your own password. **What you see** is your organization's documentation, your contacts and locations, and the passwords shared with you. **To view a password**, choose **Show password**. You may be asked for a reason, and each view is recorded for your provider. **To change something**, you need to be a *Client editor*. Otherwise, ask your provider."
+  },
+  {
+    "u": "install.html",
+    "p": "Installing Atlas",
+    "s": "Ubuntu or Debian",
+    "h": "ubuntu-or-debian",
+    "t": "The installer sets up Node.js 22, PostgreSQL 16 and Caddy on Ubuntu 22.04 or 24.04, or Debian 12, builds Atlas, and runs it as a systemd service. It installs the newest published release, so these commands never need a version number. The script prints the setup code when it finishes. It is also in `journalctl -u msp-atlas`. **Choosing a version:** `--version v1.0.2` installs that release. `sudo bash install-atlas.sh --help` lists every option. **HTTPS:** for a public DNS name, Caddy gets and renews a certificate by itself. For an IP address or a one-word name, it acts as its own certificate authority, which browsers don't trust until you install it. **Admin → Certificate** gives you the file. See [The certificate](manual/looking-after-atlas.html#the-certificate). **Where things go:** the program in `/opt/msp-atlas`, data and backups in `/var/lib/msp-atlas`, settings (`atlas.env`) and the master key in `/etc/msp-atlas`. **Upgrading:** from **Admin → Updates** in Atlas, or run `sudo atlas-install` on the server. Settings, key and database are kept."
+  },
+  {
+    "u": "install.html",
+    "p": "Installing Atlas",
+    "s": "Docker (Linux)",
+    "h": "docker-linux",
+    "t": "Point a DNS name at the server, and open ports 80 and 443. Caddy uses them to get and renew the certificate. Copy `.env.example` to `.env` and set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD` and `ATLAS_MASTER_KEY`. Generate the key with: Start Atlas and read the setup code from the log: A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-atlas:1.7.27`."
+  },
+  {
+    "u": "install.html",
+    "p": "Installing Atlas",
+    "s": "Windows Server",
+    "h": "windows-server",
+    "t": "Install Node.js 22 LTS and PostgreSQL 16, and create an empty database and user for Atlas. Download `msp-atlas-1.7.27-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\\Program Files\\MSP Atlas`. From an elevated PowerShell prompt, run: The script creates `C:\\ProgramData\\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\\\nas\\atlas-backups` to keep backups on another machine. To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key."
+  },
+  {
+    "u": "install.html",
+    "p": "Installing Atlas",
+    "s": "The master key",
+    "h": "the-master-key",
+    "t": "The master key protects every encrypted value: vault passwords, one-time code keys, MFA secrets, and the email, Hudu, ConnectWise and SIEM credentials. It also encrypts backups. If you lose the key, encrypted data and backups can't be recovered. Keep a copy in your existing password manager and a sealed printout, never next to database backups. To rotate it, list the new key first and the old one after it, restart, run `npm run rewrap-keys -w @atlas/server`, then remove the old key. Keep the old key for as long as you keep backups made with it."
+  },
+  {
+    "u": "install.html",
+    "p": "Installing Atlas",
+    "s": "Your first day",
+    "h": "your-first-day",
+    "t": "**Create the owner account.** Open Atlas, enter the setup code, and fill in your company and your own account. **Turn on two-step verification** when asked, and save the recovery codes somewhere other than Atlas. **Back up the master key** as described above. **Set up email** under **Admin → Email & alerts**, and choose **Send test**. Email is needed for password resets, expiry alerts and the weekly digest. **Bring your data in** from Hudu or spreadsheets under **Admin → Import & export**, or connect ConnectWise RMM. See [Data and integrations](manual/integrations.html). **Invite your team** and set their client access under **Admin → People & access**. See [People and access](manual/people-and-access.html). **Check System status** and make sure every check is green."
+  },
+  {
+    "u": "install.html",
+    "p": "Installing Atlas",
+    "s": "Where to go next",
+    "h": "where-to-go-next",
+    "t": "[People and access](manual/people-and-access.html) for roles, groups and single sign-on. [Keeping Atlas healthy](manual/looking-after-atlas.html) for backups, updates, services and the certificate. The [deployment guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DEPLOYMENT.md) lists every setting."
+  },
+  {
+    "u": "manual/people-and-access.html",
+    "p": "People and access",
+    "s": "People & access",
+    "h": "people-access",
+    "t": "**Admin → People & access** lists everyone who can sign in, with their role, their access, whether two-step verification is on, and when they last signed in. Choose **Manage** to change someone. Add a person Choose **Add person**. Enter their **Name** and **Email**. Choose their **Role**. See [the roles table](getting-started.html#what-you-can-do-depends-on-your-role). Under **Client access**, choose a level for **Every client (including new ones)**, then raise it for individual clients if you need to. Choose **Create account**. Atlas shows a temporary password for them to change at first sign-in. Staff must set up two-step verification before they can do anything else. Access levels For each client, a person has one of **No access**, **Read**, **Edit** or **Edit + passwords**. The **Every client** level applies to every client, including clients added later. A per-client level can raise it for one client. A person's access is the highest of their own levels and their groups' levels, but never more than their role allows. Changes apply straight away, even to people who are signed in. When someone loses their phone Choose **Manage**, then **Reset sign-in**, and tick **Also reset two-step verification**. They set it up again next time they sign in. When someone leaves Edit them and tick **Disable this account**. Their sessions end at once, the browser extension and Atlas for Windows are signed out, and their history stays. Ask them first to move anything in their personal vault that the company needs. **Sign out everywhere** ends every session for a person without disabling them, for example if a laptop is lost. Safeguards You can't change your own role or disable yourself. Administrators can't create, change or reset owners. At least one active owner must remain. Changing someone's role lowers their client access to what the new role allows."
+  },
+  {
+    "u": "manual/people-and-access.html",
+    "p": "People and access",
+    "s": "Groups",
+    "h": "groups",
+    "t": "**Admin → Groups** gives a team access to a set of clients in one place. Add people to a group and give the group a level for each client. Someone in several groups gets the highest level any of them gives. Groups can also be listed on restricted passwords."
+  },
+  {
+    "u": "manual/people-and-access.html",
+    "p": "People and access",
+    "s": "Single sign-on",
+    "h": "single-sign-on",
+    "t": "Staff can sign in with **Microsoft Entra ID** or any **SAML 2.0** identity provider (Okta, Google Workspace, Duo, JumpCloud and others). Both are set up under **Admin → Sign-in**, and both follow the same rules: **Signing in never creates an account.** Add the person in Atlas first, with the same email address they have at the provider. **An administrator confirms each person's first link.** The first time someone signs in, Atlas matches them by email and stops. Open them under **People & access → Manage**, check the name, email and ID shown, and choose **Confirm Microsoft account** or **Confirm SAML account**. After that Atlas recognizes them by the provider's own ID, so a changed address still works and a look-alike address gets nowhere. **The owner can always use a password.** With **Require single sign-on for staff** on, other staff can't sign in with a password or passkey, but the owner can, so a problem at the provider never locks everyone out. **Atlas's own two-step verification still applies** unless you choose to trust the provider's. Microsoft Entra ID In the Microsoft Entra admin center, under **App registrations**, make a separate app for sign-in, and add the **Web** redirect address shown on the **Microsoft sign-in** card. Create a client secret and copy its **Value**. In Atlas, enter the **Sign-in tenant ID**, **Sign-in app ID** and **Sign-in secret**. Tick **Show “Sign in with Microsoft” on the sign-in page** and choose **Save Microsoft sign-in**. Try it in a private window before you tick **Require Microsoft sign-in for staff**. **Trust Microsoft's multi-factor sign-in** skips the Atlas code when Microsoft already asked for more than a password (through conditional access or Security Defaults). SAML In your identity provider, add a SAML app using the **Single sign-on (ACS) URL** and **Audience (SP entity ID)** shown on the **SAML sign-in** card. Send the person's email as an attribute named `email`, and choose a name ID that never changes for a person. The provider must sign the assertion. In Atlas, enter the **Identity provider name** (it goes on the button), its **Provider issuer (entity ID)**, its **Provider sign-on URL**, and paste its **Provider signing certificate**. Tick **Show “Sign in with your provider” on the sign-in page**, choose **Save SAML sign-in**, and try it in a private window before requiring it. Start from the Atlas sign-in page, not the provider's app tile: Atlas refuses a response it didn't ask for. When the provider issues a new certificate, paste the old and new together, then remove the old one once the provider has switched."
+  },
+  {
+    "u": "manual/people-and-access.html",
+    "p": "People and access",
+    "s": "Vault policies",
+    "h": "vault-policies",
+    "t": "**Admin → Vault policies** holds the rules for the whole vault. Every administrator can see them; only the owner can change them. **MFA** Lists every active account that can reach passwords without two-step verification, such as client accounts. **Generator** The shortest password the generator makes, whether it always includes numbers or symbols, and whether it offers PINs. **Require a reason for every reveal, copy, and share** Applies to every client, on top of each client's own setting. **Don't let read-only accounts reveal passwords** Client viewers still see which passwords are shared with them, but can't reveal or copy them. **Restricted passwords are for the people listed on them** Administrators need a place on an entry's list like everyone else. The owner always has access. **Give each staff member a personal vault** Turns My vault on or off for everyone. Turning it off hides the vaults without deleting anything. Emergency access For when the owner can't be reached and a restricted password is needed. The owner adds trusted administrators under **Emergency access**, each with a wait between one hour and a week. A trusted administrator requests access and says why. The owner is emailed at once. During the wait the owner can **Deny** it or **Approve now**. Otherwise access starts when the wait ends, and everyone involved is emailed. Access covers every restricted password for 24 hours. The owner can end it early. Every step is in the security log, and each password used this way says *Emergency access* in its access history. Streaming logs to a SIEM **Stream logs to a SIEM** sends new security events and password access as they happen, about every 30 seconds, by HTTPS webhook (JSON, optionally signed with HMAC-SHA256) or syslog (RFC 5424 over TLS, TCP or UDP). If the SIEM can't be reached, Atlas records the error on the page and tries again from the same place, so nothing is skipped. **Send a test event** checks the connection."
+  },
+  {
+    "u": "manual/people-and-access.html",
+    "p": "People and access",
+    "s": "The security log",
+    "h": "the-security-log",
+    "t": "**Admin → Security log** records sign-ins, failures, lockouts, account and access changes, API key use, exports, backups, service actions and updates, each with the address it came from. **Vault access** lists every password reveal, copy, change and share. **Export** either log as CSV. Atlas asks for your password again first. **Verify now** checks that no event has been changed, reordered or removed since it was written. Events are chained together by the database, with a signed checkpoint. Logs are kept forever by default. Choose 1 to 7 years under **Admin → Email & alerts → Alerts and logs**. Someone changed the database directly. Keep the server as it is, export the security log, and investigate. Restore from a backup if you need to."
+  },
+  {
+    "u": "manual/settings.html",
+    "p": "Settings",
+    "s": "Email & alerts",
+    "h": "email-alerts",
+    "t": "Atlas sends password reset links, expiry alerts and a Monday digest. Tick **Send email from Atlas**, then choose a mail service. Microsoft 365 (app registration), recommended Atlas signs in as an app registration and sends through Microsoft Graph. No mailbox password or SMTP sign-in is involved. In the Microsoft Entra admin center, open **App registrations → New registration** (single tenant, no redirect address). Under **API permissions**, add **Microsoft Graph → Application permissions → Mail.Send**, then **Grant admin consent**. Under **Certificates & secrets**, create a client secret and copy its value. Note when it expires. In Atlas, enter the **Directory (tenant) ID**, **Application (client) ID** and **Client secret**, then the **From address** and **From name**. Choose **Save**, then **Send test**. An Exchange Online application access policy, or RBAC for Applications, can limit the app to the From mailbox so it can't send as anyone else. Other mail services **Microsoft 365 SMTP (legacy)** fills in Office 365's server and port. Microsoft is retiring basic authentication for SMTP, so prefer the app registration. **Other SMTP server** takes an **SMTP server**, **Port**, **Encryption**, **Username** and **Password**. **Send test** shows the mail server's own error if something is wrong. Alerts and logs **Email an alert this many days before something is due.** For example, 30, 14 and 7 days. **Send a weekly digest on Monday mornings,** listing everything overdue or due in the coming weeks. **Keep security and password logs for** a number of years, or forever (the default). People choose whether they receive alerts with **Email me about expirations** on their own account page."
+  },
+  {
+    "u": "manual/settings.html",
+    "p": "Settings",
+    "s": "Monitoring",
+    "h": "monitoring",
+    "t": "**RMM health** **Stale after (days)** and **Very stale after (days)**: when an agent that hasn't checked in counts as stale. **Asset warranty** **Expiring soon within (days)**, and **Look up warranties automatically** for Dell, Lenovo and HP. **Asset statistics** Which asset layouts count as servers, workstations and other devices. **Domain and SSL trackers** **Check on a schedule** (domains weekly, daily within 60 days of expiry; certificates daily), and **Add SSL certificates for domains**."
+  },
+  {
+    "u": "manual/settings.html",
+    "p": "Settings",
+    "s": "Sign-in",
+    "h": "sign-in",
+    "t": "Single sign-on with Microsoft Entra ID and SAML is described in [People and access](people-and-access.html#single-sign-on)."
+  },
+  {
+    "u": "manual/settings.html",
+    "p": "Settings",
+    "s": "API keys",
+    "h": "api-keys",
+    "t": "API keys let your RMM, PSA or scripts read and update Atlas through its REST API. Choose **New key**. Atlas asks for your password again. Give it a **Name**, choose its scopes (`read`, `write`, and optionally `passwords`), and when it **Expires** (a year unless you choose otherwise). Copy the key. It's shown once; Atlas keeps only a hash of it. **The key acts as you,** with your access, limited to its scopes. Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs. Every use is in the security log. **Revoke** keys you no longer use. The API is described at `/api/openapi.json` on your Atlas."
+  },
+  {
+    "u": "manual/settings.html",
+    "p": "Settings",
+    "s": "Theme",
+    "h": "theme",
+    "t": "**Admin → Theme** sets the **Brand name**, **Tagline**, **Browser tab title**, **Favicon**, a **Logo** (and one for dark mode), the **Accent** colour (and one for dark mode), and the **Welcome message** client accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes preview as you make them, and apply for everyone once you save."
+  },
+  {
+    "u": "manual/settings.html",
+    "p": "Settings",
+    "s": "Webhooks",
+    "h": "webhooks",
+    "t": "**Admin → Webhooks** makes Atlas post a short message to an address of yours whenever something changes, so a chat channel, an automation or another tool can react. Choose **New webhook**, give it a name and an `https://` address, and tick the kinds of item it should hear about: clients, assets, documents, passwords, contacts, locations, checklists. Copy the **signing secret**, shown once. The receiver uses it to check a message came from Atlas. Choose **Send test** to post a `ping`. A message names the event (such as `asset.updated` or `password.rotated`), who did it, the client, and the item's name and address. It never carries the item's contents, and a password message gives only the entry's name. **Delivery.** Anything other than a 2xx answer within 10 seconds is a failure, tried again after 1 minute, 5 minutes, 30 minutes, 2 hours and 6 hours. After ten messages in a row have been given up on, the webhook is paused; fix the receiver and choose **Resume**. **Deliveries** shows the latest 50 and why any failed. An RMM sync changes many assets at once, and each change is a message. Leave **Assets** unticked on a webhook that posts to a chat channel. The signature format and headers are in the [administrator guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md#webhooks)."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "Import from Hudu",
+    "h": "import-from-hudu",
+    "t": "In Hudu, go to **Admin → API Keys** and create a key. A key without password access imports everything except passwords. In Atlas, open **Import & export → Hudu**, enter the Hudu address (https only) and the key, and choose **Connect**. The key is encrypted with the master key. Choose what to bring in: kinds of data, companies, and asset layouts. The choices are saved for next time. **Preview** counts what Hudu has. **Start import** runs it in the background, with progress and a summary per type. Companies Clients. A company is matched to an existing client with the same name. Asset layouts and assets Layouts and assets under the matching client. Knowledge base articles Documents for the client, or the MSP knowledge base. Passwords The client's vault, including one-time code keys. Processes Checklists. Networks Networks assets. Relations Links between the imported items. **Running it again is safe.** Atlas remembers which Hudu item became which record and updates it rather than creating a duplicate. Archived Hudu items are skipped."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "Import a spreadsheet (CSV)",
+    "h": "import-a-spreadsheet-csv",
+    "t": "**Import & export → CSV** brings in clients, contacts, locations, assets (into a chosen layout) or passwords. Choose the kind of data and the file (comma, semicolon or tab separated, up to 10 MB, with a header row). Check the column matching. Atlas matches columns by name, including common alternatives such as \"Company\", and any column can be reassigned. Choose **Check the file first**. It reports every problem with its row number and saves nothing. Choose **Import**. Importing passwords needs **Edit + passwords** on each client involved, and is recorded in the security log."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "ConnectWise RMM",
+    "h": "connectwise-rmm",
+    "t": "Atlas reads devices, their health and tickets from the ConnectWise platform API. In ConnectWise RMM, open **Integrations → API Access** and create a client ID and secret. Add the tickets read permission for tickets, and **Automation read** and **Automation create** if you'll use password rotation. In Atlas, enter them under **Import & export → ConnectWise RMM**. Link each ConnectWise company to a client, or let Atlas create the client. Choose what to sync: devices, tickets, and optionally BitLocker keys, by site or device. The sync runs every hour, and **Sync now** runs it straight away. **Devices** become device assets with manufacturer, model, serial number, operating system, last check-in, online status and endpoint protection. Fields you add yourself are kept on each sync. A device the RMM no longer has is archived. **Tickets** are read-only and feed the Tickets cards. **Warranty dates** for Dell, Lenovo and HP are looked up when ConnectWise has none. **BitLocker keys** in a device custom field are saved to the client's vault, linked to the device."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "Microsoft 365",
+    "h": "microsoft-365",
+    "t": "**Import & export → Microsoft 365** documents each client's tenant from one multi-tenant app registration with `Directory.Read.All`, consented once per tenant. Users become contacts (with their licences and admin roles), paid subscriptions become License assets with seats bought and assigned, custom domains become Domain assets, and a Microsoft 365 asset lists the tenant's domains, subscriptions and administrators."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "Export",
+    "h": "export",
+    "t": "**One client:** **Export** on the client's page. See [Clients](clients.html#export-a-client). **Everything:** System status → **Back up now** makes a full encrypted backup. See [Keeping Atlas healthy](looking-after-atlas.html#backups). **The API:** with an API key, `/api/openapi.json` describes every endpoint."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "BitLocker collector",
+    "h": "bitlocker-collector",
+    "t": "**Vault → BitLocker collector** gives you a script for your RMM that reads each Windows machine's BitLocker status and recovery keys and sends them to Atlas. **Make an enrollment.** Choose the client, a name, and whether it covers all of the client's devices or one. The script downloads at once. Keep the file as you would a password: it holds an upload token, and Atlas can't show it again. **Add it to your RMM** as a PowerShell script for that client, run as **SYSTEM**. It needs no parameters. **Try it on one machine.** It prints one line of counts (never keys) and exits 0 when the report was uploaded. **Schedule it** every 6 hours, and after a recovery key is rotated. Machines are matched to assets by serial number, then by name. **Revoke** an enrollment, or **Block** one machine, to stop uploads; keys already saved stay in the vault. The script only reads: it can't turn BitLocker on or off or change a key."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "Automatic password rotation",
+    "h": "automatic-password-rotation",
+    "t": "**Vault → Password rotation** changes local administrator and Active Directory service account passwords on a schedule, through ConnectWise RMM. Connect ConnectWise RMM, with **Automation read** and **Automation create** on its API key. Import `deploy/rmm/Invoke-AtlasPasswordRotation.ps1` into ConnectWise RMM as a PowerShell script, enter its ID on the page, and tick **Rotate passwords automatically**. Add a policy for each account type: how often, and the password rules. A policy for **All clients** is the default; a client's own policy replaces it. Choose the passwords: the client, the vault entry, and the device the script runs on. For an AD service account, choose a domain controller. **How it stays safe.** The script sends the new password to Atlas before changing anything, using a token good for that one rotation for two hours. Only a confirmed change replaces the password in the vault; the old one moves to its history. A failure keeps the old password, is recorded in the access history and security log, emails administrators, and is tried again after a day."
+  },
+  {
+    "u": "manual/looking-after-atlas.html",
+    "p": "Keeping Atlas healthy",
+    "s": "System status",
+    "h": "system-status",
+    "t": "Open **Admin → System status** every week or so. It lists anything that needs attention, and shows: **Backups:** the last good backup, the next one, and the history. A red row means the last backup failed, with the reason. **Disk space** for the data and backup folders. **Email**, and the **master key** in use, including whether an old key is still loaded after a rotation. Then open **Security log** and choose **Verify now** to check that no event has been changed or removed."
+  },
+  {
+    "u": "manual/looking-after-atlas.html",
+    "p": "Keeping Atlas healthy",
+    "s": "Backups",
+    "h": "backups",
+    "t": "Atlas backs itself up every night into one encrypted `.atlasbak` file holding the whole database and every attachment, and keeps the newest 14. **Back up now** on System status makes one on demand. **Download** saves a copy; Atlas asks for your password first. Backups are encrypted with a key derived from the master key. Without it, a backup can't be read. System status warns while backups sit on the same disk as Atlas. Point `ATLAS_BACKUP_DIR` at a network share, or copy the folder off the server on a schedule. Restore a backup Stop Atlas. Make sure the master key the backup was made with is loaded. Run the restore against a new, empty database, or add `--replace` to overwrite the current one: Start Atlas. Everyone signs in again. The restore checks the whole file before it changes anything. A backup from an older version is upgraded as it loads, and **Verify now** still passes afterwards."
+  },
+  {
+    "u": "manual/looking-after-atlas.html",
+    "p": "Keeping Atlas healthy",
+    "s": "Updates",
+    "h": "updates",
+    "t": "**Admin → Updates** lists the published releases newer than yours, with their release notes. On servers set up with the Linux installer, an administrator can install one from the page: Atlas asks for your password, takes a backup, installs the release, and puts the previous version back if the install fails. Database changes are not rolled back; the pre-update backup covers that. Docker and Windows installs see the page read-only, and update the way they were installed. See [Installing Atlas](../install.html)."
+  },
+  {
+    "u": "manual/looking-after-atlas.html",
+    "p": "Keeping Atlas healthy",
+    "s": "Services",
+    "h": "services",
+    "t": "**Admin → Services** shows Atlas, the web proxy, the database and the updater, whether each is running, and since when. It works on servers set up with the Linux installer. **Restart** one service. Restarting Atlas takes a few seconds and signs nobody out. Restarting the web proxy drops connections for a moment. Restarting the database restarts Atlas with it. **Repair** is for when something won't start, or can't read or write its files. It puts the owners and permissions of Atlas's settings, master key, program and data folders back as the installer set them, turns the services back on at startup, restarts them, and checks that Atlas answers. It doesn't change your settings, data or version. Every action asks for your password and is written to the security log. If Atlas itself is down, run `sudo systemctl restart msp-atlas` on the server, and `sudo journalctl -u msp-atlas -n 50` to see why it stopped."
+  },
+  {
+    "u": "manual/looking-after-atlas.html",
+    "p": "Keeping Atlas healthy",
+    "s": "The certificate",
+    "h": "the-certificate",
+    "t": "**Admin → Certificate** shows the certificate Atlas is served with, checked the way a visitor's computer sees it. **Trusted everywhere:** a public authority issued it, because Atlas has a public DNS name. Nothing to do. **Not trusted until installed:** Atlas was installed at an IP address or a one-word name, so the web proxy is its own certificate authority. The connection is encrypted, but browsers warn and Atlas for Windows refuses to connect until that authority is installed on the computer. To install the authority: Choose **Download**. It's a public certificate, not a key. Check its thumbprint against the one on the page, with the PowerShell command the page gives. Install it for the whole computer (as an administrator) or for yourself, with the commands on the page, or push it with Group Policy. Open Atlas at the address on the certificate. A certificate for an IP address doesn't cover a name that points to the same server. A computer that trusts this authority accepts any certificate it issues. Its key is on your Atlas server and only used for Atlas, but install it only on computers you manage. A public DNS name with a public certificate avoids the question."
+  },
+  {
+    "u": "support.html",
+    "p": "Troubleshooting",
+    "s": "Signing in",
+    "h": "signing-in",
+    "t": "I lost the setup code With Docker: `docker compose -f deploy/docker-compose.yml logs app | grep \"setup code\"`. With the Linux installer: `journalctl -u msp-atlas`. On Windows: `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. It only works until the first account exists. Someone is locked out after too many attempts Wait 15 minutes, or an administrator can use **Reset sign-in** on their account. Someone lost their phone An administrator uses **Reset sign-in** and ticks **Also reset two-step verification**. If the owner lost their phone and recovery codes, another owner or administrator can do it; if there's none, whoever runs the server must help. Sign in with Microsoft or SAML says to wait The first sign-in waits for an administrator to confirm the link under **People & access → Manage**."
+  },
+  {
+    "u": "support.html",
+    "p": "Troubleshooting",
+    "s": "Access",
+    "h": "access",
+    "t": "A technician can't see a client A client someone can't access looks exactly like a missing one. Check their access for that client, their groups and their role under **People & access**. A password shows but can't be revealed Revealing needs **Edit + passwords** for the client, a place on the entry's list if it's restricted, and a reason if the client requires one."
+  },
+  {
+    "u": "support.html",
+    "p": "Troubleshooting",
+    "s": "Email",
+    "h": "email",
+    "t": "Email isn't sending **Admin → Email & alerts → Send test** shows the mail server's error. Prefer **Microsoft 365 (app registration)**; for legacy SMTP, Authenticated SMTP must be on for the mailbox."
+  },
+  {
+    "u": "support.html",
+    "p": "Troubleshooting",
+    "s": "Backups and the server",
+    "h": "backups-and-the-server",
+    "t": "Backups are failing, or on the same disk Read the error on **System status**. Check the backup folder exists, Atlas can write to it, and the disk isn't full. Point `ATLAS_BACKUP_DIR` at a network share to clear the same-disk warning. A restore fails with a key error A backup can only be read with the master key it was made with. After a rotation, list the old key after the new one and try again. Atlas says it can't read or write a file, or a service is stopped **Admin → Services**: restart the service, or use **Repair**. If you can't reach Atlas at all, run `sudo systemctl restart msp-atlas` on the server. Browsers warn about the certificate **Admin → Certificate**: download the authority, install it, and open Atlas at the address on the certificate. Verify now reports a break in the security log Someone changed the database directly. Keep the server as it is, export the security log, and investigate. Restore from a backup if needed."
+  },
+  {
+    "u": "support.html",
+    "p": "Troubleshooting",
+    "s": "Imports and syncs",
+    "h": "imports-and-syncs",
+    "t": "A Hudu import stopped partway Run it again. It updates what it already brought in rather than duplicating it. Duplicates can be merged under **Admin → Duplicates**. ConnectWise devices or tickets are missing Under **Import & export → ConnectWise RMM**, check the company is linked to a client, that devices and tickets are ticked, and read the last sync's messages. Tickets need the tickets read permission. Choose **Sync now** after a change. A warranty date is missing Lookups cover Dell, Lenovo and HP devices with a serial number. Choose **Check warranty** on the asset, or type the date in. A domain or certificate shows as unknown Choose **Check now** on the client's tracker tab. Some registries don't publish an expiry date, and a certificate can only be read from a site Atlas reaches on port 443. Enter the date on the asset for those. A password rotation failed The old password is still in the vault. Read the reason under **Password rotation → Recent attempts**. Check the script ID, that the device is online, and that the API key has Automation read and create."
+  },
+  {
+    "u": "support.html",
+    "p": "Troubleshooting",
+    "s": "Apps",
+    "h": "apps",
+    "t": "The browser extension won't sign in Enter your Atlas address, then approve the browser in Atlas after checking the codes match. Its session ends after 7 days unused, 30 days in all, or when your password changes. Atlas for Windows won't connect It refuses a certificate Windows doesn't trust. Install the certificate authority (above) and use the address on the certificate."
+  },
+  {
+    "u": "support.html",
+    "p": "Troubleshooting",
+    "s": "Still stuck",
+    "h": "still-stuck",
+    "t": "Open an issue on [GitHub](https://github.com/ithealthtech/nexus-atlas/issues) for a verified defect. Never include passwords, master keys, API keys, client data, or screenshots with secrets in them. Report suspected vulnerabilities privately, as described in the [security model](security.html#reporting-a-vulnerability)."
+  },
+  {
+    "u": "security.html",
+    "p": "Security model",
+    "s": "Every request",
+    "h": "every-request",
+    "t": "**Host and Origin** must match `PUBLIC_URL`; cross-site requests are refused. **The session cookie** (HttpOnly, Secure, SameSite=Strict) resolves to an active session, and every change carries its CSRF token. **Sign-in is complete:** password, then two-step verification (required for staff), then any required password change. **Client access** (the highest of the person's levels and groups, capped by their role) allows the action. **Passwords** also need edit-and-passwords access, a place on the restriction list, and a reason where required. The reveal is recorded. API keys replace the session with a hashed key limited to its scopes. The extension and Atlas for Windows sign in through the browser and get their own sessions."
+  },
+  {
+    "u": "security.html",
+    "p": "Security model",
+    "s": "Threats and protections",
+    "h": "threats-and-protections",
+    "t": "Stolen database or backup Secrets are encrypted with AES-256-GCM under keys wrapped by a master key that is never in the database. Backups are encrypted too. Password guessing scrypt hashes, lockout after 5 failures, rate limits, MFA for staff, and passkeys that can't be phished. Stolen session Sessions expire after 2 hours idle or 12 hours; people can end their sessions; sensitive actions ask for the password again. Cross-site attacks Host, Origin and Sec-Fetch-Site checks, a CSRF token, and a strict Content Security Policy. Over-broad access inside the MSP Per-client access, restricted passwords, required reasons, and a record of every reveal, copy, change and share. Malicious uploads Stored outside the web root under random names; only images that pass a content check display inline. Tampering with the audit trail Events are hash-chained by the database with a signed checkpoint; **Verify now** detects edits and deletions. Leaked API key Stored as a hash, limited by scope, kept away from account, settings, backup and log endpoints, and can expire. Share links and Send Encrypted in the browser; the key is only in the link's `#` part, which the server never receives. Extension or Windows app on a lost device Neither stores passwords. Both are signed out by a password change or an administrator, and every fill or copy is recorded. An administrator reading restricted passwords Vault policies can limit restricted entries to the people listed. Emergency access is time-limited and emails the owner. Logs can stream to a SIEM. A rotated password that didn't take The vault changes only after the device confirms. Each run uses a single-use token; failures keep the old password."
+  },
+  {
+    "u": "security.html",
+    "p": "Security model",
+    "s": "What it doesn't protect against",
+    "h": "what-it-doesn-t-protect-against",
+    "t": "Atlas is not end-to-end encrypted like a personal password manager. It records every read instead, and lets you restrict entries to named people. Someone who has both the master key and the database. A compromised server, administrator account, or signed-in person's device. Server-side requests an administrator sets up: the Hudu importer connects to any `https://` address, including internal ones. A compromised ConnectWise account. Password rotation runs scripts through ConnectWise RMM, so whoever controls it already controls those devices."
+  },
+  {
+    "u": "security.html",
+    "p": "Security model",
+    "s": "Operating securely",
+    "h": "operating-securely",
+    "t": "Serve Atlas only over HTTPS. Keep the master key in a password manager and on paper, not next to backups. Keep backups off the Atlas server, and check them with `npm run backup -w @atlas/server -- verify `. Check **System status** and **Security log → Verify now** regularly."
+  },
+  {
+    "u": "security.html",
+    "p": "Security model",
+    "s": "Reporting a vulnerability",
+    "h": "reporting-a-vulnerability",
+    "t": "Never in a public issue. Use GitHub's private vulnerability reporting (**Security → Report a vulnerability**) with the affected version, impact and steps to reproduce. See the [security policy](https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md)."
+  }
+]

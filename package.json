@@ -25,7 +25,8 @@
     "test:e2e": "playwright test",
     "db:generate": "npm run generate -w @atlas/db",
     "check": "npm run lint && npm run typecheck && npm test",
-    "legacy:test": "cd legacy && node --test tests/*.test.mjs"
+    "legacy:test": "cd legacy && node --test tests/*.test.mjs",
+    "build:site": "node scripts/build-site.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
