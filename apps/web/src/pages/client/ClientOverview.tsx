@@ -30,44 +30,44 @@ export function ClientOverview() {
     .map((l) => ({ ...l, count: assets.filter((a) => a.layoutId === l.id).length }))
     .filter((l) => l.count > 0);
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="space-y-6">
-        <Card>
-          {/* Every field shows, even when empty, so the gaps are easy to spot and fill. */}
-          <dl className="grid gap-x-6 gap-y-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                label: 'Primary contact',
-                icon: User,
-                value: contact && (
-                  <AppLink to={`/clients/${clientId}/contacts`} className="hover:underline">
-                    {contact.name}
-                  </AppLink>
-                ),
-              },
-              {
-                label: 'Phone',
-                icon: Phone,
-                value: phone && (
-                  <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="text-primary hover:underline">
-                    {phone}
-                  </a>
-                ),
-              },
-              { label: 'Hours of operation', icon: Clock, value: client?.hours },
-              { label: 'Maintenance window', icon: Wrench, value: client?.maintenanceWindow },
-            ].map((f) => (
-              <div key={f.label} className="min-w-0">
-                <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                  <f.icon className="size-3.5" aria-hidden /> {f.label}
-                </dt>
-                <dd className="mt-1 truncate text-sm font-medium">
-                  {f.value || <span className="font-normal text-muted">Not set</span>}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </Card>
+    <div className="space-y-6">
+      <Card>
+        {/* Every field shows, even when empty, so the gaps are easy to spot and fill. */}
+        <dl className="grid gap-x-6 gap-y-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: 'Primary contact',
+              icon: User,
+              value: contact && (
+                <AppLink to={`/clients/${clientId}/contacts`} className="hover:underline">
+                  {contact.name}
+                </AppLink>
+              ),
+            },
+            {
+              label: 'Phone',
+              icon: Phone,
+              value: phone && (
+                <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="text-primary hover:underline">
+                  {phone}
+                </a>
+              ),
+            },
+            { label: 'Hours of operation', icon: Clock, value: client?.hours },
+            { label: 'Maintenance window', icon: Wrench, value: client?.maintenanceWindow },
+          ].map((f) => (
+            <div key={f.label} className="min-w-0">
+              <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <f.icon className="size-3.5" aria-hidden /> {f.label}
+              </dt>
+              <dd className="mt-1 truncate text-sm font-medium">
+                {f.value || <span className="font-normal text-muted">Not set</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
+      <div className="grid items-start gap-6 lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
         <Card>
           <CardHeader
             title="Assets"
@@ -82,7 +82,7 @@ export function ClientOverview() {
             }
           />
           {counts.length ? (
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-3">
               {counts.map((l) => (
                 <AppLink
                   key={l.id}
@@ -108,55 +108,6 @@ export function ClientOverview() {
             </p>
           )}
         </Card>
-        <RmmHealthCard clientId={clientId} />
-        <ClientSecurityCard clientId={clientId} />
-        <TrackerCard clientId={clientId} />
-        <TicketsCard clientId={clientId} />
-        <TicketDetails clientId={clientId} />
-        <AssetStatsCard clientId={clientId} />
-        <SoftwareCard clientId={clientId} />
-        <Card>
-          <CardHeader
-            title="Recently updated documents"
-            actions={
-              <AppLink
-                to={`/clients/${clientId}/documents`}
-                className="text-sm font-semibold text-primary hover:underline"
-              >
-                View all
-              </AppLink>
-            }
-          />
-          {docs.length ? (
-            <ul className="divide-y divide-border">
-              {[...docs]
-                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-                .slice(0, 5)
-                .map((d) => (
-                  <li key={d.id}>
-                    <AppLink to={`/documents/${d.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-surface-2">
-                      <BookOpen className="size-4 text-primary" aria-hidden />
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{d.title}</span>
-                      <span className="text-xs text-muted">
-                        {DOCUMENT_STATUS_LABELS[d.status]} · {relativeTime(d.updatedAt)}
-                      </span>
-                    </AppLink>
-                  </li>
-                ))}
-            </ul>
-          ) : (
-            <p className="px-5 py-4 text-sm text-muted">
-              No documents yet.{' '}
-              <AppLink to={`/clients/${clientId}/documents`} className="text-primary underline underline-offset-2">
-                Write a runbook
-              </AppLink>{' '}
-              for this client.
-            </p>
-          )}
-        </Card>
-      </div>
-      <div className="space-y-6">
-        <WarrantyCard clientId={clientId} />
         <Card>
           <CardHeader title="Contact and location" />
           {contact ? (
@@ -208,6 +159,58 @@ export function ClientOverview() {
                 Add locations
               </AppLink>{' '}
               and mark one as primary.
+            </p>
+          )}
+        </Card>
+        <WarrantyCard clientId={clientId} />
+      </div>
+      {/* Full width, so its three charts sit side by side instead of stacking. */}
+      <RmmHealthCard clientId={clientId} />
+      <ClientSecurityCard clientId={clientId} />
+      <div className="grid items-start gap-6 lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
+        <TrackerCard clientId={clientId} />
+        <AssetStatsCard clientId={clientId} />
+      </div>
+      <TicketsCard clientId={clientId} />
+      <TicketDetails clientId={clientId} />
+      <SoftwareCard clientId={clientId} />
+      <div className="grid items-start gap-6 lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
+        <Card>
+          <CardHeader
+            title="Recently updated documents"
+            actions={
+              <AppLink
+                to={`/clients/${clientId}/documents`}
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                View all
+              </AppLink>
+            }
+          />
+          {docs.length ? (
+            <ul className="divide-y divide-border">
+              {[...docs]
+                .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+                .slice(0, 5)
+                .map((d) => (
+                  <li key={d.id}>
+                    <AppLink to={`/documents/${d.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-surface-2">
+                      <BookOpen className="size-4 text-primary" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{d.title}</span>
+                      <span className="text-xs text-muted">
+                        {DOCUMENT_STATUS_LABELS[d.status]} · {relativeTime(d.updatedAt)}
+                      </span>
+                    </AppLink>
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            <p className="px-5 py-4 text-sm text-muted">
+              No documents yet.{' '}
+              <AppLink to={`/clients/${clientId}/documents`} className="text-primary underline underline-offset-2">
+                Write a runbook
+              </AppLink>{' '}
+              for this client.
             </p>
           )}
         </Card>
