@@ -35,7 +35,7 @@ public sealed partial class SearchWindow : Window
     /// One page: a sidebar place (home, clients, passwords, assets, documents), a client with one of its tabs, the
     /// results of a search, or an item. The pages you went through make the breadcrumb trail and the way back.
     /// </summary>
-    private sealed record Place(string Kind, string Title, string? ClientId = null, string Tab = "passwords", Row? Item = null, string? Query = null);
+    private sealed record Place(string Kind, string Title, string? ClientId = null, string Tab = "overview", Row? Item = null, string? Query = null);
 
     private readonly App app;
     private readonly IntPtr hwnd;
@@ -60,6 +60,8 @@ public sealed partial class SearchWindow : Window
     private Row? current;
     private PasswordEntry? password;
     private bool started;
+    // Whether this sign-in may change things (sign-ins from before the app could edit may only read).
+    private bool canWrite;
     private bool shuttingDown;
 
     public SearchWindow(App app)
@@ -199,6 +201,7 @@ public sealed partial class SearchWindow : Window
         {
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
+            canWrite = session.CanWrite;
             ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
             AccountInitials.Text = Initials(session.User.Name);
             AppTitleBar.Subtitle = session.Organization.Name;
@@ -331,8 +334,7 @@ public sealed partial class SearchWindow : Window
         if (switchingTabs || sender.SelectedItem is not { Tag: string tab } || trail.LastOrDefault() is not { Kind: "client" } place)
             return;
         trail[^1] = place with { Tab = tab };
-        FilterBox.Text = "";
-        _ = LoadPageAsync();
+        ShowPlace();
     }
 
     /// <summary>Draws the page at the end of the trail: the breadcrumbs, the sidebar, and a list or an item.</summary>
@@ -347,10 +349,11 @@ public sealed partial class SearchWindow : Window
         StatusBar.IsOpen = false;
 
         var isItem = place.Kind == "item";
-        ListPanel.Visibility = isItem ? Visibility.Collapsed : Visibility.Visible;
-        DetailScroll.Visibility = isItem ? Visibility.Visible : Visibility.Collapsed;
+        var isOverview = place.Kind == "client" && place.Tab == "overview";
+        ListPanel.Visibility = isItem || isOverview ? Visibility.Collapsed : Visibility.Visible;
+        DetailScroll.Visibility = isItem || isOverview ? Visibility.Visible : Visibility.Collapsed;
         DetailBar.Visibility = isItem ? Visibility.Visible : Visibility.Collapsed;
-        FilterBox.Visibility = isItem || place.Kind == "search" ? Visibility.Collapsed : Visibility.Visible;
+        FilterBox.Visibility = isItem || isOverview || place.Kind == "search" ? Visibility.Collapsed : Visibility.Visible;
         TypeFilter.Visibility = Visibility.Collapsed;
         Tabs.Visibility = place.Kind == "client" ? Visibility.Visible : Visibility.Collapsed;
         PageTitle.Text = place.Title;
@@ -365,11 +368,201 @@ public sealed partial class SearchWindow : Window
         if (place.Kind == "client")
         {
             switchingTabs = true;
-            Tabs.SelectedItem = place.Tab switch { "assets" => AssetsTab, "documents" => DocumentsTab, _ => PasswordsTab };
+            Tabs.SelectedItem = place.Tab switch { "passwords" => PasswordsTab, "assets" => AssetsTab, "documents" => DocumentsTab, _ => OverviewTab };
             switchingTabs = false;
+            if (isOverview)
+            {
+                ShowOverview(place.ClientId!);
+                return;
+            }
         }
         FilterBox.Text = "";
         _ = LoadPageAsync();
+    }
+
+    // ---------- a client's overview ----------
+    /// <summary>The client at a glance: its quick note, hours, the people and places to know, editable where allowed.</summary>
+    private async void ShowOverview(string clientId)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        try
+        {
+            var detailTask = client.GetClientAsync(clientId, cancel.Token);
+            var contactsTask = client.ListContactsAsync(clientId, cancel.Token);
+            var locationsTask = client.ListLocationsAsync(clientId, cancel.Token);
+            await Task.WhenAll(detailTask, contactsTask, locationsTask);
+            if (cancel.IsCancellationRequested)
+                return;
+            var detail = detailTask.Result;
+            var contacts = contactsTask.Result.OrderByDescending(c => c.Primary).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            var locations = locationsTask.Result.OrderByDescending(l => l.Primary).ThenBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            PageInfo.Text = Join(detail.Type, Access(detail.Access));
+
+            if (!canWrite && detail.CanEdit)
+                Detail.Children.Add(SignInAgainNotice());
+            Detail.Children.Add(QuickNoteCard(detail));
+
+            var facts = new List<(string Label, string Value)>();
+            if ((contacts.FirstOrDefault(c => c.Primary) ?? contacts.FirstOrDefault()) is { } person)
+                facts.Add(("Primary contact", Join(person.Name, person.Phone.Length > 0 ? person.Phone : person.Mobile)));
+            if ((locations.FirstOrDefault(l => l.Primary) ?? locations.FirstOrDefault()) is { } place)
+                facts.Add((place.Name, place.OneLine));
+            if (detail.Hours.Length > 0)
+                facts.Add(("Hours", detail.Hours));
+            if (detail.MaintenanceWindow.Length > 0)
+                facts.Add(("Maintenance window", detail.MaintenanceWindow));
+            if (detail.RequireRevealReason)
+                facts.Add(("Passwords", "A reason is asked before each is shown or copied"));
+            if (facts.Count > 0)
+                Detail.Children.Add(Facts(facts));
+
+            if (contacts.Count > 0)
+                Detail.Children.Add(Card("Contacts", [.. contacts.Select(ContactRow)]));
+            if (locations.Count > 0)
+                Detail.Children.Add(Card("Locations", [.. locations.Select(LocationRow)]));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    private static string Access(string level) => level switch
+    {
+        "edit_passwords" => "You can edit, including passwords",
+        "edit" => "You can edit",
+        "read" => "Read only",
+        _ => "",
+    };
+
+    private UIElement ContactRow(ContactInfo contact)
+    {
+        var actions = new List<Button>();
+        if (contact.Email.Length > 0)
+            actions.Add(IconButton("", $"Copy {contact.Email}", (_, _) => Copy(contact.Email, "Email address copied.")));
+        var phone = contact.Phone.Length > 0 ? contact.Phone : contact.Mobile;
+        if (phone.Length > 0)
+            actions.Add(IconButton("", $"Copy {phone}", (_, _) => Copy(phone, "Phone number copied.")));
+        var label = contact.Primary ? $"{contact.Name} · primary" : contact.Name;
+        return Field(label, Value(Join(contact.Title, contact.Email, phone)), [.. actions]);
+    }
+
+    private UIElement LocationRow(LocationInfo location)
+    {
+        var label = location.Primary ? $"{location.Name} · primary" : location.Name;
+        var address = location.OneLine;
+        return address.Length > 0
+            ? Field(label, Value(Join(address, location.Phone)), IconButton("", "Copy address", (_, _) => Copy(address, "Address copied.")))
+            : Field(label, Value(location.Phone));
+    }
+
+    /// <summary>The quick note, with Edit where the person may change it. Saving says whose words won if two people edited.</summary>
+    private UIElement QuickNoteCard(ClientDetail detail)
+    {
+        var host = new StackPanel();
+        void Reading()
+        {
+            host.Children.Clear();
+            var grid = new Grid { Padding = new Thickness(16, 12, 8, 12), ColumnSpacing = 8 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var text = new StackPanel { Spacing = 4 };
+            text.Children.Add(new TextBlock
+            {
+                Text = detail.Notes.Length > 0 ? detail.Notes : "No quick note yet. Use it for what everyone should know before touching anything here.",
+                TextWrapping = TextWrapping.Wrap,
+                IsTextSelectionEnabled = true,
+                Foreground = detail.Notes.Length > 0 ? (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"] : Secondary(),
+            });
+            if (detail.NotesUpdatedAt is { } at)
+                text.Children.Add(new TextBlock { Text = Join($"Edited {When(at)}", detail.NotesUpdatedByName is { } by ? $"by {by}" : null), FontSize = 12, Foreground = Secondary() });
+            grid.Children.Add(text);
+            if (canWrite && detail.CanEdit)
+            {
+                var edit = new Button { Content = "Edit", VerticalAlignment = VerticalAlignment.Top };
+                edit.Click += (_, _) => Editing();
+                Grid.SetColumn(edit, 1);
+                grid.Children.Add(edit);
+            }
+            host.Children.Add(grid);
+        }
+        void Editing()
+        {
+            host.Children.Clear();
+            var panel = new StackPanel { Padding = new Thickness(16, 12, 16, 14), Spacing = 10 };
+            var box = new TextBox
+            {
+                Text = detail.Notes,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap,
+                MaxLength = 5000,
+                MinHeight = 90,
+                PlaceholderText = "What everyone should know before touching anything here",
+            };
+            AutomationProperties.SetName(box, "Quick note");
+            var save = new Button { Content = "Save", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            var cancel = new Button { Content = "Cancel" };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            buttons.Children.Add(save);
+            buttons.Children.Add(cancel);
+            panel.Children.Add(box);
+            panel.Children.Add(buttons);
+            host.Children.Add(panel);
+            box.Focus(FocusState.Programmatic);
+            cancel.Click += (_, _) => Reading();
+            save.Click += async (_, _) =>
+            {
+                if (app.Client is not { } client)
+                    return;
+                save.IsEnabled = false;
+                try
+                {
+                    detail = await client.SaveQuickNoteAsync(detail.Id, box.Text.Trim(), detail.NotesVersion);
+                    Show("Quick note saved.", InfoBarSeverity.Success);
+                    Reading();
+                }
+                catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+                {
+                    Show("Someone else changed the quick note while you were editing. Copy your text, then reopen the client to see theirs.", InfoBarSeverity.Warning);
+                    save.IsEnabled = true;
+                }
+                catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+                {
+                    Fail(ex);
+                    save.IsEnabled = true;
+                }
+            };
+        }
+        Reading();
+        return Card("Quick note", host);
+    }
+
+    /// <summary>Sign-ins from before the app could make changes may only read; signing in again asks for more.</summary>
+    private InfoBar SignInAgainNotice()
+    {
+        var again = new Button { Content = "Sign in again" };
+        again.Click += (_, _) => _ = app.SignOutAsync();
+        return new InfoBar
+        {
+            IsOpen = true,
+            IsClosable = false,
+            Severity = InfoBarSeverity.Informational,
+            Title = "Make changes from here",
+            Message = "This sign-in can only read. Sign in again once to edit from Atlas for Windows; everything you change is recorded under your name.",
+            ActionButton = again,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
     }
 
     // ---------- favorites ----------

@@ -20,6 +20,9 @@ public sealed record AppSessionInfo(
     AppRelease? App = null)
 {
     public bool CanReveal => Scopes.Contains("reveal");
+
+    /// <summary>Whether this sign-in may change things. Sign-ins from before the app could edit may only read.</summary>
+    public bool CanWrite => Scopes.Contains("write");
 }
 
 /// <summary>The version of this app that Atlas offers, and where its setup program is.</summary>
@@ -128,6 +131,43 @@ public sealed record DocumentDetail(
     string? UpdatedByName = null);
 
 public sealed record FavoriteState(bool Favorite);
+
+/// <summary>A client in full: its quick note (with the version it was saved as), hours, and your access.</summary>
+public sealed record ClientDetail(
+    string Id,
+    string Name,
+    string Type,
+    string Status,
+    string Notes,
+    int NotesVersion,
+    string? NotesUpdatedAt,
+    string? NotesUpdatedByName,
+    string Hours,
+    string MaintenanceWindow,
+    bool RequireRevealReason,
+    string Access)
+{
+    /// <summary>Whether the person may change this client's documentation.</summary>
+    public bool CanEdit => Access is "edit" or "edit_passwords";
+}
+
+public sealed record ContactInfo(string Id, string ClientId, string Name, string Title, string Email, string Phone, string Mobile, string Notes, bool Primary);
+
+public sealed record LocationInfo(
+    string Id,
+    string ClientId,
+    string Name,
+    string Address,
+    string City,
+    string Region,
+    string PostalCode,
+    string Country,
+    string Phone,
+    string Notes,
+    bool Primary)
+{
+    public string OneLine => string.Join(", ", new[] { Address, City, Region, PostalCode }.Where(p => !string.IsNullOrWhiteSpace(p)));
+}
 
 /// <summary>Something the person starred in Atlas.</summary>
 public sealed record FavoriteItem(string Type, string Id, string Name, string? ClientId, string? ClientName);

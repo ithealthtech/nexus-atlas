@@ -22,7 +22,8 @@ public sealed class SessionEndedException(string message) : AtlasApiException(Ht
 public sealed class AtlasClient : IDisposable
 {
     public const string ClientId = "atlas-windows";
-    public const string RequestedScopes = "read reveal";
+    // "write" lets the app change what the person may change in the browser; Atlas checks each change as it would there.
+    public const string RequestedScopes = "read write reveal";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly HttpClient http;
     private string? token;
@@ -162,6 +163,22 @@ public sealed class AtlasClient : IDisposable
     /// <summary>What the person starred in Atlas.</summary>
     public Task<IReadOnlyList<FavoriteItem>> ListFavoritesAsync(CancellationToken cancellationToken = default) =>
         SendAsync<IReadOnlyList<FavoriteItem>>(HttpMethod.Get, "favorites", null, cancellationToken);
+
+    public Task<ClientDetail> GetClientAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<ClientDetail>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    public Task<IReadOnlyList<ContactInfo>> ListContactsAsync(string clientId, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<ContactInfo>>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(clientId)}/contacts", null, cancellationToken);
+
+    public Task<IReadOnlyList<LocationInfo>> ListLocationsAsync(string clientId, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<LocationInfo>>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(clientId)}/locations", null, cancellationToken);
+
+    /// <summary>
+    /// Saves a client's quick note. The version it was edited from goes with it: if someone saved since, Atlas
+    /// refuses (409) rather than overwrite their words.
+    /// </summary>
+    public Task<ClientDetail> SaveQuickNoteAsync(string clientId, string notes, int version, CancellationToken cancellationToken = default) =>
+        SendAsync<ClientDetail>(HttpMethod.Patch, $"clients/{Uri.EscapeDataString(clientId)}", new { notes, notesVersion = version }, cancellationToken);
 
     /// <summary>Stars or unstars a client, asset, document, or password: the person's own bookmark in Atlas.</summary>
     public Task<FavoriteState> SetFavoriteAsync(string kind, string id, bool favorite, CancellationToken cancellationToken = default)

@@ -514,6 +514,17 @@ public class PreviewServerTests
         Assert.Contains("1. Sign in to the FortiGate", RichTextPlain.From(doc.Content));
         Assert.Equal("482193", (await client.RevealToShowAsync("p-m365", SecretField.OneTimeCode, cancellationToken: ct)).Value);
         Assert.Equal("Alex Rivera", (await client.GetSessionAsync(ct)).User.Name);
+
+        // A client's overview, and saving its quick note with the version it was edited from.
+        var harborClient = await client.GetClientAsync("c-harbor", ct);
+        Assert.True(harborClient.CanEdit);
+        Assert.Equal("Dana Morales", (await client.ListContactsAsync("c-harbor", ct)).Single(c => c.Primary).Name);
+        Assert.Equal("410 Harbor St, Raleigh, NC, 27601", (await client.ListLocationsAsync("c-harbor", ct)).Single(l => l.Primary).OneLine);
+        var saved = await client.SaveQuickNoteAsync("c-harbor", "New note", harborClient.NotesVersion, ct);
+        Assert.Equal(("New note", harborClient.NotesVersion + 1), (saved.Notes, saved.NotesVersion));
+        var stale = await Assert.ThrowsAsync<AtlasApiException>(() => client.SaveQuickNoteAsync("c-harbor", "Older edit", harborClient.NotesVersion, ct));
+        Assert.Equal(HttpStatusCode.Conflict, stale.Status);
+        Assert.True((await client.GetSessionAsync(ct)).CanWrite);
         Assert.NotEmpty(await client.SearchAsync("hdg", cancellationToken: ct));
     }
 

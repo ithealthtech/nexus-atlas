@@ -129,6 +129,41 @@ public sealed class PreviewServer : HttpMessageHandler
         new { type = "document", id = "d-reboot", name = "Firewall reboot procedure", clientId = Harbor, clientName = "Harbor Dental Group" },
     ];
 
+    // The quick notes, which the preview lets you edit: text and version, by client.
+    private readonly Dictionary<string, (string Text, int Version)> notes = new()
+    {
+        [Harbor] = ("Three offices. Practice management runs on-prem (Dentrix): never reboot HDG-DC-01 before 6 PM.", 3),
+        [Northline] = ("", 0),
+        [Cedar] = ("Every password reveal needs a ticket number.", 1),
+    };
+
+    private object ClientDetail(string id)
+    {
+        var name = Prop(Clients.First(c => Prop(c, "id") == id), "name");
+        var (text, version) = notes[id];
+        return new
+        {
+            id, name, type = "Customer", status = "active", notes = text, notesVersion = version,
+            notesUpdatedAt = version > 0 ? Now : null, notesUpdatedByName = version > 0 ? "Alex Rivera" : null,
+            hours = id == Harbor ? "Mon–Fri 7:30–5:00, Sat 8–12" : "Mon–Fri 8–5",
+            maintenanceWindow = id == Harbor ? "Sundays 10 PM – 2 AM" : "",
+            requireRevealReason = id == Cedar, access = "edit_passwords",
+        };
+    }
+
+    private static readonly object[] Contacts =
+    [
+        new { id = "ct-dana", clientId = Harbor, name = "Dana Morales", title = "Office manager", email = "dana@harbordental.demo", phone = "(919) 555-0142", mobile = "", notes = "", primary = true },
+        new { id = "ct-raj", clientId = Harbor, name = "Dr. Raj Patel", title = "Owner", email = "raj@harbordental.demo", phone = "", mobile = "(919) 555-0177", notes = "", primary = false },
+        new { id = "ct-lee", clientId = Northline, name = "Morgan Lee", title = "Principal", email = "morgan@northlinearch.demo", phone = "(919) 555-0109", mobile = "", notes = "", primary = true },
+    ];
+
+    private static readonly object[] Locations =
+    [
+        new { id = "lo-main", clientId = Harbor, name = "Main office", address = "410 Harbor St", city = "Raleigh", region = "NC", postalCode = "27601", country = "US", phone = "(919) 555-0142", notes = "", primary = true },
+        new { id = "lo-cary", clientId = Harbor, name = "Cary office", address = "22 Kildaire Farm Rd", city = "Cary", region = "NC", postalCode = "27511", country = "US", phone = "", notes = "", primary = false },
+    ];
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         await Task.Delay(60, cancellationToken).ConfigureAwait(false);
@@ -136,6 +171,23 @@ public sealed class PreviewServer : HttpMessageHandler
         var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
         var client = query["client"];
         var tail = path[(path.IndexOf("/api/v1/", StringComparison.Ordinal) + 8)..];
+        var clientPage = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)(/contacts|/locations)?$");
+        if (clientPage.Success && notes.ContainsKey(clientPage.Groups[1].Value))
+        {
+            var id = clientPage.Groups[1].Value;
+            if (clientPage.Groups[2].Value == "/contacts")
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Filter(Contacts, id)) };
+            if (clientPage.Groups[2].Value == "/locations")
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Filter(Locations, id)) };
+            if (request.Method == HttpMethod.Patch)
+            {
+                var edit = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).RootElement;
+                if (edit.GetProperty("notesVersion").GetInt32() != notes[id].Version)
+                    return new HttpResponseMessage(HttpStatusCode.Conflict) { Content = Json(new { error = "Someone else changed the quick note while you were editing it.", code = "conflict" }) };
+                notes[id] = (edit.GetProperty("notes").GetString() ?? "", notes[id].Version + 1);
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(ClientDetail(id)) };
+        }
         if (request.Method == HttpMethod.Put || request.Method == HttpMethod.Delete)
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new { favorite = request.Method == HttpMethod.Put }) };
         object? body = tail switch
@@ -168,7 +220,7 @@ public sealed class PreviewServer : HttpMessageHandler
         user = new { name = "Alex Rivera", email = "alex@itdoneright.demo" },
         organization = new { id = "o-1", name = "IT Done Right" },
         deviceName = Environment.MachineName,
-        scopes = new[] { "read", "reveal" },
+        scopes = new[] { "read", "write", "reveal" },
     };
 
     private static object[] Filter(object[] items, string? client) =>
