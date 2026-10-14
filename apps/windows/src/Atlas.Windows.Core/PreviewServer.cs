@@ -174,7 +174,7 @@ public sealed class PreviewServer : HttpMessageHandler
 
     private static object? Find(object[] items, string id) => items.FirstOrDefault(i => Prop(i, "id") == id);
 
-    private static object? DocumentFor(string id)
+    private static Dictionary<string, object?>? DocumentFor(string id)
     {
         var doc = Find(Documents, id);
         if (doc is null)
@@ -185,7 +185,7 @@ public sealed class PreviewServer : HttpMessageHandler
         return copy;
     }
 
-    private static object Search(string q) =>
+    private static object[] Search(string q) =>
         Passwords.Concat(Assets).Concat(Documents)
             .Where(i => (Prop(i, "name") ?? Prop(i, "title") ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
             .Select(i => new
@@ -198,11 +198,12 @@ public sealed class PreviewServer : HttpMessageHandler
                 clientName = Prop(i, "clientName"),
                 snippet = "",
             })
-            .ToArray();
+            .ToArray<object>();
 
     private static string? Prop(object item, string name) =>
         item.GetType().GetProperty(name)?.GetValue(item) as string;
 
-    private static StringContent Json(object body) =>
-        new(JsonSerializer.Serialize(body, new JsonSerializerOptions(JsonSerializerDefaults.Web)), Encoding.UTF8, "application/json");
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+
+    private static StringContent Json(object body) => new(JsonSerializer.Serialize(body, Web), Encoding.UTF8, "application/json");
 }
