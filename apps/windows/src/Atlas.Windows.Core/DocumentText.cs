@@ -51,7 +51,7 @@ public static partial class DocumentText
         return string.Join('\n', lines);
     }
 
-    private static void Blocks(IEnumerable<JsonElement> blocks, List<string> lines)
+    private static void Blocks(List<JsonElement> blocks, List<string> lines)
     {
         var first = true;
         foreach (var block in blocks)
@@ -697,8 +697,8 @@ public static partial class DocumentText
     private static JsonElement? Attr(JsonElement node, string name) =>
         node.TryGetProperty("attrs", out var attrs) && attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty(name, out var value) ? value : null;
 
-    private static IEnumerable<JsonElement> Children(JsonElement node) =>
-        node.ValueKind == JsonValueKind.Object && node.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.Array ? c.EnumerateArray() : [];
+    private static List<JsonElement> Children(JsonElement node) =>
+        node.ValueKind == JsonValueKind.Object && node.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.Array ? [.. c.EnumerateArray()] : [];
 
-    private static bool IsEmptyParagraph(JsonElement node) => TypeOf(node) == "paragraph" && !Children(node).Any();
+    private static bool IsEmptyParagraph(JsonElement node) => TypeOf(node) == "paragraph" && Children(node).Count == 0;
 }
