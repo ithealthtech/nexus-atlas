@@ -500,7 +500,11 @@ public class PreviewServerTests
     {
         var ct = TestContext.Current.CancellationToken;
         using var client = Client();
-        Assert.Equal(3, (await client.ListClientsAsync(ct)).Count);
+        var listed = await client.ListClientsAsync(ct);
+        Assert.Equal(4, listed.Count);
+        Assert.Equal(("prospect", "Sundays 10 PM – 2 AM"), (listed.Single(c => c.Id == "c-pine").Status, listed.Single(c => c.Id == "c-harbor").MaintenanceWindow));
+        Assert.StartsWith("Three offices.", listed.Single(c => c.Id == "c-harbor").Notes, StringComparison.Ordinal);
+        Assert.Contains(await client.GetExpirationsAsync(30, ct), e => e.ClientId == "c-harbor" && e.DaysLeft >= 0);
         var harbor = await client.ListPasswordsAsync("c-harbor", ct);
         Assert.All(harbor, p => Assert.Equal("Harbor Dental Group", p.ClientName));
         Assert.Contains(harbor, p => p.HasTotp);

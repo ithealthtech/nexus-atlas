@@ -48,7 +48,7 @@ try {
     $element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
     Start-Sleep -Milliseconds 1800
   }
-  function Open($name) { Press (Named $CT::ListItem $name) "list item '$name'" }
+  function Open($name) { Press (All $CT::ListItem | Where-Object { $_.Current.Name -like $name } | Select-Object -First 1) "list item '$name'" }
   function Fill($header, $text) {
     $box = Named $CT::Edit $header
     if (-not $box) { Check $false "found field '$header'"; return }
@@ -80,7 +80,11 @@ try {
 
   Shot '01-home'
 
-  Open 'Clients'; Open 'Harbor Dental Group, Client'
+  Open 'Clients'
+  Check (Shows 'Next 30 days') 'the Clients page shows its table'
+  Check (Shows '*expiring*') 'a client shows what is coming due'
+  Shot '02-clients'
+  Open 'Harbor Dental Group*'
   Check ((Title) -eq 'Harbor Dental Group') 'a client opens on its overview'
   Shot '02-client-overview'
 

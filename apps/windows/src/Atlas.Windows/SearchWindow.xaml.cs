@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Atlas.Windows.Core;
 using Microsoft.UI.Text;
@@ -1581,7 +1582,9 @@ public sealed partial class SearchWindow : Window
                     empty = "Nothing here yet. Open a client or an item and choose Add to favorites at the top to keep it here. What you open also shows up here.";
                     break;
                 case "clients":
-                    rows = [.. clients.Select(c => new Row("client", c.Id!, c.Name, "Client", c.Id, c.Name))];
+                    clientCache = await LoadClientRowsAsync(client, cancel.Token);
+                    FillStatuses();
+                    rows = ClientRows();
                     empty = "You don't have access to any clients yet.";
                     break;
                 case "passwords":
@@ -1611,7 +1614,8 @@ public sealed partial class SearchWindow : Window
                 groupBy = r => r.ClientName ?? "Knowledge base";
             if (cancel.IsCancellationRequested)
                 return;
-            TypeFilter.Visibility = kind == "assets" ? Visibility.Visible : Visibility.Collapsed;
+            TypeFilter.Visibility = kind is "assets" or "clients" ? Visibility.Visible : Visibility.Collapsed;
+            ClientHeader.Visibility = kind == "clients" ? Visibility.Visible : Visibility.Collapsed;
             loaded = rows;
             grouping = groupBy;
             ListEmptyText.Text = place.Kind == "client" ? $"{place.Title} has no {place.Tab} in Atlas yet." : empty;
@@ -1665,6 +1669,8 @@ public sealed partial class SearchWindow : Window
         PageInfo.Text = shown.Count == loaded.Count
             ? $"{loaded.Count:N0} {noun}{(loaded.Count == 1 ? "" : "s")}"
             : $"{shown.Count:N0} of {loaded.Count:N0} {noun}s";
+        if (place.Kind == "clients" && clientTotals.Length > 0 && shown.Count == clientCache.Count)
+            PageInfo.Text = clientTotals;
         if (place.Kind == "client")
         {
             var tabs = new[] { (PasswordsTab, "Passwords", "passwords"), (AssetsTab, "Assets", "assets"), (DocumentsTab, "Documents", "documents") };
@@ -1713,8 +1719,135 @@ public sealed partial class SearchWindow : Window
     {
         if (fillingTypes || trail.Count == 0)
             return;
-        loaded = AssetRows();
+        loaded = trail[^1].Kind == "clients" ? ClientRows() : AssetRows();
         Render();
+    }
+
+    // ---------- the Clients page ----------
+    private List<Row> clientCache = [];
+    private string clientTotals = "";
+
+    private static readonly string[] TileColors = ["#2F6FB2", "#3E8E7E", "#8A5BB5", "#C0573E", "#B8862B", "#4F7A2E", "#B04A7A", "#4B5D8F"];
+
+    /// <summary>
+    /// Every client with how much is documented for it and what's coming due. The counts come from the lists Atlas
+    /// already gives the app; one it won't give (no access to passwords, say) shows as a dash instead of a number.
+    /// </summary>
+    private async Task<List<Row>> LoadClientRowsAsync(AtlasClient client, CancellationToken cancel)
+    {
+        static async Task<IReadOnlyList<T>?> Maybe<T>(Task<IReadOnlyList<T>> task)
+        {
+            try
+            {
+                return await task;
+            }
+            catch (AtlasApiException)
+            {
+                return null;
+            }
+        }
+        var listTask = client.ListClientsAsync(cancel);
+        var passwordsTask = Maybe(client.ListPasswordsAsync(null, cancel));
+        var assetsTask = Maybe(client.ListAssetsAsync(null, cancel));
+        var documentsTask = Maybe(client.ListDocumentsAsync(null, cancel));
+        var dueTask = Maybe(client.GetExpirationsAsync(30, cancel));
+        await Task.WhenAll(listTask, passwordsTask, assetsTask, documentsTask, dueTask);
+        var list = listTask.Result;
+        clients = [.. list.Where(c => c.Status != "inactive").Select(c => new ClientChoice(c.Id, c.Name))];
+
+        static Dictionary<string, int>? CountBy<T>(IReadOnlyList<T>? items, Func<T, string?> key) =>
+            items?.Where(i => key(i) is not null).GroupBy(i => key(i)!).ToDictionary(g => g.Key, g => g.Count());
+        var passwords = CountBy(passwordsTask.Result, p => p.ClientId);
+        var assets = CountBy(assetsTask.Result, a => a.ClientId);
+        var documents = CountBy(documentsTask.Result, d => d.ClientId);
+        var due = dueTask.Result ?? [];
+        int? CountFor(Dictionary<string, int>? counts, string id) => counts is null ? null : counts.GetValueOrDefault(id);
+
+        var totals = new List<string> { $"{list.Count:N0} client{(list.Count == 1 ? "" : "s")}" };
+        if (passwordsTask.Result is { } p)
+            totals.Add($"{p.Count:N0} passwords");
+        if (assetsTask.Result is { } a)
+            totals.Add($"{a.Count:N0} assets");
+        if (documentsTask.Result is { } d)
+            totals.Add($"{d.Count(x => x.ClientId is not null):N0} documents");
+        if (due.Count > 0)
+            totals.Add($"{due.Count(x => x.ClientId is not null || x.ClientName is not null):N0} due in 30 days");
+        clientTotals = string.Join(" · ", totals);
+
+        return [.. list.Select(c =>
+        {
+            var mine = due.Where(x => x.ClientId == c.Id || (x.ClientId is null && x.ClientName == c.Name)).ToList();
+            var note = c.Notes.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+            var line = Join(
+                c.Type,
+                Access(c.Access),
+                c.MaintenanceWindow.Length > 0 ? $"Maintenance {c.MaintenanceWindow}" : null,
+                c.UpdatedAt is { } at ? $"Updated {Ago(at)}" : null);
+            var facts = new ClientFacts(
+                Initials(c.Name),
+                Tile(c.Name),
+                line,
+                note,
+                c.Status == "active" ? "" : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(c.Status),
+                CountFor(passwords, c.Id),
+                CountFor(assets, c.Id),
+                CountFor(documents, c.Id),
+                mine.Count(x => x.DaysLeft >= 0),
+                mine.Count(x => x.DaysLeft < 0),
+                starred.Contains($"client:{c.Id}"));
+            // The subtitle is what the filter box searches and what a screen reader says after the name.
+            var subtitle = Join(c.Type, c.Status == "active" ? null : c.Status, note,
+                facts.Passwords is { } pw ? $"{pw} passwords" : null,
+                facts.Assets is { } asset ? $"{asset} assets" : null,
+                facts.Documents is { } doc ? $"{doc} documents" : null,
+                mine.Count > 0 ? facts.Attention : null);
+            return new Row("client", c.Id, c.Name, subtitle, c.Id, c.Name) { Facts = facts };
+        })];
+    }
+
+    private void FillStatuses()
+    {
+        var previous = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
+        var counts = clientCache.GroupBy(r => r.Facts!.Status.Length == 0 ? "active" : r.Facts.Status.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.Count());
+        var choices = new List<TypeChoice> { new(null, $"All clients ({clientCache.Count})") };
+        foreach (var (value, label) in new[] { ("active", "Active"), ("prospect", "Prospects"), ("inactive", "Inactive") })
+            if (counts.TryGetValue(value, out var n))
+                choices.Add(new TypeChoice(value, $"{label} ({n})"));
+        fillingTypes = true;
+        TypeFilter.ItemsSource = choices;
+        TypeFilter.SelectedItem = choices.FirstOrDefault(c => c.LayoutId == previous) ?? choices[0];
+        fillingTypes = false;
+    }
+
+    private List<Row> ClientRows()
+    {
+        var status = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
+        return [.. clientCache.Where(r => status is null || (r.Facts!.Status.Length == 0 ? "active" : r.Facts.Status.ToLowerInvariant()) == status)];
+    }
+
+    private static Brush Tile(string name)
+    {
+        // The same client always gets the same colour.
+        var sum = name.Aggregate(0, (total, c) => unchecked((total * 31) + c));
+        var hex = TileColors[(int)((uint)sum % (uint)TileColors.Length)];
+        return new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(
+            255,
+            Convert.ToByte(hex[1..3], 16),
+            Convert.ToByte(hex[3..5], 16),
+            Convert.ToByte(hex[5..7], 16)));
+    }
+
+    private static string Ago(string iso)
+    {
+        if (!DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at))
+            return "";
+        var span = DateTimeOffset.Now - at;
+        return span.TotalMinutes < 2 ? "just now"
+            : span.TotalHours < 1 ? $"{(int)span.TotalMinutes} minutes ago"
+            : span.TotalDays < 1 ? $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")} ago"
+            : span.TotalDays < 2 ? "yesterday"
+            : span.TotalDays < 60 ? $"{(int)span.TotalDays} days ago"
+            : at.ToLocalTime().ToString("MMM d, yyyy", CultureInfo.CurrentCulture);
     }
 
     /// <summary>
