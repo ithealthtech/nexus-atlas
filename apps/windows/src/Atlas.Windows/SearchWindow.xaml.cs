@@ -1727,7 +1727,10 @@ public sealed partial class SearchWindow : Window
     private List<Row> clientCache = [];
     private string clientTotals = "";
 
-    private static readonly string[] TileColors = ["#2F6FB2", "#3E8E7E", "#8A5BB5", "#C0573E", "#B8862B", "#4F7A2E", "#B04A7A", "#4B5D8F"];
+    private static readonly string[] TileColors =
+    [
+        "#2F6FB2", "#3E8E7E", "#8A5BB5", "#C0573E", "#B8862B", "#4F7A2E", "#B04A7A", "#4B5D8F", "#0F7B8A", "#7A5230", "#5E60CE", "#A23B3B",
+    ];
 
     /// <summary>
     /// Every client with how much is documented for it and what's coming due. The counts come from the lists Atlas
@@ -1774,18 +1777,22 @@ public sealed partial class SearchWindow : Window
             totals.Add($"{due.Count(x => x.ClientId is not null || x.ClientName is not null):N0} due in 30 days");
         clientTotals = string.Join(" · ", totals);
 
+        var places = list
+            .OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select((c, i) => (c.Id, i))
+            .ToDictionary(p => p.Id, p => p.i);
         return [.. list.Select(c =>
         {
             var mine = due.Where(x => x.ClientId == c.Id || (x.ClientId is null && x.ClientName == c.Name)).ToList();
             var note = c.Notes.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
             var line = Join(
                 c.Type,
-                Access(c.Access),
+                ShortAccess(c.Access),
                 c.MaintenanceWindow.Length > 0 ? $"Maintenance {c.MaintenanceWindow}" : null,
                 c.UpdatedAt is { } at ? $"Updated {Ago(at)}" : null);
             var facts = new ClientFacts(
                 Initials(c.Name),
-                Tile(c.Name),
+                Tile(places[c.Id]),
                 line,
                 note,
                 c.Status == "active" ? "" : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(c.Status),
@@ -1825,11 +1832,19 @@ public sealed partial class SearchWindow : Window
         return [.. clientCache.Where(r => status is null || (r.Facts!.Status.Length == 0 ? "active" : r.Facts.Status.ToLowerInvariant()) == status)];
     }
 
-    private static Brush Tile(string name)
+    // The access level in a word or two, for the list.
+    private static string ShortAccess(string level) => level switch
     {
-        // The same client always gets the same colour.
-        var sum = name.Aggregate(0, (total, c) => unchecked((total * 31) + c));
-        var hex = TileColors[(int)((uint)sum % (uint)TileColors.Length)];
+        "edit_passwords" => "Full access",
+        "edit" => "Can edit",
+        "read" => "Read only",
+        _ => "",
+    };
+
+    // Colours go round in A–Z order, so clients next to each other in the list never share one.
+    private static Brush Tile(int place)
+    {
+        var hex = TileColors[place % TileColors.Length];
         return new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(
             255,
             Convert.ToByte(hex[1..3], 16),
