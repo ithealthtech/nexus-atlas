@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.32] - 2026-10-15
+
+### Changed
+
+- **Atlas for Windows 0.3.2: Passwords, Assets, and Documents lists as tables.** Each row has a tile with an icon for what it is (a password's category, an asset's type), the favorite star, and chips such as 2FA, plus a line that tells it apart: username, site, and folder; type, IP, OS, and serial; or where a document lives. Columns show a password's strength as a four-bar meter, with breaches and reuse in red, or an asset's or document's status; what's coming due (rotation, expiry, warranty, review), amber within two weeks and red when overdue; and who changed it last and when. Everything shown comes from what Atlas already sends. (#200)
+
 ## [1.7.31] - 2026-10-15
 
 ### Fixed
