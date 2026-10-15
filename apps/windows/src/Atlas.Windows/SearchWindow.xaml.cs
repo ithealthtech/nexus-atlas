@@ -72,6 +72,13 @@ public sealed partial class SearchWindow : Window
         hwnd = WindowNative.GetWindowHandle(this);
         clipboard = new ClipboardGuard(new Native.Clipboard(hwnd), TimeProvider.System);
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
+        // An update found before this window opened shows at once; one found later shows when it's found. A closed
+        // window stops listening.
+        void UpdateChanged() => DispatcherQueue.TryEnqueue(ShowUpdate);
+        app.UpdateChanged += UpdateChanged;
+        Closed += (_, _) => app.UpdateChanged -= UpdateChanged;
+        CheckUpdatesItem.Text = $"Check for updates (you have {AppInfo.VersionText})";
+        ShowUpdate();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -1524,6 +1531,99 @@ public sealed partial class SearchWindow : Window
         finally
         {
             StarButton.IsEnabled = true;
+        }
+    }
+
+    // ---------- updating the app ----------
+    private string? dismissedUpdate;
+    private bool installingUpdate;
+
+    /// <summary>Shows the update bar when Atlas offers a newer version of this app, unless it was put away for that version.</summary>
+    internal void ShowUpdate()
+    {
+        if (installingUpdate)
+            return;
+        var release = app.AvailableUpdate;
+        if (release is null || dismissedUpdate == release.LatestVersion)
+        {
+            UpdateBar.IsOpen = false;
+            return;
+        }
+        UpdateBar.Severity = InfoBarSeverity.Informational;
+        UpdateBar.Title = $"Atlas for Windows {release.LatestVersion} is available";
+        UpdateBar.Message = $"You have {AppInfo.VersionText}. It installs in a few seconds, and the app opens again by itself.";
+        UpdateButton.Content = "Install and restart";
+        UpdateButton.IsEnabled = true;
+        UpdateProgress.Visibility = Visibility.Collapsed;
+        UpdateBrowserLink.Visibility = Visibility.Collapsed;
+        UpdateBar.IsOpen = true;
+    }
+
+    private void UpdateBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => dismissedUpdate = app.AvailableUpdate?.LatestVersion;
+
+    private async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (installingUpdate)
+            return;
+        installingUpdate = true;
+        UpdateButton.IsEnabled = false;
+        UpdateBrowserLink.Visibility = Visibility.Collapsed;
+        UpdateProgress.Value = 0;
+        UpdateProgress.Visibility = Visibility.Visible;
+        UpdateBar.IsClosable = false;
+        UpdateBar.Message = "Downloading…";
+        var progress = new Progress<double>(share =>
+        {
+            UpdateProgress.Value = share * 100;
+            UpdateBar.Message = share < 1 ? $"Downloading… {share:P0}" : "Checked. Installing; the app closes and opens again in a moment.";
+        });
+        try
+        {
+            await app.InstallUpdateAsync(progress);
+        }
+        catch (Exception ex) when (ex is UpdateFailedException or HttpRequestException or IOException or TaskCanceledException or System.ComponentModel.Win32Exception)
+        {
+            UpdateBar.Severity = InfoBarSeverity.Error;
+            UpdateBar.Title = "The update didn't install";
+            UpdateBar.Message = ex switch
+            {
+                UpdateFailedException failed => failed.Message,
+                HttpRequestException http => ConnectionProblem.Describe(http),
+                System.ComponentModel.Win32Exception => "Windows didn't start the setup program. You can download it in your browser instead.",
+                _ => "The download stopped. Check the connection and try again.",
+            };
+            UpdateButton.Content = "Try again";
+            UpdateButton.IsEnabled = true;
+            UpdateProgress.Visibility = Visibility.Collapsed;
+            UpdateBrowserLink.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            installingUpdate = false;
+            UpdateBar.IsClosable = true;
+        }
+    }
+
+    private void UpdateBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        if (app.AvailableUpdate?.DownloadLink is { } link)
+            _ = Launcher.LaunchUriAsync(link);
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        switch (await app.CheckForUpdateNowAsync())
+        {
+            case true:
+                dismissedUpdate = null;
+                ShowUpdate();
+                break;
+            case false:
+                Show($"You have the newest version, {AppInfo.VersionText}.", InfoBarSeverity.Success);
+                break;
+            default:
+                Show("Atlas couldn't be asked about updates just now. Try again later.", InfoBarSeverity.Warning);
+                break;
         }
     }
 
