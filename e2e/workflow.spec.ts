@@ -762,7 +762,7 @@ test.describe.serial('account security and administration', () => {
 test.describe.serial('data in and out, and the client portal', () => {
   test.setTimeout(90_000);
 
-  test('admin imports a CSV, creates an API key, brands Atlas, and exports a client', async ({ page }) => {
+  test('admin imports a CSV, creates an API key, brands Atlas, and exports a client', async ({ page, browser }) => {
     watch(page);
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);
     await nav(page, 'Import & export');
@@ -802,6 +802,16 @@ test.describe.serial('data in and out, and the client portal', () => {
     await expect(page).toHaveTitle('IT Done Right');
     await accessible(page);
     await page.screenshot({ path: 'test-results/screens/theme.png', fullPage: true });
+    // A new browser, signed out, gets the saved theme on the sign-in page too.
+    const visitor = await browser.newContext({ reducedMotion: 'reduce' });
+    const signInPage = await visitor.newPage();
+    await signInPage.goto(new URL('/', page.url()).toString());
+    await expect(signInPage.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(signInPage).toHaveTitle('IT Done Right');
+    expect(await signInPage.evaluate(() => document.documentElement.style.getPropertyValue('--primary'))).toBe(
+      '#1d4ed8',
+    );
+    await visitor.close();
     // Back to the default layout so later screenshots and checks use it.
     await page.getByLabel('Density').selectOption('comfortable');
     await page.getByRole('button', { name: 'Save theme' }).click();

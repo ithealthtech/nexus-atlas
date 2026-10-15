@@ -77,10 +77,13 @@ const queryClient = new QueryClient({
     },
   },
 });
-// When the server says the session is gone, drop cached data and show sign-in.
+// What anyone may see, signed in or not: the sign-in screen needs it, and the theme stays applied.
+const PUBLIC_QUERIES = new Set(['session', 'setup', 'branding', 'sso', 'sso-saml']);
+// When the server says the session is gone, drop the signed-in data and show sign-in. Public data stays: removing
+// it would leave a screen already waiting on it (the theme, on a first visit) waiting forever.
 onUnauthenticated(() => {
   queryClient.setQueryData(sessionKey, null);
-  queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'session' });
+  queryClient.removeQueries({ predicate: (q) => !PUBLIC_QUERIES.has(String(q.queryKey[0])) });
 });
 
 function Loading() {
