@@ -22,7 +22,8 @@ public sealed class SessionEndedException(string message) : AtlasApiException(Ht
 public sealed class AtlasClient : IDisposable
 {
     public const string ClientId = "atlas-windows";
-    public const string RequestedScopes = "read reveal";
+    // "write" lets the app change what the person may change in the browser; Atlas checks each change as it would there.
+    public const string RequestedScopes = "read write reveal";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly HttpClient http;
     private string? token;
@@ -133,6 +134,203 @@ public sealed class AtlasClient : IDisposable
     /// <summary>Things coming due (certificates, domains, warranties, password rotations) within the next days.</summary>
     public Task<IReadOnlyList<ExpirationItem>> GetExpirationsAsync(int days = 14, CancellationToken cancellationToken = default) =>
         SendAsync<IReadOnlyList<ExpirationItem>>(HttpMethod.Get, $"expirations?days={Math.Clamp(days, 1, 730)}", null, cancellationToken);
+
+    // ---------- browsing ----------
+    private static string ForClient(string? clientId) => clientId is null ? "" : $"?client={Uri.EscapeDataString(clientId)}";
+
+    public Task<IReadOnlyList<ClientSummary>> ListClientsAsync(CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<ClientSummary>>(HttpMethod.Get, "clients", null, cancellationToken);
+
+    /// <summary>The password entries the person can open, for one client or all of them. Never their secrets.</summary>
+    public Task<IReadOnlyList<PasswordSummary>> ListPasswordsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<PasswordSummary>>(HttpMethod.Get, "passwords" + ForClient(clientId), null, cancellationToken);
+
+    public Task<IReadOnlyList<AssetSummary>> ListAssetsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<AssetSummary>>(HttpMethod.Get, "assets" + ForClient(clientId), null, cancellationToken);
+
+    public Task<AssetSummary> GetAssetAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(HttpMethod.Get, $"assets/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    public Task<IReadOnlyList<LayoutInfo>> ListLayoutsAsync(CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<LayoutInfo>>(HttpMethod.Get, "layouts", null, cancellationToken);
+
+    public Task<IReadOnlyList<DocumentSummary>> ListDocumentsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<DocumentSummary>>(HttpMethod.Get, "documents" + ForClient(clientId), null, cancellationToken);
+
+    public Task<DocumentDetail> GetDocumentAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<DocumentDetail>(HttpMethod.Get, $"documents/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    /// <summary>What the person starred in Atlas.</summary>
+    public Task<IReadOnlyList<FavoriteItem>> ListFavoritesAsync(CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<FavoriteItem>>(HttpMethod.Get, "favorites", null, cancellationToken);
+
+    public Task<ClientDetail> GetClientAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<ClientDetail>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    public Task<IReadOnlyList<ContactInfo>> ListContactsAsync(string clientId, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<ContactInfo>>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(clientId)}/contacts", null, cancellationToken);
+
+    public Task<IReadOnlyList<LocationInfo>> ListLocationsAsync(string clientId, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<LocationInfo>>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(clientId)}/locations", null, cancellationToken);
+
+    /// <summary>
+    /// Saves a client's quick note. The version it was edited from goes with it: if someone saved since, Atlas
+    /// refuses (409) rather than overwrite their words.
+    /// </summary>
+    public Task<ClientDetail> SaveQuickNoteAsync(string clientId, string notes, int version, CancellationToken cancellationToken = default) =>
+        SendAsync<ClientDetail>(HttpMethod.Patch, $"clients/{Uri.EscapeDataString(clientId)}", new { notes, notesVersion = version }, cancellationToken);
+
+    public Task<IReadOnlyList<PasswordFolder>> ListPasswordFoldersAsync(string clientId, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<PasswordFolder>>(HttpMethod.Get, $"clients/{Uri.EscapeDataString(clientId)}/password-folders", null, cancellationToken);
+
+    /// <summary>Adds a login to a client's vault. Atlas records who added it, with this app named.</summary>
+    public Task<PasswordEntry> CreatePasswordAsync(string clientId, PasswordDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<PasswordEntry>(
+            HttpMethod.Post,
+            $"clients/{Uri.EscapeDataString(clientId)}/passwords",
+            new
+            {
+                kind = "login",
+                name = draft.Name,
+                username = draft.Username,
+                url = draft.Url,
+                secret = draft.Secret ?? "",
+                totp = draft.Totp ?? "",
+                notes = draft.Notes ?? "",
+                rotationDays = draft.RotationDays,
+                folderId = draft.FolderId,
+            },
+            cancellationToken);
+
+    /// <summary>
+    /// Changes a password entry. The version it was opened at goes with it: if someone saved since, Atlas refuses
+    /// (409) rather than overwrite them. The old password moves to the entry's history.
+    /// </summary>
+    public Task<PasswordEntry> UpdatePasswordAsync(string id, int version, PasswordDraft draft, CancellationToken cancellationToken = default)
+    {
+        var changes = new Dictionary<string, object?>
+        {
+            ["version"] = version,
+            ["name"] = draft.Name,
+            ["username"] = draft.Username,
+            ["url"] = draft.Url,
+            ["rotationDays"] = draft.RotationDays,
+            ["folderId"] = draft.FolderId,
+        };
+        if (!string.IsNullOrEmpty(draft.Secret))
+            changes["secret"] = draft.Secret;
+        if (draft.Totp is not null)
+            changes["totp"] = draft.Totp;
+        if (draft.Notes is not null)
+            changes["notes"] = draft.Notes;
+        return SendAsync<PasswordEntry>(HttpMethod.Patch, $"passwords/{Uri.EscapeDataString(id)}", changes, cancellationToken);
+    }
+
+    /// <summary>Archives an entry (or restores it). Archived entries leave lists but can be restored in Atlas.</summary>
+    public Task<PasswordEntry> ArchivePasswordAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
+        SendAsync<PasswordEntry>(HttpMethod.Post, $"passwords/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
+
+    /// <summary>Adds an asset to a client, in one of the layouts. Atlas checks each field against the layout.</summary>
+    public Task<AssetSummary> CreateAssetAsync(
+        string clientId,
+        string layoutId,
+        string name,
+        string status,
+        IReadOnlyDictionary<string, object?> fields,
+        string notes,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(
+            HttpMethod.Post,
+            $"clients/{Uri.EscapeDataString(clientId)}/assets",
+            new { layoutId, name, status, fields, notes },
+            cancellationToken);
+
+    /// <summary>Changes an asset, refused (409) if someone saved it since the version it was opened at.</summary>
+    public Task<AssetSummary> UpdateAssetAsync(
+        string id,
+        int version,
+        string name,
+        string status,
+        IReadOnlyDictionary<string, object?> fields,
+        string notes,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(
+            HttpMethod.Patch,
+            $"assets/{Uri.EscapeDataString(id)}",
+            new { version, name, status, fields, notes },
+            cancellationToken);
+
+    public Task<AssetSummary> ArchiveAssetAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
+        SendAsync<AssetSummary>(HttpMethod.Post, $"assets/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
+
+    // ---------- documents ----------
+    /// <summary>Adds a document, for a client or (with no client) in the knowledge base.</summary>
+    public Task<DocumentDetail> CreateDocumentAsync(
+        string? clientId,
+        string title,
+        string status,
+        System.Text.Json.Nodes.JsonObject content,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<DocumentDetail>(HttpMethod.Post, "documents", new { clientId, title, status, content }, cancellationToken);
+
+    /// <summary>
+    /// Changes a document saved as <paramref name="version"/>. Leave <paramref name="content"/> null to keep the body;
+    /// a 409 means someone saved it meanwhile.
+    /// </summary>
+    public Task<DocumentDetail> UpdateDocumentAsync(
+        string id,
+        int version,
+        string title,
+        string status,
+        System.Text.Json.Nodes.JsonObject? content,
+        CancellationToken cancellationToken = default)
+    {
+        var changes = new Dictionary<string, object> { ["version"] = version, ["title"] = title, ["status"] = status };
+        if (content is not null)
+            changes["content"] = content;
+        return SendAsync<DocumentDetail>(HttpMethod.Patch, $"documents/{Uri.EscapeDataString(id)}", changes, cancellationToken);
+    }
+
+    public Task<JsonElement> ArchiveDocumentAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
+        SendAsync<JsonElement>(HttpMethod.Post, $"documents/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
+
+    // ---------- contacts and locations ----------
+    public Task<ContactInfo> CreateContactAsync(string clientId, ContactDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<ContactInfo>(HttpMethod.Post, $"clients/{Uri.EscapeDataString(clientId)}/contacts", draft, cancellationToken);
+
+    public Task<ContactInfo> UpdateContactAsync(string id, ContactDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<ContactInfo>(HttpMethod.Patch, $"contacts/{Uri.EscapeDataString(id)}", draft, cancellationToken);
+
+    public Task DeleteContactAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<JsonElement>(HttpMethod.Delete, $"contacts/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    public Task<LocationInfo> CreateLocationAsync(string clientId, LocationDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<LocationInfo>(HttpMethod.Post, $"clients/{Uri.EscapeDataString(clientId)}/locations", draft, cancellationToken);
+
+    public Task<LocationInfo> UpdateLocationAsync(string id, LocationDraft draft, CancellationToken cancellationToken = default) =>
+        SendAsync<LocationInfo>(HttpMethod.Patch, $"locations/{Uri.EscapeDataString(id)}", draft, cancellationToken);
+
+    public Task DeleteLocationAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<JsonElement>(HttpMethod.Delete, $"locations/{Uri.EscapeDataString(id)}", null, cancellationToken);
+
+    /// <summary>Stars or unstars a client, asset, document, or password: the person's own bookmark in Atlas.</summary>
+    public Task<FavoriteState> SetFavoriteAsync(string kind, string id, bool favorite, CancellationToken cancellationToken = default)
+    {
+        var escaped = Uri.EscapeDataString(id);
+        var path = kind == "password" ? $"passwords/{escaped}/favorite" : $"favorites/{Uri.EscapeDataString(kind)}/{escaped}";
+        return SendAsync<FavoriteState>(favorite ? HttpMethod.Put : HttpMethod.Delete, path, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads a password or the current one-time code to show it on screen for a moment. Recorded in the password's
+    /// access history like a reveal in the browser.
+    /// </summary>
+    public Task<RevealResult> RevealToShowAsync(string id, SecretField field, string reason = "", CancellationToken cancellationToken = default) =>
+        SendAsync<RevealResult>(
+            HttpMethod.Post,
+            $"passwords/{Uri.EscapeDataString(id)}/reveal",
+            new { field = field == SecretField.OneTimeCode ? "totp" : "secret", copy = false, reason },
+            cancellationToken);
 
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
     {

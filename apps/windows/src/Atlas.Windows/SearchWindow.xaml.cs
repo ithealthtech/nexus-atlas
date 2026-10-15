@@ -1,27 +1,67 @@
+using System.Text.Json;
 using Atlas.Windows.Core;
-using Microsoft.UI.Windowing;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using WinRT.Interop;
 
 namespace Atlas.Windows;
 
 /// <summary>
-/// The quick-search window. It is hidden, not closed, between uses, so the hotkey brings it back instantly.
-/// Secrets are fetched only when copied, go straight to the clipboard, and are cleared from it after 30 seconds.
+/// The Atlas window, laid out like the web app: a sidebar of places (Home, Clients, Passwords, Assets, Documents),
+/// and one page at a time beside it, with breadcrumbs showing where you are. A client opens on tabs for its
+/// passwords, assets, and documents; an item opens as a page of cards with a copy button beside each value. It is hidden, not closed,
+/// between uses, so the hotkey brings it back instantly. Secrets are fetched only to copy or briefly show them;
+/// Atlas records each one, and a copied secret is cleared from the clipboard after 30 seconds.
 /// </summary>
 public sealed partial class SearchWindow : Window
 {
     private const int HotkeyId = 0xA71A;
+    private static readonly TimeSpan ShowFor = TimeSpan.FromSeconds(30);
+    private static readonly Section[] SectionList =
+    [
+        new("home", "Home", ""),
+        new("clients", "Clients", ""),
+        new("passwords", "Passwords", ""),
+        new("assets", "Assets", ""),
+        new("documents", "Documents", ""),
+    ];
+
+    /// <summary>
+    /// One page: a sidebar place (home, clients, passwords, assets, documents), a client with one of its tabs, the
+    /// results of a search, or an item. The pages you went through make the breadcrumb trail and the way back.
+    /// </summary>
+    private sealed record Place(string Kind, string Title, string? ClientId = null, string Tab = "overview", Row? Item = null, string? Query = null, string Editing = "password", object? Subject = null);
+
     private readonly App app;
     private readonly IntPtr hwnd;
     private readonly Native.SubclassProc subclass;
     private readonly ClipboardGuard clipboard;
-    private CancellationTokenSource? searchCancel;
+    private readonly List<Row> recent = [];
+    private readonly Dictionary<string, LayoutInfo> layouts = [];
+    private readonly List<Place> trail = [];
+    // What the person starred, as "kind:id", so the star on a page shows whether it is.
+    private readonly HashSet<string> starred = [];
+    private List<ClientChoice> clients = [];
+    private IReadOnlyList<AssetSummary> assetCache = [];
+    private List<Row> loaded = [];
+    private Func<Row, string>? grouping;
+    private bool fillingTypes;
+    private bool switchingTabs;
+    private CancellationTokenSource? listCancel;
+    private CancellationTokenSource? detailCancel;
     private CancellationTokenSource? signInCancel;
+    private DispatcherTimer? hideTimer;
+    private (TextBlock Target, string Masked)? shown;
+    private Row? current;
     private PasswordEntry? password;
+    private bool started;
+    // Whether this sign-in may change things (sign-ins from before the app could edit may only read).
+    private bool canWrite;
     private bool shuttingDown;
 
     public SearchWindow(App app)
@@ -32,19 +72,22 @@ public sealed partial class SearchWindow : Window
         clipboard = new ClipboardGuard(new Native.Clipboard(hwnd), TimeProvider.System);
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
 
-        AppWindow.Resize(new global::Windows.Graphics.SizeInt32(760, 520));
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
+        // As big as it's comfortable, but never bigger than the screen it opens on, and centred there.
+        var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary).WorkArea;
+        var width = Math.Min(1180, area.Width - 32);
+        var height = Math.Min(780, area.Height - 32);
+        AppWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(
+            area.X + (area.Width - width) / 2, area.Y + (area.Height - height) / 2, width, height));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico"));
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-        }
         // Closing hides the window; the app keeps running in the tray.
         AppWindow.Closing += (_, e) =>
         {
             if (shuttingDown)
                 return;
             e.Cancel = true;
+            HideSecrets();
             AppWindow.Hide();
         };
         // The hotkey arrives as a window message.
@@ -55,6 +98,37 @@ public sealed partial class SearchWindow : Window
             return Native.DefSubclassProc(h, msg, w, l);
         };
         Native.SetWindowSubclass(hwnd, subclass, 1, 0);
+
+        Sections.ItemsSource = SectionList;
+        Accelerator(VirtualKey.F, VirtualKeyModifiers.Control, FocusSearch);
+        Accelerator(VirtualKey.P, VirtualKeyModifiers.Control, () => _ = CopySecretAsync(SecretField.Password));
+        Accelerator(VirtualKey.T, VirtualKeyModifiers.Control, () => _ = CopySecretAsync(SecretField.OneTimeCode));
+        Accelerator(VirtualKey.U, VirtualKeyModifiers.Control, CopyUsername);
+        Accelerator(VirtualKey.Left, VirtualKeyModifiers.Menu, Back);
+        Accelerator(VirtualKey.Escape, VirtualKeyModifiers.None, () =>
+        {
+            if (QueryBox.Text.Length > 0)
+                QueryBox.Text = "";
+            else if (trail.Count > 1)
+                Back();
+            else
+            {
+                HideSecrets();
+                AppWindow.Hide();
+            }
+        });
+    }
+
+    private void Accelerator(VirtualKey key, VirtualKeyModifiers modifiers, Action run)
+    {
+        var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
+        accelerator.Invoked += (_, e) =>
+        {
+            e.Handled = true;
+            run();
+        };
+        Root.KeyboardAccelerators.Add(accelerator);
+        Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
     }
 
     public bool RegisterHotkey() => Native.RegisterSearchHotkey(hwnd, HotkeyId);
@@ -72,8 +146,16 @@ public sealed partial class SearchWindow : Window
     // ---------- showing ----------
     public void ShowSetup(string? address, string? message = null)
     {
-        SearchPanel.Visibility = Visibility.Collapsed;
+        MainPanel.Visibility = Visibility.Collapsed;
         SetupPanel.Visibility = Visibility.Visible;
+        QueryBox.Visibility = Visibility.Collapsed;
+        AccountButton.Visibility = Visibility.Collapsed;
+        AppTitleBar.Subtitle = "";
+        started = false;
+        recent.Clear();
+        layouts.Clear();
+        trail.Clear();
+        HideSecrets();
         AddressBox.Text = address ?? "";
         SetupMessage.IsOpen = message is not null;
         SetupMessage.Severity = InfoBarSeverity.Warning;
@@ -85,8 +167,21 @@ public sealed partial class SearchWindow : Window
     public void ShowSearch()
     {
         SetupPanel.Visibility = Visibility.Collapsed;
-        SearchPanel.Visibility = Visibility.Visible;
+        MainPanel.Visibility = Visibility.Visible;
+        QueryBox.Visibility = Visibility.Visible;
+        AccountButton.Visibility = Visibility.Visible;
         Bring();
+        if (!started)
+        {
+            started = true;
+            _ = LoadAccountAsync();
+            Go(new Place("home", "Home"), fresh: true);
+        }
+        FocusSearch();
+    }
+
+    private void FocusSearch()
+    {
         QueryBox.Focus(FocusState.Programmatic);
         QueryBox.SelectAll();
     }
@@ -98,14 +193,44 @@ public sealed partial class SearchWindow : Window
         Native.SetForegroundWindow(hwnd);
     }
 
-    private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
+    private async Task LoadAccountAsync()
     {
-        if (e.Key == VirtualKey.Escape)
+        if (app.Client is not { } client)
+            return;
+        AccountServer.Text = client.Address.ToString().Replace("https://", "", StringComparison.Ordinal);
+        try
         {
-            e.Handled = true;
-            AppWindow.Hide();
+            var session = await client.GetSessionAsync();
+            AccountName.Text = session.User.Name;
+            canWrite = session.CanWrite;
+            ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
+            AccountInitials.Text = Initials(session.User.Name);
+            AppTitleBar.Subtitle = session.Organization.Name;
+            foreach (var layout in await client.ListLayoutsAsync())
+                layouts[layout.Id] = layout;
+            try
+            {
+                foreach (var f in await client.ListFavoritesAsync())
+                    starred.Add($"{f.Type}:{f.Id}");
+                ShowStar();
+            }
+            catch (AtlasApiException ex) when (ex.Code == "api_scope")
+            {
+                // An Atlas older than this app doesn't share favorites with it yet.
+            }
+            var list = await client.ListClientsAsync();
+            clients = [.. list.Where(c => c.Status != "inactive").Select(c => new ClientChoice(c.Id, c.Name))];
+            if (trail.LastOrDefault()?.Kind == "clients")
+                _ = LoadPageAsync();
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
         }
     }
+
+    private static string Initials(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
 
     // ---------- sign-in ----------
     private void AddressBox_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -148,24 +273,1063 @@ public sealed partial class SearchWindow : Window
         }
     }
 
-    // ---------- search ----------
-    private async void QueryBox_TextChanged(object sender, TextChangedEventArgs e)
+    // ---------- going places ----------
+    /// <summary>Opens a page. From the sidebar the trail starts again; anywhere else the page is added to it.</summary>
+    private void Go(Place place, bool fresh = false)
     {
-        searchCancel?.Cancel();
-        var cancel = searchCancel = new CancellationTokenSource();
-        var query = QueryBox.Text;
+        if (fresh)
+            trail.Clear();
+        // A search refines the one before it rather than piling up.
+        if (place.Kind == "search" && trail.LastOrDefault()?.Kind == "search")
+            trail.RemoveAt(trail.Count - 1);
+        trail.Add(place);
+        ShowPlace();
+    }
+
+    private void Back()
+    {
+        if (trail.Count < 2)
+            return;
+        if (trail[^1].Kind == "search")
+        {
+            QueryBox.TextChanged -= QueryBox_TextChanged;
+            QueryBox.Text = "";
+            QueryBox.TextChanged += QueryBox_TextChanged;
+        }
+        trail.RemoveAt(trail.Count - 1);
+        ShowPlace();
+    }
+
+    private void Back_Click(object sender, RoutedEventArgs e) => Back();
+
+    private void Crumbs_ItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs e)
+    {
+        if (e.Index >= trail.Count - 1)
+            return;
+        trail.RemoveRange(e.Index + 1, trail.Count - e.Index - 1);
+        ShowPlace();
+    }
+
+    private void Sections_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not Section chosen)
+            return;
+        QueryBox.TextChanged -= QueryBox_TextChanged;
+        QueryBox.Text = "";
+        QueryBox.TextChanged += QueryBox_TextChanged;
+        Go(new Place(chosen.Id, chosen.Label), fresh: true);
+    }
+
+    private void Results_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not Row row)
+            return;
+        if (row.Kind == "client")
+            Go(new Place("client", row.Title, ClientId: row.Id));
+        else
+            Go(new Place("item", row.Title, Item: row));
+    }
+
+    private void Tabs_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs e)
+    {
+        if (switchingTabs || sender.SelectedItem is not { Tag: string tab } || trail.LastOrDefault() is not { Kind: "client" } place)
+            return;
+        trail[^1] = place with { Tab = tab };
+        ShowPlace();
+    }
+
+    /// <summary>Draws the page at the end of the trail: the breadcrumbs, the sidebar, and a list or an item.</summary>
+    private void ShowPlace()
+    {
+        var place = trail[^1];
+        Crumbs.ItemsSource = trail.Select(p => p.Title).ToList();
+        BackButton.IsEnabled = trail.Count > 1;
+        var root = SectionList.FirstOrDefault(s => s.Id == trail[0].Kind);
+        Sections.SelectedItem = root;
+        HideSecrets();
+        StatusBar.IsOpen = false;
+
+        var isItem = place.Kind == "item";
+        var isOverview = place.Kind == "client" && place.Tab == "overview";
+        var isEditor = place.Kind == "edit";
+        var showsPasswords = place.Kind == "passwords" || (place.Kind == "client" && place.Tab == "passwords");
+        var showsAssets = place.Kind == "assets" || (place.Kind == "client" && place.Tab == "assets");
+        var showsDocuments = place.Kind == "documents" || (place.Kind == "client" && place.Tab == "documents");
+        NewButton.Visibility = canWrite && (showsPasswords || showsAssets || showsDocuments) ? Visibility.Visible : Visibility.Collapsed;
+        NewText.Text = showsAssets ? "New asset" : showsDocuments ? "New document" : "New password";
+        // A document says whether you may change it once it's open (see ShowDocument).
+        var editable = canWrite && place.Item is { Kind: "password" or "asset" };
+        EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        ListPanel.Visibility = isItem || isOverview || isEditor ? Visibility.Collapsed : Visibility.Visible;
+        DetailScroll.Visibility = isItem || isOverview || isEditor ? Visibility.Visible : Visibility.Collapsed;
+        DetailBar.Visibility = isItem ? Visibility.Visible : Visibility.Collapsed;
+        FilterBox.Visibility = isItem || isOverview || isEditor || place.Kind == "search" ? Visibility.Collapsed : Visibility.Visible;
+        TypeFilter.Visibility = Visibility.Collapsed;
+        Tabs.Visibility = place.Kind == "client" ? Visibility.Visible : Visibility.Collapsed;
+        PageTitle.Text = place.Title;
+        PageInfo.Text = "";
+        ShowStar();
+        if (isEditor)
+        {
+            PageInfo.Text = place.Item is null ? "Saved encrypted in the client's vault, and recorded under your name." : "Only what you change is saved. The old password is kept in the entry's history.";
+            if (place.Editing == "document")
+            {
+                PageInfo.Text = place.Item is not null ? "Each save is a new version. Earlier versions stay in the document's history."
+                    : place.ClientId is null ? "Without a client, it goes in the knowledge base." : "Saved with the client's documents.";
+                ShowDocumentEditor(place);
+            }
+            else if (place.Editing is "contact" or "location")
+            {
+                PageInfo.Text = place.Editing == "contact" ? "Shown on the client's overview, and in Atlas." : "Shown on the client's overview, with a button to copy the address.";
+                ShowPersonEditor(place);
+            }
+            else if (place.Editing == "asset")
+            {
+                PageInfo.Text = place.Item is null ? "Atlas checks each field against the asset's type when it's saved." : "Only what you change is saved. The previous version is kept in the asset's history.";
+                ShowAssetEditor(place);
+            }
+            else
+                ShowPasswordEditor(place);
+            return;
+        }
+        if (isItem)
+        {
+            PageInfo.Text = Join(Kind(place.Item!.Kind), place.Item.ClientName);
+            ShowItem(place.Item);
+            return;
+        }
+        if (place.Kind == "client")
+        {
+            switchingTabs = true;
+            Tabs.SelectedItem = place.Tab switch { "passwords" => PasswordsTab, "assets" => AssetsTab, "documents" => DocumentsTab, _ => OverviewTab };
+            switchingTabs = false;
+            if (isOverview)
+            {
+                ShowOverview(place.ClientId!);
+                return;
+            }
+        }
+        FilterBox.Text = "";
+        _ = LoadPageAsync();
+    }
+
+    // ---------- adding and changing passwords ----------
+    private static readonly (string Label, int? Days)[] RotationChoices =
+    [
+        ("Don't remind me", null),
+        ("Every 30 days", 30),
+        ("Every 60 days", 60),
+        ("Every 90 days", 90),
+        ("Every 6 months", 180),
+        ("Every year", 365),
+    ];
+
+    private void New_Click(object sender, RoutedEventArgs e)
+    {
+        var place = trail.LastOrDefault();
+        var kind = place is { Kind: "assets" } or { Kind: "client", Tab: "assets" } ? "asset"
+            : place is { Kind: "documents" } or { Kind: "client", Tab: "documents" } ? "document"
+            : "password";
+        Go(new Place("edit", $"New {kind}", ClientId: place?.Kind == "client" ? place.ClientId : null, Editing: kind));
+    }
+
+    private void EditHere_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is { Kind: "password" or "asset" or "document" } row)
+            Go(new Place("edit", $"Edit {row.Title}", ClientId: row.ClientId, Item: row, Editing: row.Kind));
+    }
+
+    private async void Archive_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is not { Kind: "password" or "asset" or "document" } row || app.Client is not { } client)
+            return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = $"Archive {row.Title}?",
+            Content = "It leaves the lists and search. It isn't deleted: you can restore it from the archived list in Atlas.",
+            PrimaryButtonText = "Archive",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
         try
         {
-            // Wait for a pause in typing.
-            await Task.Delay(150, cancel.Token);
-            IReadOnlyList<SearchResult> results = app.Client is null ? [] : await app.Client.SearchAsync(query, 15, cancel.Token);
+            if (row.Kind == "asset")
+                await client.ArchiveAssetAsync(row.Id);
+            else if (row.Kind == "document")
+                await client.ArchiveDocumentAsync(row.Id);
+            else
+                await client.ArchivePasswordAsync(row.Id);
+            recent.RemoveAll(r => r.Kind == row.Kind && r.Id == row.Id);
+            Back();
+            Show($"{row.Title} archived. Restore it from the archived list in Atlas.", InfoBarSeverity.Success);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    /// <summary>The form for a new password, or for changing one. Secrets already saved are never shown here.</summary>
+    private async void ShowPasswordEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        PasswordEntry? existing = null;
+        IReadOnlyList<PasswordFolder> folders = [];
+        try
+        {
+            if (place.Item is { } row)
+                existing = await client.GetPasswordAsync(row.Id, cancel.Token);
+            var clientId = existing?.ClientId ?? place.ClientId;
+            if (clientId is not null)
+                folders = await client.ListPasswordFoldersAsync(clientId, cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return;
+        }
+        if (cancel.IsCancellationRequested)
+            return;
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        ComboBox? clientBox = null;
+        if (existing is null && place.ClientId is null)
+        {
+            clientBox = new ComboBox { Header = "Client", PlaceholderText = "Choose the client it belongs to", HorizontalAlignment = HorizontalAlignment.Stretch };
+            clientBox.ItemsSource = clients.Select(c => c.Name).ToList();
+            form.Children.Add(clientBox);
+        }
+        else
+        {
+            var owner = existing?.ClientName ?? clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+            form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
+        }
+        var name = new TextBox { Header = "Name", Text = existing?.Name ?? "", PlaceholderText = "For example, HDG-FW-01 admin", MaxLength = 200 };
+        var username = new TextBox { Header = "Username", Text = existing?.Username ?? "", MaxLength = 254 };
+        var secret = new PasswordBox
+        {
+            Header = existing is null ? "Password" : "New password",
+            PlaceholderText = existing is null ? "" : "Leave empty to keep the current password",
+            PasswordRevealMode = PasswordRevealMode.Peek,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        var generate = new Button { Content = "Generate", VerticalAlignment = VerticalAlignment.Bottom };
+        generate.Click += (_, _) =>
+        {
+            secret.Password = PasswordGenerator.Generate();
+            secret.PasswordRevealMode = PasswordRevealMode.Visible;
+        };
+        var secretRow = new Grid { ColumnSpacing = 8 };
+        secretRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        secretRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(generate, 1);
+        secretRow.Children.Add(secret);
+        secretRow.Children.Add(generate);
+        var url = new TextBox { Header = "Website or address", Text = existing?.Url ?? "", PlaceholderText = "https://", InputScope = new InputScope { Names = { new InputScopeName(InputScopeNameValue.Url) } } };
+        var totp = new PasswordBox
+        {
+            Header = "Authenticator setup key (optional)",
+            PlaceholderText = existing?.HasTotp == true ? "Leave empty to keep the current key" : "The key shown when two-step sign-in was set up",
+            PasswordRevealMode = PasswordRevealMode.Peek,
+        };
+        var removeTotp = new CheckBox { Content = "Remove the one-time code", Visibility = existing?.HasTotp == true ? Visibility.Visible : Visibility.Collapsed };
+        var folder = new ComboBox { Header = "Folder", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var folderChoices = new List<(string? Id, string Name)> { (null, "No folder") };
+        folderChoices.AddRange(folders.Select(f => ((string?)f.Id, f.Name)));
+        folder.ItemsSource = folderChoices.Select(f => f.Name).ToList();
+        folder.SelectedIndex = Math.Max(0, folderChoices.FindIndex(f => f.Id == existing?.FolderId));
+        folder.Visibility = folders.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var rotation = new ComboBox { Header = "Remind me to change it", HorizontalAlignment = HorizontalAlignment.Stretch };
+        rotation.ItemsSource = RotationChoices.Select(c => c.Label).ToList();
+        rotation.SelectedIndex = Math.Max(0, Array.FindIndex(RotationChoices, c => c.Days == existing?.RotationDays));
+        var notes = new TextBox
+        {
+            Header = "Notes",
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 80,
+            MaxLength = 20000,
+            PlaceholderText = existing?.HasNotes == true ? "Leave empty to keep the current notes" : "Kept encrypted, like the password",
+        };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button { Content = existing is null ? "Add password" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        foreach (var control in new UIElement[] { name, username, secretRow, url, totp, removeTotp, folder, rotation, notes, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        name.Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            var clientId = existing?.ClientId ?? place.ClientId ?? (clientBox?.SelectedIndex is >= 0 and var i ? clients[i].Id : null);
+            string? problem = clientId is null ? "Choose the client it belongs to."
+                : name.Text.Trim().Length == 0 ? "Give it a name."
+                : existing is null && secret.Password.Length == 0 ? "Enter the password, or choose Generate."
+                : url.Text.Trim().Length > 0 && !IsWebAddress(url.Text.Trim()) ? "The address must start with http:// or https://."
+                : null;
+            if (problem is not null)
+            {
+                error.Message = problem;
+                error.IsOpen = true;
+                return;
+            }
+            var draft = new PasswordDraft(
+                name.Text.Trim(),
+                username.Text.Trim(),
+                url.Text.Trim(),
+                secret.Password.Length > 0 ? secret.Password : null,
+                removeTotp.IsChecked == true ? "" : totp.Password.Length > 0 ? totp.Password.Replace(" ", "", StringComparison.Ordinal) : null,
+                notes.Text.Length > 0 ? notes.Text : null,
+                RotationChoices[Math.Max(0, rotation.SelectedIndex)].Days,
+                folderChoices[Math.Max(0, folder.SelectedIndex)].Id);
+            save.IsEnabled = false;
+            try
+            {
+                var saved = existing is null
+                    ? await client.CreatePasswordAsync(clientId!, draft)
+                    : await client.UpdatePasswordAsync(existing.Id, existing.Version, draft);
+                var row = new Row("password", saved.Id, saved.Name, saved.Username, saved.ClientId, saved.ClientName);
+                Remember(row);
+                // The form gives way to the saved entry, so Back goes where it would have before.
+                trail[^1] = new Place("item", row.Title, Item: row);
+                if (existing is not null && trail.Count > 1 && trail[^2] is { Kind: "item", Item: { } before } && before.Id == row.Id)
+                    trail.RemoveAt(trail.Count - 2);
+                ShowPlace();
+                Show(
+                    existing is null ? $"{row.Title} added."
+                    : draft.Secret is not null ? "Saved. The previous password is in the entry's history."
+                    : "Changes saved.",
+                    InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+            {
+                error.Message = "Someone saved this password while you were editing. Copy anything you typed, then go back and open it again.";
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
+    }
+
+    // ---------- adding and changing assets ----------
+    private static readonly (string Value, string Label)[] AssetStatuses = [("active", "Active"), ("inactive", "Inactive"), ("retired", "Retired")];
+
+    /// <summary>
+    /// The form for a new asset, or for changing one, built from the asset's layout: a box for text, a list for a
+    /// choice, ticks for several, a date picker for dates. Atlas checks every field again when it's saved.
+    /// </summary>
+    private async void ShowAssetEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        AssetSummary? existing = null;
+        try
+        {
+            if (place.Item is { } row)
+                existing = await client.GetAssetAsync(row.Id, cancel.Token);
+            if (layouts.Count == 0)
+                foreach (var layout in await client.ListLayoutsAsync(cancel.Token))
+                    layouts[layout.Id] = layout;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return;
+        }
+        if (cancel.IsCancellationRequested)
+            return;
+        if (existing is not null && existing.Notes.Contains("Synced from", StringComparison.OrdinalIgnoreCase))
+            PageInfo.Text = "This asset is kept up to date by a sync: fields it fills are replaced at the next sync. Fields you add yourself are kept.";
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        ComboBox? clientBox = null;
+        if (existing is null && place.ClientId is null)
+        {
+            clientBox = new ComboBox { Header = "Client", PlaceholderText = "Choose the client it belongs to", HorizontalAlignment = HorizontalAlignment.Stretch };
+            clientBox.ItemsSource = clients.Select(c => c.Name).ToList();
+            form.Children.Add(clientBox);
+        }
+        else
+        {
+            var owner = existing?.ClientName ?? clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+            form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
+        }
+
+        // The layout can only be chosen for a new asset; its fields are drawn below and redrawn when it changes.
+        var layoutList = layouts.Values.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        var layoutBox = new ComboBox { Header = "Type", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = layoutList.Select(l => l.Name).ToList() };
+        if (existing is not null)
+        {
+            layoutBox.SelectedIndex = layoutList.FindIndex(l => l.Id == existing.LayoutId);
+            layoutBox.IsEnabled = false;
+        }
+        var name = new TextBox { Header = "Name", Text = existing?.Name ?? "", MaxLength = 200, PlaceholderText = "For example, HDG-FW-01" };
+        var status = new ComboBox { Header = "Status", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = AssetStatuses.Select(s => s.Label).ToList() };
+        status.SelectedIndex = Math.Max(0, Array.FindIndex(AssetStatuses, s => s.Value == (existing?.Status ?? "active")));
+        var fieldsPanel = new StackPanel { Spacing = 14 };
+        var readers = new List<(LayoutField Field, Func<object?> Read)>();
+        void DrawFields()
+        {
+            fieldsPanel.Children.Clear();
+            readers.Clear();
+            if (layoutBox.SelectedIndex < 0)
+                return;
+            foreach (var field in layoutList[layoutBox.SelectedIndex].Fields)
+            {
+                JsonElement? value = existing is not null && existing.Fields.TryGetValue(field.Key, out var v) ? v : null;
+                var (control, read) = FieldEditor(field, value);
+                fieldsPanel.Children.Add(control);
+                readers.Add((field, read));
+            }
+        }
+        layoutBox.SelectionChanged += (_, _) => DrawFields();
+        var notes = new TextBox { Header = "Notes", Text = existing?.Notes ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxLength = 20000 };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button { Content = existing is null ? "Add asset" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        foreach (var control in new UIElement[] { layoutBox, name, status, fieldsPanel, notes, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        DrawFields();
+        (existing is null ? (Control)layoutBox : name).Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            var clientId = existing?.ClientId ?? place.ClientId ?? (clientBox?.SelectedIndex is >= 0 and var i ? clients[i].Id : null);
+            var missing = readers.FirstOrDefault(r => r.Field.Required && IsEmpty(r.Read()));
+            string? problem = clientId is null ? "Choose the client it belongs to."
+                : layoutBox.SelectedIndex < 0 ? "Choose what type of asset it is."
+                : name.Text.Trim().Length == 0 ? "Give it a name."
+                : missing.Field is not null ? $"{missing.Field.Label} is required."
+                : null;
+            if (problem is not null)
+            {
+                error.Message = problem;
+                error.IsOpen = true;
+                return;
+            }
+            var values = readers.ToDictionary(r => r.Field.Key, r => r.Read());
+            var statusValue = AssetStatuses[Math.Max(0, status.SelectedIndex)].Value;
+            save.IsEnabled = false;
+            try
+            {
+                var saved = existing is null
+                    ? await client.CreateAssetAsync(clientId!, layoutList[layoutBox.SelectedIndex].Id, name.Text.Trim(), statusValue, values, notes.Text)
+                    : await client.UpdateAssetAsync(existing.Id, existing.Version, name.Text.Trim(), statusValue, values, notes.Text);
+                var row = new Row("asset", saved.Id, saved.Name, saved.LayoutName, saved.ClientId, saved.ClientName);
+                Remember(row);
+                trail[^1] = new Place("item", row.Title, Item: row);
+                if (existing is not null && trail.Count > 1 && trail[^2] is { Kind: "item", Item: { } before } && before.Id == row.Id)
+                    trail.RemoveAt(trail.Count - 2);
+                ShowPlace();
+                Show(existing is null ? $"{row.Title} added." : "Changes saved. The previous version is in the asset's history.", InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+            {
+                error.Message = "Someone saved this asset while you were editing. Copy anything you typed, then go back and open it again.";
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
+    }
+
+    private static bool IsEmpty(object? value) =>
+        value is null || (value is string s && s.Trim().Length == 0) || (value is IList<string> list && list.Count == 0) || value is false;
+
+    /// <summary>The control for one layout field, and how to read what was entered (null for nothing).</summary>
+    private static (UIElement Control, Func<object?> Read) FieldEditor(LayoutField field, JsonElement? value)
+    {
+        var label = Tidy(field.Label) + (field.Required ? " *" : "");
+        var text = value is { } v ? Display(v) : "";
+        switch (field.Type)
+        {
+            case "select":
+            {
+                var choices = new List<string> { "" };
+                choices.AddRange(field.Options ?? []);
+                // A value from before the list changed is kept rather than lost.
+                if (text.Length > 0 && !choices.Contains(text))
+                    choices.Add(text);
+                var box = new ComboBox { Header = label, ItemsSource = choices, SelectedItem = text, HorizontalAlignment = HorizontalAlignment.Stretch };
+                return (box, () => box.SelectedItem is string s && s.Length > 0 ? s : null);
+            }
+            case "multiselect":
+            {
+                var chosen = value is { ValueKind: JsonValueKind.Array } array ? array.EnumerateArray().Select(Display).ToHashSet() : [];
+                var panel = new StackPanel { Spacing = 2 };
+                panel.Children.Add(new TextBlock { Text = label });
+                var boxes = (field.Options ?? []).Select(o => new CheckBox { Content = o, IsChecked = chosen.Contains(o) }).ToList();
+                foreach (var box in boxes)
+                    panel.Children.Add(box);
+                return (panel, () => boxes.Where(b => b.IsChecked == true).Select(b => (string)b.Content).ToList());
+            }
+            case "checkbox":
+            {
+                var box = new CheckBox { Content = label, IsChecked = value is { ValueKind: JsonValueKind.True } };
+                return (box, () => box.IsChecked == true);
+            }
+            case "date":
+            {
+                var picker = new CalendarDatePicker { Header = label, PlaceholderText = "Choose a date", HorizontalAlignment = HorizontalAlignment.Stretch };
+                if (DateTimeOffset.TryParse(text, out var day))
+                    picker.Date = day;
+                return (picker, () => picker.Date?.ToString("yyyy-MM-dd"));
+            }
+            case "number":
+            {
+                var box = new NumberBox { Header = label, Value = double.TryParse(text, out var n) ? n : double.NaN, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden };
+                return (box, () => double.IsNaN(box.Value) ? null : box.Value);
+            }
+            case "textarea":
+            {
+                var box = new TextBox { Header = label, Text = text, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 70, MaxLength = 10000 };
+                return (box, () => box.Text.Length > 0 ? box.Text : null);
+            }
+            default:
+            {
+                var box = new TextBox { Header = label, Text = text, MaxLength = field.Type == "phone" ? 40 : 500, PlaceholderText = field.Help ?? "" };
+                if (field.Type is "ip" or "url")
+                    box.FontFamily = new FontFamily("Cascadia Mono, Consolas");
+                return (box, () => box.Text.Trim().Length > 0 ? box.Text.Trim() : null);
+            }
+        }
+    }
+
+    // ---------- adding and changing contacts and locations ----------
+    private UIElement AddRow(string text, string editing, string clientId)
+    {
+        var button = new Button { Content = text, Margin = new Thickness(12, 8, 12, 10) };
+        button.Click += (_, _) => Go(new Place("edit", text, ClientId: clientId, Editing: editing));
+        return button;
+    }
+
+    private Button[] PersonActions(string editing, string id, string name, object subject, string clientId) =>
+    [
+        IconButton("", $"Edit {name}", (_, _) => Go(new Place("edit", $"Edit {name}", ClientId: clientId, Editing: editing, Subject: subject))),
+        IconButton("", $"Delete {name}", (_, _) => DeletePerson(editing, id, name)),
+    ];
+
+    private async void DeletePerson(string editing, string id, string name)
+    {
+        if (app.Client is not { } client)
+            return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = $"Delete {name}?",
+            Content = editing == "contact" ? "The contact is removed from this client." : "The location is removed from this client.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            return;
+        try
+        {
+            if (editing == "contact")
+                await client.DeleteContactAsync(id);
+            else
+                await client.DeleteLocationAsync(id);
+            ShowPlace();
+            Show($"{name} deleted.", InfoBarSeverity.Success);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    /// <summary>The form for a contact or a location. Saving goes back to the client's overview.</summary>
+    private void ShowPersonEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        var isContact = place.Editing == "contact";
+        var contact = place.Subject as ContactInfo;
+        var location = place.Subject as LocationInfo;
+        var adding = place.Subject is null;
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var owner = clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+        form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
+        TextBox Box(string header, string text, int max, string hint = "")
+        {
+            var box = new TextBox { Header = header, Text = text, MaxLength = max, PlaceholderText = hint };
+            AutomationProperties.SetName(box, header);
+            form.Children.Add(box);
+            return box;
+        }
+        var name = Box("Name", contact?.Name ?? location?.Name ?? "", 120, isContact ? "For example, Dana Morales" : "For example, Main office");
+        TextBox title = null!, email = null!, phone, mobile = null!, address = null!, city = null!, region = null!, postal = null!, country = null!;
+        if (isContact)
+        {
+            title = Box("Title", contact?.Title ?? "", 120, "For example, Office manager");
+            email = Box("Email", contact?.Email ?? "", 254);
+            email.InputScope = new InputScope { Names = { new InputScopeName(InputScopeNameValue.EmailSmtpAddress) } };
+            phone = Box("Phone", contact?.Phone ?? "", 40);
+            mobile = Box("Mobile", contact?.Mobile ?? "", 40);
+        }
+        else
+        {
+            address = Box("Address", location?.Address ?? "", 200);
+            var cityRow = new Grid { ColumnSpacing = 8 };
+            cityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+            cityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            cityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            city = new TextBox { Header = "City", Text = location?.City ?? "", MaxLength = 120 };
+            region = new TextBox { Header = "State or region", Text = location?.Region ?? "", MaxLength = 120 };
+            postal = new TextBox { Header = "Postal code", Text = location?.PostalCode ?? "", MaxLength = 20 };
+            AutomationProperties.SetName(city, "City");
+            AutomationProperties.SetName(region, "State or region");
+            AutomationProperties.SetName(postal, "Postal code");
+            Grid.SetColumn(region, 1);
+            Grid.SetColumn(postal, 2);
+            cityRow.Children.Add(city);
+            cityRow.Children.Add(region);
+            cityRow.Children.Add(postal);
+            form.Children.Add(cityRow);
+            country = Box("Country", location?.Country ?? "", 80);
+            phone = Box("Phone", location?.Phone ?? "", 40);
+        }
+        var notes = new TextBox { Header = "Notes", Text = contact?.Notes ?? location?.Notes ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxLength = 5000 };
+        var primary = new CheckBox
+        {
+            Content = isContact ? "Primary contact for this client" : "Primary location for this client",
+            IsChecked = contact?.Primary ?? location?.Primary ?? false,
+        };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button
+        {
+            Content = adding ? (isContact ? "Add contact" : "Add location") : "Save changes",
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+        };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        foreach (var control in new UIElement[] { notes, primary, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        name.Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            if (app.Client is not { } client || place.ClientId is not { } clientId)
+                return;
+            if (name.Text.Trim().Length == 0)
+            {
+                error.Message = "Give it a name.";
+                error.IsOpen = true;
+                return;
+            }
+            if (isContact && email.Text.Trim() is { Length: > 0 } typed && !typed.Contains('@', StringComparison.Ordinal))
+            {
+                error.Message = "That email address doesn't look right.";
+                error.IsOpen = true;
+                return;
+            }
+            save.IsEnabled = false;
+            try
+            {
+                var isPrimary = primary.IsChecked == true;
+                if (isContact)
+                {
+                    var draft = new ContactDraft(name.Text.Trim(), title.Text.Trim(), email.Text.Trim(), phone.Text.Trim(), mobile.Text.Trim(), notes.Text.Trim(), isPrimary);
+                    _ = contact is null ? await client.CreateContactAsync(clientId, draft) : await client.UpdateContactAsync(contact.Id, draft);
+                }
+                else
+                {
+                    var draft = new LocationDraft(
+                        name.Text.Trim(), address.Text.Trim(), city.Text.Trim(), region.Text.Trim(), postal.Text.Trim(), country.Text.Trim(), phone.Text.Trim(), notes.Text.Trim(), isPrimary);
+                    _ = location is null ? await client.CreateLocationAsync(clientId, draft) : await client.UpdateLocationAsync(location.Id, draft);
+                }
+                Back();
+                Show(adding ? $"{name.Text.Trim()} added." : "Changes saved.", InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
+    }
+
+    // ---------- adding and changing documents ----------
+    private static readonly (string Value, string Label)[] DocumentStatuses = [("current", "Current"), ("needs_review", "Needs review"), ("draft", "Draft")];
+
+    /// <summary>
+    /// The form for a new document, or for changing one. The body is edited as text with formatting typed in
+    /// (see <see cref="DocumentText"/>); a document with content the text can't hold keeps its body and only the
+    /// title and status can change here.
+    /// </summary>
+    private async void ShowDocumentEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        DocumentDetail? existing = null;
+        try
+        {
+            if (place.Item is { } row)
+                existing = await client.GetDocumentAsync(row.Id, cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return;
+        }
+        if (cancel.IsCancellationRequested)
+            return;
+        var bodyText = "";
+        var bodyEditable = existing is null || DocumentText.TryEditable(existing.Content, out bodyText);
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 8, 0, 24) };
+        ComboBox? clientBox = null;
+        if (existing is null && place.ClientId is null)
+        {
+            clientBox = new ComboBox { Header = "Where", HorizontalAlignment = HorizontalAlignment.Stretch };
+            clientBox.ItemsSource = new[] { "Knowledge base (no client)" }.Concat(clients.Select(c => c.Name)).ToList();
+            clientBox.SelectedIndex = 0;
+            form.Children.Add(clientBox);
+        }
+        else
+        {
+            var owner = existing is not null ? existing.ClientName ?? "Knowledge base" : clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+            form.Children.Add(new TextBlock { Text = $"Where: {owner}", Foreground = Secondary() });
+        }
+        var title = new TextBox { Header = "Title", Text = existing?.Title ?? "", MaxLength = 200, PlaceholderText = "For example, Firewall reboot procedure" };
+        var status = new ComboBox { Header = "Status", HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 220, ItemsSource = DocumentStatuses.Select(s => s.Label).ToList() };
+        status.SelectedIndex = Math.Max(0, Array.FindIndex(DocumentStatuses, s => s.Value == (existing?.Status ?? "current")));
+        form.Children.Add(title);
+        form.Children.Add(status);
+
+        var body = new TextBox
+        {
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 360,
+            IsSpellCheckEnabled = true,
+            PlaceholderText = "Start writing. A blank line starts a new paragraph.",
+        };
+        AutomationProperties.SetName(body, "Document text");
+        body.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+        if (bodyEditable)
+            body.Text = bodyText;
+        else
+        {
+            // Shown so the person can read it while changing the title or status; the stored body isn't touched.
+            body.Text = RichTextPlain.From(existing!.Content);
+            body.IsReadOnly = true;
+            form.Children.Add(new InfoBar
+            {
+                Severity = InfoBarSeverity.Informational,
+                IsOpen = true,
+                IsClosable = false,
+                Title = "The text of this document can only be changed in Atlas",
+                Message = "It has tables or layout the app can't edit without losing them. You can still change its title and status here.",
+            });
+        }
+
+        if (bodyEditable)
+        {
+            var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+            // Icons where Windows has one; a letter where it doesn't.
+            void Tool(object face, string tip, Action act)
+            {
+                var button = IconButton("", tip, (_, _) =>
+                {
+                    act();
+                    body.Focus(FocusState.Programmatic);
+                });
+                button.Content = face is string glyph ? new FontIcon { Glyph = glyph, FontSize = 14 } : face;
+                tools.Children.Add(button);
+            }
+            static TextBlock Letter(string text, global::Windows.UI.Text.TextDecorations decorations = global::Windows.UI.Text.TextDecorations.None) =>
+                new() { Text = text, FontSize = 14, FontWeight = FontWeights.SemiBold, TextDecorations = decorations, HorizontalAlignment = HorizontalAlignment.Center };
+            Tool("", "Bold (Ctrl+B)", () => Wrap(body, "**", "**"));
+            Tool("", "Italic (Ctrl+I)", () => Wrap(body, "*", "*"));
+            Tool(Letter("S", global::Windows.UI.Text.TextDecorations.Strikethrough), "Strikethrough", () => Wrap(body, "~~", "~~"));
+            Tool("", "Highlight", () => Wrap(body, "==", "=="));
+            tools.Children.Add(new AppBarSeparator());
+            Tool(Letter("H"), "Heading", () => PrefixLines(body, _ => "## "));
+            Tool("", "Bulleted list", () => PrefixLines(body, _ => "- "));
+            Tool(Letter("1."), "Numbered list", () => PrefixLines(body, n => $"{n}. "));
+            Tool("", "Checklist", () => PrefixLines(body, _ => "- [ ] "));
+            Tool(Letter("“"), "Quote", () => PrefixLines(body, _ => "> "));
+            tools.Children.Add(new AppBarSeparator());
+            Tool("", "Link", () => Wrap(body, "[", "](https://)"));
+            Tool("", "Code", () => Wrap(body, "`", "`"));
+            AddShortcut(body, VirtualKey.B, () => Wrap(body, "**", "**"));
+            AddShortcut(body, VirtualKey.I, () => Wrap(body, "*", "*"));
+            form.Children.Add(tools);
+        }
+        form.Children.Add(body);
+        if (bodyEditable)
+            form.Children.Add(new TextBlock
+            {
+                Text = "Formatting: **bold**, *italic*, ~~struck~~, ==highlight==, `code`, [text](https://link). Start a line with # for a heading, - for a list, 1. for numbers, - [ ] for a checklist, or > for a quote. Indent two spaces to put a line under a list item.",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Foreground = Secondary(),
+            });
+
+        var preview = new StackPanel();
+        var previewButton = new Microsoft.UI.Xaml.Controls.Primitives.ToggleButton { Content = "Preview" };
+        previewButton.Click += (_, _) =>
+        {
+            preview.Children.Clear();
+            if (previewButton.IsChecked != true)
+                return;
+            var shown = RichTextPlain.From(JsonSerializer.SerializeToElement(DocumentText.FromText(body.Text)));
+            preview.Children.Add(Card("Preview", Text(shown.Length > 0 ? shown : "Nothing written yet.", selectable: true)));
+        };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button { Content = existing is null ? "Add document" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        if (bodyEditable)
+            buttons.Children.Add(previewButton);
+        foreach (var control in new UIElement[] { preview, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        (existing is null ? title : bodyEditable ? body : title).Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            if (title.Text.Trim().Length == 0)
+            {
+                error.Message = "Give it a title.";
+                error.IsOpen = true;
+                return;
+            }
+            var statusValue = DocumentStatuses[Math.Max(0, status.SelectedIndex)].Value;
+            var content = bodyEditable ? DocumentText.FromText(body.Text) : null;
+            save.IsEnabled = false;
+            try
+            {
+                DocumentDetail saved;
+                if (existing is null)
+                {
+                    var clientId = place.ClientId ?? (clientBox?.SelectedIndex is > 0 and var i ? clients[i - 1].Id : null);
+                    saved = await client.CreateDocumentAsync(clientId, title.Text.Trim(), statusValue, content!);
+                }
+                else
+                    saved = await client.UpdateDocumentAsync(existing.Id, existing.Version, title.Text.Trim(), statusValue, content);
+                var row = new Row("document", saved.Id, saved.Title, saved.ClientName is null ? "Knowledge base" : "Document", saved.ClientId, saved.ClientName ?? "Knowledge base");
+                Remember(row);
+                trail[^1] = new Place("item", row.Title, Item: row);
+                if (existing is not null && trail.Count > 1 && trail[^2] is { Kind: "item", Item: { } before } && before.Id == row.Id)
+                    trail.RemoveAt(trail.Count - 2);
+                ShowPlace();
+                Show(existing is null ? $"{row.Title} added." : "Changes saved. The previous version is in the document's history.", InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+            {
+                error.Message = "Someone saved this document while you were editing. Copy your text, then go back and open it again.";
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
+    }
+
+    private static void AddShortcut(UIElement target, VirtualKey key, Action act)
+    {
+        var accelerator = new KeyboardAccelerator { Key = key, Modifiers = VirtualKeyModifiers.Control };
+        accelerator.Invoked += (_, args) =>
+        {
+            act();
+            args.Handled = true;
+        };
+        target.KeyboardAccelerators.Add(accelerator);
+    }
+
+    // Puts formatting around the selection, keeping the selection on the same words.
+    private static void Wrap(TextBox box, string before, string after)
+    {
+        var start = box.SelectionStart;
+        var length = box.SelectionLength;
+        var text = box.Text;
+        box.Text = text[..start] + before + text.Substring(start, length) + after + text[(start + length)..];
+        box.Select(start + before.Length, length);
+    }
+
+    // Starts each selected line (or the line the cursor is on) with a marker, numbering from 1 where asked.
+    private static void PrefixLines(TextBox box, Func<int, string> marker)
+    {
+        // TextBox keeps lines apart with \r.
+        var text = box.Text.Replace("\r\n", "\r", StringComparison.Ordinal).Replace('\n', '\r');
+        var start = Math.Min(box.SelectionStart, text.Length);
+        var end = Math.Min(start + box.SelectionLength, text.Length);
+        var lineStart = start == 0 ? 0 : text.LastIndexOf('\r', start - 1) + 1;
+        var lineEnd = text.IndexOf('\r', end);
+        if (lineEnd < 0)
+            lineEnd = text.Length;
+        var lines = text[lineStart..lineEnd].Split('\r');
+        var changed = string.Join('\r', lines.Select((l, n) => marker(n + 1) + l));
+        box.Text = text[..lineStart] + changed + text[lineEnd..];
+        box.Select(lineStart + changed.Length, 0);
+    }
+
+    // ---------- a client's overview ----------
+    /// <summary>The client at a glance: its quick note, hours, the people and places to know, editable where allowed.</summary>
+    private async void ShowOverview(string clientId)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        try
+        {
+            var detailTask = client.GetClientAsync(clientId, cancel.Token);
+            var contactsTask = client.ListContactsAsync(clientId, cancel.Token);
+            var locationsTask = client.ListLocationsAsync(clientId, cancel.Token);
+            await Task.WhenAll(detailTask, contactsTask, locationsTask);
             if (cancel.IsCancellationRequested)
                 return;
-            Results.ItemsSource = results;
-            if (results.Count > 0)
-                Results.SelectedIndex = 0;
-            else
-                ShowDetail(null);
+            var detail = detailTask.Result;
+            var contacts = contactsTask.Result.OrderByDescending(c => c.Primary).ThenBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            var locations = locationsTask.Result.OrderByDescending(l => l.Primary).ThenBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            PageInfo.Text = Join(detail.Type, Access(detail.Access));
+
+            if (!canWrite && detail.CanEdit)
+                Detail.Children.Add(SignInAgainNotice());
+            Detail.Children.Add(QuickNoteCard(detail));
+
+            var facts = new List<(string Label, string Value)>();
+            if ((contacts.FirstOrDefault(c => c.Primary) ?? contacts.FirstOrDefault()) is { } person)
+                facts.Add(("Primary contact", Join(person.Name, person.Phone.Length > 0 ? person.Phone : person.Mobile)));
+            if ((locations.FirstOrDefault(l => l.Primary) ?? locations.FirstOrDefault()) is { } place)
+                facts.Add((place.Name, place.OneLine));
+            if (detail.Hours.Length > 0)
+                facts.Add(("Hours", detail.Hours));
+            if (detail.MaintenanceWindow.Length > 0)
+                facts.Add(("Maintenance window", detail.MaintenanceWindow));
+            if (detail.RequireRevealReason)
+                facts.Add(("Passwords", "A reason is asked before each is shown or copied"));
+            if (facts.Count > 0)
+                Detail.Children.Add(Facts(facts));
+
+            // Where the person may make changes, the cards show even when empty, so there's somewhere to add the first one.
+            var changeable = canWrite && detail.CanEdit;
+            var contactRows = contacts.Select(c => ContactRow(c, changeable)).ToList();
+            var locationRows = locations.Select(l => LocationRow(l, changeable)).ToList();
+            if (changeable)
+            {
+                contactRows.Add(AddRow("Add contact", "contact", clientId));
+                locationRows.Add(AddRow("Add location", "location", clientId));
+            }
+            if (contactRows.Count > 0)
+                Detail.Children.Add(Card("Contacts", [.. contactRows]));
+            if (locationRows.Count > 0)
+                Detail.Children.Add(Card("Locations", [.. locationRows]));
         }
         catch (OperationCanceledException)
         {
@@ -176,6 +1340,472 @@ public sealed partial class SearchWindow : Window
         }
     }
 
+    private static string Access(string level) => level switch
+    {
+        "edit_passwords" => "You can edit, including passwords",
+        "edit" => "You can edit",
+        "read" => "Read only",
+        _ => "",
+    };
+
+    private UIElement ContactRow(ContactInfo contact, bool changeable)
+    {
+        var actions = new List<Button>();
+        if (contact.Email.Length > 0)
+            actions.Add(IconButton("", $"Copy {contact.Email}", (_, _) => Copy(contact.Email, "Email address copied.")));
+        var phone = contact.Phone.Length > 0 ? contact.Phone : contact.Mobile;
+        if (phone.Length > 0)
+            actions.Add(IconButton("", $"Copy {phone}", (_, _) => Copy(phone, "Phone number copied.")));
+        if (changeable)
+            actions.AddRange(PersonActions("contact", contact.Id, contact.Name, contact, contact.ClientId));
+        var label = contact.Primary ? $"{contact.Name} · primary" : contact.Name;
+        return Field(label, Value(Join(contact.Title, contact.Email, phone)), [.. actions]);
+    }
+
+    private UIElement LocationRow(LocationInfo location, bool changeable)
+    {
+        var label = location.Primary ? $"{location.Name} · primary" : location.Name;
+        var address = location.OneLine;
+        var actions = new List<Button>();
+        if (address.Length > 0)
+            actions.Add(IconButton("", "Copy address", (_, _) => Copy(address, "Address copied.")));
+        if (changeable)
+            actions.AddRange(PersonActions("location", location.Id, location.Name, location, location.ClientId));
+        return Field(label, Value(Join(address, location.Phone)), [.. actions]);
+    }
+
+    /// <summary>The quick note, with Edit where the person may change it. Saving says whose words won if two people edited.</summary>
+    private UIElement QuickNoteCard(ClientDetail detail)
+    {
+        var host = new StackPanel();
+        void Reading()
+        {
+            host.Children.Clear();
+            var grid = new Grid { Padding = new Thickness(16, 12, 8, 12), ColumnSpacing = 8 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var text = new StackPanel { Spacing = 4 };
+            text.Children.Add(new TextBlock
+            {
+                Text = detail.Notes.Length > 0 ? detail.Notes : "No quick note yet. Use it for what everyone should know before touching anything here.",
+                TextWrapping = TextWrapping.Wrap,
+                IsTextSelectionEnabled = true,
+                Foreground = detail.Notes.Length > 0 ? (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"] : Secondary(),
+            });
+            if (detail.NotesUpdatedAt is { } at)
+                text.Children.Add(new TextBlock { Text = Join($"Edited {When(at)}", detail.NotesUpdatedByName is { } by ? $"by {by}" : null), FontSize = 12, Foreground = Secondary() });
+            grid.Children.Add(text);
+            if (canWrite && detail.CanEdit)
+            {
+                var edit = new Button { Content = "Edit", VerticalAlignment = VerticalAlignment.Top };
+                edit.Click += (_, _) => Editing();
+                Grid.SetColumn(edit, 1);
+                grid.Children.Add(edit);
+            }
+            host.Children.Add(grid);
+        }
+        void Editing()
+        {
+            host.Children.Clear();
+            var panel = new StackPanel { Padding = new Thickness(16, 12, 16, 14), Spacing = 10 };
+            var box = new TextBox
+            {
+                Text = detail.Notes,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap,
+                MaxLength = 5000,
+                MinHeight = 90,
+                PlaceholderText = "What everyone should know before touching anything here",
+            };
+            AutomationProperties.SetName(box, "Quick note");
+            var save = new Button { Content = "Save", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            var cancel = new Button { Content = "Cancel" };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            buttons.Children.Add(save);
+            buttons.Children.Add(cancel);
+            panel.Children.Add(box);
+            panel.Children.Add(buttons);
+            host.Children.Add(panel);
+            box.Focus(FocusState.Programmatic);
+            cancel.Click += (_, _) => Reading();
+            save.Click += async (_, _) =>
+            {
+                if (app.Client is not { } client)
+                    return;
+                save.IsEnabled = false;
+                try
+                {
+                    detail = await client.SaveQuickNoteAsync(detail.Id, box.Text.Trim(), detail.NotesVersion);
+                    Show("Quick note saved.", InfoBarSeverity.Success);
+                    Reading();
+                }
+                catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+                {
+                    Show("Someone else changed the quick note while you were editing. Copy your text, then reopen the client to see theirs.", InfoBarSeverity.Warning);
+                    save.IsEnabled = true;
+                }
+                catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+                {
+                    Fail(ex);
+                    save.IsEnabled = true;
+                }
+            };
+        }
+        Reading();
+        return Card("Quick note", host);
+    }
+
+    /// <summary>Sign-ins from before the app could make changes may only read; signing in again asks for more.</summary>
+    private InfoBar SignInAgainNotice()
+    {
+        var again = new Button { Content = "Sign in again" };
+        again.Click += (_, _) => _ = app.SignOutAsync();
+        return new InfoBar
+        {
+            IsOpen = true,
+            IsClosable = false,
+            Severity = InfoBarSeverity.Informational,
+            Title = "Make changes from here",
+            Message = "This sign-in can only read. Sign in again once to edit from Atlas for Windows; everything you change is recorded under your name.",
+            ActionButton = again,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+    }
+
+    // ---------- favorites ----------
+    /// <summary>What the current page is, as something that can be starred: a client, or an item.</summary>
+    private (string Kind, string Id)? Starrable() => trail.LastOrDefault() switch
+    {
+        { Kind: "client", ClientId: { } id } => ("client", id),
+        { Kind: "item", Item: { Kind: "password" or "asset" or "document" } row } => (row.Kind, row.Id),
+        _ => null,
+    };
+
+    private void ShowStar()
+    {
+        if (Starrable() is not { } thing)
+        {
+            StarButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var on = starred.Contains($"{thing.Kind}:{thing.Id}");
+        StarButton.Visibility = Visibility.Visible;
+        StarIcon.Glyph = on ? "" : "";
+        StarText.Text = on ? "In favorites" : "Add to favorites";
+        ToolTipService.SetToolTip(StarButton, on ? "Remove from favorites" : "Keep this on Home");
+    }
+
+    private async void Star_Click(object sender, RoutedEventArgs e)
+    {
+        if (Starrable() is not { } thing || app.Client is not { } client)
+            return;
+        var key = $"{thing.Kind}:{thing.Id}";
+        var on = !starred.Contains(key);
+        try
+        {
+            StarButton.IsEnabled = false;
+            await client.SetFavoriteAsync(thing.Kind, thing.Id, on);
+            if (on)
+                starred.Add(key);
+            else
+                starred.Remove(key);
+            ShowStar();
+            Show(on ? "Added to favorites. It's on Home." : "Removed from favorites.", InfoBarSeverity.Success);
+        }
+        catch (AtlasApiException ex) when (ex.Code == "api_scope")
+        {
+            Show("Your Atlas server needs updating before favorites can be changed here. Star it in Atlas in your browser for now.", InfoBarSeverity.Warning);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+        finally
+        {
+            StarButton.IsEnabled = true;
+        }
+    }
+
+    private void OpenAtlas_Click(object sender, RoutedEventArgs e)
+    {
+        if (app.Client is { } client)
+            _ = Launcher.LaunchUriAsync(client.Address.Origin);
+    }
+
+    private void Refresh_Click(object sender, RoutedEventArgs e)
+    {
+        _ = LoadAccountAsync();
+        ShowPlace();
+    }
+
+    private void SignOut_Click(object sender, RoutedEventArgs e) => _ = app.SignOutAsync();
+
+    // ---------- list pages ----------
+    private async Task LoadPageAsync()
+    {
+        if (app.Client is not { } client || trail.Count == 0)
+            return;
+        var place = trail[^1];
+        if (place.Kind == "item")
+            return;
+        listCancel?.Cancel();
+        var cancel = listCancel = new CancellationTokenSource();
+        ListLoading.Visibility = Visibility.Visible;
+        try
+        {
+            List<Row> rows;
+            Func<Row, string>? groupBy = null;
+            var empty = "Nothing here yet.";
+            var kind = place.Kind == "client" ? place.Tab : place.Kind;
+            var clientId = place.ClientId;
+            switch (kind)
+            {
+                case "home":
+                    rows = [];
+                    try
+                    {
+                        var favorites = await client.ListFavoritesAsync(cancel.Token);
+                        starred.Clear();
+                        foreach (var f in favorites)
+                            starred.Add($"{f.Type}:{f.Id}");
+                        rows.AddRange(favorites
+                            .Where(f => f.Type is "password" or "asset" or "document" or "client")
+                            .Select(f => new Row(f.Type, f.Id, f.Name, Join(Kind(f.Type), f.ClientName), f.ClientId, "Favorites")));
+                    }
+                    catch (AtlasApiException ex) when (ex.Code == "api_scope")
+                    {
+                        // An Atlas older than this app doesn't share favorites with it yet.
+                    }
+                    rows.AddRange(recent.Select(r => r with { ClientName = "Recently opened", Subtitle = Join(Kind(r.Kind), r.ClientName) }));
+                    groupBy = r => r.ClientName!;
+                    empty = "Nothing here yet. Open a client or an item and choose Add to favorites at the top to keep it here. What you open also shows up here.";
+                    break;
+                case "clients":
+                    rows = [.. clients.Select(c => new Row("client", c.Id!, c.Name, "Client", c.Id, c.Name))];
+                    empty = "You don't have access to any clients yet.";
+                    break;
+                case "passwords":
+                    rows = [.. (await client.ListPasswordsAsync(clientId, cancel.Token))
+                        .Select(p => new Row("password", p.Id, p.Name, p.Username.Length > 0 ? p.Username : "No username", p.ClientId, p.ClientName))];
+                    break;
+                case "assets":
+                    assetCache = await client.ListAssetsAsync(clientId, cancel.Token);
+                    FillTypes();
+                    rows = AssetRows();
+                    break;
+                case "documents":
+                    rows = [.. (await client.ListDocumentsAsync(clientId, cancel.Token))
+                        .Select(d => new Row("document", d.Id, d.Title, d.ClientName is null ? "Knowledge base" : "Document", d.ClientId, d.ClientName ?? "Knowledge base"))];
+                    break;
+                case "search":
+                    rows = [.. (await client.SearchAsync(place.Query ?? "", 40, cancel.Token))
+                        .Select(r => new Row(r.Type, r.Id, r.Title, Join(Kind(r.Type), r.ClientName, Snippet(r.Snippet, r.Title)), r.ClientId, r.ClientName))];
+                    groupBy = r => r.Kind switch { "client" => "Clients", "password" => "Passwords", "asset" => "Assets", "document" => "Documents", _ => "Other" };
+                    empty = "Nothing you can see matches that.";
+                    break;
+                default:
+                    rows = [];
+                    break;
+            }
+            if (kind is "passwords" or "assets" or "documents" && clientId is null)
+                groupBy = r => r.ClientName ?? "Knowledge base";
+            if (cancel.IsCancellationRequested)
+                return;
+            TypeFilter.Visibility = kind == "assets" ? Visibility.Visible : Visibility.Collapsed;
+            loaded = rows;
+            grouping = groupBy;
+            ListEmptyText.Text = place.Kind == "client" ? $"{place.Title} has no {place.Tab} in Atlas yet." : empty;
+            Render();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+        finally
+        {
+            if (!cancel.IsCancellationRequested)
+                ListLoading.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>Shows the loaded rows that match the filter, under headings when the list spans many clients.</summary>
+    private void Render()
+    {
+        var place = trail[^1];
+        var filter = FilterBox.Text.Trim();
+        var shown = loaded
+            .Where(r => filter.Length == 0 || r.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || r.Subtitle.Contains(filter, StringComparison.CurrentCultureIgnoreCase))
+            .ToList();
+        if (place.Kind != "home")
+            shown = [.. shown.OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
+        if (grouping is not null)
+        {
+            var first = new[] { "Favorites", "Recently opened", "Clients", "Passwords", "Assets", "Documents" };
+            var groups = shown
+                .GroupBy(grouping)
+                .OrderBy(g => Array.IndexOf(first, g.Key) is var i and >= 0 ? i.ToString() : "9" + g.Key, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new RowGroup(g.Key, g))
+                .ToList();
+            Results.ItemsSource = new Microsoft.UI.Xaml.Data.CollectionViewSource { IsSourceGrouped = true, Source = groups }.View;
+        }
+        else
+        {
+            Results.ItemsSource = shown;
+        }
+        var noun = place.Kind switch
+        {
+            "clients" => "client",
+            "home" or "search" => "item",
+            "client" => place.Tab.TrimEnd('s'),
+            _ => place.Kind.TrimEnd('s'),
+        };
+        PageInfo.Text = shown.Count == loaded.Count
+            ? $"{loaded.Count:N0} {noun}{(loaded.Count == 1 ? "" : "s")}"
+            : $"{shown.Count:N0} of {loaded.Count:N0} {noun}s";
+        if (place.Kind == "client")
+        {
+            var tabs = new[] { (PasswordsTab, "Passwords", "passwords"), (AssetsTab, "Assets", "assets"), (DocumentsTab, "Documents", "documents") };
+            foreach (var (item, label, tab) in tabs)
+                item.Text = tab == place.Tab ? $"{label} ({loaded.Count})" : label;
+        }
+        ListEmpty.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (shown.Count == 0 && loaded.Count > 0)
+            ListEmptyText.Text = "Nothing in this list matches that.";
+    }
+
+    private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (trail.Count > 0 && trail[^1].Kind != "item")
+            Render();
+    }
+
+    // The asset types present in the list, for the filter.
+    private void FillTypes()
+    {
+        var previous = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
+        var choices = new List<TypeChoice> { new(null, "All types") };
+        choices.AddRange(assetCache
+            .GroupBy(a => a.LayoutId)
+            .Select(g => new TypeChoice(g.Key, $"{g.First().LayoutName} ({g.Count()})"))
+            .OrderBy(c => c.Label, StringComparer.CurrentCultureIgnoreCase));
+        fillingTypes = true;
+        TypeFilter.ItemsSource = choices;
+        TypeFilter.SelectedItem = choices.FirstOrDefault(c => c.LayoutId == previous) ?? choices[0];
+        fillingTypes = false;
+    }
+
+    private List<Row> AssetRows()
+    {
+        var layoutId = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
+        return [.. assetCache
+            .Where(a => layoutId is null || a.LayoutId == layoutId)
+            .Select(a =>
+            {
+                var facts = KeyFacts(a).Where(f => f.Kind is "ip" or "os" or "seen").Select(f => f.Value);
+                return new Row("asset", a.Id, a.Name, Join([a.LayoutName, .. facts]), a.ClientId, a.ClientName);
+            })];
+    }
+
+    private void TypeFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (fillingTypes || trail.Count == 0)
+            return;
+        loaded = AssetRows();
+        Render();
+    }
+
+    /// <summary>
+    /// The facts that tell one asset from another, picked by what each field is called: its address, name on the
+    /// network, operating system, serial number, model, maker, warranty, last check-in, protection, and user.
+    /// </summary>
+    private List<(string Kind, string Label, string Value)> KeyFacts(AssetSummary asset)
+    {
+        layouts.TryGetValue(asset.LayoutId, out var layout);
+        var fields = (layout?.Fields ?? []).ToList();
+        foreach (var key in asset.Fields.Keys)
+            if (!fields.Any(f => f.Key == key))
+                fields.Add(new LayoutField(key, Tidy(key), "text"));
+        var facts = new List<(string Kind, string Label, string Value)>();
+        foreach (var (kind, pattern) in FactKinds)
+        {
+            foreach (var field in fields)
+            {
+                var matches = (kind == "ip" && field.Type == "ip") ||
+                    System.Text.RegularExpressions.Regex.IsMatch($"{field.Key} {field.Label}", pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!matches || facts.Any(f => f.Label == Tidy(field.Label)))
+                    continue;
+                if (asset.Fields.TryGetValue(field.Key, out var value) && Display(value) is { Length: > 0 } text)
+                {
+                    facts.Add((kind, Tidy(field.Label), field.Type == "date" ? Day(text) : text));
+                    break;
+                }
+            }
+        }
+        return facts;
+    }
+
+    private static readonly (string Kind, string Pattern)[] FactKinds =
+    [
+        ("ip", @"\bip\b|ip.?address"),
+        ("host", @"host.?name|\bfqdn\b"),
+        ("os", @"operating.?system|\bos\b"),
+        ("serial", @"serial"),
+        ("model", @"\bmodel\b"),
+        ("maker", @"manufacturer|vendor"),
+        ("warranty", @"warranty"),
+        ("seen", @"last.?(check|seen|contact)|check.?in"),
+        ("protection", @"endpoint.?protection|anti.?virus"),
+        ("user", @"logged.?in|last.?user"),
+    ];
+
+    // Labels from synced devices ("anti_viruses_application_name") read as words.
+    private static string Tidy(string label)
+    {
+        var words = label.Replace('_', ' ').Trim();
+        return words.Length == 0 ? label : char.ToUpperInvariant(words[0]) + words[1..];
+    }
+
+    private static string Day(string iso) =>
+        DateTimeOffset.TryParse(iso, out var at) ? at.ToLocalTime().ToString("MMM d, yyyy") : iso;
+
+    // What search matched besides the name (an address, a serial number), so same-named results differ.
+    private static string? Snippet(string snippet, string title)
+    {
+        var text = string.Join(' ', snippet.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+        if (text.StartsWith(title, StringComparison.OrdinalIgnoreCase))
+            text = text[title.Length..].TrimStart(' ', '—', '-', '·');
+        return text.Length > 0 ? text : null;
+    }
+
+    private static string Join(params string?[] parts) => string.Join(" · ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+    // ---------- search ----------
+    private async void QueryBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        var query = QueryBox.Text.Trim();
+        if (query.Length == 0)
+        {
+            if (trail.LastOrDefault()?.Kind == "search")
+                Back();
+            return;
+        }
+        listCancel?.Cancel();
+        try
+        {
+            // Wait for a pause in typing.
+            await Task.Delay(200);
+            if (QueryBox.Text.Trim() != query)
+                return;
+            Go(new Place("search", $"Search: {query}", Query: query));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
     private void QueryBox_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key == VirtualKey.Down && Results.Items.Count > 0)
@@ -183,59 +1813,68 @@ public sealed partial class SearchWindow : Window
             e.Handled = true;
             Results.Focus(FocusState.Keyboard);
         }
-        else if (e.Key == VirtualKey.Enter && Results.SelectedItem is SearchResult result)
-        {
-            e.Handled = true;
-            _ = RunDefaultAsync(result);
-        }
     }
 
-    private void Results_KeyDown(object sender, KeyRoutedEventArgs e)
+    private void Remember(Row row)
     {
-        if (e.Key == VirtualKey.Enter && Results.SelectedItem is SearchResult result)
-        {
-            e.Handled = true;
-            _ = RunDefaultAsync(result);
-        }
+        recent.RemoveAll(r => r.Kind == row.Kind && r.Id == row.Id);
+        recent.Insert(0, row);
+        if (recent.Count > 25)
+            recent.RemoveAt(recent.Count - 1);
     }
 
-    private void Results_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    // ---------- the item ----------
+    private async void ShowItem(Row? row)
     {
-        if (Results.SelectedItem is SearchResult result)
-            _ = RunDefaultAsync(result);
-    }
-
-    /// <summary>Enter copies a password entry's password, and opens anything else in Atlas.</summary>
-    private Task RunDefaultAsync(SearchResult result) =>
-        result.IsPassword ? CopySecretAsync(SecretField.Password) : OpenAsync(app.Client!.Address.WebLink(result.Type, result.Id, result.ClientId));
-
-    private async void Results_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        await ShowDetailAsync(Results.SelectedItem as SearchResult);
-
-    // ---------- the read-only summary ----------
-    private async Task ShowDetailAsync(SearchResult? result)
-    {
-        ShowDetail(result);
-        if (result is not { IsPassword: true } || app.Client is null)
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        Detail.Children.Clear();
+        current = null;
+        if (row is null || app.Client is not { } client)
             return;
+        DetailScroll.ChangeView(null, 0, null, true);
+        current = row;
+        Detail.Children.Add(HeaderCard(row));
         try
         {
-            var entry = await app.Client.GetPasswordAsync(result.Id);
-            if (!ReferenceEquals(Results.SelectedItem, result))
-                return;
-            password = entry;
-            DetailBody.Text = string.Join(
-                Environment.NewLine,
-                new[]
-                {
-                    entry.Username.Length > 0 ? $"Username: {entry.Username}" : null,
-                    entry.Url.Length > 0 ? $"Sign-in address: {entry.Url}" : null,
-                    entry.HasTotp ? "Has a one-time code" : null,
-                    entry.RequireReason ? "This client asks for a reason before passwords are copied." : null,
-                }.Where(line => line is not null));
-            CopyUsernameButton.Visibility = VisibleIf(entry.Username.Length > 0);
-            OpenSignInButton.Visibility = VisibleIf(IsWebAddress(entry.Url));
-            CopyCodeButton.Visibility = VisibleIf(entry.HasTotp);
+            switch (row.Kind)
+            {
+                case "password":
+                    var entry = await client.GetPasswordAsync(row.Id, cancel.Token);
+                    if (cancel.IsCancellationRequested)
+                        return;
+                    password = entry;
+                    ShowPassword(entry);
+                    break;
+                case "asset":
+                    var asset = await client.GetAssetAsync(row.Id, cancel.Token);
+                    if (layouts.Count == 0)
+                        foreach (var layout in await client.ListLayoutsAsync(cancel.Token))
+                            layouts[layout.Id] = layout;
+                    if (cancel.IsCancellationRequested)
+                        return;
+                    ShowAsset(asset);
+                    break;
+                case "document":
+                    var document = await client.GetDocumentAsync(row.Id, cancel.Token);
+                    if (cancel.IsCancellationRequested)
+                        return;
+                    ShowDocument(document);
+                    break;
+                case "client":
+                    Detail.Children.Add(Card("Client", Text("Open the client in Atlas, or choose it in the sidebar to list its passwords, assets, and documents.")));
+                    break;
+                default:
+                    if (row.Subtitle.Length > 0)
+                        Detail.Children.Add(Card("Details", Text(row.Subtitle)));
+                    break;
+            }
+            Remember(row);
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
         {
@@ -243,22 +1882,7 @@ public sealed partial class SearchWindow : Window
         }
     }
 
-    private void ShowDetail(SearchResult? result)
-    {
-        password = null;
-        Detail.Visibility = VisibleIf(result is not null);
-        if (result is null)
-            return;
-        DetailTitle.Text = result.Title;
-        DetailKind.Text = string.Join(" · ", new[] { Label(result.Type), result.ClientName }.Where(s => !string.IsNullOrEmpty(s)));
-        DetailBody.Text = string.Join(Environment.NewLine, new[] { result.Subtitle, result.Snippet }.Where(s => !string.IsNullOrEmpty(s)));
-        CopyPasswordButton.Visibility = VisibleIf(result.IsPassword);
-        CopyCodeButton.Visibility = Visibility.Collapsed;
-        CopyUsernameButton.Visibility = Visibility.Collapsed;
-        OpenSignInButton.Visibility = Visibility.Collapsed;
-    }
-
-    private static string Label(string type) => type switch
+    private static string Kind(string kind) => kind switch
     {
         "client" => "Client",
         "asset" => "Asset",
@@ -266,43 +1890,305 @@ public sealed partial class SearchWindow : Window
         "password" => "Password",
         "contact" => "Contact",
         "location" => "Location",
-        _ => type,
+        _ => kind,
     };
 
-    private static Visibility VisibleIf(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
+    private void ShowPassword(PasswordEntry entry)
+    {
+        var rows = new List<UIElement>();
+        if (entry.Username.Length > 0)
+            rows.Add(Field("Username", Value(entry.Username, mono: true), IconButton("", "Copy username (Ctrl+U)", (_, _) => CopyUsername())));
+        const string maskedPassword = "••••••••••••";
+        var secret = Value(maskedPassword, mono: true);
+        rows.Add(Field(
+            "Password",
+            secret,
+            IconButton("", "Show for 30 seconds", (_, _) => _ = ShowSecretAsync(SecretField.Password, secret, maskedPassword)),
+            IconButton("", "Copy password (Ctrl+P)", (_, _) => _ = CopySecretAsync(SecretField.Password))));
+        if (entry.HasTotp)
+        {
+            const string maskedCode = "••• •••";
+            var code = Value(maskedCode, mono: true);
+            rows.Add(Field(
+                "One-time code",
+                code,
+                IconButton("", "Show the current code", (_, _) => _ = ShowSecretAsync(SecretField.OneTimeCode, code, maskedCode)),
+                IconButton("", "Copy one-time code (Ctrl+T)", (_, _) => _ = CopySecretAsync(SecretField.OneTimeCode))));
+        }
+        Detail.Children.Add(Card("Sign-in", [.. rows]));
+
+        if (entry.Url.Length > 0)
+        {
+            var actions = new List<Button> { IconButton("", "Copy address", (_, _) => Copy(entry.Url, "Address copied.")) };
+            if (IsWebAddress(entry.Url))
+                actions.Insert(0, IconButton("", "Open the sign-in page", (_, _) => _ = Launcher.LaunchUriAsync(new Uri(entry.Url))));
+            Detail.Children.Add(Card("Website", Field("Address", Value(entry.Url), [.. actions])));
+        }
+
+        var about = new List<UIElement> { Field("Client", Value(entry.ClientName)) };
+        if (entry.RequireReason)
+            about.Add(Field("Reason", Value("This client asks for a reason before a password is shown or copied.")));
+        about.Add(Field("Updated", Value(When(entry.UpdatedAt))));
+        Detail.Children.Add(Card("About", [.. about]));
+        Detail.Children.Add(Footnote("Every time a password is shown or copied, Atlas records it in the password's access history."));
+    }
+
+    private void ShowAsset(AssetSummary asset)
+    {
+        var facts = KeyFacts(asset);
+        if (facts.Count > 0)
+            Detail.Children.Add(Facts([.. facts.Take(6).Select(f => (f.Label, f.Value))]));
+
+        var rows = new List<UIElement>();
+        layouts.TryGetValue(asset.LayoutId, out var layout);
+        var known = new HashSet<string>();
+        foreach (var field in layout?.Fields ?? [])
+        {
+            known.Add(field.Key);
+            if (asset.Fields.TryGetValue(field.Key, out var value) && Display(value) is { Length: > 0 } text)
+                rows.Add(CopyableField(Tidy(field.Label), field.Type == "date" ? Day(text) : text, mono: field.Type is "ip" or "url"));
+        }
+        // Values a layout no longer lists (an import, say) are still shown.
+        foreach (var (key, value) in asset.Fields)
+            if (!known.Contains(key) && Display(value) is { Length: > 0 } text)
+                rows.Add(CopyableField(Tidy(key), text));
+        if (rows.Count == 0)
+            Detail.Children.Add(Card("Details", Text("No details filled in yet.")));
+        else if (facts.Count == 0 || rows.Count <= 6)
+            Detail.Children.Add(Card("Details", [.. rows]));
+        else
+        {
+            var all = new StackPanel();
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (i > 0)
+                    all.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
+                all.Children.Add(rows[i]);
+            }
+            Detail.Children.Add(new Expander
+            {
+                Header = $"All fields ({rows.Count})",
+                Content = all,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0, 16, 0, 0),
+            });
+        }
+        if (asset.Notes.Trim().Length > 0)
+            Detail.Children.Add(Card("Notes", Text(asset.Notes.Trim(), selectable: true)));
+        Detail.Children.Add(Card(
+            "About",
+            Field("Client", Value(asset.ClientName)),
+            Field("Type", Value(asset.LayoutName)),
+            Field("Updated", Value(Join(When(asset.UpdatedAt), asset.UpdatedByName)))));
+    }
+
+    /// <summary>The key facts as tiles across the top, two to a row; selecting one copies it.</summary>
+    private UIElement Facts(List<(string Label, string Value)> facts)
+    {
+        var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8, Margin = new Thickness(0, 16, 0, 0) };
+        const int columns = 2;
+        for (var c = 0; c < columns; c++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (var i = 0; i < facts.Count; i++)
+        {
+            if (i % columns == 0)
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var (label, value) = facts[i];
+            var content = new StackPanel { Spacing = 2 };
+            content.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = Secondary(), TextTrimming = TextTrimming.CharacterEllipsis });
+            content.Children.Add(new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = FontWeights.SemiBold });
+            var tile = new Button
+            {
+                Content = content,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(12, 9, 12, 10),
+            };
+            ToolTipService.SetToolTip(tile, $"Copy {label.ToLowerInvariant()}");
+            AutomationProperties.SetName(tile, $"{label}: {value}. Copy");
+            tile.Click += (_, _) => Copy(value, $"{label} copied.");
+            Grid.SetRow(tile, i / columns);
+            Grid.SetColumn(tile, i % columns);
+            grid.Children.Add(tile);
+        }
+        return grid;
+    }
+
+    private void ShowDocument(DocumentDetail document)
+    {
+        var editable = canWrite && document.CanEdit ? Visibility.Visible : Visibility.Collapsed;
+        EditHereButton.Visibility = editable;
+        ArchiveButton.Visibility = editable;
+        var text = RichTextPlain.From(document.Content);
+        Detail.Children.Add(Card("Document", Text(text.Length > 0 ? text : "This document is empty.", selectable: true)));
+        Detail.Children.Add(Card(
+            "About",
+            Field("Where", Value(document.ClientName ?? "Knowledge base")),
+            Field("Updated", Value(Join(When(document.UpdatedAt), document.UpdatedByName)))));
+    }
+
+    private static string Display(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => value.GetString() ?? "",
+        JsonValueKind.Number => value.GetRawText(),
+        JsonValueKind.True => "Yes",
+        JsonValueKind.False => "No",
+        JsonValueKind.Array => string.Join(", ", value.EnumerateArray().Select(Display).Where(s => s.Length > 0)),
+        _ => "",
+    };
+
+    private static string When(string iso) =>
+        DateTimeOffset.TryParse(iso, out var at) ? at.ToLocalTime().ToString("MMM d, yyyy, h:mm tt") : iso;
 
     private static bool IsWebAddress(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
+    // ---------- building the cards ----------
+    /// <summary>The first card: what it is, its name, and the client it belongs to.</summary>
+    private static UIElement HeaderCard(Row row)
+    {
+        var grid = new Grid { ColumnSpacing = 14, Padding = new Thickness(16, 14, 16, 14) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var tile = new Border
+        {
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(8),
+            Background = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"],
+            Child = new FontIcon { Glyph = row.Glyph, FontSize = 18, Foreground = (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"] },
+        };
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 3 };
+        text.Children.Add(new TextBlock { Text = row.Title, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        var where = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        where.Children.Add(new FontIcon { Glyph = "", FontSize = 12, Foreground = Secondary() });
+        where.Children.Add(new TextBlock { Text = Join(Kind(row.Kind), row.ClientName), FontSize = 12, Foreground = Secondary(), TextWrapping = TextWrapping.Wrap });
+        text.Children.Add(where);
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(tile);
+        grid.Children.Add(text);
+        return new Border
+        {
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Child = grid,
+        };
+    }
+
+    private static UIElement Card(string label, params UIElement[] rows)
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Secondary(),
+            Margin = new Thickness(2, 20, 0, 8),
+        });
+        var list = new StackPanel();
+        for (var i = 0; i < rows.Length; i++)
+        {
+            if (i > 0)
+                list.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
+            list.Children.Add(rows[i]);
+        }
+        panel.Children.Add(new Border
+        {
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Child = list,
+        });
+        return panel;
+    }
+
+    private static UIElement Field(string label, TextBlock value, params Button[] actions)
+    {
+        var grid = new Grid { Padding = new Thickness(16, 10, 8, 10), ColumnSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = (Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"] });
+        text.Children.Add(value);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        foreach (var action in actions)
+            buttons.Children.Add(action);
+        Grid.SetColumn(buttons, 1);
+        grid.Children.Add(text);
+        grid.Children.Add(buttons);
+        return grid;
+    }
+
+    private UIElement CopyableField(string label, string value, bool mono = false) =>
+        Field(label, Value(value, mono), IconButton("", $"Copy {label.ToLowerInvariant()}", (_, _) => Copy(value, $"{label} copied.")));
+
+    private static TextBlock Value(string text, bool mono = false) => new()
+    {
+        Text = text,
+        TextWrapping = TextWrapping.Wrap,
+        IsTextSelectionEnabled = true,
+        Margin = new Thickness(0, 2, 0, 0),
+        FontFamily = mono ? new FontFamily("Cascadia Mono, Consolas") : FontFamily.XamlAutoFontFamily,
+    };
+
+    private static UIElement Text(string text, bool selectable = false) =>
+        new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = selectable, Padding = new Thickness(16, 12, 16, 14), LineHeight = 22 };
+
+    private static UIElement Footnote(string text) =>
+        new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Secondary(), Margin = new Thickness(2, 14, 0, 0) };
+
+    private static Button IconButton(string glyph, string tip, RoutedEventHandler click)
+    {
+        var button = new Button
+        {
+            Content = new FontIcon { Glyph = glyph, FontSize = 14 },
+            Width = 36,
+            Height = 32,
+            Padding = new Thickness(0),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+        };
+        ToolTipService.SetToolTip(button, tip);
+        AutomationProperties.SetName(button, tip);
+        button.Click += click;
+        return button;
+    }
+
+    private static Brush Secondary() => (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
+    // ---------- the bar under the item ----------
+    private void Edit_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is { } row)
+            _ = OpenInAtlasAsync(row);
+    }
+
+    private void CopyLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is { } row && app.Client is { } client)
+            Copy(client.Address.WebLink(row.Kind, row.Id, row.ClientId).ToString(), "Link copied.");
+    }
+
     // ---------- actions ----------
-    private void CopyPassword_Click(object sender, RoutedEventArgs e) => _ = CopySecretAsync(SecretField.Password);
+    private Task OpenInAtlasAsync(Row row) =>
+        app.Client is { } client ? Launcher.LaunchUriAsync(client.Address.WebLink(row.Kind, row.Id, row.ClientId)).AsTask() : Task.CompletedTask;
 
-    private void CopyCode_Click(object sender, RoutedEventArgs e) => _ = CopySecretAsync(SecretField.OneTimeCode);
-
-    private void CopyUsername_Click(object sender, RoutedEventArgs e)
+    private void Copy(string text, string message)
     {
-        if (password is null)
-            return;
-        clipboard.Copy(password.Username, sensitive: false);
-        Show("Username copied.", InfoBarSeverity.Success);
+        clipboard.Copy(text, sensitive: false);
+        Show(message, InfoBarSeverity.Success);
     }
 
-    private void OpenSignIn_Click(object sender, RoutedEventArgs e)
+    private void CopyUsername()
     {
-        if (password is not null && IsWebAddress(password.Url))
-            _ = OpenAsync(new Uri(password.Url));
-    }
-
-    private void OpenWeb_Click(object sender, RoutedEventArgs e)
-    {
-        if (Results.SelectedItem is SearchResult result && app.Client is not null)
-            _ = OpenAsync(app.Client.Address.WebLink(result.Type, result.Id, result.ClientId));
-    }
-
-    private async Task OpenAsync(Uri uri)
-    {
-        await Launcher.LaunchUriAsync(uri);
-        AppWindow.Hide();
+        if (password is { Username.Length: > 0 })
+            Copy(password.Username, "Username copied.");
     }
 
     /// <summary>
@@ -311,11 +2197,13 @@ public sealed partial class SearchWindow : Window
     /// </summary>
     private async Task CopySecretAsync(SecretField field, string reason = "")
     {
-        if (Results.SelectedItem is not SearchResult { IsPassword: true } result || app.Client is null)
+        if (password is not { } entry || app.Client is not { } client)
+            return;
+        if (field == SecretField.OneTimeCode && !entry.HasTotp)
             return;
         try
         {
-            var secret = await app.Client.RevealForCopyAsync(result.Id, field, reason);
+            var secret = await client.RevealForCopyAsync(entry.Id, field, reason);
             clipboard.Copy(secret.Value, sensitive: true);
             Show(
                 field == SecretField.OneTimeCode
@@ -325,14 +2213,51 @@ public sealed partial class SearchWindow : Window
         }
         catch (AtlasApiException ex) when (ex.Code == "reason_required" && reason.Length == 0)
         {
-            var given = await AskReasonAsync();
-            if (given is not null)
+            if (await AskReasonAsync() is { } given)
                 await CopySecretAsync(field, given);
         }
         catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
         {
             Fail(ex);
         }
+    }
+
+    /// <summary>Shows a password or code in place for 30 seconds (a code until it changes), then hides it again.</summary>
+    private async Task ShowSecretAsync(SecretField field, TextBlock target, string masked, string reason = "")
+    {
+        if (password is not { } entry || app.Client is not { } client)
+            return;
+        try
+        {
+            var secret = await client.RevealToShowAsync(entry.Id, field, reason);
+            if (!ReferenceEquals(password, entry))
+                return;
+            HideSecrets();
+            target.Text = field == SecretField.OneTimeCode && secret.Value.Length == 6 ? $"{secret.Value[..3]} {secret.Value[3..]}" : secret.Value;
+            shown = (target, masked);
+            hideTimer = new DispatcherTimer { Interval = field == SecretField.OneTimeCode ? TimeSpan.FromSeconds(secret.ExpiresIn ?? 30) : ShowFor };
+            hideTimer.Tick += (_, _) => HideSecrets();
+            hideTimer.Start();
+        }
+        catch (AtlasApiException ex) when (ex.Code == "reason_required" && reason.Length == 0)
+        {
+            if (await AskReasonAsync() is { } given)
+                await ShowSecretAsync(field, target, masked, given);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    // Anything shown is taken off the screen when its time is up, the window hides, or another item is chosen.
+    private void HideSecrets()
+    {
+        hideTimer?.Stop();
+        hideTimer = null;
+        if (shown is { } s)
+            s.Target.Text = s.Masked;
+        shown = null;
     }
 
     private async Task<string?> AskReasonAsync()
@@ -351,7 +2276,7 @@ public sealed partial class SearchWindow : Window
                     box,
                 },
             },
-            PrimaryButtonText = "Copy",
+            PrimaryButtonText = "Continue",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
         };

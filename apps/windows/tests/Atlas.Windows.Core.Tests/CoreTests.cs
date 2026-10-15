@@ -159,7 +159,7 @@ public class AtlasClientTests
         Assert.Equal(pkce.Challenge, query["code_challenge"]);
         Assert.Equal("S256", query["code_challenge_method"]);
         Assert.Equal(pkce.State, query["state"]);
-        Assert.Equal("read reveal", query["scope"]);
+        Assert.Equal("read write reveal", query["scope"]);
         Assert.Equal("TECH-LAPTOP 07", query["device_name"]);
         Assert.DoesNotContain("verifier", uri.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -452,4 +452,175 @@ public class ConnectionProblemTests
     [Fact]
     public void Says_Atlas_is_unreachable_for_anything_else() =>
         Assert.DoesNotContain("certificate", ConnectionProblem.Describe(new HttpRequestException("No such host is known.")), StringComparison.Ordinal);
+}
+
+public class RichTextPlainTests
+{
+    [Fact]
+    public void Reads_a_document_as_plain_text()
+    {
+        var doc = JsonDocument.Parse("""
+            {"type":"doc","content":[
+              {"type":"heading","content":[{"type":"text","text":"Steps"}]},
+              {"type":"paragraph","content":[{"type":"text","text":"Reboot after "},{"type":"text","text":"6 PM","marks":[{"type":"bold"}]},{"type":"text","text":"."}]},
+              {"type":"orderedList","content":[
+                {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Sign in"}]}]},
+                {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Reboot"}]}]}]},
+              {"type":"taskList","content":[
+                {"type":"taskItem","attrs":{"checked":true},"content":[{"type":"paragraph","content":[{"type":"text","text":"Backup checked"}]}]},
+                {"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"Tell the office"}]}]}]},
+              {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"One"}]}]}]},
+              {"type":"mystery","content":[{"type":"text","text":"Kept anyway"}]}
+            ]}
+            """).RootElement;
+        Assert.Equal(
+            "Steps\n\nReboot after 6 PM.\n\n1. Sign in\n2. Reboot\n\n☑ Backup checked\n☐ Tell the office\n\n• One\n\nKept anyway",
+            RichTextPlain.From(doc));
+    }
+
+    [Fact]
+    public void An_empty_or_odd_document_is_empty_text()
+    {
+        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("""{"type":"doc"}""").RootElement));
+        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("[1,2]").RootElement));
+    }
+}
+
+public class PreviewServerTests
+{
+    private static AtlasClient Client()
+    {
+        var client = new AtlasClient(PreviewServer.Address, new PreviewServer());
+        client.UseToken(PreviewServer.Token);
+        return client;
+    }
+
+    [Fact]
+    public async Task Serves_everything_the_window_lists()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = Client();
+        Assert.Equal(3, (await client.ListClientsAsync(ct)).Count);
+        var harbor = await client.ListPasswordsAsync("c-harbor", ct);
+        Assert.All(harbor, p => Assert.Equal("Harbor Dental Group", p.ClientName));
+        Assert.Contains(harbor, p => p.HasTotp);
+        var assets = await client.ListAssetsAsync(cancellationToken: ct);
+        Assert.Equal("10.20.0.10", assets.First(a => a.Name == "HDG-DC-01").Fields["ip"].GetString());
+        Assert.NotEmpty((await client.ListLayoutsAsync(ct))[0].Fields);
+        Assert.Equal(4, (await client.ListFavoritesAsync(ct)).Count);
+        Assert.True((await client.SetFavoriteAsync("password", "p-wifi", true, ct)).Favorite);
+        Assert.False((await client.SetFavoriteAsync("client", "c-harbor", false, ct)).Favorite);
+        var doc = await client.GetDocumentAsync("d-reboot", ct);
+        Assert.Contains("1. Sign in to the FortiGate", RichTextPlain.From(doc.Content));
+        Assert.Equal("482193", (await client.RevealToShowAsync("p-m365", SecretField.OneTimeCode, cancellationToken: ct)).Value);
+        Assert.Equal("Alex Rivera", (await client.GetSessionAsync(ct)).User.Name);
+
+        // A client's overview, and saving its quick note with the version it was edited from.
+        var harborClient = await client.GetClientAsync("c-harbor", ct);
+        Assert.True(harborClient.CanEdit);
+        Assert.Equal("Dana Morales", (await client.ListContactsAsync("c-harbor", ct)).Single(c => c.Primary).Name);
+        Assert.Equal("410 Harbor St, Raleigh, NC, 27601", (await client.ListLocationsAsync("c-harbor", ct)).Single(l => l.Primary).OneLine);
+        var saved = await client.SaveQuickNoteAsync("c-harbor", "New note", harborClient.NotesVersion, ct);
+        Assert.Equal(("New note", harborClient.NotesVersion + 1), (saved.Notes, saved.NotesVersion));
+        var stale = await Assert.ThrowsAsync<AtlasApiException>(() => client.SaveQuickNoteAsync("c-harbor", "Older edit", harborClient.NotesVersion, ct));
+        Assert.Equal(HttpStatusCode.Conflict, stale.Status);
+        Assert.True((await client.GetSessionAsync(ct)).CanWrite);
+
+        // Adding, changing, and archiving a password.
+        var draft = new PasswordDraft("Router admin", "admin", "https://10.20.0.254", PasswordGenerator.Generate(), null, null, 90, null);
+        var added = await client.CreatePasswordAsync("c-harbor", draft, ct);
+        Assert.Equal(("Router admin", "Harbor Dental Group", 1), (added.Name, added.ClientName, added.Version));
+        var changed = await client.UpdatePasswordAsync(added.Id, added.Version, draft with { Name = "Router admin (new)", Secret = null }, ct);
+        Assert.Equal(("Router admin (new)", 2), (changed.Name, changed.Version));
+        var late = await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdatePasswordAsync(added.Id, added.Version, draft, ct));
+        Assert.Equal(HttpStatusCode.Conflict, late.Status);
+        await client.ArchivePasswordAsync(added.Id, cancellationToken: ct);
+        Assert.DoesNotContain(await client.ListPasswordsAsync("c-harbor", ct), p => p.Id == added.Id);
+
+        // Adding, changing, and archiving an asset in a layout.
+        var layout = (await client.ListLayoutsAsync(ct))[0];
+        Assert.Contains("Firewall", layout.Fields.Single(f => f.Key == "type").Options!);
+        var fields = new Dictionary<string, object?> { ["type"] = "Switch", ["ip"] = "10.20.0.2" };
+        var asset = await client.CreateAssetAsync("c-harbor", layout.Id, "HDG-SW-01", "active", fields, "", ct);
+        Assert.Equal(("HDG-SW-01", "10.20.0.2", 1), (asset.Name, asset.Fields["ip"].GetString(), asset.Version));
+        fields["ip"] = "10.20.0.3";
+        var edited = await client.UpdateAssetAsync(asset.Id, asset.Version, "HDG-SW-01", "active", fields, "Core switch", ct);
+        Assert.Equal(("10.20.0.3", "Core switch", 2), (edited.Fields["ip"].GetString(), edited.Notes, edited.Version));
+        await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdateAssetAsync(asset.Id, asset.Version, "Old", "active", fields, "", ct));
+        await client.ArchiveAssetAsync(asset.Id, cancellationToken: ct);
+        Assert.DoesNotContain(await client.ListAssetsAsync("c-harbor", ct), a => a.Id == asset.Id);
+
+        // Adding, changing, and deleting a contact and a location.
+        var contact = await client.CreateContactAsync("c-harbor", new ContactDraft("Sam Ortiz", "Front desk", "sam@harbordental.demo", "", "", "", true), ct);
+        Assert.Equal(("Sam Ortiz", "c-harbor"), (contact.Name, contact.ClientId));
+        Assert.Equal("Sam Ortiz", (await client.ListContactsAsync("c-harbor", ct)).Single(c => c.Primary).Name);
+        var renamed = await client.UpdateContactAsync(contact.Id, new ContactDraft("Sam Ortiz", "Office lead", "sam@harbordental.demo", "(919) 555-0100", "", "", true), ct);
+        Assert.Equal(("Office lead", "(919) 555-0100"), (renamed.Title, renamed.Phone));
+        await client.DeleteContactAsync(contact.Id, ct);
+        Assert.DoesNotContain(await client.ListContactsAsync("c-harbor", ct), c => c.Id == contact.Id);
+        var site = await client.CreateLocationAsync("c-harbor", new LocationDraft("Durham office", "5 Main St", "Durham", "NC", "27701", "US", "", "", false), ct);
+        Assert.Equal("5 Main St, Durham, NC, 27701", site.OneLine);
+        var moved = await client.UpdateLocationAsync(site.Id, new LocationDraft("Durham office", "9 Main St", "Durham", "NC", "27701", "US", "", "", false), ct);
+        Assert.StartsWith("9 Main St", moved.OneLine, StringComparison.Ordinal);
+        await client.DeleteLocationAsync(site.Id, ct);
+        Assert.DoesNotContain(await client.ListLocationsAsync("c-harbor", ct), l => l.Id == site.Id);
+
+        // A document opens as text, saves back, and archives.
+        var reboot = await client.GetDocumentAsync("d-reboot", ct);
+        Assert.True(reboot.CanEdit);
+        Assert.True(DocumentText.TryEditable(reboot.Content, out var body));
+        Assert.Contains("## Steps", body, StringComparison.Ordinal);
+        Assert.Contains("- [ ] Tell the office manager (Dana Morales)", body, StringComparison.Ordinal);
+        var rewritten = await client.UpdateDocumentAsync(reboot.Id, reboot.Version, "Firewall reboot", "needs_review", DocumentText.FromText(body + "\n\n**Done.**"), ct);
+        Assert.Equal(("Firewall reboot", "needs_review", reboot.Version + 1), (rewritten.Title, rewritten.Status, rewritten.Version));
+        Assert.True(DocumentText.TryEditable(rewritten.Content, out var rewrittenBody));
+        Assert.EndsWith("**Done.**", rewrittenBody, StringComparison.Ordinal);
+        var kept = await client.UpdateDocumentAsync(reboot.Id, rewritten.Version, "Firewall reboot", "current", null, ct);
+        Assert.Equal(DocumentText.Canonical(rewritten.Content), DocumentText.Canonical(kept.Content));
+        await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdateDocumentAsync(reboot.Id, reboot.Version, "Old", "current", null, ct));
+        var created = await client.CreateDocumentAsync("c-harbor", "Printer setup", "draft", DocumentText.FromText("# Printers\n\n1. Add the queue"), ct);
+        Assert.Contains(await client.ListDocumentsAsync("c-harbor", ct), d => d.Id == created.Id);
+        await client.ArchiveDocumentAsync(created.Id, cancellationToken: ct);
+        Assert.DoesNotContain(await client.ListDocumentsAsync("c-harbor", ct), d => d.Id == created.Id);
+        Assert.NotEmpty(await client.SearchAsync("hdg", cancellationToken: ct));
+    }
+
+    [Fact]
+    public async Task Asks_for_the_list_of_one_client_by_its_id()
+    {
+        string? asked = null;
+        using var client = new AtlasClient(AtlasAddress.Parse("https://atlas.example.com"), new Recorder(uri => asked = uri.PathAndQuery));
+        client.UseToken("t");
+        await client.ListAssetsAsync("c 1&x", TestContext.Current.CancellationToken);
+        Assert.Equal("/api/v1/assets?client=c%201%26x", asked);
+    }
+
+    private sealed class Recorder(Action<Uri> seen) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            seen(request.RequestUri!);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]", Encoding.UTF8, "application/json") });
+        }
+    }
+}
+
+public class PasswordGeneratorTests
+{
+    [Fact]
+    public void Makes_long_mixed_passwords_without_look_alike_characters()
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            var password = PasswordGenerator.Generate(16);
+            Assert.Equal(16, password.Length);
+            Assert.Contains(password, char.IsLower);
+            Assert.Contains(password, char.IsUpper);
+            Assert.Contains(password, char.IsDigit);
+            Assert.Contains(password, c => !char.IsLetterOrDigit(c));
+            Assert.DoesNotContain(password, c => "0Oo1lI|".Contains(c));
+        }
+        Assert.NotEqual(PasswordGenerator.Generate(), PasswordGenerator.Generate());
+        Assert.Throws<ArgumentOutOfRangeException>(() => PasswordGenerator.Generate(4));
+    }
 }
