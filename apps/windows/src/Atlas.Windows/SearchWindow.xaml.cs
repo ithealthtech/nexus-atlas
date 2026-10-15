@@ -1784,7 +1784,7 @@ public sealed partial class SearchWindow : Window
             Tile(Array.IndexOf(CategoryOrder, p.Category) is var i and >= 0 ? i : CategoryOrder.Length),
             Join(p.Username.Length > 0 ? p.Username : "No username", host, p.FolderName),
             p.HasTotp ? "2FA" : "",
-            p.RequireReason ? "Reason needed" : p.Restricted ? "Restricted" : "",
+            p.RequireReason ? "Reason" : p.Restricted ? "Restricted" : "",
             p.Favorite || starred.Contains($"password:{p.Id}"),
             // A server older than the strength check sends no score: the column then stays empty.
             strength >= 0 ? StrengthWords[strength] : "",

@@ -45,7 +45,8 @@ try {
   }
   function Press($element, $what) {
     if (-not $element) { Check $false "found $what"; return }
-    $element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    try { $element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke() }
+    catch { Check $false "pressed $what ($($_.Exception.Message))"; return }
     Start-Sleep -Milliseconds 1800
   }
   function Open($name) { Press (All $CT::ListItem | Where-Object { $_.Current.Name -like $name } | Select-Object -First 1) "list item '$name'" }
@@ -118,7 +119,7 @@ try {
   Shot '05-asset'
 
   # A document: open it, change its text, save.
-  Open 'Documents'; Open 'Firewall reboot procedure, Document'
+  Open 'Documents'; Open 'Firewall reboot procedure*'
   Check ((Title) -eq 'Firewall reboot procedure') 'a document opens'
   Shot '06-document'
   Press (ById 'EditHereButton') 'Edit here on a document'

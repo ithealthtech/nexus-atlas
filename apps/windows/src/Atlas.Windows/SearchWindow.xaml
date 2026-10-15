@@ -264,17 +264,23 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="140" />
-                                                <ColumnDefinition Width="140" />
-                                                <ColumnDefinition Width="120" />
+                                                <ColumnDefinition Width="128" />
+                                                <ColumnDefinition Width="128" />
+                                                <ColumnDefinition Width="110" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <Border Width="36" Height="36" CornerRadius="8" Background="{x:Bind Item.Tile}" VerticalAlignment="Center">
                                                 <FontIcon Glyph="{x:Bind Item.Glyph}" FontSize="16" Foreground="White" />
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <!-- The name gives way (with an ellipsis) before the star and chips do. -->
+                                                <Grid ColumnSpacing="6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
                                                     <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                                     <FontIcon Glyph="&#xE735;" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{x:Bind Item.StarVisibility}" VerticalAlignment="Center" />
                                                     <Border Visibility="{x:Bind Item.ChipAVisibility}" CornerRadius="4" Padding="5,0" VerticalAlignment="Center"
                                                             Background="{ThemeResource SubtleFillColorTertiaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
@@ -284,7 +290,8 @@
                                                             Background="{ThemeResource SubtleFillColorTertiaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
                                                         <TextBlock Text="{x:Bind Item.ChipB}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                                     </Border>
-                                                </StackPanel>
+                                                    </StackPanel>
+                                                </Grid>
                                                 <TextBlock Text="{x:Bind Item.Line}" FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3">
@@ -321,9 +328,9 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="36" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="140" />
-                                    <ColumnDefinition Width="140" />
-                                    <ColumnDefinition Width="120" />
+                                    <ColumnDefinition Width="128" />
+                                    <ColumnDefinition Width="128" />
+                                    <ColumnDefinition Width="110" />
                                     <ColumnDefinition Width="11" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock x:Name="ItemHeaderName" Grid.Column="1" Text="Name" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
