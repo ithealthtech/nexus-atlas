@@ -98,7 +98,7 @@ public sealed class PreviewServer : HttpMessageHandler
         content = new object[]
         {
             new { type = "paragraph", content = new object[] { new { type = "text", text = "Reboot outside practice hours (after 6 PM or Sunday). Dentrix runs on HDG-DC-01 and needs the firewall for its cloud backup." } } },
-            new { type = "heading", content = new object[] { new { type = "text", text = "Before you start" } } },
+            new { type = "heading", attrs = new { level = 2 }, content = new object[] { new { type = "text", text = "Before you start" } } },
             new
             {
                 type = "taskList",
@@ -108,10 +108,11 @@ public sealed class PreviewServer : HttpMessageHandler
                     new { type = "taskItem", attrs = new { @checked = false }, content = new object[] { new { type = "paragraph", content = new object[] { new { type = "text", text = "Confirm last night's backup succeeded" } } } } },
                 },
             },
-            new { type = "heading", content = new object[] { new { type = "text", text = "Steps" } } },
+            new { type = "heading", attrs = new { level = 2 }, content = new object[] { new { type = "text", text = "Steps" } } },
             new
             {
                 type = "orderedList",
+                attrs = new { start = 1 },
                 content = new object[]
                 {
                     new { type = "listItem", content = new object[] { new { type = "paragraph", content = new object[] { new { type = "text", text = "Sign in to the FortiGate at https://10.20.0.1 with HDG-FW-01 admin." } } } } },
@@ -135,6 +136,56 @@ public sealed class PreviewServer : HttpMessageHandler
     private readonly List<Dictionary<string, object?>> assets = [.. Assets.Select(Mutable)];
     private readonly List<Dictionary<string, object?>> people = [.. Contacts.Select(Mutable)];
     private readonly List<Dictionary<string, object?>> sites = [.. Locations.Select(Mutable)];
+    private readonly List<Dictionary<string, object?>> docs = [.. Documents.Select(d => DocumentFor(Prop(d, "id")!)!)];
+
+    private object[] Docs() => [.. docs.Where(d => !(d.TryGetValue("archived", out var a) && a is true)).Cast<object>()];
+
+    // Adding, changing, and archiving documents in the preview.
+    private async Task<HttpResponseMessage?> ChangeDocumentsAsync(HttpRequestMessage request, string tail, CancellationToken cancellationToken)
+    {
+        if (request.Method == HttpMethod.Get || !(tail == "documents" || tail.StartsWith("documents/", StringComparison.Ordinal)))
+            return null;
+        var raw = await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var body = JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        static string Text(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : "";
+        if (tail == "documents")
+        {
+            var clientId = body.TryGetProperty("clientId", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+            var entry = new Dictionary<string, object?>
+            {
+                ["id"] = $"d-new-{++added}",
+                ["clientId"] = clientId,
+                ["clientName"] = clientId is null ? null : Prop(Clients.First(x => Prop(x, "id") == clientId), "name"),
+                ["title"] = Text(body, "title"),
+                ["status"] = Text(body, "status"),
+                ["updatedAt"] = DateTime.UtcNow.ToString("O"),
+                ["updatedByName"] = "Alex Rivera",
+                ["version"] = 1,
+                ["canEdit"] = true,
+                ["content"] = JsonSerializer.Deserialize<object>(body.GetProperty("content").GetRawText()),
+            };
+            docs.Add(entry);
+            return new HttpResponseMessage(HttpStatusCode.Created) { Content = Json(entry) };
+        }
+        var one = System.Text.RegularExpressions.Regex.Match(tail, "^documents/([^/]+)(/archive)?$");
+        var found = one.Success ? docs.FirstOrDefault(d => (string?)d["id"] == one.Groups[1].Value) : null;
+        if (found is null)
+            return null;
+        if (one.Groups[2].Success)
+        {
+            found["archived"] = true;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(found) };
+        }
+        if (body.GetProperty("version").GetInt32() != (int)found["version"]!)
+            return new HttpResponseMessage(HttpStatusCode.Conflict) { Content = Json(new { error = "Someone saved this document while you were editing it.", code = "conflict" }) };
+        found["title"] = Text(body, "title");
+        found["status"] = Text(body, "status");
+        if (body.TryGetProperty("content", out var content))
+            found["content"] = JsonSerializer.Deserialize<object>(content.GetRawText());
+        found["version"] = (int)found["version"]! + 1;
+        found["updatedAt"] = DateTime.UtcNow.ToString("O");
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(found) };
+    }
 
     // Adding, changing, and deleting contacts and locations in the preview.
     private async Task<HttpResponseMessage?> ChangePeopleAsync(HttpRequestMessage request, string tail, CancellationToken cancellationToken)
@@ -321,6 +372,8 @@ public sealed class PreviewServer : HttpMessageHandler
             return changedAsset;
         if (await ChangePeopleAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedPerson)
             return changedPerson;
+        if (await ChangeDocumentsAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedDocument)
+            return changedDocument;
         if (tail.EndsWith("/password-folders", StringComparison.Ordinal))
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Array.Empty<object>()) };
         var clientPage = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)(/contacts|/locations)?$");
@@ -348,7 +401,7 @@ public sealed class PreviewServer : HttpMessageHandler
             "clients" => Clients,
             "passwords" => Filter(Vault(), client),
             "assets" => Filter(Things(), client),
-            "documents" => Filter(Documents, client),
+            "documents" => Filter(Docs(), client),
             "layouts" => Layouts,
             "favorites" => Favorites,
             "expirations" => Array.Empty<object>(),
@@ -359,7 +412,7 @@ public sealed class PreviewServer : HttpMessageHandler
                     : new { value = "c7Hq-29Lm-Vx4r-Np8e", expiresIn = (int?)null },
             _ when tail.StartsWith("passwords/", StringComparison.Ordinal) => Find(Vault(), tail[10..]),
             _ when tail.StartsWith("assets/", StringComparison.Ordinal) => Find(Things(), tail[7..]),
-            _ when tail.StartsWith("documents/", StringComparison.Ordinal) => DocumentFor(tail[10..]),
+            _ when tail.StartsWith("documents/", StringComparison.Ordinal) => Find(Docs(), tail[10..]),
             _ => null,
         };
         if (body is null)
@@ -388,11 +441,13 @@ public sealed class PreviewServer : HttpMessageHandler
         var element = JsonSerializer.SerializeToElement(doc);
         var copy = JsonSerializer.Deserialize<Dictionary<string, object?>>(element.GetRawText())!;
         copy["content"] = id == "d-reboot" ? RebootContent : new { type = "doc", content = Array.Empty<object>() };
+        copy["version"] = 1;
+        copy["canEdit"] = true;
         return copy;
     }
 
     private object[] Search(string q) =>
-        Vault().Concat(Things()).Concat(Documents)
+        Vault().Concat(Things()).Concat(Docs())
             .Where(i => (Prop(i, "name") ?? Prop(i, "title") ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
             .Select(i => new
             {

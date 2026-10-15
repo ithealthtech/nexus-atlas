@@ -154,7 +154,9 @@ public sealed record DocumentDetail(
     string Status,
     string UpdatedAt,
     System.Text.Json.JsonElement Content,
-    string? UpdatedByName = null);
+    string? UpdatedByName = null,
+    int Version = 0,
+    bool CanEdit = false);
 
 public sealed record FavoriteState(bool Favorite);
 

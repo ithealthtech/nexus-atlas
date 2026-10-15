@@ -353,8 +353,10 @@ public sealed partial class SearchWindow : Window
         var isEditor = place.Kind == "edit";
         var showsPasswords = place.Kind == "passwords" || (place.Kind == "client" && place.Tab == "passwords");
         var showsAssets = place.Kind == "assets" || (place.Kind == "client" && place.Tab == "assets");
-        NewButton.Visibility = canWrite && (showsPasswords || showsAssets) ? Visibility.Visible : Visibility.Collapsed;
-        NewText.Text = showsAssets ? "New asset" : "New password";
+        var showsDocuments = place.Kind == "documents" || (place.Kind == "client" && place.Tab == "documents");
+        NewButton.Visibility = canWrite && (showsPasswords || showsAssets || showsDocuments) ? Visibility.Visible : Visibility.Collapsed;
+        NewText.Text = showsAssets ? "New asset" : showsDocuments ? "New document" : "New password";
+        // A document says whether you may change it once it's open (see ShowDocument).
         var editable = canWrite && place.Item is { Kind: "password" or "asset" };
         EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
         ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
@@ -370,7 +372,13 @@ public sealed partial class SearchWindow : Window
         if (isEditor)
         {
             PageInfo.Text = place.Item is null ? "Saved encrypted in the client's vault, and recorded under your name." : "Only what you change is saved. The old password is kept in the entry's history.";
-            if (place.Editing is "contact" or "location")
+            if (place.Editing == "document")
+            {
+                PageInfo.Text = place.Item is not null ? "Each save is a new version. Earlier versions stay in the document's history."
+                    : place.ClientId is null ? "Without a client, it goes in the knowledge base." : "Saved with the client's documents.";
+                ShowDocumentEditor(place);
+            }
+            else if (place.Editing is "contact" or "location")
             {
                 PageInfo.Text = place.Editing == "contact" ? "Shown on the client's overview, and in Atlas." : "Shown on the client's overview, with a button to copy the address.";
                 ShowPersonEditor(place);
@@ -419,19 +427,21 @@ public sealed partial class SearchWindow : Window
     private void New_Click(object sender, RoutedEventArgs e)
     {
         var place = trail.LastOrDefault();
-        var kind = place is { Kind: "assets" } or { Kind: "client", Tab: "assets" } ? "asset" : "password";
-        Go(new Place("edit", kind == "asset" ? "New asset" : "New password", ClientId: place?.Kind == "client" ? place.ClientId : null, Editing: kind));
+        var kind = place is { Kind: "assets" } or { Kind: "client", Tab: "assets" } ? "asset"
+            : place is { Kind: "documents" } or { Kind: "client", Tab: "documents" } ? "document"
+            : "password";
+        Go(new Place("edit", $"New {kind}", ClientId: place?.Kind == "client" ? place.ClientId : null, Editing: kind));
     }
 
     private void EditHere_Click(object sender, RoutedEventArgs e)
     {
-        if (current is { Kind: "password" or "asset" } row)
+        if (current is { Kind: "password" or "asset" or "document" } row)
             Go(new Place("edit", $"Edit {row.Title}", ClientId: row.ClientId, Item: row, Editing: row.Kind));
     }
 
     private async void Archive_Click(object sender, RoutedEventArgs e)
     {
-        if (current is not { Kind: "password" or "asset" } row || app.Client is not { } client)
+        if (current is not { Kind: "password" or "asset" or "document" } row || app.Client is not { } client)
             return;
         var dialog = new ContentDialog
         {
@@ -448,6 +458,8 @@ public sealed partial class SearchWindow : Window
         {
             if (row.Kind == "asset")
                 await client.ArchiveAssetAsync(row.Id);
+            else if (row.Kind == "document")
+                await client.ArchiveDocumentAsync(row.Id);
             else
                 await client.ArchivePasswordAsync(row.Id);
             recent.RemoveAll(r => r.Kind == row.Kind && r.Id == row.Id);
@@ -1008,6 +1020,247 @@ public sealed partial class SearchWindow : Window
                 save.IsEnabled = true;
             }
         };
+    }
+
+    // ---------- adding and changing documents ----------
+    private static readonly (string Value, string Label)[] DocumentStatuses = [("current", "Current"), ("needs_review", "Needs review"), ("draft", "Draft")];
+
+    /// <summary>
+    /// The form for a new document, or for changing one. The body is edited as text with formatting typed in
+    /// (see <see cref="DocumentText"/>); a document with content the text can't hold keeps its body and only the
+    /// title and status can change here.
+    /// </summary>
+    private async void ShowDocumentEditor(Place place)
+    {
+        detailCancel?.Cancel();
+        var cancel = detailCancel = new CancellationTokenSource();
+        HideSecrets();
+        password = null;
+        current = null;
+        Detail.Children.Clear();
+        DetailScroll.ChangeView(null, 0, null, true);
+        if (app.Client is not { } client)
+            return;
+        DocumentDetail? existing = null;
+        try
+        {
+            if (place.Item is { } row)
+                existing = await client.GetDocumentAsync(row.Id, cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return;
+        }
+        if (cancel.IsCancellationRequested)
+            return;
+        var bodyText = "";
+        var bodyEditable = existing is null || DocumentText.TryEditable(existing.Content, out bodyText);
+
+        var form = new StackPanel { Spacing = 14, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 8, 0, 24) };
+        ComboBox? clientBox = null;
+        if (existing is null && place.ClientId is null)
+        {
+            clientBox = new ComboBox { Header = "Where", HorizontalAlignment = HorizontalAlignment.Stretch };
+            clientBox.ItemsSource = new[] { "Knowledge base (no client)" }.Concat(clients.Select(c => c.Name)).ToList();
+            clientBox.SelectedIndex = 0;
+            form.Children.Add(clientBox);
+        }
+        else
+        {
+            var owner = existing is not null ? existing.ClientName ?? "Knowledge base" : clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
+            form.Children.Add(new TextBlock { Text = $"Where: {owner}", Foreground = Secondary() });
+        }
+        var title = new TextBox { Header = "Title", Text = existing?.Title ?? "", MaxLength = 200, PlaceholderText = "For example, Firewall reboot procedure" };
+        var status = new ComboBox { Header = "Status", HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 220, ItemsSource = DocumentStatuses.Select(s => s.Label).ToList() };
+        status.SelectedIndex = Math.Max(0, Array.FindIndex(DocumentStatuses, s => s.Value == (existing?.Status ?? "current")));
+        form.Children.Add(title);
+        form.Children.Add(status);
+
+        var body = new TextBox
+        {
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 360,
+            IsSpellCheckEnabled = true,
+            PlaceholderText = "Start writing. A blank line starts a new paragraph.",
+        };
+        AutomationProperties.SetName(body, "Document text");
+        if (bodyEditable)
+            body.Text = bodyText;
+        else
+        {
+            // Shown so the person can read it while changing the title or status; the stored body isn't touched.
+            body.Text = RichTextPlain.From(existing!.Content);
+            body.IsReadOnly = true;
+            form.Children.Add(new InfoBar
+            {
+                Severity = InfoBarSeverity.Informational,
+                IsOpen = true,
+                IsClosable = false,
+                Title = "The text of this document can only be changed in Atlas",
+                Message = "It has tables or layout the app can't edit without losing them. You can still change its title and status here.",
+            });
+        }
+
+        if (bodyEditable)
+        {
+            var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+            // Icons where Windows has one; a letter where it doesn't.
+            void Tool(object face, string tip, Action act)
+            {
+                var button = IconButton("", tip, (_, _) =>
+                {
+                    act();
+                    body.Focus(FocusState.Programmatic);
+                });
+                button.Content = face is string glyph ? new FontIcon { Glyph = glyph, FontSize = 14 } : face;
+                tools.Children.Add(button);
+            }
+            static TextBlock Letter(string text, global::Windows.UI.Text.TextDecorations decorations = global::Windows.UI.Text.TextDecorations.None) =>
+                new() { Text = text, FontSize = 14, FontWeight = FontWeights.SemiBold, TextDecorations = decorations, HorizontalAlignment = HorizontalAlignment.Center };
+            Tool("", "Bold (Ctrl+B)", () => Wrap(body, "**", "**"));
+            Tool("", "Italic (Ctrl+I)", () => Wrap(body, "*", "*"));
+            Tool(Letter("S", global::Windows.UI.Text.TextDecorations.Strikethrough), "Strikethrough", () => Wrap(body, "~~", "~~"));
+            Tool("", "Highlight", () => Wrap(body, "==", "=="));
+            tools.Children.Add(new AppBarSeparator());
+            Tool(Letter("H"), "Heading", () => PrefixLines(body, _ => "## "));
+            Tool("", "Bulleted list", () => PrefixLines(body, _ => "- "));
+            Tool(Letter("1."), "Numbered list", () => PrefixLines(body, n => $"{n}. "));
+            Tool("", "Checklist", () => PrefixLines(body, _ => "- [ ] "));
+            Tool(Letter("“"), "Quote", () => PrefixLines(body, _ => "> "));
+            tools.Children.Add(new AppBarSeparator());
+            Tool("", "Link", () => Wrap(body, "[", "](https://)"));
+            Tool("", "Code", () => Wrap(body, "`", "`"));
+            AddShortcut(body, VirtualKey.B, () => Wrap(body, "**", "**"));
+            AddShortcut(body, VirtualKey.I, () => Wrap(body, "*", "*"));
+            form.Children.Add(tools);
+        }
+        form.Children.Add(body);
+        if (bodyEditable)
+            form.Children.Add(new TextBlock
+            {
+                Text = "Formatting: **bold**, *italic*, ~~struck~~, ==highlight==, `code`, [text](https://link). Start a line with # for a heading, - for a list, 1. for numbers, - [ ] for a checklist, or > for a quote. Indent two spaces to put a line under a list item.",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Foreground = Secondary(),
+            });
+
+        var preview = new StackPanel();
+        var previewButton = new Microsoft.UI.Xaml.Controls.Primitives.ToggleButton { Content = "Preview" };
+        previewButton.Click += (_, _) =>
+        {
+            preview.Children.Clear();
+            if (previewButton.IsChecked != true)
+                return;
+            var shown = RichTextPlain.From(JsonSerializer.SerializeToElement(DocumentText.FromText(body.Text)));
+            preview.Children.Add(Card("Preview", Text(shown.Length > 0 ? shown : "Nothing written yet.", selectable: true)));
+        };
+        var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
+        var save = new Button { Content = existing is null ? "Add document" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var cancelButton = new Button { Content = "Cancel" };
+        cancelButton.Click += (_, _) => Back();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        buttons.Children.Add(save);
+        buttons.Children.Add(cancelButton);
+        if (bodyEditable)
+            buttons.Children.Add(previewButton);
+        foreach (var control in new UIElement[] { preview, error, buttons })
+            form.Children.Add(control);
+        Detail.Children.Add(form);
+        (existing is null ? title : bodyEditable ? body : title).Focus(FocusState.Programmatic);
+
+        save.Click += async (_, _) =>
+        {
+            error.IsOpen = false;
+            if (title.Text.Trim().Length == 0)
+            {
+                error.Message = "Give it a title.";
+                error.IsOpen = true;
+                return;
+            }
+            var statusValue = DocumentStatuses[Math.Max(0, status.SelectedIndex)].Value;
+            var content = bodyEditable ? DocumentText.FromText(body.Text) : null;
+            save.IsEnabled = false;
+            try
+            {
+                DocumentDetail saved;
+                if (existing is null)
+                {
+                    var clientId = place.ClientId ?? (clientBox?.SelectedIndex is > 0 and var i ? clients[i - 1].Id : null);
+                    saved = await client.CreateDocumentAsync(clientId, title.Text.Trim(), statusValue, content!);
+                }
+                else
+                    saved = await client.UpdateDocumentAsync(existing.Id, existing.Version, title.Text.Trim(), statusValue, content);
+                var row = new Row("document", saved.Id, saved.Title, saved.ClientName is null ? "Knowledge base" : "Document", saved.ClientId, saved.ClientName ?? "Knowledge base");
+                Remember(row);
+                trail[^1] = new Place("item", row.Title, Item: row);
+                if (existing is not null && trail.Count > 1 && trail[^2] is { Kind: "item", Item: { } before } && before.Id == row.Id)
+                    trail.RemoveAt(trail.Count - 2);
+                ShowPlace();
+                Show(existing is null ? $"{row.Title} added." : "Changes saved. The previous version is in the document's history.", InfoBarSeverity.Success);
+            }
+            catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+            {
+                error.Message = "Someone saved this document while you were editing. Copy your text, then go back and open it again.";
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (AtlasApiException ex)
+            {
+                error.Message = ex.Message;
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+            catch (HttpRequestException ex)
+            {
+                error.Message = ConnectionProblem.Describe(ex);
+                error.IsOpen = true;
+                save.IsEnabled = true;
+            }
+        };
+    }
+
+    private static void AddShortcut(UIElement target, VirtualKey key, Action act)
+    {
+        var accelerator = new KeyboardAccelerator { Key = key, Modifiers = VirtualKeyModifiers.Control };
+        accelerator.Invoked += (_, args) =>
+        {
+            act();
+            args.Handled = true;
+        };
+        target.KeyboardAccelerators.Add(accelerator);
+    }
+
+    // Puts formatting around the selection, keeping the selection on the same words.
+    private static void Wrap(TextBox box, string before, string after)
+    {
+        var start = box.SelectionStart;
+        var length = box.SelectionLength;
+        var text = box.Text;
+        box.Text = text[..start] + before + text.Substring(start, length) + after + text[(start + length)..];
+        box.Select(start + before.Length, length);
+    }
+
+    // Starts each selected line (or the line the cursor is on) with a marker, numbering from 1 where asked.
+    private static void PrefixLines(TextBox box, Func<int, string> marker)
+    {
+        // TextBox keeps lines apart with \r.
+        var text = box.Text.Replace("\r\n", "\r", StringComparison.Ordinal).Replace('\n', '\r');
+        var start = Math.Min(box.SelectionStart, text.Length);
+        var end = Math.Min(start + box.SelectionLength, text.Length);
+        var lineStart = start == 0 ? 0 : text.LastIndexOf('\r', start - 1) + 1;
+        var lineEnd = text.IndexOf('\r', end);
+        if (lineEnd < 0)
+            lineEnd = text.Length;
+        var lines = text[lineStart..lineEnd].Split('\r');
+        var changed = string.Join('\r', lines.Select((l, n) => marker(n + 1) + l));
+        box.Text = text[..lineStart] + changed + text[lineEnd..];
+        box.Select(lineStart + changed.Length, 0);
     }
 
     // ---------- a client's overview ----------
@@ -1755,6 +2008,9 @@ public sealed partial class SearchWindow : Window
 
     private void ShowDocument(DocumentDetail document)
     {
+        var editable = canWrite && document.CanEdit ? Visibility.Visible : Visibility.Collapsed;
+        EditHereButton.Visibility = editable;
+        ArchiveButton.Visibility = editable;
         var text = RichTextPlain.From(document.Content);
         Detail.Children.Add(Card("Document", Text(text.Length > 0 ? text : "This document is empty.", selectable: true)));
         Detail.Children.Add(Card(

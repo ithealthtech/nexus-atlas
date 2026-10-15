@@ -564,6 +564,24 @@ public class PreviewServerTests
         Assert.StartsWith("9 Main St", moved.OneLine, StringComparison.Ordinal);
         await client.DeleteLocationAsync(site.Id, ct);
         Assert.DoesNotContain(await client.ListLocationsAsync("c-harbor", ct), l => l.Id == site.Id);
+
+        // A document opens as text, saves back, and archives.
+        var reboot = await client.GetDocumentAsync("d-reboot", ct);
+        Assert.True(reboot.CanEdit);
+        Assert.True(DocumentText.TryEditable(reboot.Content, out var body));
+        Assert.Contains("## Steps", body, StringComparison.Ordinal);
+        Assert.Contains("- [ ] Tell the office manager (Dana Morales)", body, StringComparison.Ordinal);
+        var saved = await client.UpdateDocumentAsync(reboot.Id, reboot.Version, "Firewall reboot", "needs_review", DocumentText.FromText(body + "\n\n**Done.**"), ct);
+        Assert.Equal(("Firewall reboot", "needs_review", reboot.Version + 1), (saved.Title, saved.Status, saved.Version));
+        Assert.True(DocumentText.TryEditable(saved.Content, out var savedBody));
+        Assert.EndsWith("**Done.**", savedBody, StringComparison.Ordinal);
+        var kept = await client.UpdateDocumentAsync(reboot.Id, saved.Version, "Firewall reboot", "current", null, ct);
+        Assert.Equal(DocumentText.Canonical(saved.Content), DocumentText.Canonical(kept.Content));
+        await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdateDocumentAsync(reboot.Id, reboot.Version, "Old", "current", null, ct));
+        var created = await client.CreateDocumentAsync("c-harbor", "Printer setup", "draft", DocumentText.FromText("# Printers\n\n1. Add the queue"), ct);
+        Assert.Contains(await client.ListDocumentsAsync("c-harbor", ct), d => d.Id == created.Id);
+        await client.ArchiveDocumentAsync(created.Id, cancellationToken: ct);
+        Assert.DoesNotContain(await client.ListDocumentsAsync("c-harbor", ct), d => d.Id == created.Id);
         Assert.NotEmpty(await client.SearchAsync("hdg", cancellationToken: ct));
     }
 

@@ -263,6 +263,37 @@ public sealed class AtlasClient : IDisposable
     public Task<AssetSummary> ArchiveAssetAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
         SendAsync<AssetSummary>(HttpMethod.Post, $"assets/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
 
+    // ---------- documents ----------
+    /// <summary>Adds a document, for a client or (with no client) in the knowledge base.</summary>
+    public Task<DocumentDetail> CreateDocumentAsync(
+        string? clientId,
+        string title,
+        string status,
+        System.Text.Json.Nodes.JsonObject content,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<DocumentDetail>(HttpMethod.Post, "documents", new { clientId, title, status, content }, cancellationToken);
+
+    /// <summary>
+    /// Changes a document saved as <paramref name="version"/>. Leave <paramref name="content"/> null to keep the body;
+    /// a 409 means someone saved it meanwhile.
+    /// </summary>
+    public Task<DocumentDetail> UpdateDocumentAsync(
+        string id,
+        int version,
+        string title,
+        string status,
+        System.Text.Json.Nodes.JsonObject? content,
+        CancellationToken cancellationToken = default)
+    {
+        var changes = new Dictionary<string, object> { ["version"] = version, ["title"] = title, ["status"] = status };
+        if (content is not null)
+            changes["content"] = content;
+        return SendAsync<DocumentDetail>(HttpMethod.Patch, $"documents/{Uri.EscapeDataString(id)}", changes, cancellationToken);
+    }
+
+    public Task<JsonElement> ArchiveDocumentAsync(string id, bool archived = true, CancellationToken cancellationToken = default) =>
+        SendAsync<JsonElement>(HttpMethod.Post, $"documents/{Uri.EscapeDataString(id)}/archive", new { archived }, cancellationToken);
+
     // ---------- contacts and locations ----------
     public Task<ContactInfo> CreateContactAsync(string clientId, ContactDraft draft, CancellationToken cancellationToken = default) =>
         SendAsync<ContactInfo>(HttpMethod.Post, $"clients/{Uri.EscapeDataString(clientId)}/contacts", draft, cancellationToken);
