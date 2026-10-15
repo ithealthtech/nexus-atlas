@@ -128,6 +128,7 @@ public sealed partial class SearchWindow : Window
             run();
         };
         Root.KeyboardAccelerators.Add(accelerator);
+        Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
     }
 
     public bool RegisterHotkey() => Native.RegisterSearchHotkey(hwnd, HotkeyId);
@@ -568,6 +569,7 @@ public sealed partial class SearchWindow : Window
         };
         var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
         var save = new Button { Content = existing is null ? "Add password" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
         var cancelButton = new Button { Content = "Cancel" };
         cancelButton.Click += (_, _) => Back();
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
@@ -728,6 +730,7 @@ public sealed partial class SearchWindow : Window
         var notes = new TextBox { Header = "Notes", Text = existing?.Notes ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxLength = 20000 };
         var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
         var save = new Button { Content = existing is null ? "Add asset" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
         var cancelButton = new Button { Content = "Cancel" };
         cancelButton.Click += (_, _) => Back();
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
@@ -918,6 +921,7 @@ public sealed partial class SearchWindow : Window
         TextBox Box(string header, string text, int max, string hint = "")
         {
             var box = new TextBox { Header = header, Text = text, MaxLength = max, PlaceholderText = hint };
+            AutomationProperties.SetName(box, header);
             form.Children.Add(box);
             return box;
         }
@@ -941,6 +945,9 @@ public sealed partial class SearchWindow : Window
             city = new TextBox { Header = "City", Text = location?.City ?? "", MaxLength = 120 };
             region = new TextBox { Header = "State or region", Text = location?.Region ?? "", MaxLength = 120 };
             postal = new TextBox { Header = "Postal code", Text = location?.PostalCode ?? "", MaxLength = 20 };
+            AutomationProperties.SetName(city, "City");
+            AutomationProperties.SetName(region, "State or region");
+            AutomationProperties.SetName(postal, "Postal code");
             Grid.SetColumn(region, 1);
             Grid.SetColumn(postal, 2);
             cityRow.Children.Add(city);
@@ -962,6 +969,7 @@ public sealed partial class SearchWindow : Window
             Content = adding ? (isContact ? "Add contact" : "Add location") : "Save changes",
             Style = (Style)Application.Current.Resources["AccentButtonStyle"],
         };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
         var cancelButton = new Button { Content = "Cancel" };
         cancelButton.Click += (_, _) => Back();
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
@@ -1090,6 +1098,7 @@ public sealed partial class SearchWindow : Window
             PlaceholderText = "Start writing. A blank line starts a new paragraph.",
         };
         AutomationProperties.SetName(body, "Document text");
+        body.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
         if (bodyEditable)
             body.Text = bodyText;
         else
@@ -1162,6 +1171,7 @@ public sealed partial class SearchWindow : Window
         };
         var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
         var save = new Button { Content = existing is null ? "Add document" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        AutomationProperties.SetAutomationId(save, "SaveButton");
         var cancelButton = new Button { Content = "Cancel" };
         cancelButton.Click += (_, _) => Back();
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };

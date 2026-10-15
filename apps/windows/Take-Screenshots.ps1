@@ -39,11 +39,7 @@ try {
   function Cond($prop, $value) { New-Object Windows.Automation.PropertyCondition($prop, $value) }
   function All($type) { $win.FindAll($T, (Cond $AE::ControlTypeProperty $type)) }
   function ById($id) { $win.FindFirst($T, (Cond $AE::AutomationIdProperty $id)) }
-  # The breadcrumb repeats the page's name as a button, so a form's own button is the last of that name.
-  function Named($type, $name, [switch]$Last) {
-    $found = All $type | Where-Object { $_.Current.Name -eq $name }
-    if ($Last) { $found | Select-Object -Last 1 } else { $found | Select-Object -First 1 }
-  }
+  function Named($type, $name) { All $type | Where-Object { $_.Current.Name -eq $name } | Select-Object -First 1 }
   function Check([bool]$ok, [string]$what) {
     if ($ok) { Write-Host "  ok    $what" } else { Write-Warning "check failed: $what"; $script:failed += $what }
   }
@@ -92,8 +88,9 @@ try {
   Press (Named $CT::Button 'Add contact') 'Add contact'
   Fill 'Name' 'Sam Ortiz'; Fill 'Title' 'Front desk'; Fill 'Email' 'sam@harbordental.demo'
   Shot '03-contact-form'
-  Press (Named $CT::Button 'Add contact' -Last) 'the form''s Add contact'
+  Press (ById 'SaveButton') 'the contact form''s save button'
   Check ((Title) -eq 'Harbor Dental Group' -and (Shows 'Sam Ortiz*')) 'a new contact shows on the overview'
+  Check (Shows '*sam@harbordental.demo*') 'the contact''s email shows'
 
   # An asset: the form is drawn from its type.
   Open 'Assets'
@@ -101,7 +98,7 @@ try {
   Choose 'Client' 'Harbor Dental Group'; Choose 'Type' 'Configurations'
   Fill 'Name' 'HDG-SW-01'; Choose 'Type *' 'Switch'
   Shot '04-asset-form'
-  Press (Named $CT::Button 'Add asset') 'Add asset'
+  Press (ById 'SaveButton') 'the asset form''s save button'
   Check ((Title) -eq 'HDG-SW-01') 'a new asset saves and opens'
   Shot '05-asset'
 
@@ -115,7 +112,7 @@ try {
   Check ($value -like '*## Steps*' -and $value -like '*- `[ `] Tell the office manager*') 'the document opens as editable text'
   Shot '07-document-editor'
   if ($text) { $text.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($value + "`r`r**Checked by the screenshot run.**") }
-  Press (Named $CT::Button 'Save changes') 'Save changes'
+  Press (ById 'SaveButton') 'the document form''s save button'
   Check ((Title) -eq 'Firewall reboot procedure' -and (Shows '*Checked by the screenshot run.*')) 'an edited document saves and shows the new text'
   Shot '08-document-saved'
 
@@ -124,7 +121,7 @@ try {
   Press (ById 'NewButton') 'New document'
   Fill 'Title' 'Printer setup'
   Fill 'Document text' "# Printers`r`r1. Add the queue`r2. Print a test page"
-  Press (Named $CT::Button 'Add document') 'Add document'
+  Press (ById 'SaveButton') 'the new document''s save button'
   Check ((Title) -eq 'Printer setup' -and (Shows '*Print a test page*')) 'a new document saves'
   Shot '09-new-document'
 
