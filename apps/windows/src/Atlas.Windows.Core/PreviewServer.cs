@@ -15,6 +15,7 @@ public sealed class PreviewServer : HttpMessageHandler
 
     private const string Harbor = "c-harbor";
     private const string Northline = "c-northline";
+    private const string Pine = "c-pine";
     private const string Cedar = "c-cedar";
     private static readonly string Now = DateTime.UtcNow.AddHours(-3).ToString("O");
 
@@ -23,6 +24,7 @@ public sealed class PreviewServer : HttpMessageHandler
         new { id = Cedar, name = "Cedar Ridge Credit Union", type = "Customer", status = "active" },
         new { id = Harbor, name = "Harbor Dental Group", type = "Customer", status = "active" },
         new { id = Northline, name = "Northline Architecture", type = "Customer", status = "active" },
+        new { id = Pine, name = "Pinecrest Veterinary", type = "Prospect", status = "prospect" },
     ];
 
     private static object Pw(string id, string client, string clientName, string name, string user, string url, bool totp, string kind = "login", bool reason = false) =>
@@ -330,15 +332,35 @@ public sealed class PreviewServer : HttpMessageHandler
         [Harbor] = ("Three offices. Practice management runs on-prem (Dentrix): never reboot HDG-DC-01 before 6 PM.", 3),
         [Northline] = ("", 0),
         [Cedar] = ("Every password reveal needs a ticket number.", 1),
+        [Pine] = ("Quote sent for managed backup and Microsoft 365.", 1),
     };
+
+    // The client list carries each client's quick note, hours, and your access, as Atlas's does.
+    private object[] ClientList() =>
+    [
+        .. Clients.Select(c =>
+        {
+            var detail = Mutable(ClientDetail(Prop(c, "id")!));
+            detail["updatedAt"] = DateTime.UtcNow.AddDays(Prop(c, "id") == Harbor ? -1 : -9).ToString("O");
+            return (object)detail;
+        }),
+    ];
+
+    private static readonly object[] Expirations =
+    [
+        new { kind = "asset", id = "a-domain", title = "harbordental.demo", label = "Domain · Expires", clientId = Harbor, clientName = "Harbor Dental Group", date = "2026-10-28", daysLeft = 13 },
+        new { kind = "password", id = "p-m365", title = "Microsoft 365 global admin", label = "Password rotation", clientId = Harbor, clientName = "Harbor Dental Group", date = "2026-10-20", daysLeft = 5 },
+        new { kind = "password", id = "p-core", title = "Core switch enable", label = "Password rotation", clientId = Cedar, clientName = "Cedar Ridge Credit Union", date = "2026-10-11", daysLeft = -4 },
+    ];
 
     private object ClientDetail(string id)
     {
-        var name = Prop(Clients.First(c => Prop(c, "id") == id), "name");
+        var entry = Clients.First(c => Prop(c, "id") == id);
+        var (name, type, status) = (Prop(entry, "name"), Prop(entry, "type"), Prop(entry, "status"));
         var (text, version) = notes[id];
         return new
         {
-            id, name, type = "Customer", status = "active", notes = text, notesVersion = version,
+            id, name, type, status, notes = text, notesVersion = version,
             notesUpdatedAt = version > 0 ? Now : null, notesUpdatedByName = version > 0 ? "Alex Rivera" : null,
             hours = id == Harbor ? "Mon–Fri 7:30–5:00, Sat 8–12" : "Mon–Fri 8–5",
             maintenanceWindow = id == Harbor ? "Sundays 10 PM – 2 AM" : "",
@@ -398,13 +420,13 @@ public sealed class PreviewServer : HttpMessageHandler
         object? body = tail switch
         {
             "native/session" => Session(),
-            "clients" => Clients,
+            "clients" => ClientList(),
             "passwords" => Filter(Vault(), client),
             "assets" => Filter(Things(), client),
             "documents" => Filter(Docs(), client),
             "layouts" => Layouts,
             "favorites" => Favorites,
-            "expirations" => Array.Empty<object>(),
+            "expirations" => Expirations,
             "search" => Search(query["q"] ?? ""),
             _ when tail.StartsWith("passwords/", StringComparison.Ordinal) && tail.EndsWith("/reveal", StringComparison.Ordinal) =>
                 (await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).Contains("\"totp\"")

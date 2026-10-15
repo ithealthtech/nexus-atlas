@@ -135,7 +135,7 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock x:Name="PageTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock x:Name="PageInfo" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="PageInfo" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button x:Name="NewButton" Click="New_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
@@ -172,6 +172,7 @@
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
                                 <Setter Property="MinHeight" Value="48" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                 <Setter Property="Padding" Value="12,0,12,0" />
                             </Style>
                         </ListView.ItemContainerStyle>
@@ -184,24 +185,100 @@
                                 </GroupStyle.HeaderTemplate>
                             </GroupStyle>
                         </ListView.GroupStyle>
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="local:Row">
-                                <Grid ColumnSpacing="14" Padding="0,6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Bind Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{x:Bind Subtitle}" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    </StackPanel>
-                                    <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
+                        <ListView.ItemTemplateSelector>
+                            <local:RowTemplates>
+                                <local:RowTemplates.Plain>
+                                    <DataTemplate x:DataType="local:Row">
+                                        <Grid ColumnSpacing="14" Padding="0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{x:Bind Subtitle}" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </StackPanel>
+                                            <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </local:RowTemplates.Plain>
+                                <local:RowTemplates.Client>
+                                    <DataTemplate x:DataType="local:Row">
+                                        <Grid ColumnSpacing="12" Padding="0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="72" />
+                                                <ColumnDefinition Width="72" />
+                                                <ColumnDefinition Width="72" />
+                                                <ColumnDefinition Width="132" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="40" Height="40" CornerRadius="8" Background="{x:Bind Facts.Tile}" VerticalAlignment="Top" Margin="0,2,0,0">
+                                                <TextBlock Text="{x:Bind Facts.Initials}" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                                                    <FontIcon Glyph="&#xE735;" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{x:Bind Facts.StarVisibility}" VerticalAlignment="Center" />
+                                                    <Border Visibility="{x:Bind Facts.StatusVisibility}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center"
+                                                            Background="{ThemeResource SubtleFillColorTertiaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+                                                        <TextBlock Text="{x:Bind Facts.Status}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{x:Bind Facts.Line}" FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Text="{x:Bind Facts.Note}" FontSize="12" FontStyle="Italic" TextTrimming="CharacterEllipsis" MaxLines="1"
+                                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" Visibility="{x:Bind Facts.NoteVisibility}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="Passwords">
+                                                <FontIcon Glyph="&#xE8D7;" FontSize="13" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                <TextBlock Text="{x:Bind Facts.PasswordsText}" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="Assets">
+                                                <FontIcon Glyph="&#xE7F8;" FontSize="13" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                <TextBlock Text="{x:Bind Facts.AssetsText}" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" ToolTipService.ToolTip="Documents">
+                                                <FontIcon Glyph="&#xE8A5;" FontSize="13" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                <TextBlock Text="{x:Bind Facts.DocumentsText}" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <Border Grid.Column="5" Visibility="{x:Bind Facts.AttentionVisibility}" CornerRadius="10" Padding="8,2" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                    Background="{x:Bind Facts.AttentionBackground}">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <FontIcon Glyph="&#xE7BA;" FontSize="11" Foreground="{x:Bind Facts.AttentionForeground}" />
+                                                    <TextBlock Text="{x:Bind Facts.Attention}" FontSize="12" Foreground="{x:Bind Facts.AttentionForeground}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <TextBlock Grid.Column="5" Visibility="{x:Bind Facts.AllClearVisibility}" Text="Nothing due" FontSize="12" VerticalAlignment="Center"
+                                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            <FontIcon Grid.Column="6" Glyph="&#xE76C;" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </local:RowTemplates.Client>
+                            </local:RowTemplates>
+                        </ListView.ItemTemplateSelector>
+                        <!-- Column names over the Clients table, lined up with its rows. -->
+                        <ListView.Header>
+                            <Grid x:Name="ClientHeader" ColumnSpacing="12" Padding="12,6,12,4" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="72" />
+                                    <ColumnDefinition Width="72" />
+                                    <ColumnDefinition Width="72" />
+                                    <ColumnDefinition Width="132" />
+                                    <ColumnDefinition Width="11" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="Client" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="2" Text="Passwords" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="3" Text="Assets" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="4" Text="Docs" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="5" Text="Next 30 days" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                        </ListView.Header>
                     </ListView>
                     <StackPanel x:Name="ListEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="24" Visibility="Collapsed">
                         <FontIcon Glyph="&#xE721;" FontSize="22" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />

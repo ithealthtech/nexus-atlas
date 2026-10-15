@@ -86,7 +86,7 @@ public sealed record PasswordDraft(
 
 public sealed record RevealResult(string Value, int? ExpiresIn);
 
-public sealed record ExpirationItem(string Kind, string Id, string Title, string Label, string? ClientName, string Date, int DaysLeft);
+public sealed record ExpirationItem(string Kind, string Id, string Title, string Label, string? ClientName, string Date, int DaysLeft, string? ClientId = null);
 
 /// <summary>Which secret to copy.</summary>
 public enum SecretField
@@ -99,7 +99,17 @@ public enum SecretField
 // What the desktop app lists in its three columns. None of these carry a secret: passwords and one-time codes are
 // only ever fetched to copy or briefly show, through RevealAsync, which Atlas records.
 
-public sealed record ClientSummary(string Id, string Name, string Type, string Status);
+/// <summary>A client as listed: what it is, its quick note, its hours, and your access.</summary>
+public sealed record ClientSummary(
+    string Id,
+    string Name,
+    string Type,
+    string Status,
+    string Notes = "",
+    string Hours = "",
+    string MaintenanceWindow = "",
+    string Access = "",
+    string? UpdatedAt = null);
 
 /// <summary>A password entry as listed, without its secret.</summary>
 public sealed record PasswordSummary(
