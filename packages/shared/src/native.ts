@@ -13,7 +13,7 @@ export type NativeClientId = keyof typeof NATIVE_CLIENTS;
  * a test keeps the two equal), raised when the app changes rather than with every Atlas release. Signed-in copies
  * compare it with their own version and offer the download when it is newer.
  */
-export const WINDOWS_APP_VERSION = '0.2.0';
+export const WINDOWS_APP_VERSION = '0.3.0';
 /** The setup program's file name. Every release carries it under this name. */
 export const WINDOWS_APP_SETUP = 'AtlasForWindowsSetup.exe';
 /** Where the newest setup program is, in the repository this server takes its releases from. */

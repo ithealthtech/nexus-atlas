@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.30] - 2026-10-15
+
+### Changed
+
+- **Atlas for Windows 0.3.0: a redesign that works like the web app.** The window now has a sidebar (Home, Clients, Passwords, Assets, Documents), a breadcrumb with Back (Alt+Left or Esc), and one page at a time. A client opens on an **Overview** with its quick note, key facts, contacts, and locations, and tabs for its passwords, assets, and documents. **Home** shows your favorites and what you opened recently, and every item has a star to add or remove it. (#193)
+
+### Added
+
+- **Editing in Atlas for Windows.** People who may change a client can now, from the app: add, edit, and archive **passwords** (with a generator, folders, and change reminders; saved secrets are never shown in the form); add, edit, and archive **assets**, with a form built from the asset's type; edit the client's **quick note**; add, edit, and delete **contacts** and **locations**; and write, edit, and archive **documents**. Documents are edited as text with the formatting typed in (headings, lists, checklists, quotes, code, bold, links), with a toolbar and a preview. A document with tables or centred text keeps its body as it is, and only its title and status change in the app. If someone else saved first, the app says so instead of overwriting their change. Editing needs a new sign-in: earlier sign-ins can only read. Tested in CI with the app's sample data, not yet against a real Atlas server. (#193)
+- **Desktop app sessions can star items** with read access, and list your favorites. (#193)
+
 ## [1.7.29] - 2026-10-14
 
 ### Fixed
