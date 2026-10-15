@@ -571,12 +571,12 @@ public class PreviewServerTests
         Assert.True(DocumentText.TryEditable(reboot.Content, out var body));
         Assert.Contains("## Steps", body, StringComparison.Ordinal);
         Assert.Contains("- [ ] Tell the office manager (Dana Morales)", body, StringComparison.Ordinal);
-        var edited = await client.UpdateDocumentAsync(reboot.Id, reboot.Version, "Firewall reboot", "needs_review", DocumentText.FromText(body + "\n\n**Done.**"), ct);
-        Assert.Equal(("Firewall reboot", "needs_review", reboot.Version + 1), (edited.Title, edited.Status, edited.Version));
-        Assert.True(DocumentText.TryEditable(edited.Content, out var editedBody));
-        Assert.EndsWith("**Done.**", editedBody, StringComparison.Ordinal);
-        var kept = await client.UpdateDocumentAsync(reboot.Id, edited.Version, "Firewall reboot", "current", null, ct);
-        Assert.Equal(DocumentText.Canonical(edited.Content), DocumentText.Canonical(kept.Content));
+        var rewritten = await client.UpdateDocumentAsync(reboot.Id, reboot.Version, "Firewall reboot", "needs_review", DocumentText.FromText(body + "\n\n**Done.**"), ct);
+        Assert.Equal(("Firewall reboot", "needs_review", reboot.Version + 1), (rewritten.Title, rewritten.Status, rewritten.Version));
+        Assert.True(DocumentText.TryEditable(rewritten.Content, out var rewrittenBody));
+        Assert.EndsWith("**Done.**", rewrittenBody, StringComparison.Ordinal);
+        var kept = await client.UpdateDocumentAsync(reboot.Id, rewritten.Version, "Firewall reboot", "current", null, ct);
+        Assert.Equal(DocumentText.Canonical(rewritten.Content), DocumentText.Canonical(kept.Content));
         await Assert.ThrowsAsync<AtlasApiException>(() => client.UpdateDocumentAsync(reboot.Id, reboot.Version, "Old", "current", null, ct));
         var created = await client.CreateDocumentAsync("c-harbor", "Printer setup", "draft", DocumentText.FromText("# Printers\n\n1. Add the queue"), ct);
         Assert.Contains(await client.ListDocumentsAsync("c-harbor", ct), d => d.Id == created.Id);
