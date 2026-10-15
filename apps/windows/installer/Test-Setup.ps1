@@ -34,7 +34,10 @@ function WaitUntil([scriptblock]$condition, [int]$seconds, [string]$failure) {
   throw $failure
 }
 function Install([string]$log, [string[]]$extra = @()) {
-  $p = Start-Process $setup -ArgumentList (@('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log") + $extra) -PassThru -Wait
+  # Wait for setup itself only: -Wait would also wait for the app it opens with /relaunch=1.
+  $p = Start-Process $setup -ArgumentList (@('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log") + $extra) -PassThru
+  $null = $p.Handle  # keeps the exit code readable once it ends
+  if (-not $p.WaitForExit(300000)) { throw 'Setup did not finish in five minutes.' }
   if ($p.ExitCode -ne 0) {
     if (Test-Path $log) { Get-Content $log -Tail 60 }
     throw "Setup exited with code $($p.ExitCode)."
