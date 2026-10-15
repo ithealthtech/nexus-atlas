@@ -2,6 +2,16 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.31] - 2026-10-15
+
+### Fixed
+
+- **Your theme applies on a first visit.** In a new browser or tab, Atlas often showed its default colours, title, and sizes instead of your theme, on the sign-in page and after signing in. The first "not signed in" answer was dropping the theme while it was still downloading. Public information (the theme, setup, and sign-in options) now stays when a session ends. (#198)
+
+### Changed
+
+- **Atlas for Windows 0.3.1: a Clients table.** Each client shows a coloured tile, its type, status, your access, maintenance window, when it last changed, and the first line of its quick note, with columns for how many passwords, assets, and documents it has and a badge for anything expiring or expired in the next 30 days. The page line totals everything, and the filter picks active clients, prospects, or inactive ones; inactive clients are now listed. (#197)
+
 ## [1.7.30] - 2026-10-15
 
 ### Changed
