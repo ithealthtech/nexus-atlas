@@ -438,8 +438,8 @@ public sealed class PreviewServer : HttpMessageHandler
         var doc = Find(Documents, id);
         if (doc is null)
             return null;
-        var element = JsonSerializer.SerializeToElement(doc);
-        var copy = JsonSerializer.Deserialize<Dictionary<string, object?>>(element.GetRawText())!;
+        // Keeps each field as written (a string stays a string), so lookups by id find it.
+        var copy = Mutable(doc);
         copy["content"] = id == "d-reboot" ? RebootContent : new { type = "doc", content = Array.Empty<object>() };
         copy["version"] = 1;
         copy["canEdit"] = true;
