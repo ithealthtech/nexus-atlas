@@ -45,7 +45,8 @@ try {
   }
   function Press($element, $what) {
     if (-not $element) { Check $false "found $what"; return }
-    $element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    try { $element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke() }
+    catch { Check $false "pressed $what ($($_.Exception.Message))"; return }
     Start-Sleep -Milliseconds 1800
   }
   function Open($name) { Press (All $CT::ListItem | Where-Object { $_.Current.Name -like $name } | Select-Object -First 1) "list item '$name'" }
@@ -96,8 +97,19 @@ try {
   Check ((Title) -eq 'Harbor Dental Group' -and (Shows 'Sam Ortiz*')) 'a new contact shows on the overview'
   Check (Shows '*sam@harbordental.demo*') 'the contact''s email shows'
 
+  # Each list, as a table.
+  Open 'Passwords'
+  Check (Shows 'Strength') 'the Passwords list shows its columns'
+  Check (Shows 'In 2 breaches') 'a breached password is flagged'
+  Shot '03b-passwords'
+  Open 'Documents'
+  Check (Shows 'Needs review') 'a document shows its status'
+  Shot '03c-documents'
+
   # An asset: the form is drawn from its type.
   Open 'Assets'
+  Check (Shows 'Warranty expires') 'an asset shows what is coming due'
+  Shot '03d-assets'
   Press (ById 'NewButton') 'New asset'
   Choose 'Client' 'Harbor Dental Group'; Choose 'Type' 'Configurations'
   Fill 'Name' 'HDG-SW-01'; Choose 'Type *' 'Switch'
@@ -107,7 +119,7 @@ try {
   Shot '05-asset'
 
   # A document: open it, change its text, save.
-  Open 'Documents'; Open 'Firewall reboot procedure, Document'
+  Open 'Documents'; Open 'Firewall reboot procedure*'
   Check ((Title) -eq 'Firewall reboot procedure') 'a document opens'
   Shot '06-document'
   Press (ById 'EditHereButton') 'Edit here on a document'

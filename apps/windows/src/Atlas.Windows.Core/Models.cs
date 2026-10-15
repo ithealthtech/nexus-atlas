@@ -126,7 +126,13 @@ public sealed record PasswordSummary(
     bool CanReveal,
     bool Restricted,
     string UpdatedAt,
-    string? UpdatedByName = null);
+    string? UpdatedByName = null,
+    int Strength = -1,
+    int Reused = 0,
+    int? BreachCount = null,
+    string? FolderName = null,
+    bool Favorite = false,
+    string Category = "");
 
 /// <summary>One field of an asset layout: what it holds, whether it must be filled, and the choices for a list.</summary>
 public sealed record LayoutField(string Key, string Label, string Type, bool Required = false, string[]? Options = null, string? Help = null);
@@ -154,7 +160,8 @@ public sealed record DocumentSummary(
     string Title,
     string Status,
     string UpdatedAt,
-    string? UpdatedByName = null);
+    string? UpdatedByName = null,
+    string? ReviewDate = null);
 
 public sealed record DocumentDetail(
     string Id,

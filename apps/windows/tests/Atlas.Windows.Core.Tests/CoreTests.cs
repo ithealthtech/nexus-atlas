@@ -505,6 +505,10 @@ public class PreviewServerTests
         Assert.Equal(("prospect", "Sundays 10 PM – 2 AM"), (listed.Single(c => c.Id == "c-pine").Status, listed.Single(c => c.Id == "c-harbor").MaintenanceWindow));
         Assert.StartsWith("Three offices.", listed.Single(c => c.Id == "c-harbor").Notes, StringComparison.Ordinal);
         Assert.Contains(await client.GetExpirationsAsync(30, ct), e => e.ClientId == "c-harbor" && e.DaysLeft >= 0);
+        var everyPassword = await client.ListPasswordsAsync(cancellationToken: ct);
+        var breached = everyPassword.Single(p => p.Id == "p-core");
+        Assert.Equal(("network", 1, (int?)2), (breached.Category, breached.Strength, breached.BreachCount));
+        Assert.Contains(everyPassword, p => p.Favorite && p.FolderName == "Cloud admins");
         var harbor = await client.ListPasswordsAsync("c-harbor", ct);
         Assert.All(harbor, p => Assert.Equal("Harbor Dental Group", p.ClientName));
         Assert.Contains(harbor, p => p.HasTotp);

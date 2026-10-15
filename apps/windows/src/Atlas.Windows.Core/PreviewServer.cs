@@ -27,23 +27,38 @@ public sealed class PreviewServer : HttpMessageHandler
         new { id = Pine, name = "Pinecrest Veterinary", type = "Prospect", status = "prospect" },
     ];
 
-    private static object Pw(string id, string client, string clientName, string name, string user, string url, bool totp, string kind = "login", bool reason = false) =>
+    private static object Pw(
+        string id,
+        string client,
+        string clientName,
+        string name,
+        string user,
+        string url,
+        bool totp,
+        string kind = "login",
+        bool reason = false,
+        string category = "other",
+        int strength = 4,
+        int reused = 1,
+        int? breaches = 0,
+        string? folder = null) =>
         new
         {
             id, clientId = client, clientName, kind, name, username = user, url, hasTotp = totp, hasNotes = false,
             requireReason = reason, canReveal = true, restricted = false, updatedAt = Now, updatedByName = "Alex Rivera",
-            version = 1, folderId = (string?)null, folderName = (string?)null, rotationDays = (int?)null,
+            version = 1, folderId = (string?)null, folderName = folder, rotationDays = (int?)null,
+            category, strength, reused, breachCount = breaches, favorite = id == "p-m365",
         };
 
     private static readonly object[] Passwords =
     [
-        Pw("p-m365", Harbor, "Harbor Dental Group", "Microsoft 365 global admin", "admin@harbordental.demo", "https://admin.microsoft.com", true),
-        Pw("p-fw", Harbor, "Harbor Dental Group", "HDG-FW-01 admin", "admin", "https://10.20.0.1", false),
-        Pw("p-wifi", Harbor, "Harbor Dental Group", "Front desk Wi-Fi", "HDG-Guest", "", false),
-        Pw("p-core", Cedar, "Cedar Ridge Credit Union", "Core switch enable", "manager", "", false, reason: true),
-        Pw("p-vpn", Cedar, "Cedar Ridge Credit Union", "Site-to-site VPN pre-shared key", "", "", false, reason: true),
-        Pw("p-nas", Northline, "Northline Architecture", "NLA-NAS-01 admin", "nla-admin", "https://10.30.0.20:5001", true),
-        Pw("p-autodesk", Northline, "Northline Architecture", "Autodesk account", "it@northlinearch.demo", "https://manage.autodesk.com", true),
+        Pw("p-m365", Harbor, "Harbor Dental Group", "Microsoft 365 global admin", "admin@harbordental.demo", "https://admin.microsoft.com", true, category: "cloud", folder: "Cloud admins"),
+        Pw("p-fw", Harbor, "Harbor Dental Group", "HDG-FW-01 admin", "admin", "https://10.20.0.1", false, category: "network", strength: 3, folder: "Network"),
+        Pw("p-wifi", Harbor, "Harbor Dental Group", "Front desk Wi-Fi", "HDG-Guest", "", false, category: "wifi", strength: 2, reused: 3),
+        Pw("p-core", Cedar, "Cedar Ridge Credit Union", "Core switch enable", "manager", "", false, reason: true, category: "network", strength: 1, breaches: 2),
+        Pw("p-vpn", Cedar, "Cedar Ridge Credit Union", "Site-to-site VPN pre-shared key", "", "", false, reason: true, category: "remote"),
+        Pw("p-nas", Northline, "Northline Architecture", "NLA-NAS-01 admin", "nla-admin", "https://10.30.0.20:5001", true, category: "server", strength: 3),
+        Pw("p-autodesk", Northline, "Northline Architecture", "Autodesk account", "it@northlinearch.demo", "https://manage.autodesk.com", true, category: "vendor"),
     ];
 
     private static readonly object[] Layouts =
@@ -91,7 +106,7 @@ public sealed class PreviewServer : HttpMessageHandler
     private static readonly object[] Documents =
     [
         new { id = "d-reboot", clientId = Harbor, clientName = "Harbor Dental Group", title = "Firewall reboot procedure", status = "current", updatedAt = Now, updatedByName = "Alex Rivera" },
-        new { id = "d-onboard", clientId = (string?)null, clientName = (string?)null, title = "New client onboarding checklist", status = "current", updatedAt = Now, updatedByName = "Alex Rivera" },
+        new { id = "d-onboard", clientId = (string?)null, clientName = (string?)null, title = "New client onboarding checklist", status = "needs_review", updatedAt = Now, updatedByName = "Sam Ortiz" },
     ];
 
     private static readonly object RebootContent = new
@@ -351,6 +366,8 @@ public sealed class PreviewServer : HttpMessageHandler
         new { kind = "asset", id = "a-domain", title = "harbordental.demo", label = "Domain · Expires", clientId = Harbor, clientName = "Harbor Dental Group", date = "2026-10-28", daysLeft = 13 },
         new { kind = "password", id = "p-m365", title = "Microsoft 365 global admin", label = "Password rotation", clientId = Harbor, clientName = "Harbor Dental Group", date = "2026-10-20", daysLeft = 5 },
         new { kind = "password", id = "p-core", title = "Core switch enable", label = "Password rotation", clientId = Cedar, clientName = "Cedar Ridge Credit Union", date = "2026-10-11", daysLeft = -4 },
+        new { kind = "asset", id = "a-dc", title = "HDG-DC-01", label = "Warranty expires", clientId = Harbor, clientName = "Harbor Dental Group", date = "2026-12-01", daysLeft = 47 },
+        new { kind = "document", id = "d-reboot", title = "Firewall reboot procedure", label = "Review due", clientId = Harbor, clientName = "Harbor Dental Group", date = "2026-11-04", daysLeft = 20 },
     ];
 
     private object ClientDetail(string id)

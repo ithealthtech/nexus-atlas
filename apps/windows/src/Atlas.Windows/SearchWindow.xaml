@@ -258,10 +258,86 @@
                                         </Grid>
                                     </DataTemplate>
                                 </local:RowTemplates.Client>
+                                <local:RowTemplates.Item>
+                                    <DataTemplate x:DataType="local:Row">
+                                        <Grid ColumnSpacing="12" Padding="0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="128" />
+                                                <ColumnDefinition Width="128" />
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="36" Height="36" CornerRadius="8" Background="{x:Bind Item.Tile}" VerticalAlignment="Center">
+                                                <FontIcon Glyph="{x:Bind Item.Glyph}" FontSize="16" Foreground="White" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                <!-- The name gives way (with an ellipsis) before the star and chips do. -->
+                                                <Grid ColumnSpacing="6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xE735;" FontSize="12" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="{x:Bind Item.StarVisibility}" VerticalAlignment="Center" />
+                                                    <Border Visibility="{x:Bind Item.ChipAVisibility}" CornerRadius="4" Padding="5,0" VerticalAlignment="Center"
+                                                            Background="{ThemeResource SubtleFillColorTertiaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+                                                        <TextBlock Text="{x:Bind Item.ChipA}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    </Border>
+                                                    <Border Visibility="{x:Bind Item.ChipBVisibility}" CornerRadius="4" Padding="5,0" VerticalAlignment="Center"
+                                                            Background="{ThemeResource SubtleFillColorTertiaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+                                                        <TextBlock Text="{x:Bind Item.ChipB}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    </Border>
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock Text="{x:Bind Item.Line}" FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3">
+                                                <StackPanel Orientation="Horizontal" Spacing="3" Visibility="{x:Bind Item.BarsVisibility}">
+                                                    <Border Width="12" Height="4" CornerRadius="2" VerticalAlignment="Center" Background="{x:Bind Item.Bar1}" />
+                                                    <Border Width="12" Height="4" CornerRadius="2" VerticalAlignment="Center" Background="{x:Bind Item.Bar2}" />
+                                                    <Border Width="12" Height="4" CornerRadius="2" VerticalAlignment="Center" Background="{x:Bind Item.Bar3}" />
+                                                    <Border Width="12" Height="4" CornerRadius="2" VerticalAlignment="Center" Background="{x:Bind Item.Bar4}" />
+                                                    <TextBlock Text="{x:Bind Item.State}" FontSize="12" Margin="6,0,0,0" Foreground="{x:Bind Item.StateForeground}" />
+                                                </StackPanel>
+                                                <Border Visibility="{x:Bind Item.PillVisibility}" CornerRadius="10" Padding="8,1" HorizontalAlignment="Left" Background="{x:Bind Item.StateBackground}">
+                                                    <TextBlock Text="{x:Bind Item.State}" FontSize="12" Foreground="{x:Bind Item.StateForeground}" />
+                                                </Border>
+                                                <TextBlock Text="{x:Bind Item.StateDetail}" FontSize="11" Foreground="{x:Bind Item.StateDetailForeground}" Visibility="{x:Bind Item.StateDetailVisibility}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind Item.Due}" FontSize="12" Foreground="{x:Bind Item.DueForeground}" />
+                                                <TextBlock Text="{x:Bind Item.DueDetail}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="4" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind Item.Updated}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Text="{x:Bind Item.UpdatedBy}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
+                                            <FontIcon Grid.Column="5" Glyph="&#xE76C;" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </local:RowTemplates.Item>
                             </local:RowTemplates>
                         </ListView.ItemTemplateSelector>
                         <!-- Column names over the Clients table, lined up with its rows. -->
                         <ListView.Header>
+                            <StackPanel>
+                            <Grid x:Name="ItemHeader" ColumnSpacing="12" Padding="12,6,12,4" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="36" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="128" />
+                                    <ColumnDefinition Width="128" />
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="11" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="ItemHeaderName" Grid.Column="1" Text="Name" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="ItemHeaderState" Grid.Column="2" Text="Status" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="ItemHeaderDue" Grid.Column="3" Text="Due" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="4" Text="Updated" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
                             <Grid x:Name="ClientHeader" ColumnSpacing="12" Padding="12,6,12,4" Visibility="Collapsed">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="40" />
@@ -278,6 +354,7 @@
                                 <TextBlock Grid.Column="4" Text="Docs" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <TextBlock Grid.Column="5" Text="Next 30 days" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </Grid>
+                            </StackPanel>
                         </ListView.Header>
                     </ListView>
                     <StackPanel x:Name="ListEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="24" Visibility="Collapsed">
