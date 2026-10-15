@@ -33,8 +33,8 @@ function WaitUntil([scriptblock]$condition, [int]$seconds, [string]$failure) {
   }
   throw $failure
 }
-function Install([string]$log) {
-  $p = Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log" -PassThru -Wait
+function Install([string]$log, [string[]]$extra = @()) {
+  $p = Start-Process $setup -ArgumentList (@('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log") + $extra) -PassThru -Wait
   if ($p.ExitCode -ne 0) {
     if (Test-Path $log) { Get-Content $log -Tail 60 }
     throw "Setup exited with code $($p.ExitCode)."
@@ -77,6 +77,15 @@ if (-not (Select-String -Path $log -SimpleMatch 'closed when asked' -Quiet)) {
 if (StartupCommand) { throw 'An upgrade turned Start with Windows back on.' }
 if (-not (Test-Path $exe)) { throw 'The upgrade removed the app.' }
 
+Step 'An update the app installs itself opens the app again'
+$log = Join-Path $env:TEMP 'atlas-setup-3.log'
+Install $log @('/relaunch=1')
+WaitUntil { Running } 30 'After an update started with /relaunch=1, the app did not open again.'
+Start-Sleep -Seconds 8
+if (-not (Running)) { throw 'The app opened again after the update and then stopped.' }
+Start-Process $exe -ArgumentList '--quit' -Wait
+WaitUntil { -not (Running) } 30 'The app did not quit when asked.'
+
 Step 'Uninstall'
 New-Item -ItemType Directory -Force -Path $data | Out-Null
 Set-Content (Join-Path $data 'settings.json') '{}'
@@ -92,4 +101,4 @@ if (Running) { throw 'Uninstalling left the app running.' }
 if (StartupCommand) { throw 'Uninstalling left Start with Windows behind.' }
 if (Test-Path $shortcut) { throw 'Uninstalling left the Start menu shortcut.' }
 
-Write-Host "`nSetup works: self-test, install, upgrade over a running copy, and uninstall."
+Write-Host "`nSetup works: self-test, install, upgrade over a running copy, an update that reopens the app, and uninstall."

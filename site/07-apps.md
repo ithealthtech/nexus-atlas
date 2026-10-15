@@ -83,7 +83,7 @@ A copy is recorded like a reveal in the browser, asks for a reason where the cli
 
 ### Updates
 
-When a newer version is out, the app tells you once and adds **Get version …** to its menu, which opens the download in your browser. Run the new setup program over the old one; you stay signed in. The app never downloads or installs anything by itself.
+The app asks Atlas for a newer version when it starts and every six hours, and you can ask at any time with **Check for updates** in the account menu. When one is out, the app tells you once, shows **Install and restart** at the top of the window, and adds **Install version … and restart** to its tray menu. Choosing it downloads the setup program, checks it against the checksum published with the release, installs it over the old copy, and opens the app again; you stay signed in. Nothing installs until you choose to. If the download fails its checks, nothing is installed and the app says why, with a link to download it in your browser instead.
 
 ### Sign out
 

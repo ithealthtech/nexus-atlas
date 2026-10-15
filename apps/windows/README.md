@@ -23,7 +23,7 @@ The app talks to Atlas only over HTTPS with a certificate Windows trusts, and ha
 
 ## Updates
 
-The app has its own version number (`Directory.Build.props`), which changes when the app does, not with every Atlas release. Atlas tells each signed-in copy which version it offers. When that is newer, the app says so once and adds **Get version …** to its tray menu, which opens the download in your browser. It never downloads or installs anything itself.
+The app has its own version number (`Directory.Build.props`), which changes when the app does, not with every Atlas release. Atlas tells each signed-in copy which version it offers. It asks at start-up, every six hours, and when you choose **Check for updates**. When the offered version is newer, the app says so once and shows **Install and restart** in the window and the tray menu. Choosing it downloads the setup program (https only, from the address Atlas gave or GitHub's download servers), checks it against the `.sha256` published beside it, starts it with `/VERYSILENT /relaunch=1`, and quits; setup installs over the old copy and opens the app again (`AppUpdater.cs`, the `Relaunch` check in the installer).
 
 To raise the version, change `<Version>` in `Directory.Build.props` and `WINDOWS_APP_VERSION` in `packages/shared/src/native.ts` together. A server test fails if they differ.
 
@@ -64,4 +64,4 @@ CI runs all three on every pull request. `Test-Setup.ps1` starts the app with `-
 
 ## Not in this version
 
-Code signing (so Windows asks before running the setup program), MSIX packaging, updates that install themselves, and a native ARM64 build (the x64 app installs on ARM64 Windows 11 and runs under emulation; that has not been tried). Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
+Code signing (so Windows asks before running the setup program), MSIX packaging, updates that install without being asked, and a native ARM64 build (the x64 app installs on ARM64 Windows 11 and runs under emulation; that has not been tried). Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
