@@ -27,6 +27,9 @@ public sealed record Row(string Kind, string Id, string Title, string Subtitle, 
     /// <summary>On the Clients page, what each client row shows beyond its name.</summary>
     public ClientFacts? Facts { get; init; }
 
+    /// <summary>In the Passwords, Assets, and Documents lists, what each row shows beyond its name.</summary>
+    public ItemFacts? Item { get; init; }
+
     // What a screen reader says for the row: its name, then the line under it.
     public override string ToString() => string.IsNullOrEmpty(Subtitle) ? Title : $"{Title}, {Subtitle}";
 
@@ -83,14 +86,92 @@ public sealed record ClientFacts(
     private static Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
 }
 
-/// <summary>Picks the client layout for client rows on the Clients page and the plain one for everything else.</summary>
+/// <summary>
+/// A password, asset, or document's line in its list: a tile, chips by the name, the line that tells it apart, its
+/// strength or status, what's coming due, and who changed it last.
+/// </summary>
+public sealed record ItemFacts(
+    string Glyph,
+    Brush Tile,
+    string Line,
+    string ChipA,
+    string ChipB,
+    bool Starred,
+    string State,
+    string StateTone,
+    string StateDetail,
+    int Strength,
+    string Due,
+    string DueTone,
+    string DueDetail,
+    string Updated,
+    string UpdatedBy)
+{
+    public Visibility StarVisibility => Shown(Starred);
+    public Visibility ChipAVisibility => Shown(ChipA.Length > 0);
+    public Visibility ChipBVisibility => Shown(ChipB.Length > 0);
+
+    // Passwords show a strength meter; assets and documents a status pill.
+    public Visibility BarsVisibility => Shown(Strength >= 0);
+    public Visibility PillVisibility => Shown(Strength < 0 && State.Length > 0);
+    public Visibility StateDetailVisibility => Shown(StateDetail.Length > 0);
+    public Brush StateForeground => Foreground(Strength >= 0 ? StrengthTone : StateTone);
+    public Brush StateBackground => Background(StateTone);
+    public Brush StateDetailForeground => Foreground("critical");
+    public Brush DueForeground => Foreground(DueTone);
+
+    public Brush Bar1 => Bar(1);
+    public Brush Bar2 => Bar(2);
+    public Brush Bar3 => Bar(3);
+    public Brush Bar4 => Bar(4);
+
+    private string StrengthTone => Strength switch
+    {
+        <= 1 => "critical",
+        2 => "caution",
+        _ => "good",
+    };
+
+    // 0 and 1 both show one bar, so even the weakest password shows something.
+    private Brush Bar(int place) => place <= Math.Max(1, Strength) ? Foreground(StrengthTone) : Resource("ControlStrongFillColorDisabledBrush");
+
+    private static Brush Foreground(string tone) => Resource(tone switch
+    {
+        "good" => "SystemFillColorSuccessBrush",
+        "caution" => "SystemFillColorCautionBrush",
+        "critical" => "SystemFillColorCriticalBrush",
+        "quiet" => "TextFillColorTertiaryBrush",
+        _ => "TextFillColorSecondaryBrush",
+    });
+
+    private static Brush Background(string tone) => Resource(tone switch
+    {
+        "good" => "SystemFillColorSuccessBackgroundBrush",
+        "caution" => "SystemFillColorCautionBackgroundBrush",
+        "critical" => "SystemFillColorCriticalBackgroundBrush",
+        _ => "SubtleFillColorTertiaryBrush",
+    });
+
+    private static Brush Resource(string key) => (Brush)Application.Current.Resources[key];
+
+    private static Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
+}
+
+/// <summary>Picks the client layout for the Clients page, the item layout for lists of one kind, and the plain one elsewhere.</summary>
 public sealed partial class RowTemplates : DataTemplateSelector
 {
     public DataTemplate? Plain { get; set; }
 
     public DataTemplate? Client { get; set; }
 
-    protected override DataTemplate? SelectTemplateCore(object item) => item is Row { Facts: not null } ? Client : Plain;
+    public DataTemplate? Item { get; set; }
+
+    protected override DataTemplate? SelectTemplateCore(object item) => item switch
+    {
+        Row { Facts: not null } => Client,
+        Row { Item: not null } => Item,
+        _ => Plain,
+    };
 
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container) => SelectTemplateCore(item);
 }

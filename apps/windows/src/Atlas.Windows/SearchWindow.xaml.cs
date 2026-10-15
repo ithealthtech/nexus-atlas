@@ -1588,18 +1588,28 @@ public sealed partial class SearchWindow : Window
                     empty = "You don't have access to any clients yet.";
                     break;
                 case "passwords":
-                    rows = [.. (await client.ListPasswordsAsync(clientId, cancel.Token))
-                        .Select(p => new Row("password", p.Id, p.Name, p.Username.Length > 0 ? p.Username : "No username", p.ClientId, p.ClientName))];
+                {
+                    var listed = client.ListPasswordsAsync(clientId, cancel.Token);
+                    dueById = await LoadDueAsync(client, cancel.Token);
+                    rows = [.. (await listed).Select(PasswordRow)];
                     break;
+                }
                 case "assets":
-                    assetCache = await client.ListAssetsAsync(clientId, cancel.Token);
+                {
+                    var listed = client.ListAssetsAsync(clientId, cancel.Token);
+                    dueById = await LoadDueAsync(client, cancel.Token);
+                    assetCache = await listed;
                     FillTypes();
                     rows = AssetRows();
                     break;
+                }
                 case "documents":
-                    rows = [.. (await client.ListDocumentsAsync(clientId, cancel.Token))
-                        .Select(d => new Row("document", d.Id, d.Title, d.ClientName is null ? "Knowledge base" : "Document", d.ClientId, d.ClientName ?? "Knowledge base"))];
+                {
+                    var listed = client.ListDocumentsAsync(clientId, cancel.Token);
+                    dueById = await LoadDueAsync(client, cancel.Token);
+                    rows = [.. (await listed).Select(DocumentRow)];
                     break;
+                }
                 case "search":
                     rows = [.. (await client.SearchAsync(place.Query ?? "", 40, cancel.Token))
                         .Select(r => new Row(r.Type, r.Id, r.Title, Join(Kind(r.Type), r.ClientName, Snippet(r.Snippet, r.Title)), r.ClientId, r.ClientName))];
@@ -1616,6 +1626,7 @@ public sealed partial class SearchWindow : Window
                 return;
             TypeFilter.Visibility = kind is "assets" or "clients" ? Visibility.Visible : Visibility.Collapsed;
             ClientHeader.Visibility = kind == "clients" ? Visibility.Visible : Visibility.Collapsed;
+            ShowItemHeader(kind);
             loaded = rows;
             grouping = groupBy;
             ListEmptyText.Text = place.Kind == "client" ? $"{place.Title} has no {place.Tab} in Atlas yet." : empty;
@@ -1708,11 +1719,7 @@ public sealed partial class SearchWindow : Window
         var layoutId = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
         return [.. assetCache
             .Where(a => layoutId is null || a.LayoutId == layoutId)
-            .Select(a =>
-            {
-                var facts = KeyFacts(a).Where(f => f.Kind is "ip" or "os" or "seen").Select(f => f.Value);
-                return new Row("asset", a.Id, a.Name, Join([a.LayoutName, .. facts]), a.ClientId, a.ClientName);
-            })];
+            .Select(AssetRow)];
     }
 
     private void TypeFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1721,6 +1728,174 @@ public sealed partial class SearchWindow : Window
             return;
         loaded = trail[^1].Kind == "clients" ? ClientRows() : AssetRows();
         Render();
+    }
+
+    // ---------- the Passwords, Assets, and Documents lists ----------
+    private Dictionary<string, ExpirationItem> dueById = [];
+
+    private static readonly string[] StrengthWords = ["Very weak", "Weak", "Fair", "Good", "Strong"];
+
+    /// <summary>What comes due in the next 60 days (rotation, expiry, review), by kind and id. Nothing if Atlas won't say.</summary>
+    private static async Task<Dictionary<string, ExpirationItem>> LoadDueAsync(AtlasClient client, CancellationToken cancel)
+    {
+        try
+        {
+            return (await client.GetExpirationsAsync(60, cancel))
+                .GroupBy(e => $"{e.Kind}:{e.Id}")
+                .ToDictionary(g => g.Key, g => g.MinBy(e => e.DaysLeft)!);
+        }
+        catch (AtlasApiException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>The Due column: when, coloured by how soon, and what it is.</summary>
+    private (string When, string Tone, string What) DueFor(string kind, string id)
+    {
+        if (!dueById.TryGetValue($"{kind}:{id}", out var due))
+            return ("", "quiet", "");
+        var when = due.DaysLeft switch
+        {
+            < -1 => $"{-due.DaysLeft} days overdue",
+            -1 => "1 day overdue",
+            0 => "Due today",
+            1 => "Tomorrow",
+            _ => $"In {due.DaysLeft} days",
+        };
+        var tone = due.DaysLeft < 0 ? "critical" : due.DaysLeft <= 14 ? "caution" : "neutral";
+        return (when, tone, due.Label);
+    }
+
+    private static (string When, string Who) Changed(string updatedAt, string? by) =>
+        (Ago(updatedAt) is { Length: > 0 } ago ? char.ToUpper(ago[0], CultureInfo.CurrentCulture) + ago[1..] : "", by is { Length: > 0 } ? $"by {by}" : "");
+
+    private Row PasswordRow(PasswordSummary p)
+    {
+        var host = Uri.TryCreate(p.Url, UriKind.Absolute, out var uri) ? uri.Authority : p.Url;
+        var (when, tone, what) = DueFor("password", p.Id);
+        var (changed, by) = Changed(p.UpdatedAt, p.UpdatedByName);
+        var strength = Math.Clamp(p.Strength, -1, 4);
+        var warning = p.BreachCount is > 0 ? $"In {p.BreachCount} breach{(p.BreachCount == 1 ? "" : "es")}"
+            : p.Reused > 1 ? $"Used {p.Reused} times"
+            : "";
+        var facts = new ItemFacts(
+            CategoryGlyph(p.Category, p.Kind),
+            Tile(Array.IndexOf(CategoryOrder, p.Category) is var i and >= 0 ? i : CategoryOrder.Length),
+            Join(p.Username.Length > 0 ? p.Username : "No username", host, p.FolderName),
+            p.HasTotp ? "2FA" : "",
+            p.RequireReason ? "Reason needed" : p.Restricted ? "Restricted" : "",
+            p.Favorite || starred.Contains($"password:{p.Id}"),
+            // A server older than the strength check sends no score: the column then stays empty.
+            strength >= 0 ? StrengthWords[strength] : "",
+            "neutral",
+            warning,
+            strength,
+            when,
+            tone,
+            what,
+            changed,
+            by);
+        var subtitle = Join(p.Username.Length > 0 ? p.Username : "No username", host, p.FolderName, p.HasTotp ? "2FA" : null, warning, when.Length > 0 ? $"{what} {when}" : null);
+        return new Row("password", p.Id, p.Name, subtitle, p.ClientId, p.ClientName) { Item = facts };
+    }
+
+    private Row AssetRow(AssetSummary a)
+    {
+        var keys = KeyFacts(a);
+        var line = Join([a.LayoutName, .. keys.Where(f => f.Kind is "ip" or "os" or "serial" or "model").Take(3).Select(f => f.Value)]);
+        var (when, tone, what) = DueFor("asset", a.Id);
+        var (changed, by) = Changed(a.UpdatedAt, a.UpdatedByName);
+        var status = a.Status switch { "active" => "Active", "inactive" => "Inactive", "retired" => "Retired", var s => s };
+        var seen = keys.FirstOrDefault(f => f.Kind == "seen").Value;
+        var layoutPlace = layouts.Values.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).Select(l => l.Id).ToList().IndexOf(a.LayoutId);
+        var facts = new ItemFacts(
+            LayoutGlyph(a.LayoutId, a.LayoutName),
+            Tile(layoutPlace < 0 ? 0 : layoutPlace + 3),
+            line,
+            "",
+            "",
+            starred.Contains($"asset:{a.Id}"),
+            status,
+            a.Status == "active" ? "good" : "neutral",
+            "",
+            -1,
+            when,
+            tone,
+            what.Length > 0 ? what : seen is { Length: > 0 } ? $"Seen {seen}" : "",
+            changed,
+            by);
+        return new Row("asset", a.Id, a.Name, Join(line, status, when.Length > 0 ? $"{what} {when}" : null), a.ClientId, a.ClientName) { Item = facts };
+    }
+
+    private Row DocumentRow(DocumentSummary d)
+    {
+        var (when, tone, what) = DueFor("document", d.Id);
+        if (when.Length == 0 && d.ReviewDate is { } review && DateTime.TryParse(review, CultureInfo.InvariantCulture, DateTimeStyles.None, out var on))
+            (when, tone, what) = ($"Review {on:MMM d}", "neutral", "Review date");
+        var (changed, by) = Changed(d.UpdatedAt, d.UpdatedByName);
+        var (status, statusTone) = d.Status switch
+        {
+            "current" => ("Current", "good"),
+            "needs_review" => ("Needs review", "caution"),
+            "draft" => ("Draft", "neutral"),
+            var s => (s, "neutral"),
+        };
+        var where = d.ClientName ?? "Knowledge base";
+        var facts = new ItemFacts(
+            "",
+            Tile(statusTone switch { "good" => 1, "caution" => 4, _ => 7 }),
+            where,
+            "",
+            "",
+            starred.Contains($"document:{d.Id}"),
+            status,
+            statusTone,
+            "",
+            -1,
+            when,
+            tone,
+            what,
+            changed,
+            by);
+        return new Row("document", d.Id, d.Title, Join(where, status, when.Length > 0 ? $"{what} {when}" : null), d.ClientId, where) { Item = facts };
+    }
+
+    private static readonly string[] CategoryOrder = ["domain", "cloud", "email", "network", "wifi", "server", "database", "remote", "application", "vendor", "website", "device", "other"];
+
+    // An icon for what the login is for; a key when Atlas doesn't say.
+    private static string CategoryGlyph(string category, string kind) => kind == "note" ? "" : category switch
+    {
+        "cloud" => "",
+        "email" => "",
+        "network" => "",
+        "wifi" => "",
+        "remote" => "",
+        "website" => "",
+        "device" => "",
+        "domain" => "",
+        _ => "",
+    };
+
+    private string LayoutGlyph(string layoutId, string layoutName)
+    {
+        var icon = layouts.TryGetValue(layoutId, out var layout) ? layout.Icon : "";
+        var name = $"{icon} {layoutName}".ToLowerInvariant();
+        return name.Contains("globe", StringComparison.Ordinal) || name.Contains("domain", StringComparison.Ordinal) ? ""
+            : name.Contains("cert", StringComparison.Ordinal) || name.Contains("ssl", StringComparison.Ordinal) ? ""
+            : name.Contains("network", StringComparison.Ordinal) || name.Contains("wifi", StringComparison.Ordinal) ? ""
+            : name.Contains("print", StringComparison.Ordinal) ? ""
+            : name.Contains("licen", StringComparison.Ordinal) ? ""
+            : "";
+    }
+
+    /// <summary>Column names over the list, for the kind of thing it shows.</summary>
+    private void ShowItemHeader(string? kind)
+    {
+        ItemHeader.Visibility = kind is "passwords" or "assets" or "documents" ? Visibility.Visible : Visibility.Collapsed;
+        ItemHeaderName.Text = kind == "documents" ? "Title" : "Name";
+        ItemHeaderState.Text = kind == "passwords" ? "Strength" : "Status";
+        ItemHeaderDue.Text = kind == "documents" ? "Review" : "Due";
     }
 
     // ---------- the Clients page ----------

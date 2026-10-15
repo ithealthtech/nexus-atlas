@@ -96,8 +96,19 @@ try {
   Check ((Title) -eq 'Harbor Dental Group' -and (Shows 'Sam Ortiz*')) 'a new contact shows on the overview'
   Check (Shows '*sam@harbordental.demo*') 'the contact''s email shows'
 
+  # Each list, as a table.
+  Open 'Passwords'
+  Check (Shows 'Strength') 'the Passwords list shows its columns'
+  Check (Shows 'In 2 breaches') 'a breached password is flagged'
+  Shot '03b-passwords'
+  Open 'Documents'
+  Check (Shows 'Needs review') 'a document shows its status'
+  Shot '03c-documents'
+
   # An asset: the form is drawn from its type.
   Open 'Assets'
+  Check (Shows 'Warranty expires') 'an asset shows what is coming due'
+  Shot '03d-assets'
   Press (ById 'NewButton') 'New asset'
   Choose 'Client' 'Harbor Dental Group'; Choose 'Type' 'Configurations'
   Fill 'Name' 'HDG-SW-01'; Choose 'Type *' 'Switch'
