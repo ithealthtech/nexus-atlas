@@ -29,6 +29,8 @@ Refresh tokens are encrypted with Atlas's master key and organization-specific a
 
 If Microsoft revokes the grant or requires a fresh MFA/Conditional Access interaction, choose **Reconnect partner account**. If a customer check fails, verify the active GDAP relationship, the partner user's group membership and assigned roles, and the customer's app consent. Atlas surfaces a failed check rather than silently using application permissions.
 
+Failed Graph reads display recognized Microsoft error codes, fixed explanations, and a validated Microsoft request ID when available. Customer checks save the diagnostic in the tenant's status. Raw upstream messages and authentication challenges are not displayed or saved in that diagnostic. Unknown codes or non-JSON errors retain the HTTP status and endpoint without an invented explanation. These details describe the failed request; they do not establish that customer consent or GDAP assignments are correct.
+
 ## Screenshots
 
 Synthetic data only:

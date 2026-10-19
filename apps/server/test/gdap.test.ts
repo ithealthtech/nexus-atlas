@@ -28,6 +28,7 @@ function microsoft() {
     exchangeStarted: null as (() => void) | null,
     relationshipStatus: 'active',
     nextLink: '' as string,
+    graphError: null as { code: string; message: string } | null,
   };
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -92,6 +93,14 @@ function microsoft() {
     }
     if (url.pathname === '/v1.0/organization') {
       expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer access-for-${CUSTOMER}`);
+      if (state.graphError)
+        return Response.json(
+          { error: state.graphError },
+          {
+            status: 400,
+            headers: { 'request-id': '12345678-1234-1234-1234-123456789012' },
+          },
+        );
       return Response.json({ value: [{ id: CUSTOMER, displayName: 'Harbor Dental', verifiedDomains: [] }] });
     }
     if (['/v1.0/users', '/v1.0/subscribedSkus', '/v1.0/directoryRoles'].includes(url.pathname))
@@ -233,6 +242,24 @@ describe('GDAP Microsoft 365 delegated connection', () => {
     expect(response.data.tenants[0].status).toBe('failed');
     expect(response.data.tenants[0].detail).toContain('no active GDAP');
     expect(ms.state.calls.every((c) => c.grant !== 'client_credentials')).toBe(true);
+  });
+
+  it('saves safe Graph diagnostics in the customer check status without exposing credentials', async () => {
+    await connect();
+    const client = (await owner.call('POST', '/api/clients', { name: 'Harbor Dental' })).data;
+    await owner.call('POST', '/api/integrations/m365/tenants', { clientId: client.id, tenant: CUSTOMER });
+    ms.state.graphError = {
+      code: 'Request_UnsupportedQuery',
+      message: `Unsupported query. secret=${SECRET} refresh=${ms.state.refresh} access-for-${CUSTOMER}`,
+    };
+    const checked = await owner.call('POST', `/api/integrations/m365/tenants/${client.id}/check`, {});
+    expect(checked.data.tenants[0].status).toBe('failed');
+    expect(checked.data.tenants[0].detail).toContain('Microsoft code Request_UnsupportedQuery');
+    expect(checked.data.tenants[0].detail).toContain('Microsoft request ID 12345678-1234-1234-1234-123456789012');
+    const saved = await owner.call('GET', '/api/integrations/m365');
+    expect(saved.data.tenants[0].detail).toBe(checked.data.tenants[0].detail);
+    for (const secret of [SECRET, ms.state.refresh, `access-for-${CUSTOMER}`])
+      expect(JSON.stringify(saved.data)).not.toContain(secret);
   });
 
   it('runs the documentation sync with delegated customer access', async () => {

@@ -15,6 +15,7 @@ import { LayoutService } from '../layouts.js';
 import { contacts } from '../people.js';
 import { Scope } from '../scope.js';
 import type { StoredM365 } from '../settings.js';
+import { graphErrorDetail } from './m365-graph-error.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const SOURCE_NOTE = 'Synced from Microsoft 365.';
@@ -151,14 +152,15 @@ export class M365Client {
       } catch {
         throw new HttpError(502, 'Microsoft Graph could not be reached from this server.');
       }
+      const detail = res.ok ? '' : await graphErrorDetail(res);
       if (res.status === 403 || res.status === 401)
         throw new HttpError(
           400,
-          this.delegatedToken
+          (this.delegatedToken
             ? 'Delegated access was refused. Check the technician’s GDAP group assignment, active relationship, customer consent, and Directory.Read.All delegated permission.'
-            : 'The app can’t read this tenant’s directory. Give it the Directory.Read.All application permission, then grant consent in the tenant again.',
+            : 'The app can’t read this tenant’s directory. Give it the Directory.Read.All application permission, then grant consent in the tenant again.') + detail,
         );
-      if (!res.ok) throw new HttpError(502, `Microsoft Graph answered ${res.status} for ${path.split('?')[0]}.`);
+      if (!res.ok) throw new HttpError(502, `Microsoft Graph answered ${res.status} for ${path.split('?')[0]}.${detail}`);
       const body = (await res.json()) as { value?: Json[]; '@odata.nextLink'?: string };
       out.push(...(body.value ?? []));
       url = body['@odata.nextLink'];
