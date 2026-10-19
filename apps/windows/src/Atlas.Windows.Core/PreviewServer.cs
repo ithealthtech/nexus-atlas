@@ -76,6 +76,7 @@ public sealed class PreviewServer : HttpMessageHandler
                 new { key = "serial", label = "Serial number", type = "text" },
                 new { key = "os", label = "Operating system", type = "text" },
                 new { key = "warranty", label = "Warranty expires", type = "date" },
+                new { key = "screenconnect", label = "ScreenConnect session", type = "text" },
             },
         },
         new
@@ -97,7 +98,7 @@ public sealed class PreviewServer : HttpMessageHandler
         Asset("a-dc", Harbor, "Harbor Dental Group", "l-config", "Configurations", "HDG-DC-01",
             new { type = "Server", hostname = "hdg-dc-01.harbor.local", ip = "10.20.0.10", manufacturer = "Dell", model = "PowerEdge T350", serial = "7HX2K93", os = "Windows Server 2022", warranty = "2027-03-31" }),
         Asset("a-fw", Harbor, "Harbor Dental Group", "l-config", "Configurations", "HDG-FW-01",
-            new { type = "Firewall", ip = "10.20.0.1", manufacturer = "Fortinet", model = "FortiGate 60F", serial = "FGT60FTK2209", os = "FortiOS 7.4.4" }),
+            new { type = "Firewall", ip = "10.20.0.1", manufacturer = "Fortinet", model = "FortiGate 60F", serial = "FGT60FTK2209", os = "FortiOS 7.4.4", screenconnect = "6f1c2a9e-4b7d-4e2a-9c31-0d5b8e7f4a12" }),
         Asset("a-domain", Harbor, "Harbor Dental Group", "l-domain", "Domains", "harbordental.demo", new { registrar = "Cloudflare", expires = "2026-10-28" }),
         Asset("a-nas", Northline, "Northline Architecture", "l-config", "Configurations", "NLA-NAS-01",
             new { type = "Storage", ip = "10.30.0.20", manufacturer = "Synology", model = "RS1221+", serial = "2290QWR8N1", os = "DSM 7.2" }),
@@ -398,6 +399,98 @@ public sealed class PreviewServer : HttpMessageHandler
         new { id = "lo-cary", clientId = Harbor, name = "Cary office", address = "22 Kildaire Farm Rd", city = "Cary", region = "NC", postalCode = "27511", country = "US", phone = "", notes = "", primary = false },
     ];
 
+    // ---------- archived items, history, related items, and files ----------
+    private readonly List<Dictionary<string, object?>> archivedPasswords =
+        [Mutable(Pw("p-oldvpn", Cedar, "Cedar Ridge Credit Union", "Old VPN admin", "vpnadmin", "", false, category: "remote"))];
+
+    private readonly List<Dictionary<string, object?>> archivedAssets = [];
+
+    private static object Ref(string type, string id, string title, string subtitle) =>
+        new { type, id, title, subtitle, clientId = Harbor, clientName = "Harbor Dental Group", note = "" };
+
+    private static readonly Dictionary<string, object[]> Related = new()
+    {
+        ["asset:a-fw"] = [Ref("password", "p-fw", "HDG-FW-01 admin", "admin"), Ref("document", "d-reboot", "Firewall reboot procedure", "Document")],
+        ["password:p-fw"] = [Ref("asset", "a-fw", "HDG-FW-01", "Configurations")],
+        ["document:d-reboot"] = [Ref("asset", "a-fw", "HDG-FW-01", "Configurations")],
+    };
+
+    private static readonly Dictionary<string, object[]> Files = new()
+    {
+        ["asset:a-dc"] = [new { id = "f-quote", filename = "Dell warranty quote.pdf", size = 48213L, uploadedByName = "Alex Rivera", createdAt = Now, contentType = "application/pdf" }],
+        ["password:p-fw"] = [new { id = "f-conf", filename = "HDG-FW-01 backup.conf", size = 18034L, uploadedByName = "Alex Rivera", createdAt = Now, contentType = "text/plain" }],
+    };
+
+    private async Task<HttpResponseMessage?> ExtrasAsync(HttpRequestMessage request, string tail, string? client, bool archivedList, CancellationToken cancellationToken)
+    {
+        static HttpResponseMessage Ok(object body) => new(HttpStatusCode.OK) { Content = Json(body) };
+        static HttpResponseMessage Bytes(string text) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(Encoding.UTF8.GetBytes(text)) };
+        var get = request.Method == HttpMethod.Get;
+        if (get && archivedList)
+        {
+            object[]? list = tail switch
+            {
+                "passwords" => [.. archivedPasswords.Cast<object>()],
+                "assets" => [.. archivedAssets.Cast<object>()],
+                "documents" => [.. docs.Where(d => d.TryGetValue("archived", out var a) && a is true).Cast<object>()],
+                _ => null,
+            };
+            return list is null ? null : Ok(Filter(list, client));
+        }
+        var archive = System.Text.RegularExpressions.Regex.Match(tail, "^(passwords|assets|documents)/([^/]+)/archive$");
+        if (archive.Success && request.Method == HttpMethod.Post)
+        {
+            var raw = await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var restoring = raw.Contains("\"archived\":false", StringComparison.Ordinal);
+            var id = archive.Groups[2].Value;
+            if (archive.Groups[1].Value == "documents")
+            {
+                var doc = docs.FirstOrDefault(d => (string?)d["id"] == id);
+                if (doc is null)
+                    return null;
+                doc["archived"] = !restoring;
+                return Ok(doc);
+            }
+            var (live, gone) = archive.Groups[1].Value == "passwords" ? (passwords, archivedPasswords) : (assets, archivedAssets);
+            var (from, to) = restoring ? (gone, live) : (live, gone);
+            var found = from.FirstOrDefault(e => (string?)e["id"] == id);
+            if (found is null)
+                return null;
+            from.Remove(found);
+            to.Add(found);
+            return Ok(found);
+        }
+        var history = System.Text.RegularExpressions.Regex.Match(tail, "^passwords/([^/]+)/history(/[^/]+/reveal)?$");
+        if (history.Success)
+        {
+            if (history.Groups[2].Success)
+                return Ok(new { value = "Harbor-FW-2025!", expiresIn = (int?)null });
+            object[] versions = history.Groups[1].Value == "p-fw"
+                ?
+                [
+                    new { id = "h-2", changedByName = "Alex Rivera", createdAt = DateTime.UtcNow.AddDays(-30).ToString("O") },
+                    new { id = "h-1", changedByName = "Sam Ortiz", createdAt = DateTime.UtcNow.AddDays(-200).ToString("O") },
+                ]
+                : [];
+            return Ok(versions);
+        }
+        var item = System.Text.RegularExpressions.Regex.Match(tail, "^items/(password|asset|document)/([^/]+)/(relations|attachments)$");
+        if (item.Success && get)
+        {
+            var key = $"{item.Groups[1].Value}:{item.Groups[2].Value}";
+            var table = item.Groups[3].Value == "relations" ? Related : Files;
+            return Ok(table.TryGetValue(key, out var rows) ? rows : Array.Empty<object>());
+        }
+        var passwordFiles = System.Text.RegularExpressions.Regex.Match(tail, "^passwords/([^/]+)/attachments(/[^/]+/download)?$");
+        if (passwordFiles.Success)
+            return passwordFiles.Groups[2].Success
+                ? Bytes("# HDG-FW-01 configuration backup (preview)\n")
+                : Ok(Files.TryGetValue($"password:{passwordFiles.Groups[1].Value}", out var rows) ? rows : Array.Empty<object>());
+        if (get && System.Text.RegularExpressions.Regex.IsMatch(tail, "^attachments/[^/]+/content$"))
+            return Bytes("%PDF-1.4 (preview)\n");
+        return null;
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         await Task.Delay(60, cancellationToken).ConfigureAwait(false);
@@ -405,6 +498,8 @@ public sealed class PreviewServer : HttpMessageHandler
         var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
         var client = query["client"];
         var tail = path[(path.IndexOf("/api/v1/", StringComparison.Ordinal) + 8)..];
+        if (await ExtrasAsync(request, tail, client, query["archived"] == "true", cancellationToken).ConfigureAwait(false) is { } extra)
+            return extra;
         if (await ChangeVaultAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changed)
             return changed;
         if (await ChangeAssetsAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedAsset)
@@ -449,9 +544,9 @@ public sealed class PreviewServer : HttpMessageHandler
                 (await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).Contains("\"totp\"")
                     ? new { value = "482193", expiresIn = (int?)18 }
                     : new { value = "c7Hq-29Lm-Vx4r-Np8e", expiresIn = (int?)null },
-            _ when tail.StartsWith("passwords/", StringComparison.Ordinal) => Find(Vault(), tail[10..]),
-            _ when tail.StartsWith("assets/", StringComparison.Ordinal) => Find(Things(), tail[7..]),
-            _ when tail.StartsWith("documents/", StringComparison.Ordinal) => Find(Docs(), tail[10..]),
+            _ when tail.StartsWith("passwords/", StringComparison.Ordinal) => Find([.. Vault(), .. archivedPasswords.Cast<object>()], tail[10..]),
+            _ when tail.StartsWith("assets/", StringComparison.Ordinal) => Find([.. Things(), .. archivedAssets.Cast<object>()], tail[7..]),
+            _ when tail.StartsWith("documents/", StringComparison.Ordinal) => Find([.. docs.Cast<object>()], tail[10..]),
             _ => null,
         };
         if (body is null)
@@ -465,6 +560,7 @@ public sealed class PreviewServer : HttpMessageHandler
         organization = new { id = "o-1", name = "IT Done Right" },
         deviceName = Environment.MachineName,
         scopes = new[] { "read", "write", "reveal" },
+        screenConnect = new { url = "https://itdoneright.screenconnect.demo", group = "All Machines" },
     };
 
     private static object[] Filter(object[] items, string? client) =>

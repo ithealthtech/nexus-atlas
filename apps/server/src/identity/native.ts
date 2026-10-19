@@ -28,6 +28,8 @@ const REVEAL_ROUTE = /^\/api\/passwords\/[^/]+\/(reveal|history\/[^/]+\/reveal)$
 // Starring and unstarring, which the app may do with only "read" (see authenticate).
 const STAR_ROUTE = /^\/api\/favorites\/(client|asset|document)\/[^/]+$/;
 const PASSWORD_STAR_ROUTE = /^\/api\/passwords\/[^/]+\/favorite$/;
+// A file on an asset or document, read like the item it's on. (A password's files go through the vault.)
+const ATTACHMENT_CONTENT = /^\/api\/attachments\/[^/]+\/content$/;
 // The app's own session (who am I, sign out) is always available to it.
 const OWN_SESSION = '/api/native/session';
 
@@ -202,7 +204,8 @@ export class NativeAppService {
     if (path !== OWN_SESSION) {
       // The desktop app lists what the person starred, and can star and unstar things. A star is the person's own
       // bookmark: it changes nothing anyone else sees and leaves no record, so it needs only "read".
-      const listing = path === '/api/favorites' && (method === 'GET' || method === 'HEAD');
+      const listing =
+        (path === '/api/favorites' || ATTACHMENT_CONTENT.test(path)) && (method === 'GET' || method === 'HEAD');
       const starring =
         (method === 'PUT' || method === 'DELETE') && (STAR_ROUTE.test(path) || PASSWORD_STAR_ROUTE.test(path));
       if (!listing && !starring && !API_ROUTES.some((r) => r.test(path)))

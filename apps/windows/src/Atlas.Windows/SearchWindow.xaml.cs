@@ -50,6 +50,8 @@ public sealed partial class SearchWindow : Window
     private List<ClientChoice> clients = [];
     private IReadOnlyList<AssetSummary> assetCache = [];
     private List<Row> loaded = [];
+    // The page the loaded rows belong to. Rows are only ever shown on that page.
+    private Place? loadedFor;
     private Func<Row, string>? grouping;
     private bool fillingTypes;
     private bool switchingTabs;
@@ -72,6 +74,15 @@ public sealed partial class SearchWindow : Window
         hwnd = WindowNative.GetWindowHandle(this);
         clipboard = new ClipboardGuard(new Native.Clipboard(hwnd), TimeProvider.System);
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
+        _ = SetUpHelloAsync();
+
+        // An update found before this window opened shows at once; one found later shows when it's found. A closed
+        // window stops listening.
+        void UpdateChanged() => DispatcherQueue.TryEnqueue(ShowUpdate);
+        app.UpdateChanged += UpdateChanged;
+        Closed += (_, _) => app.UpdateChanged -= UpdateChanged;
+        CheckUpdatesItem.Text = $"Check for updates (you have {AppInfo.VersionText})";
+        ShowUpdate();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -147,6 +158,11 @@ public sealed partial class SearchWindow : Window
     // ---------- showing ----------
     public void ShowSetup(string? address, string? message = null)
     {
+        if (hello.Locked)
+        {
+            Bring();
+            return;
+        }
         MainPanel.Visibility = Visibility.Collapsed;
         SetupPanel.Visibility = Visibility.Visible;
         QueryBox.Visibility = Visibility.Collapsed;
@@ -167,6 +183,13 @@ public sealed partial class SearchWindow : Window
 
     public void ShowSearch()
     {
+        // Locked: the window comes up with only the way to unlock it.
+        if (hello.Locked)
+        {
+            Bring();
+            UnlockButton.Focus(FocusState.Programmatic);
+            return;
+        }
         SetupPanel.Visibility = Visibility.Collapsed;
         MainPanel.Visibility = Visibility.Visible;
         QueryBox.Visibility = Visibility.Visible;
@@ -189,7 +212,11 @@ public sealed partial class SearchWindow : Window
 
     private void Bring()
     {
+        // Minimized stays minimized after Show, so restore it first.
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } presenter)
+            presenter.Restore();
         AppWindow.Show();
+        AppWindow.MoveInZOrderAtTop();
         Activate();
         Native.SetForegroundWindow(hwnd);
     }
@@ -204,6 +231,7 @@ public sealed partial class SearchWindow : Window
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
             canWrite = session.CanWrite;
+            screenConnect = session.ScreenConnect;
             ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
             AccountInitials.Text = Initials(session.User.Name);
             AppTitleBar.Subtitle = session.Organization.Name;
@@ -318,6 +346,7 @@ public sealed partial class SearchWindow : Window
         QueryBox.TextChanged -= QueryBox_TextChanged;
         QueryBox.Text = "";
         QueryBox.TextChanged += QueryBox_TextChanged;
+        ArchivedToggle.IsChecked = false;
         Go(new Place(chosen.Id, chosen.Label), fresh: true);
     }
 
@@ -359,9 +388,16 @@ public sealed partial class SearchWindow : Window
         NewButton.Visibility = canWrite && (showsPasswords || showsAssets || showsDocuments) ? Visibility.Visible : Visibility.Collapsed;
         NewText.Text = showsAssets ? "New asset" : showsDocuments ? "New document" : "New password";
         // A document says whether you may change it once it's open (see ShowDocument).
-        var editable = canWrite && place.Item is { Kind: "password" or "asset" };
+        var editable = canWrite && place.Item is { Kind: "password" or "asset", Archived: false };
         EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        ConnectButton.Visibility = Visibility.Collapsed;
+        connectLink = null;
         ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        RestoreButton.Visibility = canWrite && place.Item is { Archived: true } ? Visibility.Visible : Visibility.Collapsed;
+        var listKind = place.Kind == "client" ? place.Tab : place.Kind;
+        ArchivedToggle.Visibility = listKind is "passwords" or "assets" or "documents" ? Visibility.Visible : Visibility.Collapsed;
+        if (ArchivedToggle.IsChecked == true && listKind is "passwords" or "assets" or "documents")
+            NewButton.Visibility = Visibility.Collapsed;
         ListPanel.Visibility = isItem || isOverview || isEditor ? Visibility.Collapsed : Visibility.Visible;
         DetailScroll.Visibility = isItem || isOverview || isEditor ? Visibility.Visible : Visibility.Collapsed;
         DetailBar.Visibility = isItem ? Visibility.Visible : Visibility.Collapsed;
@@ -411,6 +447,13 @@ public sealed partial class SearchWindow : Window
                 return;
             }
         }
+        // The rows on screen belong to the page before: clear them first, so none of them show under this page's
+        // title while it loads, or after if loading fails.
+        loaded = [];
+        loadedFor = null;
+        grouping = null;
+        Results.ItemsSource = null;
+        ListEmpty.Visibility = Visibility.Collapsed;
         FilterBox.Text = "";
         _ = LoadPageAsync();
     }
@@ -1527,6 +1570,480 @@ public sealed partial class SearchWindow : Window
         }
     }
 
+    // ---------- related items, files, earlier passwords, and archived items ----------
+    /// <summary>The cards under an item: what it's linked to, its files, and (for a password) its earlier versions.</summary>
+    private async Task ShowExtrasAsync(Row row, AtlasClient client, CancellationToken cancel)
+    {
+        if (row.Kind is not ("password" or "asset" or "document"))
+            return;
+        // An Atlas older than this app, or a list this person can't see, just leaves its card out.
+        static async Task<IReadOnlyList<T>> Maybe<T>(Task<IReadOnlyList<T>> task)
+        {
+            try
+            {
+                return await task;
+            }
+            catch (AtlasApiException)
+            {
+                return [];
+            }
+        }
+        var relatedTask = Maybe(client.ListRelatedAsync(row.Kind, row.Id, cancel));
+        var filesTask = Maybe(client.ListAttachmentsAsync(row.Kind, row.Id, cancel));
+        var historyTask = row.Kind == "password" ? Maybe(client.ListPasswordHistoryAsync(row.Id, cancel)) : Task.FromResult<IReadOnlyList<PasswordVersion>>([]);
+        await Task.WhenAll(relatedTask, filesTask, historyTask);
+        if (cancel.IsCancellationRequested || current != row)
+            return;
+        if (relatedTask.Result is { Count: > 0 } related)
+            Detail.Children.Add(Card("Related", [.. related.Select(RelatedRow)]));
+        if (filesTask.Result is { Count: > 0 } files)
+            Detail.Children.Add(Card("Files", [.. files.Select(f => FileRow(row, f))]));
+        if (historyTask.Result is { Count: > 0 } history)
+            Detail.Children.Add(Card("Earlier passwords", [.. history.Select(v => VersionRow(row, v))]));
+    }
+
+    private UIElement RelatedRow(RelatedItem item) => Field(
+        Kind(item.Type),
+        Value(Join(item.Title, item.Subtitle, item.Note)),
+        IconButton("", $"Open {item.Title}", (_, _) =>
+            Go(new Place("item", item.Title, Item: new Row(item.Type, item.Id, item.Title, item.Subtitle, item.ClientId, item.ClientName)))));
+
+    private UIElement FileRow(Row item, AttachmentInfo file) => Field(
+        file.Filename,
+        Value(Join(Size(file.Size), file.UploadedByName is { Length: > 0 } by ? $"added by {by}" : null, When(file.CreatedAt))),
+        IconButton("", $"Save {file.Filename}…", (_, _) => _ = SaveFileAsync(item, file)));
+
+    private static string Size(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} bytes",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB",
+    };
+
+    /// <summary>
+    /// Saves a file where the person chooses. Nothing is opened, so a program attached to an item never runs from
+    /// here. A password's files are recorded like a reveal and may need a reason.
+    /// </summary>
+    private async Task SaveFileAsync(Row item, AttachmentInfo file, string reason = "")
+    {
+        if (item.Kind == "password" && !await SecretCheckAsync("Save a password attachment"))
+            return;
+        if (app.Client is not { } client)
+            return;
+        var picker = new global::Windows.Storage.Pickers.FileSavePicker
+        {
+            SuggestedFileName = Path.GetFileNameWithoutExtension(file.Filename),
+            SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.Downloads,
+        };
+        var extension = Path.GetExtension(file.Filename);
+        if (extension.Length == 0)
+            extension = ".bin";
+        picker.FileTypeChoices.Add($"{extension.TrimStart('.').ToUpperInvariant()} file", [extension]);
+        InitializeWithWindow.Initialize(picker, hwnd);
+        var target = await picker.PickSaveFileAsync();
+        if (target is null)
+            return;
+        try
+        {
+            var bytes = await client.DownloadAttachmentAsync(item.Kind, item.Id, file.Id, reason);
+            await global::Windows.Storage.FileIO.WriteBytesAsync(target, bytes);
+            Show($"Saved {target.Name}.", InfoBarSeverity.Success);
+        }
+        catch (AtlasApiException ex) when (ex.Code == "reason_required" && reason.Length == 0)
+        {
+            if (await AskReasonAsync() is { } given)
+                await SaveFileAsync(item, file, given);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+        catch (IOException ex)
+        {
+            Show($"The file couldn't be saved: {ex.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    /// <summary>An earlier version of a password: show it, copy it, or (with permission to edit) make it current again.</summary>
+    private UIElement VersionRow(Row item, PasswordVersion version)
+    {
+        const string masked = "••••••••••••";
+        var value = Value(masked, mono: true);
+        var actions = new List<Button>
+        {
+            IconButton("", "Show for 30 seconds", async (_, _) =>
+            {
+                if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
+                    return;
+                HideSecrets();
+                value.Text = secret;
+                shown = (value, masked);
+                hideTimer = new DispatcherTimer { Interval = ShowFor };
+                hideTimer.Tick += (_, _) => HideSecrets();
+                hideTimer.Start();
+            }),
+            IconButton("", "Copy", async (_, _) =>
+            {
+                if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
+                    return;
+                clipboard.Copy(secret, sensitive: true);
+                Show("Earlier password copied. The clipboard clears in 30 seconds.", InfoBarSeverity.Success);
+            }),
+        };
+        if (canWrite)
+            actions.Add(IconButton("", "Make this the current password again", (_, _) => _ = RestoreVersionAsync(item, version)));
+        return Field($"Replaced {When(version.CreatedAt)} by {version.ChangedByName}", value, [.. actions]);
+    }
+
+    private async Task<string?> RevealOldAsync(string passwordId, string versionId)
+    {
+        if (!await SecretCheckAsync("Show or copy an earlier password"))
+            return null;
+        if (app.Client is not { } client)
+            return null;
+        try
+        {
+            return (await client.RevealOldPasswordAsync(passwordId, versionId)).Value;
+        }
+        catch (AtlasApiException ex) when (ex.Code == "reason_required")
+        {
+            if (await AskReasonAsync() is not { } given)
+                return null;
+            try
+            {
+                return (await client.RevealOldPasswordAsync(passwordId, versionId, given)).Value;
+            }
+            catch (Exception again) when (again is AtlasApiException or HttpRequestException)
+            {
+                Fail(again);
+                return null;
+            }
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return null;
+        }
+    }
+
+    /// <summary>Saves an earlier password as the current one. The one it replaces goes into the history in turn.</summary>
+    private async Task RestoreVersionAsync(Row item, PasswordVersion version)
+    {
+        if (app.Client is not { } client || password is not { } entry || entry.Id != item.Id)
+            return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Make this the current password again?",
+            Content = $"The password from {When(version.CreatedAt)} replaces the current one, which is kept in the history. Change it on the device or account too if it's no longer in use there.",
+            PrimaryButtonText = "Restore",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || await RevealOldAsync(item.Id, version.Id) is not { } secret)
+            return;
+        try
+        {
+            await client.UpdatePasswordAsync(entry.Id, entry.Version, new PasswordDraft(entry.Name, entry.Username, entry.Url, secret, null, null, entry.RotationDays, entry.FolderId));
+            ShowPlace();
+            Show("Restored. The password it replaced is in the history.", InfoBarSeverity.Success);
+        }
+        catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+        {
+            Show("Someone changed this password meanwhile. Open it again and retry.", InfoBarSeverity.Warning);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    private void ArchivedToggle_Click(object sender, RoutedEventArgs e) => ShowPlace();
+
+    /// <summary>Brings an archived item back into the lists and search.</summary>
+    private async void Restore_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is not { Archived: true } row || app.Client is not { } client)
+            return;
+        try
+        {
+            switch (row.Kind)
+            {
+                case "password":
+                    await client.ArchivePasswordAsync(row.Id, archived: false);
+                    break;
+                case "asset":
+                    await client.ArchiveAssetAsync(row.Id, archived: false);
+                    break;
+                case "document":
+                    await client.ArchiveDocumentAsync(row.Id, archived: false);
+                    break;
+                default:
+                    return;
+            }
+            Back();
+            Show($"{row.Title} restored.", InfoBarSeverity.Success);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    // ---------- Windows Hello and locking ----------
+    private readonly HelloPolicy hello = new(TimeProvider.System);
+    private bool helloAvailable;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? idleTimer;
+    private (Visibility Main, Visibility Setup)? beforeLock;
+
+    private static readonly (string Label, int Minutes)[] GraceChoices = [("Every time", 0), ("After 5 minutes", 5), ("After 15 minutes", 15)];
+    private static readonly (string Label, int Minutes)[] LockChoices = [("After 5 minutes", 5), ("After 15 minutes", 15), ("After 30 minutes", 30), ("After 1 hour", 60), ("Never", 0)];
+
+    /// <summary>
+    /// Finds out whether Windows Hello is set up here, applies the person's choices, and starts watching for the
+    /// computer being left alone. Without Windows Hello nothing is asked and nothing locks.
+    /// </summary>
+    private async Task SetUpHelloAsync()
+    {
+        helloAvailable = await WindowsHello.IsAvailableAsync();
+        hello.Apply(app.Settings);
+        BuildHelloMenu();
+        idleTimer = DispatcherQueue.CreateTimer();
+        idleTimer.Interval = TimeSpan.FromSeconds(20);
+        idleTimer.Tick += (_, _) =>
+        {
+            if (helloAvailable && hello.ShouldLock(Native.IdleTime()))
+                LockApp($"It locked after {Minutes(hello.LockAfter!.Value)} without use.");
+        };
+        idleTimer.Start();
+    }
+
+    private static string Minutes(TimeSpan span) => span.TotalMinutes >= 60 && span.TotalMinutes % 60 == 0
+        ? $"{span.TotalHours:0} hour{(span.TotalHours == 1 ? "" : "s")}"
+        : $"{span.TotalMinutes:0} minutes";
+
+    /// <summary>The Windows Hello choices in the account menu.</summary>
+    private void BuildHelloMenu()
+    {
+        HelloMenu.Items.Clear();
+        if (!helloAvailable)
+        {
+            HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Windows Hello isn't set up on this PC", IsEnabled = false });
+            HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Set it up in Windows Settings › Accounts › Sign-in options", IsEnabled = false });
+            return;
+        }
+        var settings = app.Settings;
+        var ask = new ToggleMenuFlyoutItem { Text = "Ask before showing or copying a password", IsChecked = settings.HelloForSecrets };
+        ask.Click += (_, _) => ChangeHello(s => s with { HelloForSecrets = ask.IsChecked });
+        HelloMenu.Items.Add(ask);
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Ask again", IsEnabled = false });
+        foreach (var (label, minutes) in GraceChoices)
+        {
+            var choice = new RadioMenuFlyoutItem { Text = label, GroupName = "grace", IsChecked = settings.HelloGraceMinutes == minutes };
+            choice.Click += (_, _) => ChangeHello(s => s with { HelloGraceMinutes = minutes });
+            HelloMenu.Items.Add(choice);
+        }
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Lock when the PC isn't used", IsEnabled = false });
+        foreach (var (label, minutes) in LockChoices)
+        {
+            var choice = new RadioMenuFlyoutItem { Text = label, GroupName = "lock", IsChecked = settings.LockAfterMinutes == minutes };
+            choice.Click += (_, _) => ChangeHello(s => s with { LockAfterMinutes = minutes });
+            HelloMenu.Items.Add(choice);
+        }
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        var lockNow = new MenuFlyoutItem { Text = "Lock now", Icon = new FontIcon { Glyph = "" } };
+        lockNow.Click += (_, _) => LockApp("You locked it.");
+        HelloMenu.Items.Add(lockNow);
+    }
+
+    private void ChangeHello(Func<AppSettings, AppSettings> change)
+    {
+        app.UpdateSettings(change);
+        hello.Apply(app.Settings);
+        BuildHelloMenu();
+    }
+
+    /// <summary>
+    /// Before a password or code is shown or copied: asks for Windows Hello unless a check was passed in the last few
+    /// minutes (or Windows Hello isn't set up here). False when it didn't confirm the person.
+    /// </summary>
+    private async Task<bool> SecretCheckAsync(string message)
+    {
+        if (!helloAvailable || !hello.SecretNeedsCheck)
+            return true;
+        if (await WindowsHello.VerifyAsync(hwnd, message) is { } problem)
+        {
+            Show($"{problem} Nothing was shown or copied.", InfoBarSeverity.Warning);
+            return false;
+        }
+        hello.Verified();
+        return true;
+    }
+
+    /// <summary>Covers the window until Windows Hello confirms the person. Secrets on screen are hidden first.</summary>
+    private void LockApp(string why)
+    {
+        if (!helloAvailable)
+            return;
+        hello.Lock();
+        HideSecrets();
+        if (LockPanel.Visibility == Visibility.Visible)
+            return;
+        beforeLock = (MainPanel.Visibility, SetupPanel.Visibility);
+        MainPanel.Visibility = Visibility.Collapsed;
+        SetupPanel.Visibility = Visibility.Collapsed;
+        QueryBox.IsEnabled = false;
+        AccountButton.IsEnabled = false;
+        LockReason.Text = $"{why} Nothing shows until Windows Hello confirms it's you.";
+        LockPanel.Visibility = Visibility.Visible;
+    }
+
+    private async void Unlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (await WindowsHello.VerifyAsync(hwnd, "Unlock Atlas") is { } problem)
+        {
+            LockReason.Text = problem;
+            return;
+        }
+        hello.Verified();
+        LockPanel.Visibility = Visibility.Collapsed;
+        QueryBox.IsEnabled = true;
+        AccountButton.IsEnabled = true;
+        if (beforeLock is { } was)
+        {
+            MainPanel.Visibility = was.Main;
+            SetupPanel.Visibility = was.Setup;
+        }
+        beforeLock = null;
+    }
+
+    // ---------- ScreenConnect ----------
+    private ScreenConnectInfo? screenConnect;
+    private Uri? connectLink;
+
+    /// <summary>Connect, for a device, when the organization has set its ScreenConnect address in Atlas.</summary>
+    private void ShowConnect(AssetSummary asset)
+    {
+        layouts.TryGetValue(asset.LayoutId, out var layout);
+        connectLink = screenConnect?.LinkFor(asset, layout);
+        if (connectLink is null)
+        {
+            ConnectButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var joins = ScreenConnectInfo.SessionIdOf(asset, layout) is not null;
+        ConnectText.Text = joins ? "Connect" : "Find in ScreenConnect";
+        var tip = joins
+            ? "Join this device's ScreenConnect session."
+            : $"Open ScreenConnect searching for {ScreenConnectInfo.NameToFind(asset, layout)}. Add the session ID to the asset to join it directly.";
+        ToolTipService.SetToolTip(ConnectButton, tip);
+        AutomationProperties.SetName(ConnectButton, ConnectText.Text);
+        ConnectButton.Visibility = Visibility.Visible;
+    }
+
+    private void Connect_Click(object sender, RoutedEventArgs e)
+    {
+        if (connectLink is null)
+            return;
+        _ = Launcher.LaunchUriAsync(connectLink);
+        Show(ConnectText.Text == "Connect" ? "Opening the session in ScreenConnect…" : "Opening ScreenConnect…", InfoBarSeverity.Informational);
+    }
+
+    // ---------- updating the app ----------
+    private string? dismissedUpdate;
+    private bool installingUpdate;
+
+    /// <summary>Shows the update bar when Atlas offers a newer version of this app, unless it was put away for that version.</summary>
+    internal void ShowUpdate()
+    {
+        if (installingUpdate)
+            return;
+        var release = app.AvailableUpdate;
+        if (release is null || dismissedUpdate == release.LatestVersion)
+        {
+            UpdateBar.IsOpen = false;
+            return;
+        }
+        UpdateBar.Severity = InfoBarSeverity.Informational;
+        UpdateBar.Title = $"Atlas for Windows {release.LatestVersion} is available";
+        UpdateBar.Message = $"You have {AppInfo.VersionText}. It installs in a few seconds, and the app opens again by itself.";
+        UpdateButton.Content = "Install and restart";
+        UpdateButton.IsEnabled = true;
+        UpdateProgress.Visibility = Visibility.Collapsed;
+        UpdateBrowserLink.Visibility = Visibility.Collapsed;
+        UpdateBar.IsOpen = true;
+    }
+
+    private void UpdateBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => dismissedUpdate = app.AvailableUpdate?.LatestVersion;
+
+    private async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (installingUpdate)
+            return;
+        installingUpdate = true;
+        UpdateButton.IsEnabled = false;
+        UpdateBrowserLink.Visibility = Visibility.Collapsed;
+        UpdateProgress.Value = 0;
+        UpdateProgress.Visibility = Visibility.Visible;
+        UpdateBar.IsClosable = false;
+        UpdateBar.Message = "Downloading…";
+        var progress = new Progress<double>(share =>
+        {
+            UpdateProgress.Value = share * 100;
+            UpdateBar.Message = share < 1 ? $"Downloading… {share:P0}" : "Checked. Installing; the app closes and opens again in a moment.";
+        });
+        try
+        {
+            await app.InstallUpdateAsync(progress);
+        }
+        catch (Exception ex) when (ex is UpdateFailedException or HttpRequestException or IOException or TaskCanceledException or System.ComponentModel.Win32Exception)
+        {
+            UpdateBar.Severity = InfoBarSeverity.Error;
+            UpdateBar.Title = "The update didn't install";
+            UpdateBar.Message = ex switch
+            {
+                UpdateFailedException failed => failed.Message,
+                HttpRequestException http => ConnectionProblem.Describe(http),
+                System.ComponentModel.Win32Exception => "Windows didn't start the setup program. You can download it in your browser instead.",
+                _ => "The download stopped. Check the connection and try again.",
+            };
+            UpdateButton.Content = "Try again";
+            UpdateButton.IsEnabled = true;
+            UpdateProgress.Visibility = Visibility.Collapsed;
+            UpdateBrowserLink.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            installingUpdate = false;
+            UpdateBar.IsClosable = true;
+        }
+    }
+
+    private void UpdateBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        if (app.AvailableUpdate?.DownloadLink is { } link)
+            _ = Launcher.LaunchUriAsync(link);
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        switch (await app.CheckForUpdateNowAsync())
+        {
+            case true:
+                dismissedUpdate = null;
+                ShowUpdate();
+                break;
+            case false:
+                Show($"You have the newest version, {AppInfo.VersionText}.", InfoBarSeverity.Success);
+                break;
+            default:
+                Show("Atlas couldn't be asked about updates just now. Try again later.", InfoBarSeverity.Warning);
+                break;
+        }
+    }
+
     private void OpenAtlas_Click(object sender, RoutedEventArgs e)
     {
         if (app.Client is { } client)
@@ -1559,6 +2076,9 @@ public sealed partial class SearchWindow : Window
             var empty = "Nothing here yet.";
             var kind = place.Kind == "client" ? place.Tab : place.Kind;
             var clientId = place.ClientId;
+            showingArchived = ArchivedToggle.IsChecked == true && kind is "passwords" or "assets" or "documents";
+            if (showingArchived)
+                empty = "Nothing archived here.";
             switch (kind)
             {
                 case "home":
@@ -1589,15 +2109,15 @@ public sealed partial class SearchWindow : Window
                     break;
                 case "passwords":
                 {
-                    var listed = client.ListPasswordsAsync(clientId, cancel.Token);
-                    dueById = await LoadDueAsync(client, cancel.Token);
-                    rows = [.. (await listed).Select(PasswordRow)];
+                    var listed = showingArchived ? client.ListArchivedPasswordsAsync(clientId, cancel.Token) : client.ListPasswordsAsync(clientId, cancel.Token);
+                    dueById = showingArchived ? new Dictionary<string, ExpirationItem>() : await LoadDueAsync(client, cancel.Token);
+                    rows = [.. (await listed).Select(p => PasswordRow(p) with { Archived = showingArchived })];
                     break;
                 }
                 case "assets":
                 {
-                    var listed = client.ListAssetsAsync(clientId, cancel.Token);
-                    dueById = await LoadDueAsync(client, cancel.Token);
+                    var listed = showingArchived ? client.ListArchivedAssetsAsync(clientId, cancel.Token) : client.ListAssetsAsync(clientId, cancel.Token);
+                    dueById = showingArchived ? new Dictionary<string, ExpirationItem>() : await LoadDueAsync(client, cancel.Token);
                     assetCache = await listed;
                     FillTypes();
                     rows = AssetRows();
@@ -1605,9 +2125,9 @@ public sealed partial class SearchWindow : Window
                 }
                 case "documents":
                 {
-                    var listed = client.ListDocumentsAsync(clientId, cancel.Token);
-                    dueById = await LoadDueAsync(client, cancel.Token);
-                    rows = [.. (await listed).Select(DocumentRow)];
+                    var listed = showingArchived ? client.ListArchivedDocumentsAsync(clientId, cancel.Token) : client.ListDocumentsAsync(clientId, cancel.Token);
+                    dueById = showingArchived ? new Dictionary<string, ExpirationItem>() : await LoadDueAsync(client, cancel.Token);
+                    rows = [.. (await listed).Select(d => DocumentRow(d) with { Archived = showingArchived })];
                     break;
                 }
                 case "search":
@@ -1627,7 +2147,11 @@ public sealed partial class SearchWindow : Window
             TypeFilter.Visibility = kind is "assets" or "clients" ? Visibility.Visible : Visibility.Collapsed;
             ClientHeader.Visibility = kind == "clients" ? Visibility.Visible : Visibility.Collapsed;
             ShowItemHeader(kind);
+            // Another page may have opened while this one loaded; its own load shows its rows.
+            if (trail.Count == 0 || trail[^1] != place)
+                return;
             loaded = rows;
+            loadedFor = place;
             grouping = groupBy;
             ListEmptyText.Text = place.Kind == "client" ? $"{place.Title} has no {place.Tab} in Atlas yet." : empty;
             Render();
@@ -1650,6 +2174,13 @@ public sealed partial class SearchWindow : Window
     private void Render()
     {
         var place = trail[^1];
+        // Rows only ever show on the page they were loaded for; until this page's arrive, the list stays empty.
+        if (loadedFor != place)
+        {
+            Results.ItemsSource = null;
+            ListEmpty.Visibility = Visibility.Collapsed;
+            return;
+        }
         var filter = FilterBox.Text.Trim();
         var shown = loaded
             .Where(r => filter.Length == 0 || r.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || r.Subtitle.Contains(filter, StringComparison.CurrentCultureIgnoreCase))
@@ -1719,19 +2250,25 @@ public sealed partial class SearchWindow : Window
         var layoutId = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
         return [.. assetCache
             .Where(a => layoutId is null || a.LayoutId == layoutId)
-            .Select(AssetRow)];
+            .Select(a => AssetRow(a) with { Archived = showingArchived })];
     }
 
     private void TypeFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (fillingTypes || trail.Count == 0)
             return;
-        loaded = trail[^1].Kind == "clients" ? ClientRows() : AssetRows();
+        // The filter is shared by the Clients and Assets lists: act only for the one on screen, once it has loaded.
+        var place = trail[^1];
+        var kind = place.Kind == "client" ? place.Tab : place.Kind;
+        if (kind is not ("assets" or "clients") || loadedFor != place)
+            return;
+        loaded = kind == "clients" ? ClientRows() : AssetRows();
         Render();
     }
 
     // ---------- the Passwords, Assets, and Documents lists ----------
     private Dictionary<string, ExpirationItem> dueById = [];
+    private bool showingArchived;
 
     private static readonly string[] StrengthWords = ["Very weak", "Weak", "Fair", "Good", "Strong"];
 
@@ -2195,6 +2732,7 @@ public sealed partial class SearchWindow : Window
                     break;
             }
             Remember(row);
+            await ShowExtrasAsync(row, client, cancel.Token);
         }
         catch (OperationCanceledException)
         {
@@ -2258,6 +2796,7 @@ public sealed partial class SearchWindow : Window
 
     private void ShowAsset(AssetSummary asset)
     {
+        ShowConnect(asset);
         var facts = KeyFacts(asset);
         if (facts.Count > 0)
             Detail.Children.Add(Facts([.. facts.Take(6).Select(f => (f.Label, f.Value))]));
@@ -2341,7 +2880,7 @@ public sealed partial class SearchWindow : Window
 
     private void ShowDocument(DocumentDetail document)
     {
-        var editable = canWrite && document.CanEdit ? Visibility.Visible : Visibility.Collapsed;
+        var editable = canWrite && document.CanEdit && current is not { Archived: true } ? Visibility.Visible : Visibility.Collapsed;
         EditHereButton.Visibility = editable;
         ArchiveButton.Visibility = editable;
         var text = RichTextPlain.From(document.Content);
@@ -2524,6 +3063,8 @@ public sealed partial class SearchWindow : Window
             return;
         if (field == SecretField.OneTimeCode && !entry.HasTotp)
             return;
+        if (reason.Length == 0 && !await SecretCheckAsync($"Copy the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
+            return;
         try
         {
             var secret = await client.RevealForCopyAsync(entry.Id, field, reason);
@@ -2550,16 +3091,38 @@ public sealed partial class SearchWindow : Window
     {
         if (password is not { } entry || app.Client is not { } client)
             return;
+        if (reason.Length == 0 && !await SecretCheckAsync($"Show the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
+            return;
         try
         {
             var secret = await client.RevealToShowAsync(entry.Id, field, reason);
             if (!ReferenceEquals(password, entry))
                 return;
             HideSecrets();
-            target.Text = field == SecretField.OneTimeCode && secret.Value.Length == 6 ? $"{secret.Value[..3]} {secret.Value[3..]}" : secret.Value;
+            var text = field == SecretField.OneTimeCode && secret.Value.Length == 6 ? $"{secret.Value[..3]} {secret.Value[3..]}" : secret.Value;
             shown = (target, masked);
-            hideTimer = new DispatcherTimer { Interval = field == SecretField.OneTimeCode ? TimeSpan.FromSeconds(secret.ExpiresIn ?? 30) : ShowFor };
-            hideTimer.Tick += (_, _) => HideSecrets();
+            if (field == SecretField.OneTimeCode)
+            {
+                // A code shows how long it has left, a second at a time, and goes when it changes.
+                var until = DateTimeOffset.UtcNow.AddSeconds(secret.ExpiresIn ?? 30);
+                void Tick()
+                {
+                    var left = (int)Math.Ceiling((until - DateTimeOffset.UtcNow).TotalSeconds);
+                    if (left <= 0)
+                        HideSecrets();
+                    else
+                        target.Text = $"{text}   ·  changes in {left}s";
+                }
+                Tick();
+                hideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                hideTimer.Tick += (_, _) => Tick();
+            }
+            else
+            {
+                target.Text = text;
+                hideTimer = new DispatcherTimer { Interval = ShowFor };
+                hideTimer.Tick += (_, _) => HideSecrets();
+            }
             hideTimer.Start();
         }
         catch (AtlasApiException ex) when (ex.Code == "reason_required" && reason.Length == 0)

@@ -51,6 +51,13 @@
                             <MenuFlyoutItem Text="Refresh" Click="Refresh_Click">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE72C;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
+                            <MenuFlyoutSubItem x:Name="HelloMenu" Text="Windows Hello">
+                                <MenuFlyoutSubItem.Icon><FontIcon Glyph="&#xE928;" /></MenuFlyoutSubItem.Icon>
+                            </MenuFlyoutSubItem>
+
+                            <MenuFlyoutItem x:Name="CheckUpdatesItem" Text="Check for updates" Click="CheckUpdates_Click">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE895;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
                             <MenuFlyoutSeparator />
                             <MenuFlyoutItem Text="Sign out" Click="SignOut_Click">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xF3B1;" /></MenuFlyoutItem.Icon>
@@ -82,6 +89,15 @@
         </Grid>
 
         <!-- Atlas: the sidebar, and one page at a time beside it. -->
+        <!-- Shown instead of everything else while the app is locked. -->
+        <Grid x:Name="LockPanel" Grid.Row="1" Visibility="Collapsed" Canvas.ZIndex="10" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="400">
+                <FontIcon Glyph="&#xE72E;" FontSize="40" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <TextBlock Text="Atlas is locked" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
+                <TextBlock x:Name="LockReason" TextWrapping="Wrap" TextAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Button x:Name="UnlockButton" Content="Unlock with Windows Hello" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Center" Click="Unlock_Click" />
+            </StackPanel>
+        </Grid>
         <Grid x:Name="MainPanel" Grid.Row="1" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220" />
@@ -112,6 +128,17 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
+                <StackPanel>
+                <!-- A newer version of this app, ready to install. -->
+                <InfoBar x:Name="UpdateBar" Margin="20,12,24,0" IsOpen="False" Closed="UpdateBar_Closed">
+                    <InfoBar.ActionButton>
+                        <Button x:Name="UpdateButton" Content="Install and restart" Click="InstallUpdate_Click" Style="{StaticResource AccentButtonStyle}" />
+                    </InfoBar.ActionButton>
+                    <StackPanel Spacing="6" Margin="0,0,0,8">
+                        <ProgressBar x:Name="UpdateProgress" Maximum="100" Visibility="Collapsed" />
+                        <HyperlinkButton x:Name="UpdateBrowserLink" Content="Download it in your browser instead" Click="UpdateBrowser_Click" Padding="0" Visibility="Collapsed" />
+                    </StackPanel>
+                </InfoBar>
                 <!-- Where you are, and the way back. -->
                 <Grid Padding="20,14,24,0" ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -124,6 +151,7 @@
                     </Button>
                     <BreadcrumbBar x:Name="Crumbs" Grid.Column="1" VerticalAlignment="Center" ItemClicked="Crumbs_ItemClicked" />
                 </Grid>
+                </StackPanel>
 
                 <!-- The page's title, and ways to narrow it down. -->
                 <Grid Grid.Row="1" Padding="24,10,24,8" ColumnSpacing="10">
@@ -138,6 +166,12 @@
                         <TextBlock x:Name="PageInfo" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ToggleButton x:Name="ArchivedToggle" Click="ArchivedToggle_Click" Visibility="Collapsed" AutomationProperties.Name="Show archived">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE7B8;" FontSize="14" />
+                                <TextBlock Text="Archived" />
+                            </StackPanel>
+                        </ToggleButton>
                         <Button x:Name="NewButton" Click="New_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE710;" FontSize="14" />
@@ -379,6 +413,12 @@
                                 <TextBlock Text="Edit" />
                             </StackPanel>
                         </Button>
+                        <Button x:Name="ConnectButton" Click="Connect_Click" Visibility="Collapsed" AutomationProperties.AutomationId="ConnectButton">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE7F4;" FontSize="14" />
+                                <TextBlock x:Name="ConnectText" Text="Connect" />
+                            </StackPanel>
+                        </Button>
                         <Button Click="Edit_Click" AutomationProperties.Name="Open in Atlas">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE8A7;" FontSize="14" />
@@ -389,6 +429,12 @@
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE71B;" FontSize="14" />
                                 <TextBlock Text="Copy link" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="RestoreButton" Click="Restore_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE777;" FontSize="14" />
+                                <TextBlock Text="Restore" />
                             </StackPanel>
                         </Button>
                         <Button x:Name="ArchiveButton" Click="Archive_Click" Visibility="Collapsed">

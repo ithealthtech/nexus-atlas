@@ -17,7 +17,8 @@ public sealed record AppSessionInfo(
     OrganizationInfo Organization,
     string DeviceName,
     string[] Scopes,
-    AppRelease? App = null)
+    AppRelease? App = null,
+    ScreenConnectInfo? ScreenConnect = null)
 {
     public bool CanReveal => Scopes.Contains("reveal");
 
@@ -34,6 +35,15 @@ public sealed record AppRelease(string LatestVersion, string DownloadUrl)
 }
 
 public sealed record OrganizationInfo(string Id, string Name);
+
+/// <summary>An earlier version of a password: who replaced it and when. The secret itself is revealed separately.</summary>
+public sealed record PasswordVersion(string Id, string ChangedByName, string CreatedAt);
+
+/// <summary>An item linked to another (a device's admin password, the runbook for a firewall).</summary>
+public sealed record RelatedItem(string Type, string Id, string Title, string Subtitle, string? ClientId, string? ClientName, string Note = "");
+
+/// <summary>A file attached to a password, asset, or document.</summary>
+public sealed record AttachmentInfo(string Id, string Filename, long Size, string? UploadedByName, string CreatedAt, string ContentType = "");
 
 /// <summary>One quick-search hit: a client, asset, document, password entry, contact, or location.</summary>
 public sealed record SearchResult(

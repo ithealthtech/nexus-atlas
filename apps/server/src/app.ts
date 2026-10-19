@@ -31,6 +31,7 @@ import { DomainLookup } from './services/domain-lookup.js';
 import { certProbe as realCertProbe, type CertProbe } from './services/cert-probe.js';
 import { TrackerScheduler, TrackerService } from './services/trackers.js';
 import { registerTrackerRoutes } from './routes/trackers.js';
+import { registerScreenConnectRoutes } from './routes/screenconnect.js';
 import { registerVaultRoutes } from './routes/vault.js';
 import { registerDeviceRoutes } from './routes/devices.js';
 import { registerPersonalVaultRoutes } from './routes/personal-vault.js';
@@ -662,7 +663,11 @@ export async function buildApp({
       throw new HttpError(404, 'Not found.');
     await authenticate(req);
   };
-  app.get('/api/native/session', { onRequest: appOnly }, async (req) => nativeApps.describe(req.session!));
+  app.get('/api/native/session', { onRequest: appOnly }, async (req) => {
+    // The ScreenConnect address goes with the session, so the app can offer Connect on devices.
+    const screenConnect = await settings.screenConnect(req.session!.organization.id);
+    return { ...nativeApps.describe(req.session!), screenConnect: screenConnect.url ? screenConnect : null };
+  });
   app.delete('/api/native/session', { onRequest: appOnly }, async (req) => {
     await nativeApps.signOut(req.session!, req.ip);
     return { ok: true };
@@ -729,6 +734,7 @@ export async function buildApp({
     probe: certProbe ?? (config.NODE_ENV === 'test' ? undefined : realCertProbe()),
   });
   registerTrackerRoutes(app, { db, authed, recent, settings, trackers });
+  registerScreenConnectRoutes(app, { db, authed, recent, settings });
 
   const vaultKeys = new VaultKeys(db, keys);
   const { vault, sends } = registerVaultRoutes(app, {
