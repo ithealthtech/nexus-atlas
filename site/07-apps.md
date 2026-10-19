@@ -81,6 +81,10 @@ Enter your Atlas address and choose **Sign in with your browser**. Your browser 
 
 A copy is recorded like a reveal in the browser, asks for a reason where the client requires one, is kept out of Windows clipboard history, and is cleared from the clipboard after 30 seconds. Your personal vault isn't available in the app.
 
+### Windows Hello and locking
+
+Where Windows Hello (fingerprint, face or PIN) is set up, the app asks for it before it shows or copies a password or one-time code. One check covers the next 5 minutes; you can make it every time, or 15 minutes, under **Windows Hello** in the account menu. The app also locks when the computer goes 15 minutes without keyboard or mouse use, hiding anything on screen until Windows Hello confirms it's you; choose 5, 15 or 30 minutes, an hour, or never, or choose **Lock now**. On a computer without Windows Hello the app doesn't ask and doesn't lock, since nothing could unlock it; set Windows Hello up under Windows Settings › Accounts › Sign-in options.
+
 ### Updates
 
 The app asks Atlas for a newer version when it starts and every six hours, and you can ask at any time with **Check for updates** in the account menu. When one is out, the app tells you once, shows **Install and restart** at the top of the window, and adds **Install version … and restart** to its tray menu. Choosing it downloads the setup program, checks it against the checksum published with the release, installs it over the old copy, and opens the app again; you stay signed in. Nothing installs until you choose to. If the download fails its checks, nothing is installed and the app says why, with a link to download it in your browser instead.
