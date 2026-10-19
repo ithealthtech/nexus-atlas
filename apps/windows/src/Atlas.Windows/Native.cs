@@ -32,6 +32,23 @@ internal static partial class Native
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo
+    {
+        public uint Size;
+        public uint Time;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LastInputInfo info);
+
+    /// <summary>How long since anyone used the keyboard or mouse on this computer (any app, not just this one).</summary>
+    public static TimeSpan IdleTime()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        return GetLastInputInfo(ref info) ? TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - info.Time)) : TimeSpan.Zero;
+    }
+
     [DllImport("wer.dll", CharSet = CharSet.Unicode)]
     private static extern int WerAddExcludedApplication(string exeName, bool allUsers);
 

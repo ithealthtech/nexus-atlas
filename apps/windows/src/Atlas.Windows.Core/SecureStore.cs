@@ -33,6 +33,15 @@ public sealed record AppSettings
 
     /// <summary>The newer version the person has already been told about, so each is mentioned once.</summary>
     public string? UpdateNoticeFor { get; init; }
+
+    /// <summary>Ask for Windows Hello before a password or code is shown or copied (where Windows Hello is set up).</summary>
+    public bool HelloForSecrets { get; init; } = true;
+
+    /// <summary>How long one Windows Hello check covers, in minutes; 0 asks every time.</summary>
+    public int HelloGraceMinutes { get; init; } = 5;
+
+    /// <summary>Minutes without keyboard or mouse use before the app locks; 0 never locks.</summary>
+    public int LockAfterMinutes { get; init; } = 15;
 }
 
 /// <summary>

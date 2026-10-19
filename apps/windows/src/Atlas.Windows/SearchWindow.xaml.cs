@@ -72,6 +72,7 @@ public sealed partial class SearchWindow : Window
         hwnd = WindowNative.GetWindowHandle(this);
         clipboard = new ClipboardGuard(new Native.Clipboard(hwnd), TimeProvider.System);
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
+        _ = SetUpHelloAsync();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -147,6 +148,11 @@ public sealed partial class SearchWindow : Window
     // ---------- showing ----------
     public void ShowSetup(string? address, string? message = null)
     {
+        if (hello.Locked)
+        {
+            Bring();
+            return;
+        }
         MainPanel.Visibility = Visibility.Collapsed;
         SetupPanel.Visibility = Visibility.Visible;
         QueryBox.Visibility = Visibility.Collapsed;
@@ -167,6 +173,13 @@ public sealed partial class SearchWindow : Window
 
     public void ShowSearch()
     {
+        // Locked: the window comes up with only the way to unlock it.
+        if (hello.Locked)
+        {
+            Bring();
+            UnlockButton.Focus(FocusState.Programmatic);
+            return;
+        }
         SetupPanel.Visibility = Visibility.Collapsed;
         MainPanel.Visibility = Visibility.Visible;
         QueryBox.Visibility = Visibility.Visible;
@@ -1527,6 +1540,135 @@ public sealed partial class SearchWindow : Window
         }
     }
 
+    // ---------- Windows Hello and locking ----------
+    private readonly HelloPolicy hello = new(TimeProvider.System);
+    private bool helloAvailable;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? idleTimer;
+    private (Visibility Main, Visibility Setup)? beforeLock;
+
+    private static readonly (string Label, int Minutes)[] GraceChoices = [("Every time", 0), ("After 5 minutes", 5), ("After 15 minutes", 15)];
+    private static readonly (string Label, int Minutes)[] LockChoices = [("After 5 minutes", 5), ("After 15 minutes", 15), ("After 30 minutes", 30), ("After 1 hour", 60), ("Never", 0)];
+
+    /// <summary>
+    /// Finds out whether Windows Hello is set up here, applies the person's choices, and starts watching for the
+    /// computer being left alone. Without Windows Hello nothing is asked and nothing locks.
+    /// </summary>
+    private async Task SetUpHelloAsync()
+    {
+        helloAvailable = await WindowsHello.IsAvailableAsync();
+        hello.Apply(app.Settings);
+        BuildHelloMenu();
+        idleTimer = DispatcherQueue.CreateTimer();
+        idleTimer.Interval = TimeSpan.FromSeconds(20);
+        idleTimer.Tick += (_, _) =>
+        {
+            if (helloAvailable && hello.ShouldLock(Native.IdleTime()))
+                LockApp($"It locked after {Minutes(hello.LockAfter!.Value)} without use.");
+        };
+        idleTimer.Start();
+    }
+
+    private static string Minutes(TimeSpan span) => span.TotalMinutes >= 60 && span.TotalMinutes % 60 == 0
+        ? $"{span.TotalHours:0} hour{(span.TotalHours == 1 ? "" : "s")}"
+        : $"{span.TotalMinutes:0} minutes";
+
+    /// <summary>The Windows Hello choices in the account menu.</summary>
+    private void BuildHelloMenu()
+    {
+        HelloMenu.Items.Clear();
+        if (!helloAvailable)
+        {
+            HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Windows Hello isn't set up on this PC", IsEnabled = false });
+            HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Set it up in Windows Settings › Accounts › Sign-in options", IsEnabled = false });
+            return;
+        }
+        var settings = app.Settings;
+        var ask = new ToggleMenuFlyoutItem { Text = "Ask before showing or copying a password", IsChecked = settings.HelloForSecrets };
+        ask.Click += (_, _) => ChangeHello(s => s with { HelloForSecrets = ask.IsChecked });
+        HelloMenu.Items.Add(ask);
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Ask again", IsEnabled = false });
+        foreach (var (label, minutes) in GraceChoices)
+        {
+            var choice = new RadioMenuFlyoutItem { Text = label, GroupName = "grace", IsChecked = settings.HelloGraceMinutes == minutes };
+            choice.Click += (_, _) => ChangeHello(s => s with { HelloGraceMinutes = minutes });
+            HelloMenu.Items.Add(choice);
+        }
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Lock when the PC isn't used", IsEnabled = false });
+        foreach (var (label, minutes) in LockChoices)
+        {
+            var choice = new RadioMenuFlyoutItem { Text = label, GroupName = "lock", IsChecked = settings.LockAfterMinutes == minutes };
+            choice.Click += (_, _) => ChangeHello(s => s with { LockAfterMinutes = minutes });
+            HelloMenu.Items.Add(choice);
+        }
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        var lockNow = new MenuFlyoutItem { Text = "Lock now", Icon = new FontIcon { Glyph = "" } };
+        lockNow.Click += (_, _) => LockApp("You locked it.");
+        HelloMenu.Items.Add(lockNow);
+    }
+
+    private void ChangeHello(Func<AppSettings, AppSettings> change)
+    {
+        app.UpdateSettings(change);
+        hello.Apply(app.Settings);
+        BuildHelloMenu();
+    }
+
+    /// <summary>
+    /// Before a password or code is shown or copied: asks for Windows Hello unless a check was passed in the last few
+    /// minutes (or Windows Hello isn't set up here). False when it didn't confirm the person.
+    /// </summary>
+    private async Task<bool> SecretCheckAsync(string message)
+    {
+        if (!helloAvailable || !hello.SecretNeedsCheck)
+            return true;
+        if (await WindowsHello.VerifyAsync(hwnd, message) is { } problem)
+        {
+            Show($"{problem} Nothing was shown or copied.", InfoBarSeverity.Warning);
+            return false;
+        }
+        hello.Verified();
+        return true;
+    }
+
+    /// <summary>Covers the window until Windows Hello confirms the person. Secrets on screen are hidden first.</summary>
+    private void LockApp(string why)
+    {
+        if (!helloAvailable)
+            return;
+        hello.Lock();
+        HideSecrets();
+        if (LockPanel.Visibility == Visibility.Visible)
+            return;
+        beforeLock = (MainPanel.Visibility, SetupPanel.Visibility);
+        MainPanel.Visibility = Visibility.Collapsed;
+        SetupPanel.Visibility = Visibility.Collapsed;
+        QueryBox.IsEnabled = false;
+        AccountButton.IsEnabled = false;
+        LockReason.Text = $"{why} Nothing shows until Windows Hello confirms it's you.";
+        LockPanel.Visibility = Visibility.Visible;
+    }
+
+    private async void Unlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (await WindowsHello.VerifyAsync(hwnd, "Unlock Atlas") is { } problem)
+        {
+            LockReason.Text = problem;
+            return;
+        }
+        hello.Verified();
+        LockPanel.Visibility = Visibility.Collapsed;
+        QueryBox.IsEnabled = true;
+        AccountButton.IsEnabled = true;
+        if (beforeLock is { } was)
+        {
+            MainPanel.Visibility = was.Main;
+            SetupPanel.Visibility = was.Setup;
+        }
+        beforeLock = null;
+    }
+
     private void OpenAtlas_Click(object sender, RoutedEventArgs e)
     {
         if (app.Client is { } client)
@@ -2524,6 +2666,8 @@ public sealed partial class SearchWindow : Window
             return;
         if (field == SecretField.OneTimeCode && !entry.HasTotp)
             return;
+        if (reason.Length == 0 && !await SecretCheckAsync($"Copy the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
+            return;
         try
         {
             var secret = await client.RevealForCopyAsync(entry.Id, field, reason);
@@ -2549,6 +2693,8 @@ public sealed partial class SearchWindow : Window
     private async Task ShowSecretAsync(SecretField field, TextBlock target, string masked, string reason = "")
     {
         if (password is not { } entry || app.Client is not { } client)
+            return;
+        if (reason.Length == 0 && !await SecretCheckAsync($"Show the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
             return;
         try
         {

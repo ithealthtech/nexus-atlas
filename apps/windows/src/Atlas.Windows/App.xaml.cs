@@ -59,6 +59,15 @@ public partial class App : Application
 
     internal AtlasClient? Client => client;
 
+    /// <summary>The person's choices for this app on this computer.</summary>
+    internal AppSettings Settings => settings;
+
+    internal void UpdateSettings(Func<AppSettings, AppSettings> change)
+    {
+        settings = change(settings);
+        store.SaveSettings(settings);
+    }
+
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var arguments = Environment.GetCommandLineArgs();
