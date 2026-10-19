@@ -27,10 +27,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="animate-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl bg-[#17322a] px-4 py-3 text-sm text-white shadow-xl"
+            className="animate-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl border border-[#334155] bg-[#172b45] px-4 py-3 text-sm text-white"
           >
             {t.tone === 'success' ? (
-              <CheckCircle2 className="size-4 text-accent" aria-hidden />
+              <CheckCircle2 className="size-4 text-[#93c5fd]" aria-hidden />
             ) : (
               <AlertCircle className="size-4 text-[#ffb4a8]" aria-hidden />
             )}

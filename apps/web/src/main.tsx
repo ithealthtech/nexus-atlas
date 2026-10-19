@@ -20,6 +20,7 @@ import { ApiError, onUnauthenticated } from '@/lib/api';
 import { sessionKey, useActor, useSession, useSetupNeeded } from '@/lib/session';
 import { applyTheme, storedTheme } from '@/lib/theme';
 import { Dashboard } from '@/pages/Dashboard';
+import { Reports } from '@/pages/Reports';
 import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientLicenses } from '@/pages/client/Licenses';
@@ -212,6 +213,7 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/locations', component: ClientLocations }),
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
   createRoute({ getParentRoute: () => clientRoute, path: '/licenses', component: ClientLicenses }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/reports', component: Reports }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
   createRoute({ getParentRoute: () => clientRoute, path: '/trackers/domains', component: DomainTracker }),
@@ -220,6 +222,7 @@ const clientRoutes = [
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
+  createRoute({ getParentRoute: () => appRoute, path: '/reports', component: Reports }),
   clientRoute.addChildren(clientRoutes),
   createRoute({ getParentRoute: () => appRoute, path: '/client-report/$clientId', component: ClientReport }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),

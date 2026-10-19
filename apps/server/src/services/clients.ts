@@ -153,6 +153,30 @@ export class ClientService {
     await this.db.transaction(async (tx) => {
       // Rows under the client go with it (foreign keys cascade); links, favorites, history and import IDs only
       // name their item by ID, so they're cleared here.
+      // Serialize deletion with report/template inserts, which hold a shared client lock. Acquire this
+      // before purging snapshots so a concurrent generator cannot commit between purge and deletion.
+      await tx
+        .select({ id: schema.clients.id })
+        .from(schema.clients)
+        .where(and(eq(schema.clients.orgId, actor.orgId), eq(schema.clients.id, id)))
+        .for('update');
+      // A report can contain several clients. Remove the entire snapshot or template on deletion.
+      await tx
+        .delete(schema.reportRuns)
+        .where(
+          and(
+            eq(schema.reportRuns.orgId, actor.orgId),
+            sql`${schema.reportRuns.clientIds} @> ${JSON.stringify([id])}::jsonb`,
+          ),
+        );
+      await tx
+        .delete(schema.reportTemplates)
+        .where(
+          and(
+            eq(schema.reportTemplates.orgId, actor.orgId),
+            sql`${schema.reportTemplates.definition}->'clientIds' @> ${JSON.stringify([id])}::jsonb`,
+          ),
+        );
       const ids = [id];
       for (const t of [
         schema.contacts,

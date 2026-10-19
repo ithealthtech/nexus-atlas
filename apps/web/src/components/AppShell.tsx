@@ -1,57 +1,33 @@
 import { useState, type ReactNode } from 'react';
-import { Link, useRouterState } from '@tanstack/react-router';
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
-  ArrowLeft,
   BookOpen,
   Building2,
-  ChevronRight,
   ChevronsUpDown,
   House,
   KeyRound,
   LogOut,
   Menu as MenuIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Monitor,
   Moon,
   Search,
   Settings2,
   Sun,
   UserCircle,
-  X,
   type LucideIcon,
 } from 'lucide-react';
 import { CommandPalette } from '@/components/CommandPalette';
-import { Avatar } from '@/components/ui';
+import { Avatar, Button, Dialog } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { useClients, useFavorites, useWorkspacePrefs } from '@/lib/queries';
+import { useClients } from '@/lib/queries';
 import { useActor, useApplySession } from '@/lib/session';
 import { useVaultPolicy } from '@/lib/vault';
 import { applyTheme, storedTheme, type Theme } from '@/lib/theme';
-
-function NavLink({
-  to,
-  label,
-  exact,
-  onNavigate,
-}: {
-  to: string;
-  label: string;
-  exact?: boolean;
-  onNavigate?: () => void;
-}) {
-  return (
-    <Link
-      to={to}
-      onClick={onNavigate}
-      activeOptions={{ exact: !!exact }}
-      className="nav-link block truncate rounded-md px-2.5 py-[7px] text-[13.5px] text-sidebar-text transition-colors hover:bg-sidebar-2 data-[status=active]:bg-sidebar-2 data-[status=active]:font-semibold data-[status=active]:text-sidebar-active"
-    >
-      {label}
-    </Link>
-  );
-}
 
 export function useSignOut() {
   const apply = useApplySession();
@@ -99,7 +75,7 @@ function UserMenu({ row, side = 'right' }: { row?: boolean; side?: 'right' | 'to
           side={side}
           align={side === 'top' ? 'start' : 'end'}
           sideOffset={8}
-          className="z-50 w-60 rounded-xl border border-border bg-surface p-1.5 text-text shadow-xl"
+          className="z-50 w-60 rounded-md border border-border bg-surface p-1.5 text-text"
         >
           <div className="px-2.5 py-2">
             <p className="truncate text-sm font-semibold">{actor.name}</p>
@@ -156,22 +132,22 @@ type Area = {
   groups: NavGroup[];
 };
 
-// Five areas instead of one long list. The rail shows the areas; the panel beside it shows the pages of the one
-// you're in. Administration is an area of its own, so it stays out of the way of daily work.
+// Primary areas group the existing routes. Section links are rendered inside their workspace.
 function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: boolean): Area[] {
   const list: Area[] = [
     {
       id: 'home',
-      label: 'Home',
-      title: 'Home',
+      label: 'Overview',
+      title: 'Overview',
       icon: House,
       to: '/',
-      paths: ['/expirations', '/account'],
+      paths: ['/expirations', '/account', '/reports'],
       groups: [
         {
           items: [
             { to: '/', label: 'Dashboard', exact: true },
             { to: '/expirations', label: 'Expirations' },
+            { to: '/reports', label: 'Reports' },
           ],
         },
       ],
@@ -187,7 +163,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
     },
     {
       id: 'docs',
-      label: 'Docs',
+      label: 'Documentation',
       title: 'Documentation',
       icon: BookOpen,
       to: '/assets',
@@ -210,8 +186,8 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
   if (actor.isStaff)
     list.push({
       id: 'vault',
-      label: 'Vault',
-      title: 'Passwords',
+      label: 'Password Vault',
+      title: 'Password Vault',
       icon: KeyRound,
       to: '/passwords',
       paths: ['/passwords', '/my-vault', '/password-health', '/sends', '/admin/rotation', '/admin/bitlocker'],
@@ -240,7 +216,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
   if (actor.isAdmin)
     list.push({
       id: 'admin',
-      label: 'Admin',
+      label: 'Administration',
       title: 'Administration',
       icon: Settings2,
       to: '/admin/users',
@@ -299,290 +275,197 @@ function areaOf(list: Area[], pathname: string): Area {
   );
 }
 
-const FAVORITE_PATH = { client: '/clients', asset: '/assets', document: '/documents', password: '/passwords' } as const;
-
-type MenuProps = { onNavigate?: () => void; onSearch: () => void };
-
-/** The areas, the one the current page is in, and the links that go with it. Shared by all three menu styles. */
-function useMenu() {
+/** One primary sidebar; section links live inside the active workspace. */
+export function AppShell({ children }: { children: ReactNode }) {
   const actor = useActor();
-  // Shown to staff unless the organization turned personal vaults off.
-  const policy = useVaultPolicy();
-  const personalVaults = actor.isStaff && policy.data?.personalVaults !== false;
+  const personalVaults = useVaultPolicy().data?.personalVaults !== false;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const clients = useClients().data ?? [];
   const list = areas(actor, personalVaults);
   const area = areaOf(list, pathname);
-  const clients = [...(useClients().data ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  const favorites = useFavorites(actor.isStaff).data ?? [];
-  return { actor, pathname, list, area, clients, favorites };
-}
-
-function SearchButton({ onSearch, className }: { onSearch: () => void; className?: string }) {
-  return (
-    <button
-      onClick={onSearch}
-      className={cn(
-        'flex items-center gap-2 rounded-md bg-sidebar-2 px-2.5 py-2 text-left text-[13.5px] text-sidebar-muted hover:text-sidebar-active',
-        className,
-      )}
-    >
-      <Search className="size-4 shrink-0" aria-hidden />
-      <span className="flex-1 truncate">Search…</span>
-      <kbd className="rounded border border-current/25 px-1.5 text-[10px]">Ctrl K</kbd>
-    </button>
-  );
-}
-
-function Groups({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () => void }) {
-  return (
-    <div className="flex-1 space-y-px overflow-y-auto">
-      {groups.map((group, i) => (
-        <div key={group.title ?? i} className={cn('space-y-px', i > 0 && 'pt-4')}>
-          {group.title && <p className="px-2.5 pb-1 text-xs text-sidebar-muted">{group.title}</p>}
-          {group.items.map((item) => (
-            <NavLink key={item.to} {...item} onNavigate={onNavigate} />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Rail and panel: the areas down the edge, and the pages of the current one beside them. */
-function RailMenu({ onNavigate, onSearch }: MenuProps) {
-  const { list, area, clients, favorites } = useMenu();
-  const groups: NavGroup[] = [
-    ...area.groups,
-    // Every client is one click away from anywhere in the Clients area.
-    ...(area.id === 'clients' && clients.length
-      ? [
-          {
-            title: 'Go to',
-            items: clients.slice(0, 60).map((c) => ({ to: `/clients/${c.id}`, label: c.name })),
-          },
-        ]
-      : []),
-    ...(area.id === 'home' && favorites.length
-      ? [
-          {
-            title: 'Favourites',
-            items: favorites.slice(0, 12).map((f) => ({
-              to: `${FAVORITE_PATH[f.type as keyof typeof FAVORITE_PATH] ?? '/clients'}/${f.id}`,
-              label: f.name,
-            })),
-          },
-        ]
-      : []),
-  ];
-  return (
-    <nav aria-label="Main" className="flex h-full bg-sidebar">
-      <div className="flex w-[4.25rem] shrink-0 flex-col items-center gap-1 border-r border-sidebar-2 py-3">
-        <Link to="/" onClick={onNavigate} className="mb-3 text-sidebar-active" aria-label="Home page">
-          <Logo compact />
-        </Link>
-        {list.map((a) => (
-          <Link
-            key={a.id}
-            to={a.to}
-            aria-current={a.id === area.id ? 'true' : undefined}
-            className={cn(
-              'flex w-14 flex-col items-center gap-1 rounded-md pt-2 pb-1.5 text-[11px] text-sidebar-muted hover:bg-sidebar-2 hover:text-sidebar-active',
-              a.id === area.id && 'bg-sidebar-2 font-semibold text-sidebar-active',
-            )}
-          >
-            <a.icon className={cn('size-[18px]', a.id === area.id && 'text-sidebar-accent')} aria-hidden />
-            {a.label}
-          </Link>
-        ))}
-        <div className="mt-auto">
-          <UserMenu />
-        </div>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col px-2.5 pt-4 pb-3">
-        <SearchButton onSearch={onSearch} className="mb-4 w-full" />
-        <p className="mb-2 px-2.5 text-[15px] font-semibold text-sidebar-active">{area.title}</p>
-        <Groups groups={groups} onNavigate={onNavigate} />
-      </div>
-    </nav>
-  );
-}
-
-/** Pages of an area, as one flat list. */
-const pagesOf = (area: Area | undefined) => area?.groups.flatMap((g) => g.items) ?? [];
-
-/**
- * Sidebar: the pages used every day in one short list, then the clients you've starred. Administration replaces
- * the list while you're in it, with a way back.
- */
-function SidebarMenu({ onNavigate, onSearch }: MenuProps) {
-  const { pathname, list, clients, favorites } = useMenu();
-  const find = (id: Area['id']) => list.find((a) => a.id === id);
-  const admin = find('admin');
-  const vault = find('vault');
-  const inAdmin = !!admin && pathname.startsWith('/admin');
-  const starred = favorites.filter((f) => f.type === 'client').map((f) => ({ to: `/clients/${f.id}`, label: f.name }));
-  const groups: NavGroup[] = inAdmin
-    ? [...admin.groups, ...(vault?.groups.slice(1) ?? [])]
-    : [
-        {
-          items: [
-            { to: '/', label: 'Dashboard', exact: true },
-            { to: '/clients', label: 'Clients', exact: true },
-            { to: '/expirations', label: 'Expirations' },
-            ...pagesOf(find('docs')),
-            ...(vault?.groups[0]?.items ?? []),
-          ],
-        },
-        starred.length
-          ? { title: 'Starred clients', items: starred.slice(0, 12) }
-          : { title: 'Clients', items: clients.slice(0, 8).map((c) => ({ to: `/clients/${c.id}`, label: c.name })) },
-      ].filter((g) => g.items.length);
-  const foot =
-    'flex items-center gap-2 rounded-md px-2.5 py-[7px] text-[13.5px] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active';
-  return (
-    <nav aria-label="Main" className="flex h-full flex-col bg-sidebar px-2.5 pt-5 pb-2.5">
-      <Link to="/" onClick={onNavigate} className="mb-5 px-2 text-sidebar-active" aria-label="Home page">
-        <Logo />
-      </Link>
-      <SearchButton onSearch={onSearch} className="mb-4 w-full" />
-      {inAdmin && (
-        <>
-          <Link to="/" onClick={onNavigate} className={cn(foot, 'mb-3 text-sidebar-muted')}>
-            <ArrowLeft className="size-4" aria-hidden /> Back to Atlas
-          </Link>
-          <p className="mb-2 px-2.5 text-[15px] font-semibold text-sidebar-active">Administration</p>
-        </>
-      )}
-      <Groups groups={groups} onNavigate={onNavigate} />
-      <div className="mt-2 border-t border-sidebar-2 pt-2">
-        {admin && !inAdmin && (
-          <Link to={admin.to} onClick={onNavigate} className={foot}>
-            <span className="flex-1">Administration</span>
-            <ChevronRight className="size-4 text-sidebar-muted" aria-hidden />
-          </Link>
-        )}
-        <UserMenu row side="top" />
-      </div>
-    </nav>
-  );
-}
-
-/** Top bar: the areas across the top and the current area's pages in a row beneath, leaving the page full width. */
-function TopMenu({ onSearch }: { onSearch: () => void }) {
-  const { list, area, favorites } = useMenu();
-  const starred = favorites.filter((f) => f.type === 'client').map((f) => ({ to: `/clients/${f.id}`, label: f.name }));
-  const pages: NavItem[] = [...pagesOf(area), ...(area.id === 'clients' ? starred.slice(0, 8) : [])];
-  return (
-    <nav aria-label="Main">
-      <div className="flex h-14 items-center gap-1 bg-sidebar px-5">
-        <Link to="/" className="mr-5 shrink-0 text-sidebar-active" aria-label="Home page">
-          <Logo />
-        </Link>
-        {list.map((a) => (
-          <Link
-            key={a.id}
-            to={a.to}
-            aria-current={a.id === area.id ? 'true' : undefined}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-[13.5px] whitespace-nowrap text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active',
-              a.id === area.id && 'bg-sidebar-2 font-semibold text-sidebar-active',
-            )}
-          >
-            {a.title}
-          </Link>
-        ))}
-        <div className="ml-auto flex items-center gap-2">
-          <SearchButton onSearch={onSearch} className="w-64" />
-          <UserMenu side="bottom" />
-        </div>
-      </div>
-      <div className="flex h-10 items-stretch gap-1 overflow-x-auto border-b border-border bg-surface px-5">
-        {pages.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            activeOptions={{ exact: !!item.exact }}
-            className="flex items-center border-b-2 border-transparent px-2.5 text-[13.5px] whitespace-nowrap text-text-2 hover:text-text data-[status=active]:border-primary data-[status=active]:font-semibold data-[status=active]:text-text"
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
-export function AppShell({ children }: { children: ReactNode }) {
+  const currentClient = clients.find((c) => pathname.startsWith(`/clients/${c.id}`));
+  const page = list
+    .flatMap((a) => a.groups.flatMap((g) => g.items))
+    .filter((p) => pathname === p.to || (p.to !== '/' && pathname.startsWith(`${p.to}/`)))
+    .sort((a, b) => b.to.length - a.to.length)[0];
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
-  // Each person's own choice (Account). Phones always get a drawer: the rail, or the sidebar list.
-  const menu = useWorkspacePrefs().data?.menu ?? 'rail';
-  const Drawer = menu === 'rail' ? RailMenu : SidebarMenu;
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('atlas-sidebar-collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setCollapsed((previous) => {
+      try {
+        localStorage.setItem('atlas-sidebar-collapsed', String(!previous));
+      } catch {
+        /* Still works for this visit. */
+      }
+      return !previous;
+    });
+  const navigation = (compact = false) => (
+    <nav aria-label="Main" className="space-y-1">
+      {list.map((item) => (
+        <Link
+          key={item.id}
+          to={item.to}
+          onClick={() => setOpen(false)}
+          aria-current={area.id === item.id ? 'page' : undefined}
+          title={compact ? item.label : undefined}
+          className={cn(
+            'primary-nav-link flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-text hover:bg-sidebar-2',
+            compact && 'justify-center px-0',
+            area.id === item.id && 'bg-sidebar-2 text-sidebar-accent',
+          )}
+        >
+          <item.icon className="size-[18px] shrink-0" aria-hidden />
+          <span className={compact ? 'sr-only' : ''}>{item.label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
   return (
     <div
-      data-menu={menu}
-      className={cn('min-h-screen print:p-0', menu === 'top' ? 'lg:pt-24' : 'lg:pl-(--sidebar-width)')}
+      data-shell="premium"
+      data-collapsed={collapsed}
+      className={cn('min-h-screen print:p-0', collapsed ? 'lg:pl-16' : 'lg:pl-(--sidebar-width)')}
     >
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:shadow"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-surface focus:px-4 focus:py-2"
       >
         Skip to content
       </a>
-      {menu === 'top' ? (
-        <div className="fixed inset-x-0 top-0 z-30 hidden lg:block print:hidden">
-          <TopMenu onSearch={() => setSearching(true)} />
-        </div>
-      ) : (
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--sidebar-width) lg:block print:hidden">
-          <Drawer onSearch={() => setSearching(true)} />
-        </aside>
-      )}
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-surface/90 px-4 backdrop-blur lg:hidden print:hidden">
-        <button
-          onClick={() => setOpen(true)}
-          className="rounded-lg p-2 hover:bg-surface-3"
-          aria-label="Open navigation"
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-border bg-sidebar lg:flex print:hidden',
+          collapsed ? 'w-16' : 'w-(--sidebar-width)',
+        )}
+      >
+        <Link
+          to="/"
+          aria-label="Home page"
+          className={cn(
+            'flex h-16 shrink-0 items-center border-b border-border text-sidebar-active',
+            collapsed ? 'justify-center' : 'px-5',
+          )}
         >
-          <MenuIcon className="size-5" />
-        </button>
-        <Logo compact />
+          <Logo compact={collapsed} />
+        </Link>
+        <div className={cn('flex-1 overflow-y-auto py-5', collapsed ? 'px-2' : 'px-3')}>{navigation(collapsed)}</div>
+        <div className="border-t border-border p-3">
+          <button
+            onClick={toggle}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            className="flex min-h-9 w-full items-center justify-center gap-3 rounded-md text-sm text-sidebar-text hover:bg-sidebar-2"
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="size-4" />
+            ) : (
+              <>
+                <PanelLeftClose className="size-4" />
+                <span>Collapse sidebar</span>
+              </>
+            )}
+          </button>
+        </div>
+      </aside>
+      <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6 print:hidden">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden"
+          aria-label="Open navigation"
+          onClick={() => setOpen(true)}
+        >
+          <MenuIcon />
+        </Button>
+        <nav aria-label="Breadcrumb" className="min-w-0 flex-1 text-sm">
+          <ol className="flex min-w-0 items-center gap-2">
+            <li className="hidden shrink-0 text-muted sm:block">Atlas</li>
+            <li aria-hidden className="hidden text-muted sm:block">
+              /
+            </li>
+            <li>
+              <Link to={area.to} className="font-medium hover:text-primary">
+                {area.title}
+              </Link>
+            </li>
+            {(currentClient || (page && page.label !== area.title)) && (
+              <>
+                <li aria-hidden className="text-muted">
+                  /
+                </li>
+                <li className="truncate text-muted" aria-current="page">
+                  {currentClient?.name ?? page?.label}
+                </li>
+              </>
+            )}
+          </ol>
+        </nav>
+        {currentClient && (
+          <label className="hidden max-w-52 md:block">
+            <span className="sr-only">Switch client</span>
+            <select
+              value={currentClient.id}
+              onChange={(e) => void navigate({ to: `/clients/${e.target.value}` })}
+              className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+            >
+              {[...clients]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
         <button
           onClick={() => setSearching(true)}
-          className="ml-auto rounded-lg p-2 hover:bg-surface-3"
           aria-label="Search"
+          className="flex h-9 items-center gap-2 rounded-md border border-border px-2.5 text-sm text-muted hover:bg-surface-2 sm:w-56"
         >
-          <Search className="size-5" />
+          <Search className="size-4 shrink-0" aria-hidden />
+          <span className="hidden flex-1 text-left sm:inline">Search Atlas</span>
+          <kbd className="hidden text-[11px] sm:inline">Ctrl K</kbd>
         </button>
+        <UserMenu side="bottom" />
       </header>
-      {open && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
-          <button
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setOpen(false)}
-            aria-label="Close navigation"
-          />
-          <div className="relative h-full w-72 max-w-[85vw]">
-            <Drawer
-              onNavigate={() => setOpen(false)}
-              onSearch={() => {
-                setOpen(false);
-                setSearching(true);
-              }}
-            />
-            <button
-              onClick={() => setOpen(false)}
-              className="absolute top-4 right-3 rounded-lg p-2 text-sidebar-muted hover:text-sidebar-active"
-              aria-label="Close navigation"
-            >
-              <X className="size-5" />
-            </button>
-          </div>
-        </div>
-      )}
-      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[90rem] px-4 py-7 outline-none sm:px-10 sm:py-10">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-[100rem] min-w-0 px-4 py-6 outline-none sm:px-6 sm:py-7"
+      >
+        {area.id !== 'clients' && (
+          <nav aria-label="Workspace" className="mb-6 space-y-2 border-b border-border pb-3 print:hidden">
+            {area.groups.map((group, i) => (
+              <div key={group.title ?? i} className="flex flex-wrap items-center gap-1">
+                {group.title && <span className="mr-2 text-xs font-medium text-muted">{group.title}</span>}
+                {group.items.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    activeOptions={{ exact: item.exact ?? false }}
+                    className="rounded-md px-3 py-2 text-[13px] font-medium text-text-2 hover:bg-surface-3 data-[status=active]:bg-primary-soft data-[status=active]:text-primary"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </nav>
+        )}
         {children}
       </main>
+      <Dialog open={open} onClose={() => setOpen(false)} title="Navigation" size="sm">
+        {navigation()}
+      </Dialog>
       <CommandPalette open={searching} onOpenChange={setSearching} />
     </div>
   );

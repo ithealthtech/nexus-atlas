@@ -427,7 +427,7 @@ export function TicketsCard({ clientId }: { clientId?: string }) {
                   type="button"
                   onClick={() => setDays(d)}
                   aria-pressed={days === d}
-                  className="rounded-md px-2.5 py-1 text-[13px] font-medium text-text-2 aria-pressed:bg-surface aria-pressed:text-text aria-pressed:shadow-sm"
+                  className="rounded-md px-2.5 py-1 text-[13px] font-medium text-text-2 aria-pressed:bg-surface aria-pressed:text-text"
                 >
                   {d} days
                 </button>

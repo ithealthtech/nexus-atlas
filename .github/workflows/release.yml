@@ -111,7 +111,7 @@ jobs:
             'package.json', 'package-lock.json', 'node_modules', 'README.md', 'CHANGELOG.md', 'SECURITY.md', 'docs', 'deploy',
             'packages/shared/package.json', 'packages/shared/dist',
             'packages/db/package.json', 'packages/db/dist', 'packages/db/drizzle',
-            'apps/server/package.json', 'apps/server/dist',
+            'apps/server/package.json', 'apps/server/dist', 'apps/server/report-fonts',
             'apps/web/package.json', 'apps/web/dist'
           )
           foreach ($item in $items) {

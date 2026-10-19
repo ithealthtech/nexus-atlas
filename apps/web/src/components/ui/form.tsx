@@ -16,7 +16,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   { className, ...props },
   ref,
 ) {
-  return <input ref={ref} className={cn(control, 'h-10', className)} {...props} />;
+  return <input ref={ref} className={cn(control, 'h-9', className)} {...props} />;
 });
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea(
   { className, ...props },
@@ -28,7 +28,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   { className, ...props },
   ref,
 ) {
-  return <select ref={ref} className={cn(control, 'h-10 pr-8', className)} {...props} />;
+  return <select ref={ref} className={cn(control, 'h-9 pr-8', className)} {...props} />;
 });
 
 /** Label + control + help/error text with the accessibility wiring done. */

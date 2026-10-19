@@ -35,7 +35,7 @@ const LABELS = {
   navStyle: { filled: 'Filled highlight', bar: 'Accent bar', subtle: 'Coloured text' },
 } as const;
 // Atlas's own colours, used when a colour is left on default (for previews and contrast checks).
-const ATLAS = { accent: '#205843', accentDark: '#6fb68f', sidebar: '#132b24', sidebarDark: '#0b1411' };
+const ATLAS = { accent: '#245fba', accentDark: '#8dbbff', sidebar: '#ffffff', sidebarDark: '#13181f' };
 
 const same = (a: Branding, b: Branding) => JSON.stringify(a) === JSON.stringify(b);
 const pick = (b: Branding): Branding =>

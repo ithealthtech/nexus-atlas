@@ -212,7 +212,7 @@ function PolicyGenerator({ policy, onUse }: { policy: VaultPolicy['generator']; 
                 type="button"
                 aria-pressed={options.mode === mode}
                 onClick={() => update({ mode })}
-                className="rounded-md px-2.5 py-1 text-xs font-medium capitalize aria-pressed:bg-surface aria-pressed:shadow-sm"
+                className="rounded-md px-2.5 py-1 text-xs font-medium capitalize aria-pressed:bg-surface"
               >
                 {mode === 'pin' ? 'PIN' : mode}
               </button>
@@ -583,7 +583,7 @@ export function PasswordDialog({
                 type="button"
                 aria-pressed={kind === value}
                 onClick={() => setKind(value)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium aria-pressed:bg-surface aria-pressed:shadow-sm"
+                className="flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium aria-pressed:bg-surface"
               >
                 <Icon className="size-4" aria-hidden /> {label}
               </button>

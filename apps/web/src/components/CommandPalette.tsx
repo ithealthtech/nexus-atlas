@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, BookOpen, Building2, LayoutDashboard, Search, Server } from 'lucide-react';
+import { ChartNoAxesCombined, BookOpen, Building2, LayoutDashboard, Search, Server } from 'lucide-react';
 import type { SearchResult } from '@atlas/shared';
 import { ItemIcon, itemHref } from '@/components/ItemIcon';
 import { useGo } from '@/components/AppLink';
@@ -11,6 +11,13 @@ const QUICK: Entry[] = [
   { key: 'dash', title: 'Dashboard', subtitle: 'Go to', href: '/', icon: <LayoutDashboard className="size-4" /> },
   { key: 'clients', title: 'Clients', subtitle: 'Go to', href: '/clients', icon: <Building2 className="size-4" /> },
   { key: 'assets', title: 'Assets', subtitle: 'Go to', href: '/assets', icon: <Server className="size-4" /> },
+  {
+    key: 'reports',
+    title: 'Reports',
+    subtitle: 'Go to',
+    href: '/reports',
+    icon: <ChartNoAxesCombined className="size-4" />,
+  },
   { key: 'kb', title: 'Knowledge base', subtitle: 'Go to', href: '/documents', icon: <BookOpen className="size-4" /> },
 ];
 
@@ -67,7 +74,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         close();
       }}
       aria-label="Search Atlas"
-      className="animate-dialog mx-auto mt-[12vh] w-[calc(100%-2rem)] max-w-2xl overflow-hidden rounded-2xl border border-border bg-surface p-0 text-text shadow-2xl"
+      className="animate-dialog mx-auto mt-[12vh] w-[calc(100%-2rem)] max-w-2xl overflow-hidden rounded-2xl border border-border bg-surface p-0 text-text"
     >
       {open && (
         <div>
@@ -121,7 +128,6 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                   <span className="block truncate text-sm font-medium">{entry.title}</span>
                   <span className="block truncate text-xs text-muted">{entry.subtitle}</span>
                 </span>
-                {i === active && <ArrowRight className="size-4 text-primary" aria-hidden />}
               </li>
             ))}
             {q.trim() && !results.isFetching && !entries.length && (

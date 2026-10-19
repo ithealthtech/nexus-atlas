@@ -26,7 +26,7 @@ Your administrator gives you the Atlas address, your email, and a temporary pass
 
 ### Passkeys
 
-A passkey is Windows Hello, Touch ID, your phone, or a security key. Add one under **Profile & sign-in → Passkeys** (open the account menu with your initials at the bottom of the menu). After that, **Sign in with a passkey** on the sign-in page signs you in without typing a password, and can't be phished.
+A passkey is Windows Hello, Touch ID, your phone, or a security key. Add one under **Profile & sign-in → Passkeys** (open the account menu with your initials in the top-right header). After that, **Sign in with a passkey** on the sign-in page signs you in without typing a password, and can't be phished.
 
 ### Signing in with Microsoft or your identity provider
 
@@ -38,43 +38,35 @@ Choose **Forgot your password?** on the sign-in page. The link in the email work
 
 ## Find your way around
 
-![The dashboard with the rail and panel menu](../images/manual/dashboard.png "The dashboard. The rail on the far left switches between areas; the panel beside it lists the pages in the area you're in.")
+![The Atlas overview](../images/manual/dashboard.png "The overview with the unified application sidebar and header search. Synthetic example data.")
 
 Atlas is organized into five areas. Each area has a handful of pages.
 
 | Area | Pages | Who sees it |
 |---|---|---|
-| **Home** | Dashboard, Expirations | Everyone |
-| **Clients** | All clients, and a shortcut to each client | Everyone |
-| **Docs** | Assets, Knowledge base, Checklists | Everyone; the knowledge base and checklists are for staff |
-| **Vault** | Passwords, My vault, Password health, Send; Password rotation and BitLocker collector for administrators | Staff |
-| **Admin** | People and security, data, system, and settings pages | Administrators |
+| **Overview** | Dashboard, Expirations, Reports | Everyone |
+| **Clients** | Client directory and client workspaces | Everyone |
+| **Documentation** | Assets, Knowledge base, Checklists | Everyone; the knowledge base and checklists are for staff |
+| **Password Vault** | Passwords, My vault, Password health, Send; Password rotation and BitLocker collector for administrators | Staff |
+| **Administration** | People and security, data, system, and settings pages | Administrators |
 
-Your account menu, with your initials, is at the bottom of the menu (or at the right of the top bar). It has **Profile & sign-in**, light and dark appearance, and **Sign out**.
+Your account menu, with your initials, is in the top-right header. It has **Profile & sign-in**, light and dark appearance, and **Sign out**.
 
 ### Search everything with Ctrl+K
 
 ![The search window open over the dashboard](../images/manual/search.png "Ctrl+K searches clients, assets, documents, passwords, contacts and locations you can see.")
 
-Press **Ctrl+K** (or **⌘K** on a Mac) anywhere in Atlas, or click **Search** in the menu. Type a client, an asset name, an IP address, a serial number, a contact, or words from a document. Use the arrow keys and **Enter** to open a result, or **Esc** to close. Results only include what you have access to.
+Press **Ctrl+K** (or **⌘K** on a Mac) anywhere in Atlas, or click **Search** in the header. Type a client, an asset name, an IP address, a serial number, a contact, or words from a document. Use the arrow keys and **Enter** to open a result, or **Esc** to close. Results only include what you have access to.
 
-### Choose a menu style
+### Navigation and workspace tabs
 
-Atlas has three menu layouts. Everyone picks their own under **Profile & sign-in → Menu**, and it follows you to any computer. On a phone the menu always slides out from the side.
+Atlas uses a single sidebar for **Overview**, **Clients**, **Documentation**, **Password Vault**, and **Administration**. Page links appear in the current workspace. The client directory stays in **Clients**, global search, and the client switcher in the header rather than filling a second sidebar.
 
-![The three menu styles to choose from](../images/manual/menu-picker.png "The Menu card on your account page.")
-
-| Style | What it looks like | Good for |
-|---|---|---|
-| **Rail and panel** (the default) | Five area icons down the left edge, with the pages of the area you're in beside them. | Getting around quickly once you know where things are. |
-| **Sidebar** | One list of the pages you use every day, plus your starred clients. **Administration** opens its own list, with **Back to Atlas** at the top. | People who mostly work in a few pages. |
-| **Top bar** | The areas across the top, and the pages of the current area in a second row beneath. | Wide tables and long pages, because the page gets the full width of the screen. |
-
-![The top bar menu style](../images/manual/menu-top.png "The top bar style, on the client list.")
+Choose **Collapse sidebar** at the bottom of the sidebar to make more space for tables. **Expand sidebar** restores labels. Atlas remembers this choice in your browser. On phones, choose **Open navigation** in the header; Escape closes the menu and returns focus to its trigger.
 
 ### Favourites and the dashboard
 
-Click the star beside a client, asset or document to add it to the **Favorites** card on your dashboard. In the rail and sidebar styles, starred clients also appear in the menu.
+Click the star beside a client, asset or document to add it to the **Favorites** card on your dashboard.
 
 Choose **Customize** on the dashboard to show, hide and reorder its cards. Your layout is yours alone. **Reset to default** puts the standard layout back.
 
@@ -89,7 +81,7 @@ Everyone in Atlas has one role, plus an access level for each client.
 | Role | Who it's for | Clients | Administration |
 |---|---|---|---|
 | **Owner** | The person responsible for Atlas | Every client, including passwords | Everything, including other owners and vault policies |
-| **Admin** | Service managers, senior technicians | Every client, including passwords | People, settings, imports, system |
+| **Administration** | Service managers, senior technicians | Every client, including passwords | People, settings, imports, system |
 | **Technician** | Your technicians | The clients they're given, up to editing passwords | None |
 | **Read-only technician** | Trainees, auditors | The clients they're given, read-only | None |
 | **Client editor** | A client's own staff who keep their documentation | Their own organization, can edit | None |

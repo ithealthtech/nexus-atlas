@@ -196,7 +196,7 @@ export function Clients() {
                 key={s}
                 onClick={() => setStatus(s)}
                 aria-pressed={status === s}
-                className="rounded-md px-3 py-1.5 text-[13px] font-medium text-text-2 capitalize aria-pressed:bg-surface aria-pressed:text-text aria-pressed:shadow-sm"
+                className="rounded-md px-3 py-1.5 text-[13px] font-medium text-text-2 capitalize aria-pressed:bg-surface aria-pressed:text-text"
               >
                 {s}
               </button>

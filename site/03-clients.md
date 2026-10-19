@@ -98,6 +98,20 @@ For linked Microsoft 365 tenants, **Microsoft 365** reads subscriptions, seat av
 
 Microsoft seat counts and assignments remain authoritative in Microsoft. Purchases, reseller pricing, billing terms, and renewal dates are managed with your reseller. **Other software subscriptions** tracks other purchases manually and does not change vendor subscriptions. Read-only client access can view records; editing manual tracking requires client edit access. Manual changes appear in client activity and client exports.
 
+## Reports
+
+![Reports workspace](../images/manual/reports.png "The report library, workspace, and review actions. Synthetic example data.")
+
+Open **Overview → Reports** for reporting across clients, or a client's **Reports** tab for that workspace. Choose a built-in report: executive summary, asset inventory, license utilization, upcoming renewals, documentation health, or endpoint health. Choose up to 25 clients, set the report title and any renewal lookahead, and choose **Run report**.
+
+The report captures current records; it does not infer historical activity or missing health data. Source timestamps and coverage notices explain what was available. Microsoft seat inventory is read only through the linked GDAP connection. Microsoft reseller costs and renewal dates are not supplied by that inventory.
+
+Choose **Needs review** to focus on flagged records. Use **Search report results**, **Search field**, and **Visible columns** to refine the table. **CSV** and **PDF** export the selected section's matching rows and columns, with capture details and data coverage. The browser displays the first 500 matching rows; CSV includes all matches, up to the 10,000-row generation limit. PDF supports up to 2,000 matching rows; filter larger reports or export CSV.
+
+**Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
+
+Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
+
 ## The monthly report
 
 **Monthly report** in the client header opens a printable page with the client's assets and documents. Use your browser's **Print**, and choose **Save as PDF** to send it to the client.

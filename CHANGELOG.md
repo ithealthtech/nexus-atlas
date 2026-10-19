@@ -2,6 +2,16 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Reports workspace and client Reports tab with executive summaries, asset inventory, license utilization, upcoming renewals, documentation health, and endpoint health. Private templates and immutable snapshot history retain source timestamps and missing-data notices. Search fields, attention filters, and visible columns apply to both CSV and server-generated PDF exports. Microsoft inventory uses GDAP exclusively. Scheduled reports, automatic triggers, and email delivery are planned for Phase 2.
+
+### Changed
+
+- Unified application shell with one collapsible sidebar, workspace navigation, header search, breadcrumbs, client switching, and account controls. White surfaces, slate typography, blue accents, compact controls, and small corner radii form the new default appearance; existing organization branding and dark mode remain supported. The previous rail, sidebar, and top-bar choices now use the unified shell.
+
 ## [1.8.0] - 2026-10-19
 
 ### Added

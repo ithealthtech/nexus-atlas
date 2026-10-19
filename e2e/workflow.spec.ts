@@ -212,9 +212,9 @@ test.describe.serial('first run to restricted client access', () => {
     await page.screenshot({ path: 'test-results/screens/document.png', fullPage: true });
 
     await page.keyboard.press('Control+k');
-    await page.getByRole('combobox').fill('fiber carr');
+    await page.getByRole('dialog', { name: 'Search Atlas' }).getByRole('combobox').fill('fiber carr');
     await expect(page.getByRole('option', { name: /Internet outage response/ })).toBeVisible();
-    await page.getByRole('combobox').fill('10.20.0.1');
+    await page.getByRole('dialog', { name: 'Search Atlas' }).getByRole('combobox').fill('10.20.0.1');
     await expect(page.getByRole('option', { name: /HDG-FW-01/ })).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: /HDG-FW-01/ })).toBeVisible();
@@ -611,7 +611,7 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Activity' }).click();
     await expect(page.getByText(/added a password/)).toHaveCount(0);
     await page.keyboard.press('Control+k');
-    await page.getByRole('combobox').fill('firewall');
+    await page.getByRole('dialog', { name: 'Search Atlas' }).getByRole('combobox').fill('firewall');
     await expect(page.getByRole('option', { name: /HDG-FW-01/ })).toBeVisible();
     await expect(page.getByRole('option', { name: /hardening standard/ })).toHaveCount(0);
     await page.keyboard.press('Escape');
@@ -623,7 +623,6 @@ test.describe.serial('first run to restricted client access', () => {
     watch(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page, OWNER.email, OWNER.password, ownerSecret);
-    await page.getByRole('button', { name: 'Open navigation' }).click();
     await page.getByRole('button', { name: 'Account menu' }).click();
     await page.getByRole('menuitemradio', { name: 'Dark' }).click();
     await expect(page.locator('html')).toHaveClass(/dark/);
@@ -1147,23 +1146,28 @@ async function signInFully(page: Page, email: string, password: string, given: s
   await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
 }
 
-// The default menu is the rail: five areas, each showing its own pages beside it.
+// Primary areas stay in the sidebar; page links live in the workspace.
 const AREA: Record<string, string> = {
-  Dashboard: 'Home',
-  Expirations: 'Home',
-  Assets: 'Docs',
-  'Knowledge base': 'Docs',
-  Checklists: 'Docs',
-  Passwords: 'Vault',
-  'My vault': 'Vault',
-  'Password health': 'Vault',
-  Send: 'Vault',
-  'Password rotation': 'Vault',
-  'BitLocker collector': 'Vault',
+  Dashboard: 'Overview',
+  Expirations: 'Overview',
+  Assets: 'Documentation',
+  'Knowledge base': 'Documentation',
+  Checklists: 'Documentation',
+  Passwords: 'Password Vault',
+  'My vault': 'Password Vault',
+  'Password health': 'Password Vault',
+  Send: 'Password Vault',
+  'Password rotation': 'Password Vault',
+  'BitLocker collector': 'Password Vault',
 };
 const nav = async (page: Page, name: string) => {
-  const menu = page.getByRole('navigation', { name: 'Main' });
-  const area = name === 'Clients' ? 'Clients' : (AREA[name] ?? 'Admin');
+  const menu = page.getByRole('navigation', { name: 'Main', exact: true });
+  if (!(await menu.isVisible())) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  const area = name === 'Clients' ? 'Clients' : (AREA[name] ?? 'Administration');
   await menu.getByRole('link', { name: area, exact: true }).click();
-  if (name !== 'Clients') await menu.getByRole('link', { name, exact: true }).click();
+  if (name !== 'Clients')
+    await page
+      .getByRole('navigation', { name: 'Workspace', exact: true })
+      .getByRole('link', { name, exact: true })
+      .click();
 };

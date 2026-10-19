@@ -851,6 +851,12 @@ const find = <T extends { id: string }>(list: T[], id: string, what = 'Item') =>
 };
 const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_passwords' });
 
+on('GET', '/reports/templates', () => []);
+on('GET', '/reports/runs', () => []);
+
+on('GET', '/reports/templates', () => []);
+on('GET', '/reports/runs', () => []);
+
 // Client license tracking in the clickable demo. Microsoft writes are never simulated as live changes.
 const licenseRecords: LicenseView[] = [];
 on('GET', '/clients/:id/licenses', (m) => {

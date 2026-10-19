@@ -360,6 +360,43 @@
           editing manual tracking requires client edit access. Manual changes appear in client activity and client
           exports.
         </p>
+        <h2 id="reports"><a class="anchor" href="#reports">Reports</a></h2>
+        <figure>
+          <a href="../images/manual/reports.png"
+            ><img src="../images/manual/reports.png" alt="Reports workspace" loading="lazy"
+          /></a>
+          <figcaption>The report library, workspace, and review actions. Synthetic example data.</figcaption>
+        </figure>
+        <p>
+          Open <strong>Overview → Reports</strong> for reporting across clients, or a client's
+          <strong>Reports</strong> tab for that workspace. Choose a built-in report: executive summary, asset inventory,
+          license utilization, upcoming renewals, documentation health, or endpoint health. Choose up to 25 clients, set
+          the report title and any renewal lookahead, and choose <strong>Run report</strong>.
+        </p>
+        <p>
+          The report captures current records; it does not infer historical activity or missing health data. Source
+          timestamps and coverage notices explain what was available. Microsoft seat inventory is read only through the
+          linked GDAP connection. Microsoft reseller costs and renewal dates are not supplied by that inventory.
+        </p>
+        <p>
+          Choose <strong>Needs review</strong> to focus on flagged records. Use <strong>Search report results</strong>,
+          <strong>Search field</strong>, and <strong>Visible columns</strong> to refine the table.
+          <strong>CSV</strong> and <strong>PDF</strong> export the selected section's matching rows and columns, with
+          capture details and data coverage. The browser displays the first 500 matching rows; CSV includes all matches,
+          up to the 10,000-row generation limit. PDF supports up to 2,000 matching rows; filter larger reports or export
+          CSV.
+        </p>
+        <p>
+          <strong>Save template</strong> stores reusable settings privately in your account.
+          <strong>Templates</strong> lets you load, update, copy, or delete those settings.
+          <strong>History</strong> lists your recent snapshots; opening a snapshot preserves its original contents,
+          while <strong>Refresh report</strong> creates a new capture. Every view and download checks current access to
+          all included clients. Deleting a client removes any report or template containing that client. Report
+          generation, template changes, exports, and deletions appear in the security log.
+        </p>
+        <p>
+          Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
+        </p>
         <h2 id="the-monthly-report"><a class="anchor" href="#the-monthly-report">The monthly report</a></h2>
         <p>
           <strong>Monthly report</strong> in the client header opens a printable page with the client's assets and
@@ -416,6 +453,7 @@
           <li><a href="#contacts-and-locations">Contacts and locations</a></li>
           <li><a href="#the-relationship-map">The relationship map</a></li>
           <li><a href="#licenses-and-subscriptions">Licenses and subscriptions</a></li>
+          <li><a href="#reports">Reports</a></li>
           <li><a href="#the-monthly-report">The monthly report</a></li>
           <li><a href="#export-a-client">Export a client</a></li>
           <li><a href="#change-or-delete-a-client">Change or delete a client</a></li>
