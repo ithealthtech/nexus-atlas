@@ -50,6 +50,8 @@ public sealed partial class SearchWindow : Window
     private List<ClientChoice> clients = [];
     private IReadOnlyList<AssetSummary> assetCache = [];
     private List<Row> loaded = [];
+    // The page the loaded rows belong to. Rows are only ever shown on that page.
+    private Place? loadedFor;
     private Func<Row, string>? grouping;
     private bool fillingTypes;
     private bool switchingTabs;
@@ -72,6 +74,15 @@ public sealed partial class SearchWindow : Window
         hwnd = WindowNative.GetWindowHandle(this);
         clipboard = new ClipboardGuard(new Native.Clipboard(hwnd), TimeProvider.System);
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
+        _ = SetUpHelloAsync();
+
+        // An update found before this window opened shows at once; one found later shows when it's found. A closed
+        // window stops listening.
+        void UpdateChanged() => DispatcherQueue.TryEnqueue(ShowUpdate);
+        app.UpdateChanged += UpdateChanged;
+        Closed += (_, _) => app.UpdateChanged -= UpdateChanged;
+        CheckUpdatesItem.Text = $"Check for updates (you have {AppInfo.VersionText})";
+        ShowUpdate();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -147,6 +158,11 @@ public sealed partial class SearchWindow : Window
     // ---------- showing ----------
     public void ShowSetup(string? address, string? message = null)
     {
+        if (hello.Locked)
+        {
+            Bring();
+            return;
+        }
         MainPanel.Visibility = Visibility.Collapsed;
         SetupPanel.Visibility = Visibility.Visible;
         QueryBox.Visibility = Visibility.Collapsed;
@@ -167,6 +183,13 @@ public sealed partial class SearchWindow : Window
 
     public void ShowSearch()
     {
+        // Locked: the window comes up with only the way to unlock it.
+        if (hello.Locked)
+        {
+            Bring();
+            UnlockButton.Focus(FocusState.Programmatic);
+            return;
+        }
         SetupPanel.Visibility = Visibility.Collapsed;
         MainPanel.Visibility = Visibility.Visible;
         QueryBox.Visibility = Visibility.Visible;
@@ -189,7 +212,11 @@ public sealed partial class SearchWindow : Window
 
     private void Bring()
     {
+        // Minimized stays minimized after Show, so restore it first.
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } presenter)
+            presenter.Restore();
         AppWindow.Show();
+        AppWindow.MoveInZOrderAtTop();
         Activate();
         Native.SetForegroundWindow(hwnd);
     }
@@ -204,6 +231,7 @@ public sealed partial class SearchWindow : Window
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
             canWrite = session.CanWrite;
+            screenConnect = session.ScreenConnect;
             ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
             AccountInitials.Text = Initials(session.User.Name);
             AppTitleBar.Subtitle = session.Organization.Name;
@@ -362,6 +390,8 @@ public sealed partial class SearchWindow : Window
         // A document says whether you may change it once it's open (see ShowDocument).
         var editable = canWrite && place.Item is { Kind: "password" or "asset", Archived: false };
         EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        ConnectButton.Visibility = Visibility.Collapsed;
+        connectLink = null;
         ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
         RestoreButton.Visibility = canWrite && place.Item is { Archived: true } ? Visibility.Visible : Visibility.Collapsed;
         var listKind = place.Kind == "client" ? place.Tab : place.Kind;
@@ -417,6 +447,13 @@ public sealed partial class SearchWindow : Window
                 return;
             }
         }
+        // The rows on screen belong to the page before: clear them first, so none of them show under this page's
+        // title while it loads, or after if loading fails.
+        loaded = [];
+        loadedFor = null;
+        grouping = null;
+        Results.ItemsSource = null;
+        ListEmpty.Visibility = Visibility.Collapsed;
         FilterBox.Text = "";
         _ = LoadPageAsync();
     }
@@ -1589,6 +1626,8 @@ public sealed partial class SearchWindow : Window
     /// </summary>
     private async Task SaveFileAsync(Row item, AttachmentInfo file, string reason = "")
     {
+        if (item.Kind == "password" && !await SecretCheckAsync("Save a password attachment"))
+            return;
         if (app.Client is not { } client)
             return;
         var picker = new global::Windows.Storage.Pickers.FileSavePicker
@@ -1658,6 +1697,8 @@ public sealed partial class SearchWindow : Window
 
     private async Task<string?> RevealOldAsync(string passwordId, string versionId)
     {
+        if (!await SecretCheckAsync("Show or copy an earlier password"))
+            return null;
         if (app.Client is not { } client)
             return null;
         try
@@ -1746,6 +1787,260 @@ public sealed partial class SearchWindow : Window
         catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
         {
             Fail(ex);
+        }
+    }
+
+    // ---------- Windows Hello and locking ----------
+    private readonly HelloPolicy hello = new(TimeProvider.System);
+    private bool helloAvailable;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? idleTimer;
+    private (Visibility Main, Visibility Setup)? beforeLock;
+
+    private static readonly (string Label, int Minutes)[] GraceChoices = [("Every time", 0), ("After 5 minutes", 5), ("After 15 minutes", 15)];
+    private static readonly (string Label, int Minutes)[] LockChoices = [("After 5 minutes", 5), ("After 15 minutes", 15), ("After 30 minutes", 30), ("After 1 hour", 60), ("Never", 0)];
+
+    /// <summary>
+    /// Finds out whether Windows Hello is set up here, applies the person's choices, and starts watching for the
+    /// computer being left alone. Without Windows Hello nothing is asked and nothing locks.
+    /// </summary>
+    private async Task SetUpHelloAsync()
+    {
+        helloAvailable = await WindowsHello.IsAvailableAsync();
+        hello.Apply(app.Settings);
+        BuildHelloMenu();
+        idleTimer = DispatcherQueue.CreateTimer();
+        idleTimer.Interval = TimeSpan.FromSeconds(20);
+        idleTimer.Tick += (_, _) =>
+        {
+            if (helloAvailable && hello.ShouldLock(Native.IdleTime()))
+                LockApp($"It locked after {Minutes(hello.LockAfter!.Value)} without use.");
+        };
+        idleTimer.Start();
+    }
+
+    private static string Minutes(TimeSpan span) => span.TotalMinutes >= 60 && span.TotalMinutes % 60 == 0
+        ? $"{span.TotalHours:0} hour{(span.TotalHours == 1 ? "" : "s")}"
+        : $"{span.TotalMinutes:0} minutes";
+
+    /// <summary>The Windows Hello choices in the account menu.</summary>
+    private void BuildHelloMenu()
+    {
+        HelloMenu.Items.Clear();
+        if (!helloAvailable)
+        {
+            HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Windows Hello isn't set up on this PC", IsEnabled = false });
+            HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Set it up in Windows Settings › Accounts › Sign-in options", IsEnabled = false });
+            return;
+        }
+        var settings = app.Settings;
+        var ask = new ToggleMenuFlyoutItem { Text = "Ask before showing or copying a password", IsChecked = settings.HelloForSecrets };
+        ask.Click += (_, _) => ChangeHello(s => s with { HelloForSecrets = ask.IsChecked });
+        HelloMenu.Items.Add(ask);
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Ask again", IsEnabled = false });
+        foreach (var (label, minutes) in GraceChoices)
+        {
+            var choice = new RadioMenuFlyoutItem { Text = label, GroupName = "grace", IsChecked = settings.HelloGraceMinutes == minutes };
+            choice.Click += (_, _) => ChangeHello(s => s with { HelloGraceMinutes = minutes });
+            HelloMenu.Items.Add(choice);
+        }
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        HelloMenu.Items.Add(new MenuFlyoutItem { Text = "Lock when the PC isn't used", IsEnabled = false });
+        foreach (var (label, minutes) in LockChoices)
+        {
+            var choice = new RadioMenuFlyoutItem { Text = label, GroupName = "lock", IsChecked = settings.LockAfterMinutes == minutes };
+            choice.Click += (_, _) => ChangeHello(s => s with { LockAfterMinutes = minutes });
+            HelloMenu.Items.Add(choice);
+        }
+        HelloMenu.Items.Add(new MenuFlyoutSeparator());
+        var lockNow = new MenuFlyoutItem { Text = "Lock now", Icon = new FontIcon { Glyph = "" } };
+        lockNow.Click += (_, _) => LockApp("You locked it.");
+        HelloMenu.Items.Add(lockNow);
+    }
+
+    private void ChangeHello(Func<AppSettings, AppSettings> change)
+    {
+        app.UpdateSettings(change);
+        hello.Apply(app.Settings);
+        BuildHelloMenu();
+    }
+
+    /// <summary>
+    /// Before a password or code is shown or copied: asks for Windows Hello unless a check was passed in the last few
+    /// minutes (or Windows Hello isn't set up here). False when it didn't confirm the person.
+    /// </summary>
+    private async Task<bool> SecretCheckAsync(string message)
+    {
+        if (!helloAvailable || !hello.SecretNeedsCheck)
+            return true;
+        if (await WindowsHello.VerifyAsync(hwnd, message) is { } problem)
+        {
+            Show($"{problem} Nothing was shown or copied.", InfoBarSeverity.Warning);
+            return false;
+        }
+        hello.Verified();
+        return true;
+    }
+
+    /// <summary>Covers the window until Windows Hello confirms the person. Secrets on screen are hidden first.</summary>
+    private void LockApp(string why)
+    {
+        if (!helloAvailable)
+            return;
+        hello.Lock();
+        HideSecrets();
+        if (LockPanel.Visibility == Visibility.Visible)
+            return;
+        beforeLock = (MainPanel.Visibility, SetupPanel.Visibility);
+        MainPanel.Visibility = Visibility.Collapsed;
+        SetupPanel.Visibility = Visibility.Collapsed;
+        QueryBox.IsEnabled = false;
+        AccountButton.IsEnabled = false;
+        LockReason.Text = $"{why} Nothing shows until Windows Hello confirms it's you.";
+        LockPanel.Visibility = Visibility.Visible;
+    }
+
+    private async void Unlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (await WindowsHello.VerifyAsync(hwnd, "Unlock Atlas") is { } problem)
+        {
+            LockReason.Text = problem;
+            return;
+        }
+        hello.Verified();
+        LockPanel.Visibility = Visibility.Collapsed;
+        QueryBox.IsEnabled = true;
+        AccountButton.IsEnabled = true;
+        if (beforeLock is { } was)
+        {
+            MainPanel.Visibility = was.Main;
+            SetupPanel.Visibility = was.Setup;
+        }
+        beforeLock = null;
+    }
+
+    // ---------- ScreenConnect ----------
+    private ScreenConnectInfo? screenConnect;
+    private Uri? connectLink;
+
+    /// <summary>Connect, for a device, when the organization has set its ScreenConnect address in Atlas.</summary>
+    private void ShowConnect(AssetSummary asset)
+    {
+        layouts.TryGetValue(asset.LayoutId, out var layout);
+        connectLink = screenConnect?.LinkFor(asset, layout);
+        if (connectLink is null)
+        {
+            ConnectButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var joins = ScreenConnectInfo.SessionIdOf(asset, layout) is not null;
+        ConnectText.Text = joins ? "Connect" : "Find in ScreenConnect";
+        var tip = joins
+            ? "Join this device's ScreenConnect session."
+            : $"Open ScreenConnect searching for {ScreenConnectInfo.NameToFind(asset, layout)}. Add the session ID to the asset to join it directly.";
+        ToolTipService.SetToolTip(ConnectButton, tip);
+        AutomationProperties.SetName(ConnectButton, ConnectText.Text);
+        ConnectButton.Visibility = Visibility.Visible;
+    }
+
+    private void Connect_Click(object sender, RoutedEventArgs e)
+    {
+        if (connectLink is null)
+            return;
+        _ = Launcher.LaunchUriAsync(connectLink);
+        Show(ConnectText.Text == "Connect" ? "Opening the session in ScreenConnect…" : "Opening ScreenConnect…", InfoBarSeverity.Informational);
+    }
+
+    // ---------- updating the app ----------
+    private string? dismissedUpdate;
+    private bool installingUpdate;
+
+    /// <summary>Shows the update bar when Atlas offers a newer version of this app, unless it was put away for that version.</summary>
+    internal void ShowUpdate()
+    {
+        if (installingUpdate)
+            return;
+        var release = app.AvailableUpdate;
+        if (release is null || dismissedUpdate == release.LatestVersion)
+        {
+            UpdateBar.IsOpen = false;
+            return;
+        }
+        UpdateBar.Severity = InfoBarSeverity.Informational;
+        UpdateBar.Title = $"Atlas for Windows {release.LatestVersion} is available";
+        UpdateBar.Message = $"You have {AppInfo.VersionText}. It installs in a few seconds, and the app opens again by itself.";
+        UpdateButton.Content = "Install and restart";
+        UpdateButton.IsEnabled = true;
+        UpdateProgress.Visibility = Visibility.Collapsed;
+        UpdateBrowserLink.Visibility = Visibility.Collapsed;
+        UpdateBar.IsOpen = true;
+    }
+
+    private void UpdateBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => dismissedUpdate = app.AvailableUpdate?.LatestVersion;
+
+    private async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (installingUpdate)
+            return;
+        installingUpdate = true;
+        UpdateButton.IsEnabled = false;
+        UpdateBrowserLink.Visibility = Visibility.Collapsed;
+        UpdateProgress.Value = 0;
+        UpdateProgress.Visibility = Visibility.Visible;
+        UpdateBar.IsClosable = false;
+        UpdateBar.Message = "Downloading…";
+        var progress = new Progress<double>(share =>
+        {
+            UpdateProgress.Value = share * 100;
+            UpdateBar.Message = share < 1 ? $"Downloading… {share:P0}" : "Checked. Installing; the app closes and opens again in a moment.";
+        });
+        try
+        {
+            await app.InstallUpdateAsync(progress);
+        }
+        catch (Exception ex) when (ex is UpdateFailedException or HttpRequestException or IOException or TaskCanceledException or System.ComponentModel.Win32Exception)
+        {
+            UpdateBar.Severity = InfoBarSeverity.Error;
+            UpdateBar.Title = "The update didn't install";
+            UpdateBar.Message = ex switch
+            {
+                UpdateFailedException failed => failed.Message,
+                HttpRequestException http => ConnectionProblem.Describe(http),
+                System.ComponentModel.Win32Exception => "Windows didn't start the setup program. You can download it in your browser instead.",
+                _ => "The download stopped. Check the connection and try again.",
+            };
+            UpdateButton.Content = "Try again";
+            UpdateButton.IsEnabled = true;
+            UpdateProgress.Visibility = Visibility.Collapsed;
+            UpdateBrowserLink.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            installingUpdate = false;
+            UpdateBar.IsClosable = true;
+        }
+    }
+
+    private void UpdateBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        if (app.AvailableUpdate?.DownloadLink is { } link)
+            _ = Launcher.LaunchUriAsync(link);
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        switch (await app.CheckForUpdateNowAsync())
+        {
+            case true:
+                dismissedUpdate = null;
+                ShowUpdate();
+                break;
+            case false:
+                Show($"You have the newest version, {AppInfo.VersionText}.", InfoBarSeverity.Success);
+                break;
+            default:
+                Show("Atlas couldn't be asked about updates just now. Try again later.", InfoBarSeverity.Warning);
+                break;
         }
     }
 
@@ -1852,7 +2147,11 @@ public sealed partial class SearchWindow : Window
             TypeFilter.Visibility = kind is "assets" or "clients" ? Visibility.Visible : Visibility.Collapsed;
             ClientHeader.Visibility = kind == "clients" ? Visibility.Visible : Visibility.Collapsed;
             ShowItemHeader(kind);
+            // Another page may have opened while this one loaded; its own load shows its rows.
+            if (trail.Count == 0 || trail[^1] != place)
+                return;
             loaded = rows;
+            loadedFor = place;
             grouping = groupBy;
             ListEmptyText.Text = place.Kind == "client" ? $"{place.Title} has no {place.Tab} in Atlas yet." : empty;
             Render();
@@ -1875,6 +2174,13 @@ public sealed partial class SearchWindow : Window
     private void Render()
     {
         var place = trail[^1];
+        // Rows only ever show on the page they were loaded for; until this page's arrive, the list stays empty.
+        if (loadedFor != place)
+        {
+            Results.ItemsSource = null;
+            ListEmpty.Visibility = Visibility.Collapsed;
+            return;
+        }
         var filter = FilterBox.Text.Trim();
         var shown = loaded
             .Where(r => filter.Length == 0 || r.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || r.Subtitle.Contains(filter, StringComparison.CurrentCultureIgnoreCase))
@@ -1951,7 +2257,12 @@ public sealed partial class SearchWindow : Window
     {
         if (fillingTypes || trail.Count == 0)
             return;
-        loaded = trail[^1].Kind == "clients" ? ClientRows() : AssetRows();
+        // The filter is shared by the Clients and Assets lists: act only for the one on screen, once it has loaded.
+        var place = trail[^1];
+        var kind = place.Kind == "client" ? place.Tab : place.Kind;
+        if (kind is not ("assets" or "clients") || loadedFor != place)
+            return;
+        loaded = kind == "clients" ? ClientRows() : AssetRows();
         Render();
     }
 
@@ -2485,6 +2796,7 @@ public sealed partial class SearchWindow : Window
 
     private void ShowAsset(AssetSummary asset)
     {
+        ShowConnect(asset);
         var facts = KeyFacts(asset);
         if (facts.Count > 0)
             Detail.Children.Add(Facts([.. facts.Take(6).Select(f => (f.Label, f.Value))]));
@@ -2751,6 +3063,8 @@ public sealed partial class SearchWindow : Window
             return;
         if (field == SecretField.OneTimeCode && !entry.HasTotp)
             return;
+        if (reason.Length == 0 && !await SecretCheckAsync($"Copy the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
+            return;
         try
         {
             var secret = await client.RevealForCopyAsync(entry.Id, field, reason);
@@ -2776,6 +3090,8 @@ public sealed partial class SearchWindow : Window
     private async Task ShowSecretAsync(SecretField field, TextBlock target, string masked, string reason = "")
     {
         if (password is not { } entry || app.Client is not { } client)
+            return;
+        if (reason.Length == 0 && !await SecretCheckAsync($"Show the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
             return;
         try
         {

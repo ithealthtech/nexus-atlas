@@ -276,11 +276,27 @@
           until it changes. <strong>Archived</strong> at the top of the Passwords, Assets and Documents lists shows what
           was archived; an archived item opens read-only with <strong>Restore</strong>.
         </p>
+        <h3 id="windows-hello-and-locking">
+          <a class="anchor" href="#windows-hello-and-locking">Windows Hello and locking</a>
+        </h3>
+        <p>
+          Where Windows Hello (fingerprint, face or PIN) is set up, the app asks for it before it shows or copies a
+          password or one-time code. One check covers the next 5 minutes; you can make it every time, or 15 minutes,
+          under <strong>Windows Hello</strong> in the account menu. The app also locks when the computer goes 15 minutes
+          without keyboard or mouse use, hiding anything on screen until Windows Hello confirms it's you; choose 5, 15
+          or 30 minutes, an hour, or never, or choose <strong>Lock now</strong>. On a computer without Windows Hello the
+          app doesn't ask and doesn't lock, since nothing could unlock it; set Windows Hello up under Windows Settings ›
+          Accounts › Sign-in options.
+        </p>
         <h3 id="updates"><a class="anchor" href="#updates">Updates</a></h3>
         <p>
-          When a newer version is out, the app tells you once and adds <strong>Get version …</strong> to its menu, which
-          opens the download in your browser. Run the new setup program over the old one; you stay signed in. The app
-          never downloads or installs anything by itself.
+          The app asks Atlas for a newer version when it starts and every six hours, and you can ask at any time with
+          <strong>Check for updates</strong> in the account menu. When one is out, the app tells you once, shows
+          <strong>Install and restart</strong> at the top of the window, and adds
+          <strong>Install version … and restart</strong> to its tray menu. Choosing it downloads the setup program,
+          checks it against the checksum published with the release, installs it over the old copy, and opens the app
+          again; you stay signed in. Nothing installs until you choose to. If the download fails its checks, nothing is
+          installed and the app says why, with a link to download it in your browser instead.
         </p>
         <h3 id="sign-out"><a class="anchor" href="#sign-out">Sign out</a></h3>
         <p>

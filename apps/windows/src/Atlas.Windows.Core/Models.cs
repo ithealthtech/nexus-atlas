@@ -17,7 +17,8 @@ public sealed record AppSessionInfo(
     OrganizationInfo Organization,
     string DeviceName,
     string[] Scopes,
-    AppRelease? App = null)
+    AppRelease? App = null,
+    ScreenConnectInfo? ScreenConnect = null)
 {
     public bool CanReveal => Scopes.Contains("reveal");
 

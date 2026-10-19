@@ -19,6 +19,10 @@ public static class Win {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+  // A real left click where the pointer is, the way a person's click arrives (not an automation call).
+  public static void Click(int x, int y) { SetCursorPos(x, y); mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero); mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero); }
 }
 '@
 
@@ -81,6 +85,33 @@ try {
 
   Shot '01-home'
 
+  # Real mouse clicks, quickly, across the sections and into a row: the right list shows and the app keeps up.
+  function MouseClick($element, $what) {
+    if (-not $element) { Check $false "found $what to click"; return }
+    $r = $element.Current.BoundingRectangle
+    [Win]::SetForegroundWindow($hwnd) | Out-Null
+    [Win]::Click([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+  }
+  function SectionItem($name) { All $CT::ListItem | Where-Object { $_.Current.Name -eq $name } | Select-Object -First 1 }
+  foreach ($name in 'Passwords', 'Assets', 'Documents', 'Clients', 'Passwords', 'Assets') {
+    MouseClick (SectionItem $name) "the $name section"
+    Start-Sleep -Milliseconds 150
+  }
+  Start-Sleep -Seconds 3
+  $p.Refresh()
+  Check $p.Responding 'the app keeps up with quick clicks'
+  Check ((Title) -eq 'Assets') 'after quick clicks, the last section clicked is showing'
+  Check (Shows 'HDG-DC-01') 'the Assets list shows assets'
+  Check (-not (Shows 'Core switch enable')) 'the Assets list shows no passwords from an earlier section'
+  MouseClick (All $CT::ListItem | Where-Object { $_.Current.Name -like 'HDG-DC-01*' } | Select-Object -First 1) 'the HDG-DC-01 row'
+  Start-Sleep -Seconds 2
+  Check ((Title) -eq 'HDG-DC-01') 'clicking a row with the mouse opens it'
+  MouseClick (ById 'BackButton') 'Back'
+  Start-Sleep -Seconds 2
+  Check ((Title) -eq 'Assets') 'Back with the mouse returns to the list'
+  Check (-not (Shows 'Core switch enable')) 'going back shows the same list, not an earlier one'
+  Shot '01b-after-quick-clicks'
+
   Open 'Clients'
   Check (Shows 'Next 30 days') 'the Clients page shows its table'
   Check (Shows '*expiring*') 'a client shows what is coming due'
@@ -117,6 +148,8 @@ try {
   Press (ById 'SaveButton') 'the asset form''s save button'
   Check ((Title) -eq 'HDG-SW-01') 'a new asset saves and opens'
   Shot '05-asset'
+  $connect = ById 'ConnectButton'
+  Check ($connect -and $connect.Current.Name -eq 'Find in ScreenConnect') 'a device without a ScreenConnect session ID offers to find it'
 
   # Under an item: what it's linked to and its files; a password's earlier versions; a code counting down.
   Open 'Assets'; Open 'HDG-FW-01*'
