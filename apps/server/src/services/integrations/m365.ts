@@ -97,9 +97,11 @@ export class M365Client {
     private readonly appId: string,
     private readonly secret: string,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly delegatedToken?: (tenant: string) => Promise<string>,
   ) {}
 
   private async token(tenant: string) {
+    if (this.delegatedToken) return this.delegatedToken(tenant);
     const key = `${tenant}|${createHash('sha256').update(this.secret).digest('hex').slice(0, 16)}`;
     const cached = this.tokens.get(key);
     if (cached && cached.expires > Date.now() + 60_000) return cached.token;
@@ -152,7 +154,9 @@ export class M365Client {
       if (res.status === 403 || res.status === 401)
         throw new HttpError(
           400,
-          'The app can’t read this tenant’s directory. Give it the Directory.Read.All application permission, then grant consent in the tenant again.',
+          this.delegatedToken
+            ? 'Delegated access was refused. Check the technician’s GDAP group assignment, active relationship, customer consent, and Directory.Read.All delegated permission.'
+            : 'The app can’t read this tenant’s directory. Give it the Directory.Read.All application permission, then grant consent in the tenant again.',
         );
       if (!res.ok) throw new HttpError(502, `Microsoft Graph answered ${res.status} for ${path.split('?')[0]}.`);
       const body = (await res.json()) as { value?: Json[]; '@odata.nextLink'?: string };

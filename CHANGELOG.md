@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Microsoft 365 GDAP partner sign-in.** Connect a partner Microsoft account, discover active customer relationships, map customer tenants to Atlas clients, and sync documentation using delegated customer access. Partner refresh tokens are encrypted and renewed on use; disconnect cancels pending sign-ins and prevents delayed token refreshes from restoring access. Existing application-consent sync and Atlas staff sign-in remain available. See the [GDAP setup guide](docs/M365-GDAP.md).
+
 ## [1.7.32] - 2026-10-15
 
 ### Changed

@@ -280,7 +280,10 @@ export async function buildApp({
     // callback is exempt; it verifies its own state, nonce, and PKCE before it does anything.
     const path = req.url.split('?')[0]!;
     const isSsoReturn =
-      (req.method === 'GET' && (path === '/api/auth/entra/callback' || path === '/api/integrations/m365/consent')) ||
+      (req.method === 'GET' &&
+        (path === '/api/auth/entra/callback' ||
+          path === '/api/integrations/m365/consent' ||
+          path === '/api/integrations/m365/gdap/callback')) ||
       isSamlReturn;
     const isPage = req.method === 'GET' && !path.startsWith('/api/');
     if (req.headers['sec-fetch-site'] === 'cross-site' && !isSsoReturn && !isPage)
@@ -954,7 +957,18 @@ export async function buildApp({
     agentLimiter: failureLimiter(20, 15 * 60_000),
   });
   registerRequestLogRoutes(app, { db, authed, recent, requestLog });
-  registerM365Routes(app, { db, authed, recent, settings, publicOrigin: config.publicOrigin, fetcher: m365Fetch });
+  registerM365Routes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    publicOrigin: config.publicOrigin,
+    fetcher: m365Fetch,
+    keys,
+    identity,
+    cookieName,
+    secureCookies: config.secureCookies,
+  });
 
   app.all('/api/*', async () => {
     throw new HttpError(404, 'Not found.');

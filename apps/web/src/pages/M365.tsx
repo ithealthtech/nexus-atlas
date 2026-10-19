@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, ExternalLink, RefreshCw, Unplug } from 'lucide-react';
-import type { ImportJobView, M365TenantLink, M365View } from '@atlas/shared';
+import type { GdapCustomer, ImportJobView, M365TenantLink, M365View } from '@atlas/shared';
 import {
   Badge,
   Button,
@@ -33,6 +33,8 @@ export function M365Sync() {
   const toast = useToast();
   const clients = useClients();
   const state = useQuery({ queryKey: ['m365'], queryFn: () => api<M365State>('/integrations/m365') });
+  const [authMode, setAuthMode] = useState<'application' | 'gdap' | null>(null);
+  const [customers, setCustomers] = useState<GdapCustomer[]>([]);
   const [jobId, setJobId] = useState<string | null>(null);
   const job = useQuery({
     queryKey: ['import-job', jobId],
@@ -58,12 +60,26 @@ export function M365Sync() {
   const handled = useRef(false);
   useEffect(() => {
     if (handled.current || !state.data?.connection) return;
-    const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
+    const query = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
+    const gdap = query.get('gdap');
+    if (gdap) {
+      handled.current = true;
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash.split('?')[0]);
+      toast(
+        gdap === 'connected'
+          ? 'GDAP partner account connected. Load customers to choose their Atlas clients.'
+          : gdap === 'expired'
+            ? 'The GDAP sign-in expired. Start again from this page.'
+            : 'GDAP sign-in failed. Check the partner tenant, app secret, redirect URI, and consent, then try again.',
+        gdap === 'connected' ? undefined : 'error',
+      );
+      return;
+    }
     const outcome = query.get('m365');
     if (!outcome) return;
     handled.current = true;
     const client = query.get('client');
-    window.history.replaceState(null, '', window.location.hash.split('?')[0]);
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash.split('?')[0]);
     if (outcome !== 'consented' || !client) {
       toast('Consent wasn’t granted. Open the link again as a Global Administrator of that tenant.', 'error');
       return;
@@ -87,12 +103,15 @@ export function M365Sync() {
         method: 'PUT',
         body: {
           clientId: form.get('clientId'),
+          authMode: form.get('authMode'),
+          ...(form.get('partnerTenantId') ? { partnerTenantId: form.get('partnerTenantId') } : {}),
           autoSync: form.get('autoSync') === 'on',
           ...(clientSecret ? { clientSecret } : {}),
         },
       });
       await state.refetch();
-      toast('Saved. Link each client to its tenant below.');
+      setCustomers([]);
+      toast('Saved. For GDAP, sign in with your partner account, then load customers.');
     });
   };
   const link = (e: FormEvent<HTMLFormElement>) => {
@@ -106,12 +125,17 @@ export function M365Sync() {
       });
       await state.refetch();
       formEl.reset();
-      toast('Linked. Now grant consent in that tenant.');
+      toast(
+        state.data?.connection?.authMode === 'gdap'
+          ? 'Linked. Choose Check to verify delegated access.'
+          : 'Linked. Now grant consent in that tenant.',
+      );
     });
   };
 
   const data = state.data;
   const conn = data?.connection;
+  const mode = authMode ?? conn?.authMode ?? 'application';
   const linked = new Set(data?.tenants.map((t) => t.clientId));
   return (
     <Card>
@@ -124,7 +148,7 @@ export function M365Sync() {
           <Skeleton className="h-24" />
         ) : (
           <>
-            {!conn && (
+            {!conn && mode === 'application' && (
               <div className="rounded-lg border border-border bg-surface-2 p-3 text-sm text-text-2">
                 <p className="font-medium text-text">In your own Microsoft Entra → App registrations:</p>
                 <ol className="mt-1 list-decimal space-y-0.5 pl-5">
@@ -158,7 +182,51 @@ export function M365Sync() {
                 </ol>
               </div>
             )}
-            <form onSubmit={save} className="space-y-4" noValidate>
+            <form key={conn?.clientId ?? 'new'} onSubmit={save} className="space-y-4" noValidate>
+              <Field label="Microsoft 365 access">
+                {(p) => (
+                  <Select
+                    {...p}
+                    name="authMode"
+                    value={mode}
+                    onChange={(e) => setAuthMode(e.target.value as 'application' | 'gdap')}
+                  >
+                    <option value="application">Application consent in each customer tenant</option>
+                    <option value="gdap">GDAP — sign in with a partner Microsoft account</option>
+                  </Select>
+                )}
+              </Field>
+              {mode === 'gdap' && (
+                <>
+                  <Field
+                    label="Partner Directory (tenant) ID"
+                    help="The GUID of your MSP’s partner tenant, where the app is registered."
+                  >
+                    {(p) => (
+                      <Input
+                        {...p}
+                        name="partnerTenantId"
+                        defaultValue={conn?.partnerTenantId ?? ''}
+                        required
+                        autoComplete="off"
+                      />
+                    )}
+                  </Field>
+                  <div className="rounded-lg border border-border bg-surface-2 p-3 text-sm text-text-2">
+                    <p>Use a multitenant Web app. Add this redirect URI:</p>
+                    <code className="block break-all">
+                      {conn?.gdapRedirectUri ?? window.location.origin + '/api/integrations/m365/gdap/callback'}
+                    </code>
+                    <p className="mt-2">
+                      Add Microsoft Graph <strong>delegated</strong> permissions
+                      <strong> Directory.Read.All</strong> and <strong>DelegatedAdminRelationship.Read.All</strong>.
+                      Grant partner admin consent. Each customer also needs delegated application consent, an active
+                      GDAP relationship, and a suitable role assigned to the partner user’s security group. Require MFA
+                      for the partner account.
+                    </p>
+                  </div>
+                </>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Microsoft 365 app ID" help="The app registration's Application (client) ID.">
                   {(p) => (
@@ -198,6 +266,66 @@ export function M365Sync() {
         )}
         {conn && data && (
           <>
+            {conn.authMode === 'gdap' && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <p className="text-sm">
+                  {conn.gdap
+                    ? 'Partner account: ' + (conn.gdap.email || conn.gdap.name)
+                    : 'Sign in with the Microsoft partner account that has GDAP access.'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    loading={busy === 'gdap-signin'}
+                    onClick={() =>
+                      act('gdap-signin', async () => {
+                        const result = await api<{ url: string }>('/integrations/m365/gdap/start', {
+                          method: 'POST',
+                          body: {},
+                        });
+                        window.location.assign(result.url);
+                      })
+                    }
+                  >
+                    {conn.gdap ? 'Reconnect partner account' : 'Sign in with Microsoft for GDAP'}
+                  </Button>
+                  {conn.gdap && (
+                    <>
+                      <Button
+                        variant="secondary"
+                        loading={busy === 'gdap-customers'}
+                        onClick={() =>
+                          act('gdap-customers', async () => {
+                            const found = await api<GdapCustomer[]>('/integrations/m365/gdap/customers');
+                            setCustomers(found);
+                            if (!found.length) toast('No active GDAP customer relationships were found.');
+                          })
+                        }
+                      >
+                        Load GDAP customers
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() =>
+                          act('gdap-disconnect', async () => {
+                            await api('/integrations/m365/gdap', { method: 'DELETE' });
+                            setCustomers([]);
+                            await state.refetch();
+                            toast('Partner account disconnected from Atlas.');
+                          })
+                        }
+                      >
+                        Disconnect partner account
+                      </Button>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-muted">
+                  This connects Microsoft 365 for documentation sync. Atlas staff sign-in and client permissions are
+                  managed under People &amp; access.
+                </p>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted">
                 {conn.lastSyncAt ? `Last synced ${formatDateTime(conn.lastSyncAt)}` : 'Not synced yet'}
@@ -205,7 +333,9 @@ export function M365Sync() {
               <Button
                 className="ml-auto"
                 loading={busy === 'sync'}
-                disabled={job.data?.status === 'running' || !data.tenants.length}
+                disabled={
+                  job.data?.status === 'running' || !data.tenants.length || (conn.authMode === 'gdap' && !conn.gdap)
+                }
                 onClick={() =>
                   act('sync', async () => {
                     const { id } = await api<{ id: string }>('/integrations/m365/sync', { method: 'POST', body: {} });
@@ -275,7 +405,7 @@ export function M365Sync() {
                         {t.detail && <p className="text-xs text-danger">{t.detail}</p>}
                       </div>
                       <Badge tone={STATUS[t.status].tone}>{STATUS[t.status].label}</Badge>
-                      {t.status !== 'ok' && (
+                      {t.status !== 'ok' && conn.authMode !== 'gdap' && (
                         <a
                           href={t.consentUrl}
                           target="_blank"
@@ -333,18 +463,37 @@ export function M365Sync() {
                     </Select>
                   )}
                 </Field>
-                <Field label="Tenant ID or domain">
-                  {(p) => (
-                    <Input {...p} name="tenant" placeholder="contoso.onmicrosoft.com" autoComplete="off" required />
-                  )}
+                <Field label={conn.authMode === 'gdap' ? 'GDAP customer tenant' : 'Tenant ID or domain'}>
+                  {(p) =>
+                    conn.authMode === 'gdap' ? (
+                      <Select {...p} name="tenant" required defaultValue="">
+                        <option value="" disabled>
+                          Load and choose a GDAP customer…
+                        </option>
+                        {[...new Map(customers.map((c) => [c.tenantId, c])).values()].map((c) => (
+                          <option key={c.tenantId} value={c.tenantId}>
+                            {c.name} ({c.tenantId})
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Input {...p} name="tenant" placeholder="contoso.onmicrosoft.com" autoComplete="off" required />
+                    )
+                  }
                 </Field>
                 <Button type="submit" variant="secondary" loading={busy === 'link'}>
                   Link tenant
                 </Button>
               </form>
               <p className="text-xs text-muted">
-                After linking, a Global Administrator of that tenant opens <strong>Grant consent</strong> and approves
-                read access. Atlas checks the tenant when they come back.
+                {conn.authMode === 'gdap' ? (
+                  'After linking, choose Check to verify delegated access. Customer application consent and the partner user’s GDAP roles must permit directory reads.'
+                ) : (
+                  <>
+                    After linking, a Global Administrator of that tenant opens <strong>Grant consent</strong> and
+                    approves read access. Atlas checks the tenant when they come back.
+                  </>
+                )}
               </p>
             </div>
           </>

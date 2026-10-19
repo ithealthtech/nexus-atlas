@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
@@ -144,6 +145,11 @@ export interface EraseRequest {
   requestedByName: string;
 }
 export interface StoredM365 {
+  /** Changes on disconnect, invalidating even a callback already exchanging its code. */
+  gdapRevision?: string;
+  authMode?: 'application' | 'gdap';
+  partnerTenantId?: string;
+  gdap?: { refreshSealed: string; oid: string; name: string; email: string; connectedAt: string };
   clientId: string;
   secretSealed: string;
   autoSync: boolean;
@@ -184,6 +190,7 @@ export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientS
 const entraAad = (orgId: string) => `org|${orgId}|entra`;
 const cwAad = (orgId: string) => `org|${orgId}|cw-rmm`;
 const m365Aad = (orgId: string) => `org|${orgId}|m365`;
+const gdapAad = (orgId: string) => `org|${orgId}|m365|gdap`;
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
 const siemAad = (orgId: string) => `org|${orgId}|siem`;
 const graphAad = (orgId: string) => `org|${orgId}|graph`;
@@ -255,7 +262,18 @@ export class SettingsService {
           secretSealed: reseal(stored.entra.secretSealed, entraAad(id))!,
         });
       if (stored.m365)
-        await this.put(id, 'm365', { ...stored.m365, secretSealed: reseal(stored.m365.secretSealed, m365Aad(id))! });
+        await this.put(id, 'm365', {
+          ...stored.m365,
+          secretSealed: reseal(stored.m365.secretSealed, m365Aad(id))!,
+          ...(stored.m365.gdap
+            ? {
+                gdap: {
+                  ...stored.m365.gdap,
+                  refreshSealed: reseal(stored.m365.gdap.refreshSealed, gdapAad(id))!,
+                },
+              }
+            : {}),
+        });
       if (stored.cwRmm)
         await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
       if (stored.siem?.secretSealed)
@@ -507,6 +525,12 @@ export class SettingsService {
     const saved = (await this.load(orgId)).m365;
     return saved
       ? {
+          authMode: saved.authMode ?? 'application',
+          partnerTenantId: saved.partnerTenantId ?? null,
+          gdap: saved.gdap
+            ? { name: saved.gdap.name, email: saved.gdap.email, connectedAt: saved.gdap.connectedAt }
+            : null,
+          gdapRedirectUri: publicOrigin + '/api/integrations/m365/gdap/callback',
           clientId: saved.clientId,
           hasSecret: true,
           autoSync: saved.autoSync,
@@ -523,7 +547,16 @@ export class SettingsService {
     const secret = body.clientSecret ?? current?.clientSecret;
     if (!secret)
       throw new HttpError(400, 'Enter the client secret.', undefined, { clientSecret: 'Enter the client secret.' });
-    await this.put(orgId, 'm365', {
+    const keepGdap =
+      current?.clientId === body.clientId &&
+      current?.partnerTenantId === body.partnerTenantId &&
+      current?.authMode === body.authMode &&
+      (!body.clientSecret || body.clientSecret === current?.clientSecret);
+    const next = {
+      gdapRevision: current?.gdapRevision,
+      authMode: body.authMode,
+      partnerTenantId: body.partnerTenantId,
+      ...(keepGdap && current?.gdap ? { gdap: current.gdap } : {}),
       clientId: body.clientId,
       secretSealed: seal(this.keys, secret, m365Aad(orgId)),
       autoSync: body.autoSync,
@@ -531,14 +564,79 @@ export class SettingsService {
       lastSyncAt: current?.lastSyncAt ?? null,
       options: current?.options,
       tenants: current?.tenants ?? {},
-    } satisfies StoredM365);
+    } satisfies StoredM365;
+    const { clientSecret: _secret, ...expected } = current ?? {};
+    const updated = await this.db
+      .update(schema.orgs)
+      .set({
+        settings: sql`${schema.orgs.settings} || jsonb_build_object('m365', ${JSON.stringify(next)}::jsonb)`,
+      })
+      .where(
+        and(
+          eq(schema.orgs.id, orgId),
+          current
+            ? sql`${schema.orgs.settings}->'m365' = ${JSON.stringify(expected)}::jsonb`
+            : sql`not (${schema.orgs.settings} ? 'm365')`,
+        ),
+      )
+      .returning({ id: schema.orgs.id });
+    if (!updated.length) throw new HttpError(409, 'The Microsoft 365 connection changed. Reload and save again.');
   }
 
   /** Updates tenants, options, or the last-sync time without touching the secret. */
   async patchM365(orgId: string, patch: Partial<Pick<StoredM365, 'tenants' | 'lastSyncAt' | 'options'>>) {
     const saved = (await this.load(orgId)).m365;
     if (!saved) throw new HttpError(400, 'Connect Microsoft 365 first.');
-    await this.put(orgId, 'm365', { ...saved, tenants: saved.tenants ?? {}, ...patch });
+    await this.db
+      .update(schema.orgs)
+      .set({
+        settings: sql`jsonb_set(${schema.orgs.settings}, '{m365}',
+        (${schema.orgs.settings}->'m365') || ${JSON.stringify(patch)}::jsonb)`,
+      })
+      .where(and(eq(schema.orgs.id, orgId), sql`${schema.orgs.settings} ? 'm365'`));
+  }
+
+  /** Read only on the server; the refresh token never enters a settings response. */
+  async gdapRefresh(orgId: string): Promise<string> {
+    const saved = await this.m365(orgId);
+    if (!saved?.gdap || saved.authMode !== 'gdap')
+      throw new HttpError(400, 'Sign in with your GDAP partner account first.');
+    return open(this.keys, saved.gdap.refreshSealed, gdapAad(orgId));
+  }
+
+  /** Compare the original connection to prevent an in-flight login/refresh from restoring a disconnected grant. */
+  async saveGdap(orgId: string, expected: StoredM365, grant: NonNullable<StoredM365['gdap']>, refresh: string) {
+    const next = { ...grant, refreshSealed: seal(this.keys, refresh, gdapAad(orgId)) };
+    const {
+      clientSecret: _secret,
+      tenants: _tenants,
+      options: _options,
+      lastSyncAt: _last,
+      autoSync: _auto,
+      ...connection
+    } = expected as StoredM365 & { clientSecret?: string };
+    const rows = await this.db
+      .update(schema.orgs)
+      .set({
+        settings: sql`jsonb_set(${schema.orgs.settings}, '{m365,gdap}', ${JSON.stringify(next)}::jsonb)`,
+      })
+      .where(
+        and(
+          eq(schema.orgs.id, orgId),
+          sql`((${schema.orgs.settings}->'m365') - 'tenants' - 'options' - 'lastSyncAt' - 'autoSync') = ${JSON.stringify(connection)}::jsonb`,
+        ),
+      )
+      .returning({ id: schema.orgs.id });
+    if (!rows.length) throw new HttpError(409, 'The Microsoft 365 connection changed. Try again.');
+  }
+
+  async disconnectGdap(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({
+        settings: sql`jsonb_set(${schema.orgs.settings} #- '{m365,gdap}', '{m365,gdapRevision}', ${JSON.stringify(randomUUID())}::jsonb)`,
+      })
+      .where(and(eq(schema.orgs.id, orgId), sql`${schema.orgs.settings} ? 'm365'`));
   }
 
   async forgetM365(orgId: string) {
