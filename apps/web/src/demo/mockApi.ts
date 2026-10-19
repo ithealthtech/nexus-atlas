@@ -53,6 +53,7 @@ import {
   type TrackerKind,
   type TrackerReport,
   type TrackerSettings,
+  type ScreenConnectSettings,
   type WarrantyAsset,
   type WarrantyCounts,
   type WarrantyFilter,
@@ -430,6 +431,7 @@ function assetStatsReport(client: string | null): AssetStatsReport {
 
 // ---------- domain and SSL trackers (the sample's Domains and SSL certificates assets) ----------
 let trackerSettings: TrackerSettings = { enabled: true, createCertificates: true };
+let screenConnectSettings: ScreenConnectSettings = { url: '', group: 'All Machines' };
 const TRACKER_LAYOUT: Record<string, TrackerKind> = { domain: 'domain', ssl_certificate: 'ssl' };
 const trackerStanding = (daysLeft: number | null): TrackerFilter =>
   daysLeft === null ? 'unknown' : daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'soon' : 'active';
@@ -2067,6 +2069,8 @@ on('POST', '/trackers/check', () => {
 });
 on('GET', '/settings/trackers', () => trackerSettings);
 on('PUT', '/settings/trackers', (_m, b) => (trackerSettings = b as TrackerSettings));
+on('GET', '/settings/screenconnect', () => screenConnectSettings);
+on('PUT', '/settings/screenconnect', (_m, b) => (screenConnectSettings = b as ScreenConnectSettings));
 on('PUT', '/settings/warranty', (_m, b) => {
   const body = b as { soonDays: number; autoLookup: boolean };
   return (warrantySettings = { ...warrantySettings, soonDays: body.soonDays, autoLookup: body.autoLookup });

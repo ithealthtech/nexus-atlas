@@ -120,8 +120,23 @@ describe('Atlas for Windows sign-in (native apps)', () => {
       app: { latestVersion: WINDOWS_APP_VERSION, downloadUrl: SETUP_URL },
     });
 
+    // No ScreenConnect yet; once an administrator sets it, the app is told where Connect goes.
+    expect(me.json().screenConnect).toBeNull();
+    expect((await owner.call('PUT', '/api/settings/screenconnect', { url: 'http://insecure.test' })).status).toBe(400);
+    const screenConnect = await owner.call('PUT', '/api/settings/screenconnect', {
+      url: 'https://itdr.screenconnect.test/',
+      group: 'Managed machines',
+    });
+    expect(screenConnect.data).toEqual({ url: 'https://itdr.screenconnect.test', group: 'Managed machines' });
+    expect((await v1('GET', '/native/session', granted.access_token)).json().screenConnect).toEqual({
+      url: 'https://itdr.screenconnect.test',
+      group: 'Managed machines',
+    });
+
     const events = (await owner.call('GET', '/api/security-events')).data.map((e: { action: string }) => e.action);
-    expect(events).toEqual(expect.arrayContaining(['Desktop app approved', 'Desktop app signed in']));
+    expect(events).toEqual(
+      expect.arrayContaining(['Desktop app approved', 'Desktop app signed in', 'ScreenConnect settings changed']),
+    );
   });
 
   it('refuses a wrong verifier, a different redirect, or an expired code, and burns the code', async () => {

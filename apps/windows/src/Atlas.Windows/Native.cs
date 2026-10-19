@@ -49,6 +49,11 @@ internal static partial class Native
         return GetLastInputInfo(ref info) ? TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - info.Time)) : TimeSpan.Zero;
     }
 
+    // Lets another process (the copy already running) bring its window to the front. Windows only allows the
+    // process the person just started to do that, so the new copy hands the right over before it hands off.
+    [DllImport("user32.dll")]
+    public static extern bool AllowSetForegroundWindow(uint processId);
+
     [DllImport("wer.dll", CharSet = CharSet.Unicode)]
     private static extern int WerAddExcludedApplication(string exeName, bool allUsers);
 
