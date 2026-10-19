@@ -2,11 +2,20 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.7.33] - 2026-10-19
 
 ### Added
 
 - **Microsoft 365 GDAP partner sign-in.** Connect a partner Microsoft account, discover active customer relationships, map customer tenants to Atlas clients, and sync documentation using delegated customer access. Partner refresh tokens are encrypted and renewed on use; disconnect cancels pending sign-ins and prevents delayed token refreshes from restoring access. Existing application-consent sync and Atlas staff sign-in remain available. See the [GDAP setup guide](docs/M365-GDAP.md).
+
+- **Atlas for Windows 0.3.3: install updates from inside the app.** Check for updates, download the setup program, verify its checksum, and install and restart from the window or tray. (#202)
+- **ScreenConnect connections in Atlas for Windows.** Open a linked ScreenConnect session from an asset. (#204)
+- **Windows Hello and idle locking.** Require Windows Hello before revealing or copying passwords, and lock the app after inactivity. The same protection applies to earlier passwords and password attachment downloads. (#205)
+- **More item details in Atlas for Windows.** View related items, download attachments, inspect earlier passwords, restore archived items, and see the time remaining on one-time codes. (#206)
+
+### Fixed
+
+- **Windows relaunch and refreshed lists.** Relaunching brings a hidden window back, and lists no longer keep stale rows after changes. (#203)
 
 ## [1.7.32] - 2026-10-15
 
