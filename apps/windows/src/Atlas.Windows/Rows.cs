@@ -24,6 +24,9 @@ public sealed record Row(string Kind, string Id, string Title, string Subtitle, 
 {
     public string Glyph => GlyphFor(Kind);
 
+    /// <summary>From the archived list: it opens read-only, with Restore.</summary>
+    public bool Archived { get; init; }
+
     /// <summary>On the Clients page, what each client row shows beyond its name.</summary>
     public ClientFacts? Facts { get; init; }
 

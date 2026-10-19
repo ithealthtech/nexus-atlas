@@ -81,6 +81,10 @@ Enter your Atlas address and choose **Sign in with your browser**. Your browser 
 
 A copy is recorded like a reveal in the browser, asks for a reason where the client requires one, is kept out of Windows clipboard history, and is cleared from the clipboard after 30 seconds. Your personal vault isn't available in the app.
 
+### On an item's page
+
+Under a password, asset or document, the app shows what it's linked to (open any of them with one click) and its files, which you save where you choose with **Save**; nothing is opened for you. A password also lists its earlier versions: show or copy one (recorded like any reveal), or, if you can edit the password, make it the current one again with **Restore**. A one-time code counts down the seconds until it changes. **Archived** at the top of the Passwords, Assets and Documents lists shows what was archived; an archived item opens read-only with **Restore**.
+
 ### Windows Hello and locking
 
 Where Windows Hello (fingerprint, face or PIN) is set up, the app asks for it before it shows or copies a password or one-time code. One check covers the next 5 minutes; you can make it every time, or 15 minutes, under **Windows Hello** in the account menu. The app also locks when the computer goes 15 minutes without keyboard or mouse use, hiding anything on screen until Windows Hello confirms it's you; choose 5, 15 or 30 minutes, an hour, or never, or choose **Lock now**. On a computer without Windows Hello the app doesn't ask and doesn't lock, since nothing could unlock it; set Windows Hello up under Windows Settings › Accounts › Sign-in options.

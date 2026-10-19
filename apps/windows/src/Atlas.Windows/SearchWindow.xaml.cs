@@ -346,6 +346,7 @@ public sealed partial class SearchWindow : Window
         QueryBox.TextChanged -= QueryBox_TextChanged;
         QueryBox.Text = "";
         QueryBox.TextChanged += QueryBox_TextChanged;
+        ArchivedToggle.IsChecked = false;
         Go(new Place(chosen.Id, chosen.Label), fresh: true);
     }
 
@@ -387,11 +388,16 @@ public sealed partial class SearchWindow : Window
         NewButton.Visibility = canWrite && (showsPasswords || showsAssets || showsDocuments) ? Visibility.Visible : Visibility.Collapsed;
         NewText.Text = showsAssets ? "New asset" : showsDocuments ? "New document" : "New password";
         // A document says whether you may change it once it's open (see ShowDocument).
-        var editable = canWrite && place.Item is { Kind: "password" or "asset" };
+        var editable = canWrite && place.Item is { Kind: "password" or "asset", Archived: false };
         EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
         ConnectButton.Visibility = Visibility.Collapsed;
         connectLink = null;
         ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        RestoreButton.Visibility = canWrite && place.Item is { Archived: true } ? Visibility.Visible : Visibility.Collapsed;
+        var listKind = place.Kind == "client" ? place.Tab : place.Kind;
+        ArchivedToggle.Visibility = listKind is "passwords" or "assets" or "documents" ? Visibility.Visible : Visibility.Collapsed;
+        if (ArchivedToggle.IsChecked == true && listKind is "passwords" or "assets" or "documents")
+            NewButton.Visibility = Visibility.Collapsed;
         ListPanel.Visibility = isItem || isOverview || isEditor ? Visibility.Collapsed : Visibility.Visible;
         DetailScroll.Visibility = isItem || isOverview || isEditor ? Visibility.Visible : Visibility.Collapsed;
         DetailBar.Visibility = isItem ? Visibility.Visible : Visibility.Collapsed;
@@ -1564,6 +1570,226 @@ public sealed partial class SearchWindow : Window
         }
     }
 
+    // ---------- related items, files, earlier passwords, and archived items ----------
+    /// <summary>The cards under an item: what it's linked to, its files, and (for a password) its earlier versions.</summary>
+    private async Task ShowExtrasAsync(Row row, AtlasClient client, CancellationToken cancel)
+    {
+        if (row.Kind is not ("password" or "asset" or "document"))
+            return;
+        // An Atlas older than this app, or a list this person can't see, just leaves its card out.
+        static async Task<IReadOnlyList<T>> Maybe<T>(Task<IReadOnlyList<T>> task)
+        {
+            try
+            {
+                return await task;
+            }
+            catch (AtlasApiException)
+            {
+                return [];
+            }
+        }
+        var relatedTask = Maybe(client.ListRelatedAsync(row.Kind, row.Id, cancel));
+        var filesTask = Maybe(client.ListAttachmentsAsync(row.Kind, row.Id, cancel));
+        var historyTask = row.Kind == "password" ? Maybe(client.ListPasswordHistoryAsync(row.Id, cancel)) : Task.FromResult<IReadOnlyList<PasswordVersion>>([]);
+        await Task.WhenAll(relatedTask, filesTask, historyTask);
+        if (cancel.IsCancellationRequested || current != row)
+            return;
+        if (relatedTask.Result is { Count: > 0 } related)
+            Detail.Children.Add(Card("Related", [.. related.Select(RelatedRow)]));
+        if (filesTask.Result is { Count: > 0 } files)
+            Detail.Children.Add(Card("Files", [.. files.Select(f => FileRow(row, f))]));
+        if (historyTask.Result is { Count: > 0 } history)
+            Detail.Children.Add(Card("Earlier passwords", [.. history.Select(v => VersionRow(row, v))]));
+    }
+
+    private UIElement RelatedRow(RelatedItem item) => Field(
+        Kind(item.Type),
+        Value(Join(item.Title, item.Subtitle, item.Note)),
+        IconButton("", $"Open {item.Title}", (_, _) =>
+            Go(new Place("item", item.Title, Item: new Row(item.Type, item.Id, item.Title, item.Subtitle, item.ClientId, item.ClientName)))));
+
+    private UIElement FileRow(Row item, AttachmentInfo file) => Field(
+        file.Filename,
+        Value(Join(Size(file.Size), file.UploadedByName is { Length: > 0 } by ? $"added by {by}" : null, When(file.CreatedAt))),
+        IconButton("", $"Save {file.Filename}…", (_, _) => _ = SaveFileAsync(item, file)));
+
+    private static string Size(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} bytes",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB",
+    };
+
+    /// <summary>
+    /// Saves a file where the person chooses. Nothing is opened, so a program attached to an item never runs from
+    /// here. A password's files are recorded like a reveal and may need a reason.
+    /// </summary>
+    private async Task SaveFileAsync(Row item, AttachmentInfo file, string reason = "")
+    {
+        if (item.Kind == "password" && !await SecretCheckAsync("Save a password attachment"))
+            return;
+        if (app.Client is not { } client)
+            return;
+        var picker = new global::Windows.Storage.Pickers.FileSavePicker
+        {
+            SuggestedFileName = Path.GetFileNameWithoutExtension(file.Filename),
+            SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.Downloads,
+        };
+        var extension = Path.GetExtension(file.Filename);
+        if (extension.Length == 0)
+            extension = ".bin";
+        picker.FileTypeChoices.Add($"{extension.TrimStart('.').ToUpperInvariant()} file", [extension]);
+        InitializeWithWindow.Initialize(picker, hwnd);
+        var target = await picker.PickSaveFileAsync();
+        if (target is null)
+            return;
+        try
+        {
+            var bytes = await client.DownloadAttachmentAsync(item.Kind, item.Id, file.Id, reason);
+            await global::Windows.Storage.FileIO.WriteBytesAsync(target, bytes);
+            Show($"Saved {target.Name}.", InfoBarSeverity.Success);
+        }
+        catch (AtlasApiException ex) when (ex.Code == "reason_required" && reason.Length == 0)
+        {
+            if (await AskReasonAsync() is { } given)
+                await SaveFileAsync(item, file, given);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+        catch (IOException ex)
+        {
+            Show($"The file couldn't be saved: {ex.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    /// <summary>An earlier version of a password: show it, copy it, or (with permission to edit) make it current again.</summary>
+    private UIElement VersionRow(Row item, PasswordVersion version)
+    {
+        const string masked = "••••••••••••";
+        var value = Value(masked, mono: true);
+        var actions = new List<Button>
+        {
+            IconButton("", "Show for 30 seconds", async (_, _) =>
+            {
+                if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
+                    return;
+                HideSecrets();
+                value.Text = secret;
+                shown = (value, masked);
+                hideTimer = new DispatcherTimer { Interval = ShowFor };
+                hideTimer.Tick += (_, _) => HideSecrets();
+                hideTimer.Start();
+            }),
+            IconButton("", "Copy", async (_, _) =>
+            {
+                if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
+                    return;
+                clipboard.Copy(secret, sensitive: true);
+                Show("Earlier password copied. The clipboard clears in 30 seconds.", InfoBarSeverity.Success);
+            }),
+        };
+        if (canWrite)
+            actions.Add(IconButton("", "Make this the current password again", (_, _) => _ = RestoreVersionAsync(item, version)));
+        return Field($"Replaced {When(version.CreatedAt)} by {version.ChangedByName}", value, [.. actions]);
+    }
+
+    private async Task<string?> RevealOldAsync(string passwordId, string versionId)
+    {
+        if (!await SecretCheckAsync("Show or copy an earlier password"))
+            return null;
+        if (app.Client is not { } client)
+            return null;
+        try
+        {
+            return (await client.RevealOldPasswordAsync(passwordId, versionId)).Value;
+        }
+        catch (AtlasApiException ex) when (ex.Code == "reason_required")
+        {
+            if (await AskReasonAsync() is not { } given)
+                return null;
+            try
+            {
+                return (await client.RevealOldPasswordAsync(passwordId, versionId, given)).Value;
+            }
+            catch (Exception again) when (again is AtlasApiException or HttpRequestException)
+            {
+                Fail(again);
+                return null;
+            }
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+            return null;
+        }
+    }
+
+    /// <summary>Saves an earlier password as the current one. The one it replaces goes into the history in turn.</summary>
+    private async Task RestoreVersionAsync(Row item, PasswordVersion version)
+    {
+        if (app.Client is not { } client || password is not { } entry || entry.Id != item.Id)
+            return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Make this the current password again?",
+            Content = $"The password from {When(version.CreatedAt)} replaces the current one, which is kept in the history. Change it on the device or account too if it's no longer in use there.",
+            PrimaryButtonText = "Restore",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || await RevealOldAsync(item.Id, version.Id) is not { } secret)
+            return;
+        try
+        {
+            await client.UpdatePasswordAsync(entry.Id, entry.Version, new PasswordDraft(entry.Name, entry.Username, entry.Url, secret, null, null, entry.RotationDays, entry.FolderId));
+            ShowPlace();
+            Show("Restored. The password it replaced is in the history.", InfoBarSeverity.Success);
+        }
+        catch (AtlasApiException ex) when (ex.Status == System.Net.HttpStatusCode.Conflict)
+        {
+            Show("Someone changed this password meanwhile. Open it again and retry.", InfoBarSeverity.Warning);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
+    private void ArchivedToggle_Click(object sender, RoutedEventArgs e) => ShowPlace();
+
+    /// <summary>Brings an archived item back into the lists and search.</summary>
+    private async void Restore_Click(object sender, RoutedEventArgs e)
+    {
+        if (current is not { Archived: true } row || app.Client is not { } client)
+            return;
+        try
+        {
+            switch (row.Kind)
+            {
+                case "password":
+                    await client.ArchivePasswordAsync(row.Id, archived: false);
+                    break;
+                case "asset":
+                    await client.ArchiveAssetAsync(row.Id, archived: false);
+                    break;
+                case "document":
+                    await client.ArchiveDocumentAsync(row.Id, archived: false);
+                    break;
+                default:
+                    return;
+            }
+            Back();
+            Show($"{row.Title} restored.", InfoBarSeverity.Success);
+        }
+        catch (Exception ex) when (ex is AtlasApiException or HttpRequestException)
+        {
+            Fail(ex);
+        }
+    }
+
     // ---------- Windows Hello and locking ----------
     private readonly HelloPolicy hello = new(TimeProvider.System);
     private bool helloAvailable;
@@ -1850,6 +2076,9 @@ public sealed partial class SearchWindow : Window
             var empty = "Nothing here yet.";
             var kind = place.Kind == "client" ? place.Tab : place.Kind;
             var clientId = place.ClientId;
+            showingArchived = ArchivedToggle.IsChecked == true && kind is "passwords" or "assets" or "documents";
+            if (showingArchived)
+                empty = "Nothing archived here.";
             switch (kind)
             {
                 case "home":
@@ -1880,15 +2109,15 @@ public sealed partial class SearchWindow : Window
                     break;
                 case "passwords":
                 {
-                    var listed = client.ListPasswordsAsync(clientId, cancel.Token);
-                    dueById = await LoadDueAsync(client, cancel.Token);
-                    rows = [.. (await listed).Select(PasswordRow)];
+                    var listed = showingArchived ? client.ListArchivedPasswordsAsync(clientId, cancel.Token) : client.ListPasswordsAsync(clientId, cancel.Token);
+                    dueById = showingArchived ? new Dictionary<string, ExpirationItem>() : await LoadDueAsync(client, cancel.Token);
+                    rows = [.. (await listed).Select(p => PasswordRow(p) with { Archived = showingArchived })];
                     break;
                 }
                 case "assets":
                 {
-                    var listed = client.ListAssetsAsync(clientId, cancel.Token);
-                    dueById = await LoadDueAsync(client, cancel.Token);
+                    var listed = showingArchived ? client.ListArchivedAssetsAsync(clientId, cancel.Token) : client.ListAssetsAsync(clientId, cancel.Token);
+                    dueById = showingArchived ? new Dictionary<string, ExpirationItem>() : await LoadDueAsync(client, cancel.Token);
                     assetCache = await listed;
                     FillTypes();
                     rows = AssetRows();
@@ -1896,9 +2125,9 @@ public sealed partial class SearchWindow : Window
                 }
                 case "documents":
                 {
-                    var listed = client.ListDocumentsAsync(clientId, cancel.Token);
-                    dueById = await LoadDueAsync(client, cancel.Token);
-                    rows = [.. (await listed).Select(DocumentRow)];
+                    var listed = showingArchived ? client.ListArchivedDocumentsAsync(clientId, cancel.Token) : client.ListDocumentsAsync(clientId, cancel.Token);
+                    dueById = showingArchived ? new Dictionary<string, ExpirationItem>() : await LoadDueAsync(client, cancel.Token);
+                    rows = [.. (await listed).Select(d => DocumentRow(d) with { Archived = showingArchived })];
                     break;
                 }
                 case "search":
@@ -2021,7 +2250,7 @@ public sealed partial class SearchWindow : Window
         var layoutId = (TypeFilter.SelectedItem as TypeChoice)?.LayoutId;
         return [.. assetCache
             .Where(a => layoutId is null || a.LayoutId == layoutId)
-            .Select(AssetRow)];
+            .Select(a => AssetRow(a) with { Archived = showingArchived })];
     }
 
     private void TypeFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2039,6 +2268,7 @@ public sealed partial class SearchWindow : Window
 
     // ---------- the Passwords, Assets, and Documents lists ----------
     private Dictionary<string, ExpirationItem> dueById = [];
+    private bool showingArchived;
 
     private static readonly string[] StrengthWords = ["Very weak", "Weak", "Fair", "Good", "Strong"];
 
@@ -2502,6 +2732,7 @@ public sealed partial class SearchWindow : Window
                     break;
             }
             Remember(row);
+            await ShowExtrasAsync(row, client, cancel.Token);
         }
         catch (OperationCanceledException)
         {
@@ -2649,7 +2880,7 @@ public sealed partial class SearchWindow : Window
 
     private void ShowDocument(DocumentDetail document)
     {
-        var editable = canWrite && document.CanEdit ? Visibility.Visible : Visibility.Collapsed;
+        var editable = canWrite && document.CanEdit && current is not { Archived: true } ? Visibility.Visible : Visibility.Collapsed;
         EditHereButton.Visibility = editable;
         ArchiveButton.Visibility = editable;
         var text = RichTextPlain.From(document.Content);
@@ -2868,10 +3099,30 @@ public sealed partial class SearchWindow : Window
             if (!ReferenceEquals(password, entry))
                 return;
             HideSecrets();
-            target.Text = field == SecretField.OneTimeCode && secret.Value.Length == 6 ? $"{secret.Value[..3]} {secret.Value[3..]}" : secret.Value;
+            var text = field == SecretField.OneTimeCode && secret.Value.Length == 6 ? $"{secret.Value[..3]} {secret.Value[3..]}" : secret.Value;
             shown = (target, masked);
-            hideTimer = new DispatcherTimer { Interval = field == SecretField.OneTimeCode ? TimeSpan.FromSeconds(secret.ExpiresIn ?? 30) : ShowFor };
-            hideTimer.Tick += (_, _) => HideSecrets();
+            if (field == SecretField.OneTimeCode)
+            {
+                // A code shows how long it has left, a second at a time, and goes when it changes.
+                var until = DateTimeOffset.UtcNow.AddSeconds(secret.ExpiresIn ?? 30);
+                void Tick()
+                {
+                    var left = (int)Math.Ceiling((until - DateTimeOffset.UtcNow).TotalSeconds);
+                    if (left <= 0)
+                        HideSecrets();
+                    else
+                        target.Text = $"{text}   ·  changes in {left}s";
+                }
+                Tick();
+                hideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                hideTimer.Tick += (_, _) => Tick();
+            }
+            else
+            {
+                target.Text = text;
+                hideTimer = new DispatcherTimer { Interval = ShowFor };
+                hideTimer.Tick += (_, _) => HideSecrets();
+            }
             hideTimer.Start();
         }
         catch (AtlasApiException ex) when (ex.Code == "reason_required" && reason.Length == 0)

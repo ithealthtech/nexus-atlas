@@ -138,6 +138,52 @@ public sealed class AtlasClient : IDisposable
     // ---------- browsing ----------
     private static string ForClient(string? clientId) => clientId is null ? "" : $"?client={Uri.EscapeDataString(clientId)}";
 
+    private static string Archived(string? clientId) => "?archived=true" + (clientId is null ? "" : $"&client={Uri.EscapeDataString(clientId)}");
+
+    // ---------- archived items ----------
+    public Task<IReadOnlyList<PasswordSummary>> ListArchivedPasswordsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<PasswordSummary>>(HttpMethod.Get, "passwords" + Archived(clientId), null, cancellationToken);
+
+    public Task<IReadOnlyList<AssetSummary>> ListArchivedAssetsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<AssetSummary>>(HttpMethod.Get, "assets" + Archived(clientId), null, cancellationToken);
+
+    public Task<IReadOnlyList<DocumentSummary>> ListArchivedDocumentsAsync(string? clientId = null, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<DocumentSummary>>(HttpMethod.Get, "documents" + Archived(clientId), null, cancellationToken);
+
+    // ---------- history, related items, and files ----------
+    /// <summary>Earlier versions of a password, newest first.</summary>
+    public Task<IReadOnlyList<PasswordVersion>> ListPasswordHistoryAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<PasswordVersion>>(HttpMethod.Get, $"passwords/{Uri.EscapeDataString(id)}/history", null, cancellationToken);
+
+    /// <summary>Reveals an earlier version of a password. Atlas records it like any reveal and may ask for a reason.</summary>
+    public Task<RevealResult> RevealOldPasswordAsync(string id, string versionId, string reason = "", CancellationToken cancellationToken = default) =>
+        SendAsync<RevealResult>(
+            HttpMethod.Post,
+            $"passwords/{Uri.EscapeDataString(id)}/history/{Uri.EscapeDataString(versionId)}/reveal",
+            new { reason },
+            cancellationToken);
+
+    /// <summary>Items linked to this one (type: password, asset, or document).</summary>
+    public Task<IReadOnlyList<RelatedItem>> ListRelatedAsync(string type, string id, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<RelatedItem>>(HttpMethod.Get, $"items/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(id)}/relations", null, cancellationToken);
+
+    /// <summary>Files attached to a password, asset, or document.</summary>
+    public Task<IReadOnlyList<AttachmentInfo>> ListAttachmentsAsync(string type, string id, CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<AttachmentInfo>>(
+            HttpMethod.Get,
+            type == "password" ? $"passwords/{Uri.EscapeDataString(id)}/attachments" : $"items/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(id)}/attachments",
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// A file's contents. A password's files are recorded like a reveal (and may need a reason); other items' files
+    /// are read like the item.
+    /// </summary>
+    public Task<byte[]> DownloadAttachmentAsync(string type, string itemId, string attachmentId, string reason = "", CancellationToken cancellationToken = default) =>
+        type == "password"
+            ? SendBytesAsync(HttpMethod.Post, $"passwords/{Uri.EscapeDataString(itemId)}/attachments/{Uri.EscapeDataString(attachmentId)}/download", new { reason }, cancellationToken)
+            : SendBytesAsync(HttpMethod.Get, $"attachments/{Uri.EscapeDataString(attachmentId)}/content", null, cancellationToken);
+
     public Task<IReadOnlyList<ClientSummary>> ListClientsAsync(CancellationToken cancellationToken = default) =>
         SendAsync<IReadOnlyList<ClientSummary>>(HttpMethod.Get, "clients", null, cancellationToken);
 
@@ -347,6 +393,28 @@ public sealed class AtlasClient : IDisposable
             throw new SessionEndedException(await ErrorMessageAsync(response, cancellationToken).ConfigureAwait(false) ?? "Sign in to Atlas again.");
         }
         return await ReadAsync<T>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<byte[]> SendBytesAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
+    {
+        if (token is null)
+            throw new SessionEndedException("Sign in to Atlas to continue.");
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (body is not null)
+            request.Content = JsonContent.Create(body, options: Json);
+        using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            token = null;
+            throw new SessionEndedException(await ErrorMessageAsync(response, cancellationToken).ConfigureAwait(false) ?? "Sign in to Atlas again.");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await ReadErrorAsync(response, cancellationToken).ConfigureAwait(false);
+            throw new AtlasApiException(response.StatusCode, error.Message ?? $"Atlas answered {(int)response.StatusCode}.", error.Code);
+        }
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)

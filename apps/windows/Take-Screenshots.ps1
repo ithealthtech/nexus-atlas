@@ -151,6 +151,27 @@ try {
   $connect = ById 'ConnectButton'
   Check ($connect -and $connect.Current.Name -eq 'Find in ScreenConnect') 'a device without a ScreenConnect session ID offers to find it'
 
+  # Under an item: what it's linked to and its files; a password's earlier versions; a code counting down.
+  Open 'Assets'; Open 'HDG-FW-01*'
+  Check ((Shows 'Related') -and (Shows 'Firewall reboot procedure*')) 'an asset shows what it is linked to'
+  Shot '05b-related'
+  Open 'Passwords'; Open 'HDG-FW-01 admin*'
+  Check ((Shows 'Earlier passwords') -and (Shows 'Files') -and (Shows 'HDG-FW-01 backup.conf')) 'a password shows its earlier versions and files'
+  Shot '05c-history'
+  Open 'Passwords'; Open 'Microsoft 365 global admin*'
+  Press (Named $CT::Button 'Show the current code') 'Show the current code'
+  Check (Shows '*changes in*s') 'a one-time code counts down while shown'
+  # The archived list, and an archived item opens with Restore.
+  Open 'Passwords'
+  $archived = ById 'ArchivedToggle'
+  if ($archived) { $archived.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle(); Start-Sleep -Seconds 2 }
+  Check (Shows 'Old VPN admin') 'the archived list shows archived passwords'
+  Open 'Old VPN admin*'
+  # A button that is hidden is not in the automation tree at all.
+  Check ([bool](ById 'RestoreButton') -and -not (ById 'EditHereButton')) 'an archived password opens with Restore and without Edit'
+  Shot '05d-archived'
+  Open 'Passwords'
+
   # A document: open it, change its text, save.
   Open 'Documents'; Open 'Firewall reboot procedure*'
   Check ((Title) -eq 'Firewall reboot procedure') 'a document opens'
