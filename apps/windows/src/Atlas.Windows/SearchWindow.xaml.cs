@@ -50,6 +50,8 @@ public sealed partial class SearchWindow : Window
     private List<ClientChoice> clients = [];
     private IReadOnlyList<AssetSummary> assetCache = [];
     private List<Row> loaded = [];
+    // The page the loaded rows belong to. Rows are only ever shown on that page.
+    private Place? loadedFor;
     private Func<Row, string>? grouping;
     private bool fillingTypes;
     private bool switchingTabs;
@@ -189,7 +191,11 @@ public sealed partial class SearchWindow : Window
 
     private void Bring()
     {
+        // Minimized stays minimized after Show, so restore it first.
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter { State: Microsoft.UI.Windowing.OverlappedPresenterState.Minimized } presenter)
+            presenter.Restore();
         AppWindow.Show();
+        AppWindow.MoveInZOrderAtTop();
         Activate();
         Native.SetForegroundWindow(hwnd);
     }
@@ -411,6 +417,13 @@ public sealed partial class SearchWindow : Window
                 return;
             }
         }
+        // The rows on screen belong to the page before: clear them first, so none of them show under this page's
+        // title while it loads, or after if loading fails.
+        loaded = [];
+        loadedFor = null;
+        grouping = null;
+        Results.ItemsSource = null;
+        ListEmpty.Visibility = Visibility.Collapsed;
         FilterBox.Text = "";
         _ = LoadPageAsync();
     }
@@ -1627,7 +1640,11 @@ public sealed partial class SearchWindow : Window
             TypeFilter.Visibility = kind is "assets" or "clients" ? Visibility.Visible : Visibility.Collapsed;
             ClientHeader.Visibility = kind == "clients" ? Visibility.Visible : Visibility.Collapsed;
             ShowItemHeader(kind);
+            // Another page may have opened while this one loaded; its own load shows its rows.
+            if (trail.Count == 0 || trail[^1] != place)
+                return;
             loaded = rows;
+            loadedFor = place;
             grouping = groupBy;
             ListEmptyText.Text = place.Kind == "client" ? $"{place.Title} has no {place.Tab} in Atlas yet." : empty;
             Render();
@@ -1650,6 +1667,13 @@ public sealed partial class SearchWindow : Window
     private void Render()
     {
         var place = trail[^1];
+        // Rows only ever show on the page they were loaded for; until this page's arrive, the list stays empty.
+        if (loadedFor != place)
+        {
+            Results.ItemsSource = null;
+            ListEmpty.Visibility = Visibility.Collapsed;
+            return;
+        }
         var filter = FilterBox.Text.Trim();
         var shown = loaded
             .Where(r => filter.Length == 0 || r.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || r.Subtitle.Contains(filter, StringComparison.CurrentCultureIgnoreCase))
@@ -1726,7 +1750,12 @@ public sealed partial class SearchWindow : Window
     {
         if (fillingTypes || trail.Count == 0)
             return;
-        loaded = trail[^1].Kind == "clients" ? ClientRows() : AssetRows();
+        // The filter is shared by the Clients and Assets lists: act only for the one on screen, once it has loaded.
+        var place = trail[^1];
+        var kind = place.Kind == "client" ? place.Tab : place.Kind;
+        if (kind is not ("assets" or "clients") || loadedFor != place)
+            return;
+        loaded = kind == "clients" ? ClientRows() : AssetRows();
         Render();
     }
 

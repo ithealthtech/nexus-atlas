@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Runs the built app and its setup program for real, on the build machine: the app's self-test, a first install,
-  an upgrade over a running copy, and an uninstall.
+  an upgrade over a running copy, opening it again while it is hidden or minimized, and an uninstall.
 
 .DESCRIPTION
   Everything here is per-user and is undone by the uninstall at the end. It exists because compiling the app says
@@ -76,6 +76,58 @@ if (-not (Select-String -Path $log -SimpleMatch 'closed when asked' -Quiet)) {
 }
 if (StartupCommand) { throw 'An upgrade turned Start with Windows back on.' }
 if (-not (Test-Path $exe)) { throw 'The upgrade removed the app.' }
+
+Step 'Opening the app again brings back a window hidden in the tray, or minimized'
+Add-Type @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class AppWin {
+  delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc proc, IntPtr lParam);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder name, int max);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
+  // The app's main window: its WinUI top-level window, visible or not.
+  public static IntPtr Main(int pid) {
+    var found = IntPtr.Zero;
+    EnumWindows((h, _) => {
+      uint owner; GetWindowThreadProcessId(h, out owner);
+      if (owner != pid) return true;
+      var name = new StringBuilder(256); GetClassName(h, name, 256);
+      if (name.ToString() == "WinUIDesktopWin32WindowClass") { found = h; return false; }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+}
+'@
+function MainWindow { $p = Get-Process AtlasForWindows -ErrorAction SilentlyContinue | Select-Object -First 1; if ($p) { [AppWin]::Main($p.Id) } else { [IntPtr]::Zero } }
+Start-Process $exe
+WaitUntil { (MainWindow) -ne [IntPtr]::Zero -and [AppWin]::IsWindowVisible((MainWindow)) } 30 'The app did not open its window.'
+Start-Sleep -Seconds 6
+$window = MainWindow
+# Closing the window hides it; the app stays in the tray.
+[AppWin]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+WaitUntil { -not [AppWin]::IsWindowVisible($window) } 15 'Closing the window did not hide it.'
+if (-not (Running)) { throw 'Closing the window quit the app instead of hiding it in the tray.' }
+Start-Process $exe
+WaitUntil { [AppWin]::IsWindowVisible($window) } 20 'Opening the app again did not bring back its window from the tray.'
+if ([AppWin]::GetForegroundWindow() -eq $window) { Write-Host 'The window came to the front.' }
+else { Write-Warning 'The window came back but is not in front (this build machine may not allow it).' }
+if (@(Get-Process AtlasForWindows).Count -ne 1) { throw 'Opening the app again left two copies running.' }
+# Minimized: opening it again restores it.
+[AppWin]::ShowWindow($window, 6) | Out-Null
+WaitUntil { [AppWin]::IsIconic($window) } 10 'The window did not minimize.'
+Start-Process $exe
+WaitUntil { -not [AppWin]::IsIconic($window) } 20 'Opening the app again did not restore its minimized window.'
+Start-Process $exe -ArgumentList '--quit' -Wait
+WaitUntil { -not (Running) } 30 'The app did not quit when asked.'
 
 Step 'Uninstall'
 New-Item -ItemType Directory -Force -Path $data | Out-Null
