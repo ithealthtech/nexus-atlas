@@ -87,6 +87,9 @@ public partial class App : Application
         var main = AppInstance.FindOrRegisterForKey("main");
         if (!main.IsCurrent)
         {
+            // Without this, Windows keeps the running copy from coming to the front, and its window can open
+            // behind whatever is in use (or not show at all) when it was hidden in the tray.
+            Native.AllowSetForegroundWindow(main.ProcessId);
             await main.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs());
             Exit();
             return;
