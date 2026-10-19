@@ -138,7 +138,9 @@ try { WaitUntil { [AppWin]::IsWindowVisible($window) } 20 'Opening the app again
 catch { ShowWindows; throw }
 if ([AppWin]::GetForegroundWindow() -eq $window) { Write-Host 'The window came to the front.' }
 else { Write-Warning 'The window came back but is not in front (this build machine may not allow it).' }
-if (@(Get-Process AtlasForWindows).Count -ne 1) { throw 'Opening the app again left two copies running.' }
+# The copy that handed off exits on its own; it must not stay behind.
+try { WaitUntil { @(Get-Process AtlasForWindows -ErrorAction SilentlyContinue).Count -eq 1 } 15 'Opening the app again left two copies running.' }
+catch { Get-Process AtlasForWindows | Format-Table Id, StartTime, MainWindowTitle -AutoSize | Out-String | Write-Host; throw }
 # Minimized: opening it again restores it.
 [AppWin]::ShowWindow($window, 6) | Out-Null
 WaitUntil { [AppWin]::IsIconic($window) } 10 'The window did not minimize.'
