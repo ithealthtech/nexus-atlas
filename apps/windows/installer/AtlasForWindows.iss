@@ -56,6 +56,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Start {#AppName}"; Flags: nowait postinstall skipifsilent
+; When the app installs its own update (silently, with /relaunch=1), it opens again afterwards.
+Filename: "{app}\{#AppExe}"; Flags: nowait; Check: Relaunch
 
 [UninstallDelete]
 ; The Atlas address, preferences, and the encrypted session token. An upgrade keeps them; uninstalling removes them.
@@ -79,6 +81,11 @@ end;
 function FreshInstall(): Boolean;
 begin
   Result := not WasInstalled;
+end;
+
+function Relaunch(): Boolean;
+begin
+  Result := WizardSilent() and (ExpandConstant('{param:relaunch|0}') = '1');
 end;
 
 { The app holds a named mutex while it runs. Ask it to quit, which clears a copied password from the clipboard and
