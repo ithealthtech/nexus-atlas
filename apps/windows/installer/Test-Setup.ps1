@@ -93,14 +93,29 @@ public static class AppWin {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
-  // The app's main window: its WinUI top-level window, visible or not.
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int max);
+  // Every top-level window the process owns, as "handle class 'title' visible".
+  public static List<string> Describe(int pid) {
+    var all = new List<string>();
+    EnumWindows((h, _) => {
+      uint owner; GetWindowThreadProcessId(h, out owner);
+      if (owner == pid) {
+        var name = new StringBuilder(256); GetClassName(h, name, 256);
+        var text = new StringBuilder(256); GetWindowText(h, text, 256);
+        all.Add(h + " " + name + " '" + text + "' " + (IsWindowVisible(h) ? "visible" : "hidden"));
+      }
+      return true;
+    }, IntPtr.Zero);
+    return all;
+  }
+  // The app's main window, visible or not: the one titled "Atlas" (the tray's menu has a window of its own).
   public static IntPtr Main(int pid) {
     var found = IntPtr.Zero;
     EnumWindows((h, _) => {
       uint owner; GetWindowThreadProcessId(h, out owner);
       if (owner != pid) return true;
-      var name = new StringBuilder(256); GetClassName(h, name, 256);
-      if (name.ToString() == "WinUIDesktopWin32WindowClass") { found = h; return false; }
+      var text = new StringBuilder(256); GetWindowText(h, text, 256);
+      if (text.ToString() == "Atlas") { found = h; return false; }
       return true;
     }, IntPtr.Zero);
     return found;
@@ -108,8 +123,10 @@ public static class AppWin {
 }
 '@
 function MainWindow { $p = Get-Process AtlasForWindows -ErrorAction SilentlyContinue | Select-Object -First 1; if ($p) { [AppWin]::Main($p.Id) } else { [IntPtr]::Zero } }
+function ShowWindows { Get-Process AtlasForWindows -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Windows of process $($_.Id):"; [AppWin]::Describe($_.Id) | ForEach-Object { Write-Host "  $_" } } }
 Start-Process $exe
-WaitUntil { (MainWindow) -ne [IntPtr]::Zero -and [AppWin]::IsWindowVisible((MainWindow)) } 30 'The app did not open its window.'
+try { WaitUntil { (MainWindow) -ne [IntPtr]::Zero -and [AppWin]::IsWindowVisible((MainWindow)) } 30 'The app did not open its window.' }
+catch { ShowWindows; throw }
 Start-Sleep -Seconds 6
 $window = MainWindow
 # Closing the window hides it; the app stays in the tray.
@@ -117,7 +134,8 @@ $window = MainWindow
 WaitUntil { -not [AppWin]::IsWindowVisible($window) } 15 'Closing the window did not hide it.'
 if (-not (Running)) { throw 'Closing the window quit the app instead of hiding it in the tray.' }
 Start-Process $exe
-WaitUntil { [AppWin]::IsWindowVisible($window) } 20 'Opening the app again did not bring back its window from the tray.'
+try { WaitUntil { [AppWin]::IsWindowVisible($window) } 20 'Opening the app again did not bring back its window from the tray.' }
+catch { ShowWindows; throw }
 if ([AppWin]::GetForegroundWindow() -eq $window) { Write-Host 'The window came to the front.' }
 else { Write-Warning 'The window came back but is not in front (this build machine may not allow it).' }
 if (@(Get-Process AtlasForWindows).Count -ne 1) { throw 'Opening the app again left two copies running.' }
