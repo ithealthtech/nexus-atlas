@@ -411,14 +411,14 @@
     "p": "Installing Atlas",
     "s": "Docker (Linux)",
     "h": "docker-linux",
-    "t": "Point a DNS name at the server, and open ports 80 and 443. Caddy uses them to get and renew the certificate. Copy `.env.example` to `.env` and set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD` and `ATLAS_MASTER_KEY`. Generate the key with: Start Atlas and read the setup code from the log: A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-atlas:1.7.32`."
+    "t": "Point a DNS name at the server, and open ports 80 and 443. Caddy uses them to get and renew the certificate. Copy `.env.example` to `.env` and set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD` and `ATLAS_MASTER_KEY`. Generate the key with: Start Atlas and read the setup code from the log: A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-atlas:1.7.33`."
   },
   {
     "u": "install.html",
     "p": "Installing Atlas",
     "s": "Windows Server",
     "h": "windows-server",
-    "t": "Install Node.js 22 LTS and PostgreSQL 16, and create an empty database and user for Atlas. Download `msp-atlas-1.7.32-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\\Program Files\\MSP Atlas`. From an elevated PowerShell prompt, run: The script creates `C:\\ProgramData\\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\\\nas\\atlas-backups` to keep backups on another machine. To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key."
+    "t": "Install Node.js 22 LTS and PostgreSQL 16, and create an empty database and user for Atlas. Download `msp-atlas-1.7.33-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\\Program Files\\MSP Atlas`. From an elevated PowerShell prompt, run: The script creates `C:\\ProgramData\\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\\\nas\\atlas-backups` to keep backups on another machine. To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key."
   },
   {
     "u": "install.html",
