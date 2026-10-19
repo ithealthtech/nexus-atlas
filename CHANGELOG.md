@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.34] - 2026-10-19
+
+### Fixed
+
+- **Microsoft 365 connection diagnostics.** Failed Graph reads now include recognized Microsoft error codes, a safe explanation, and a validated Microsoft request ID when available. Customer checks retain those details for troubleshooting without exposing raw response messages, tokens, client secrets, or authentication challenges.
+
 ## [1.7.33] - 2026-10-19
 
 ### Added
