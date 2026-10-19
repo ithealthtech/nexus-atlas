@@ -81,6 +81,10 @@ Enter your Atlas address and choose **Sign in with your browser**. Your browser 
 
 A copy is recorded like a reveal in the browser, asks for a reason where the client requires one, is kept out of Windows clipboard history, and is cleared from the clipboard after 30 seconds. Your personal vault isn't available in the app.
 
+### On an item's page
+
+Under a password, asset or document, the app shows what it's linked to (open any of them with one click) and its files, which you save where you choose with **Save**; nothing is opened for you. A password also lists its earlier versions: show or copy one (recorded like any reveal), or, if you can edit the password, make it the current one again with **Restore**. A one-time code counts down the seconds until it changes. **Archived** at the top of the Passwords, Assets and Documents lists shows what was archived; an archived item opens read-only with **Restore**.
+
 ### Updates
 
 When a newer version is out, the app tells you once and adds **Get version …** to its menu, which opens the download in your browser. Run the new setup program over the old one; you stay signed in. The app never downloads or installs anything by itself.

@@ -119,6 +119,10 @@ describe('Atlas for Windows sign-in (native apps)', () => {
       // What the app checks its own version against, and where it sends the person for a newer one.
       app: { latestVersion: WINDOWS_APP_VERSION, downloadUrl: SETUP_URL },
     });
+    // Files on assets and documents can be downloaded (read like their item); one that doesn't exist isn't found,
+    // rather than the route being refused to the app.
+    const file = await v1('GET', '/attachments/00000000-0000-4000-8000-000000000000/content', granted.access_token);
+    expect(file.statusCode).toBe(404);
 
     const events = (await owner.call('GET', '/api/security-events')).data.map((e: { action: string }) => e.action);
     expect(events).toEqual(expect.arrayContaining(['Desktop app approved', 'Desktop app signed in']));
