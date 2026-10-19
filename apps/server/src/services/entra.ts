@@ -38,7 +38,7 @@ export class EntraService {
   private aad = 'entra|state';
 
   /** The address to send the person to, and the sealed cookie value that remembers state, nonce, and verifier. */
-  begin(settings: StoredEntra, redirectUri: string): { url: string; cookie: string } {
+  begin(settings: StoredEntra, redirectUri: string, scope = 'openid profile email'): { url: string; cookie: string } {
     const pending: Pending = {
       state: b64url(randomBytes(24)),
       nonce: b64url(randomBytes(24)),
@@ -51,7 +51,7 @@ export class EntraService {
       response_type: 'code',
       redirect_uri: redirectUri,
       response_mode: 'query',
-      scope: 'openid profile email',
+      scope,
       state: pending.state,
       nonce: pending.nonce,
       code_challenge: b64url(createHash('sha256').update(pending.verifier).digest()),
@@ -68,6 +68,16 @@ export class EntraService {
     query: { code?: string; state?: string; error?: string },
     cookie: string | undefined,
   ): Promise<EntraIdentity> {
+    return (await this.completeWithTokens(settings, redirectUri, query, cookie)).identity;
+  }
+
+  async completeWithTokens(
+    settings: StoredEntra & { clientSecret: string },
+    redirectUri: string,
+    query: { code?: string; state?: string; error?: string },
+    cookie: string | undefined,
+    scope = 'openid profile email',
+  ): Promise<{ identity: EntraIdentity; refreshToken?: string }> {
     if (query.error) throw new HttpError(400, `Microsoft returned an error: ${query.error}`, 'sso_denied');
     if (!cookie || !query.code || !query.state) throw new HttpError(400, 'The sign-in link expired.', 'sso_expired');
     let pending: Pending;
@@ -92,16 +102,19 @@ export class EntraService {
           code: query.code,
           redirect_uri: redirectUri,
           code_verifier: pending.verifier,
-          scope: 'openid profile email',
+          scope,
         }),
         signal: AbortSignal.timeout(20_000),
       });
     } catch {
       throw new HttpError(502, 'Microsoft could not be reached.', 'sso_failed');
     }
-    const body = (await res.json().catch(() => ({}))) as { id_token?: string; error?: string };
+    const body = (await res.json().catch(() => ({}))) as { id_token?: string; refresh_token?: string; error?: string };
     if (!res.ok || !body.id_token) throw new HttpError(400, 'Microsoft did not accept the sign-in.', 'sso_failed');
-    return this.verifyIdToken(settings, body.id_token, pending.nonce);
+    return {
+      identity: await this.verifyIdToken(settings, body.id_token, pending.nonce),
+      refreshToken: body.refresh_token,
+    };
   }
 
   private async signingKeys(tenant: string) {

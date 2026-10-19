@@ -261,6 +261,10 @@ Not included: other PSA and RMM integrations (Autotask, HaloPSA, NinjaOne, Datto
 discovery, IT Glue and ITBoost importers, mobile apps, and multi-tenant cloud hosting. See
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Microsoft 365 with GDAP
+
+Microsoft 365 sync supports partner account sign-in with GDAP, active customer relationship discovery, and delegated customer access. See the [GDAP setup guide](docs/M365-GDAP.md) for the Entra app registration, required consent, and customer mapping.
+
 ## Documentation
 
 | Operators | Users | Developers |

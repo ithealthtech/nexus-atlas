@@ -5,9 +5,12 @@ import { m365LinkSchema, m365SyncOptionsSchema, type Actor } from '@atlas/shared
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { actorFor } from '../identity/service.js';
+import { gdapClient, GdapService, registerGdapRoutes } from './m365-gdap.js';
+import type { IdentityService } from '../identity/service.js';
+import type { KeyProvider } from '../crypto/keys.js';
 import { ClientService } from '../services/clients.js';
 import { ImportRun } from '../services/importers/common.js';
-import { M365Client, runM365Sync, tenantLinks } from '../services/integrations/m365.js';
+import { runM365Sync, tenantLinks } from '../services/integrations/m365.js';
 import type { SettingsService } from '../services/settings.js';
 
 const SYNC_EVERY = 6 * 3_600_000;
@@ -21,7 +24,7 @@ async function startSync(
 ) {
   const saved = await settings.m365(actor.orgId);
   if (!saved) throw new HttpError(400, 'Connect Microsoft 365 first.');
-  const client = new M365Client(saved.clientId, saved.clientSecret, fetcher);
+  const client = await gdapClient(settings, actor.orgId, fetcher);
   const run = await ImportRun.start(db, actor, 'm365');
   const done = runM365Sync(db, actor, client, run, saved, async (clientId, result) => {
     const current = await settings.m365(actor.orgId);
@@ -62,9 +65,14 @@ export function registerM365Routes(
     settings: SettingsService;
     publicOrigin: string;
     fetcher?: typeof fetch;
+    keys: KeyProvider;
+    identity: IdentityService;
+    cookieName: string;
+    secureCookies: boolean;
   },
 ) {
   const { db, authed, recent, settings } = deps;
+  registerGdapRoutes(app, { ...deps, gdap: new GdapService(deps.keys, deps.fetcher) });
   const redirectUri = `${deps.publicOrigin}/api/integrations/m365/consent`;
   const admin = (req: FastifyRequest) => {
     requireAdmin(req.session!.actor);
@@ -148,7 +156,7 @@ export function registerM365Routes(
     if (!link) throw new HttpError(404, 'That client has no Microsoft 365 tenant linked.');
     let next: (typeof saved.tenants)[string];
     try {
-      const found = await new M365Client(saved.clientId, saved.clientSecret, deps.fetcher).check(link.tenantId);
+      const found = await (await gdapClient(settings, actor.orgId, deps.fetcher)).check(link.tenantId);
       // Linked by a domain, it may turn out to be a tenant another client already has under its ID.
       const other = Object.entries(saved.tenants).find(
         ([id, t]) => id !== req.params.clientId && t.tenantId.toLowerCase() === found.tenantId.toLowerCase(),

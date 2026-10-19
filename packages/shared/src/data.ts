@@ -587,13 +587,20 @@ export interface AssetStatsAsset {
 
 // ---------- Microsoft 365 documentation sync ----------
 /** One multi-tenant app registration in the MSP's tenant; each client tenant grants it admin consent. */
-export const m365ConnectionSchema = z.object({
-  // Any GUID shape: Microsoft's IDs aren't all RFC 4122 UUIDs.
-  clientId: z.string().trim().pipe(z.guid('Enter the Application (client) ID: a GUID from the app’s Overview page.')),
-  // Omitted keeps the saved secret.
-  clientSecret: z.string().trim().min(8).max(500).optional(),
-  autoSync: z.boolean().default(true),
-});
+export const m365ConnectionSchema = z
+  .object({
+    // Any GUID shape: Microsoft's IDs aren't all RFC 4122 UUIDs.
+    clientId: z.string().trim().pipe(z.guid('Enter the Application (client) ID: a GUID from the app’s Overview page.')),
+    // Omitted keeps the saved secret.
+    clientSecret: z.string().trim().min(8).max(500).optional(),
+    autoSync: z.boolean().default(true),
+    authMode: z.enum(['application', 'gdap']).default('application'),
+    partnerTenantId: z.string().trim().pipe(z.guid('Enter the partner Directory (tenant) ID.')).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.authMode === 'gdap' && !value.partnerTenantId)
+      ctx.addIssue({ code: 'custom', path: ['partnerTenantId'], message: 'Enter the partner Directory (tenant) ID.' });
+  });
 /** What a Microsoft 365 sync brings in. */
 export const m365SyncOptionsSchema = z.object({
   /** Users, as contacts. */
@@ -606,7 +613,17 @@ export const m365SyncOptionsSchema = z.object({
   domains: z.boolean().default(true),
 });
 export type M365SyncOptions = z.infer<typeof m365SyncOptionsSchema>;
+export interface GdapCustomer {
+  tenantId: string;
+  name: string;
+  relationshipId: string;
+  expiresAt: string;
+}
 export interface M365View {
+  authMode: 'application' | 'gdap';
+  partnerTenantId: string | null;
+  gdap: { connectedAt: string; name: string; email: string } | null;
+  gdapRedirectUri: string;
   clientId: string;
   hasSecret: boolean;
   autoSync: boolean;
