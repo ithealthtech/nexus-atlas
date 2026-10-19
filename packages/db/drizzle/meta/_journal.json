@@ -253,6 +253,13 @@
       "when": 1792439114244,
       "tag": "0035_slippery_synch",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792442339252,
+      "tag": "0036_next_thor",
+      "breakpoints": true
     }
   ]
 }

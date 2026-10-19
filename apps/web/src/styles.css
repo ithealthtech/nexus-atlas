@@ -11,24 +11,24 @@
   --surface-3: #eceff3;
   --border: #e0e4ea;
   --border-strong: #c8cfd8;
-  --text: #151b23;
+  --text: #172b45;
   --text-2: #414c5a;
   --muted: #5a6573;
-  --primary: #205843;
-  --primary-hover: #17442f;
+  --primary: #245fba;
+  --primary-hover: #1b4d9b;
   --primary-fg: #ffffff;
-  --primary-soft: #e6f0ea;
-  --accent: #c4e99a;
-  --accent-fg: #173e32;
-  --sidebar: #132b24;
-  --sidebar-2: #1c3a30;
-  --sidebar-text: #cfdcd3;
-  --sidebar-muted: #8ea597;
+  --primary-soft: #edf3fd;
+  --accent: #245fba;
+  --accent-fg: #ffffff;
+  --sidebar: #ffffff;
+  --sidebar-2: #edf3fd;
+  --sidebar-text: #414c5a;
+  --sidebar-muted: #5a6573;
   /* Text on the active navigation item; the theme sets it for contrast with a custom sidebar colour. */
-  --sidebar-active: #ffffff;
+  --sidebar-active: #172b45;
   /* Accent on sidebar surfaces (active icon, bar); the theme swaps it when the default would be too faint. */
   --sidebar-accent: var(--accent);
-  --sidebar-width: 16rem;
+  --sidebar-width: 260px;
   --danger: #a3301f;
   --danger-fg: #ffffff;
   --danger-soft: #fdeeeb;
@@ -38,8 +38,8 @@
   --success-soft: #e8f3eb;
   --info: #2f5a93;
   --info-soft: #e9f0fb;
-  --ring: #6ba28b;
-  --shadow: 0 1px 2px rgb(20 50 38 / 0.05), 0 4px 16px rgb(20 50 38 / 0.04);
+  --ring: #245fba;
+  --shadow: none;
 }
 .dark {
   --bg: #0d1015;
@@ -51,14 +51,18 @@
   --text: #e7ebf0;
   --text-2: #b8c1cc;
   --muted: #8a95a3;
-  --primary: #6fb68f;
-  --primary-hover: #86c7a3;
-  --primary-fg: #0c1a14;
-  --primary-soft: #1d3329;
-  --accent: #c4e99a;
-  --accent-fg: #173e32;
-  --sidebar: #0b1411;
-  --sidebar-2: #15241f;
+  --primary: #8dbbff;
+  --primary-hover: #afd0ff;
+  --primary-fg: #0b2040;
+  --primary-soft: #1c2c45;
+  --accent: #8dbbff;
+  --accent-fg: #0b2040;
+  --sidebar: #13181f;
+  --sidebar-2: #1c2c45;
+  --sidebar-text: #b8c1cc;
+  --sidebar-muted: #8a95a3;
+  --sidebar-active: #e7ebf0;
+  --sidebar-accent: #8dbbff;
   --danger: #ef8a7c;
   --danger-fg: #1f0906;
   --danger-soft: #3a1d19;
@@ -68,12 +72,17 @@
   --success-soft: #16301f;
   --info: #8db4ea;
   --info-soft: #182942;
-  --ring: #86c7a3;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.25);
+  --ring: #8dbbff;
+  --shadow: none;
   color-scheme: dark;
 }
 
 @theme inline {
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
   --font-sans: 'Instrument Sans Variable', 'Segoe UI', system-ui, sans-serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -162,10 +171,10 @@
     --radius-2xl: 1.25rem;
   }
   html[data-sidebar='narrow'] {
-    --sidebar-width: 14rem;
+    --sidebar-width: 250px;
   }
   html[data-sidebar='wide'] {
-    --sidebar-width: 18rem;
+    --sidebar-width: 270px;
   }
   html[data-motion='off'] *,
   html[data-motion='off'] *::before,
@@ -380,4 +389,13 @@ html[data-nav='subtle'] .nav-link[data-status='active'] {
   float: left;
   height: 0;
   pointer-events: none;
+}
+
+html[data-nav='bar'] .primary-nav-link[aria-current='page'] {
+  background: transparent;
+  box-shadow: inset 3px 0 0 var(--sidebar-accent);
+}
+html[data-nav='subtle'] .primary-nav-link[aria-current='page'] {
+  background: transparent;
+  color: var(--sidebar-accent);
 }

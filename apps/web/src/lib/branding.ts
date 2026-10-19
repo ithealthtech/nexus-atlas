@@ -10,10 +10,10 @@ export const useBranding = () =>
 
 const DEFAULT_TITLE = 'MSP Atlas';
 const DEFAULT_FAVICON = '/favicon.svg';
-const ATLAS_LIME = '#c4e99a';
+const ATLAS_BLUE = '#245fba';
 // Atlas's own sidebar colours (styles.css), for checking a custom accent against them.
-const DEFAULT_SIDEBAR = '#132b24';
-const DEFAULT_SIDEBAR_DARK = '#0b1411';
+const DEFAULT_SIDEBAR = '#ffffff';
+const DEFAULT_SIDEBAR_DARK = '#13181f';
 
 /** WCAG relative luminance of a #rrggbb colour. */
 export const luminance = (hex: string) => {
@@ -77,8 +77,8 @@ function applySidebar(theme: Branding, dark: boolean) {
   // Text follows the sidebar's lightness, so a light sidebar gets dark text.
   const ink = readableOn(color);
   // The active icon and bar need 3:1 against the sidebar (WCAG non-text contrast): the org's accent if it
-  // manages that, else Atlas's lime, else plain text colour.
-  const sidebarAccent = [accent, ATLAS_LIME].find((c) => c && contrast(c, color) >= 3) ?? ink;
+  // manages that, else Atlas's blue, else plain text colour.
+  const sidebarAccent = [accent, ATLAS_BLUE].find((c) => c && contrast(c, color) >= 3) ?? ink;
   setVars({
     '--sidebar': color,
     '--sidebar-2': `color-mix(in oklab, ${color} 86%, ${ink})`,

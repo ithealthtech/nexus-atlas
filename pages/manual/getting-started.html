@@ -174,9 +174,9 @@
         <h3 id="passkeys"><a class="anchor" href="#passkeys">Passkeys</a></h3>
         <p>
           A passkey is Windows Hello, Touch ID, your phone, or a security key. Add one under
-          <strong>Profile &amp; sign-in → Passkeys</strong> (open the account menu with your initials at the bottom of
-          the menu). After that, <strong>Sign in with a passkey</strong> on the sign-in page signs you in without typing
-          a password, and can't be phished.
+          <strong>Profile &amp; sign-in → Passkeys</strong> (open the account menu with your initials in the top-right
+          header). After that, <strong>Sign in with a passkey</strong> on the sign-in page signs you in without typing a
+          password, and can't be phished.
         </p>
         <h3 id="signing-in-with-microsoft-or-your-identity-provider">
           <a class="anchor" href="#signing-in-with-microsoft-or-your-identity-provider"
@@ -197,11 +197,10 @@
         <h2 id="find-your-way-around"><a class="anchor" href="#find-your-way-around">Find your way around</a></h2>
         <figure>
           <a href="../images/manual/dashboard.png"
-            ><img src="../images/manual/dashboard.png" alt="The dashboard with the rail and panel menu" loading="lazy"
+            ><img src="../images/manual/dashboard.png" alt="The Atlas overview" loading="lazy"
           /></a>
           <figcaption>
-            The dashboard. The rail on the far left switches between areas; the panel beside it lists the pages in the
-            area you're in.
+            The overview with the unified application sidebar and header search. Synthetic example data.
           </figcaption>
         </figure>
         <p>Atlas is organized into five areas. Each area has a handful of pages.</p>
@@ -216,22 +215,22 @@
             </thead>
             <tbody>
               <tr>
-                <td><strong>Home</strong></td>
-                <td>Dashboard, Expirations</td>
+                <td><strong>Overview</strong></td>
+                <td>Dashboard, Expirations, Reports</td>
                 <td>Everyone</td>
               </tr>
               <tr>
                 <td><strong>Clients</strong></td>
-                <td>All clients, and a shortcut to each client</td>
+                <td>Client directory and client workspaces</td>
                 <td>Everyone</td>
               </tr>
               <tr>
-                <td><strong>Docs</strong></td>
+                <td><strong>Documentation</strong></td>
                 <td>Assets, Knowledge base, Checklists</td>
                 <td>Everyone; the knowledge base and checklists are for staff</td>
               </tr>
               <tr>
-                <td><strong>Vault</strong></td>
+                <td><strong>Password Vault</strong></td>
                 <td>
                   Passwords, My vault, Password health, Send; Password rotation and BitLocker collector for
                   administrators
@@ -239,7 +238,7 @@
                 <td>Staff</td>
               </tr>
               <tr>
-                <td><strong>Admin</strong></td>
+                <td><strong>Administration</strong></td>
                 <td>People and security, data, system, and settings pages</td>
                 <td>Administrators</td>
               </tr>
@@ -247,7 +246,7 @@
           </table>
         </div>
         <p>
-          Your account menu, with your initials, is at the bottom of the menu (or at the right of the top bar). It has
+          Your account menu, with your initials, is in the top-right header. It has
           <strong>Profile &amp; sign-in</strong>, light and dark appearance, and <strong>Sign out</strong>.
         </p>
         <h3 id="search-everything-with-ctrl-k">
@@ -263,64 +262,31 @@
         </figure>
         <p>
           Press <strong>Ctrl+K</strong> (or <strong>⌘K</strong> on a Mac) anywhere in Atlas, or click
-          <strong>Search</strong> in the menu. Type a client, an asset name, an IP address, a serial number, a contact,
-          or words from a document. Use the arrow keys and <strong>Enter</strong> to open a result, or
+          <strong>Search</strong> in the header. Type a client, an asset name, an IP address, a serial number, a
+          contact, or words from a document. Use the arrow keys and <strong>Enter</strong> to open a result, or
           <strong>Esc</strong> to close. Results only include what you have access to.
         </p>
-        <h3 id="choose-a-menu-style"><a class="anchor" href="#choose-a-menu-style">Choose a menu style</a></h3>
+        <h3 id="navigation-and-workspace-tabs">
+          <a class="anchor" href="#navigation-and-workspace-tabs">Navigation and workspace tabs</a>
+        </h3>
         <p>
-          Atlas has three menu layouts. Everyone picks their own under <strong>Profile &amp; sign-in → Menu</strong>,
-          and it follows you to any computer. On a phone the menu always slides out from the side.
+          Atlas uses a single sidebar for <strong>Overview</strong>, <strong>Clients</strong>,
+          <strong>Documentation</strong>, <strong>Password Vault</strong>, and <strong>Administration</strong>. Page
+          links appear in the current workspace. The client directory stays in <strong>Clients</strong>, global search,
+          and the client switcher in the header rather than filling a second sidebar.
         </p>
-        <figure>
-          <a href="../images/manual/menu-picker.png"
-            ><img src="../images/manual/menu-picker.png" alt="The three menu styles to choose from" loading="lazy"
-          /></a>
-          <figcaption>The Menu card on your account page.</figcaption>
-        </figure>
-        <div class="table">
-          <table>
-            <thead>
-              <tr>
-                <th>Style</th>
-                <th>What it looks like</th>
-                <th>Good for</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Rail and panel</strong> (the default)</td>
-                <td>Five area icons down the left edge, with the pages of the area you're in beside them.</td>
-                <td>Getting around quickly once you know where things are.</td>
-              </tr>
-              <tr>
-                <td><strong>Sidebar</strong></td>
-                <td>
-                  One list of the pages you use every day, plus your starred clients.
-                  <strong>Administration</strong> opens its own list, with <strong>Back to Atlas</strong> at the top.
-                </td>
-                <td>People who mostly work in a few pages.</td>
-              </tr>
-              <tr>
-                <td><strong>Top bar</strong></td>
-                <td>The areas across the top, and the pages of the current area in a second row beneath.</td>
-                <td>Wide tables and long pages, because the page gets the full width of the screen.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <figure>
-          <a href="../images/manual/menu-top.png"
-            ><img src="../images/manual/menu-top.png" alt="The top bar menu style" loading="lazy"
-          /></a>
-          <figcaption>The top bar style, on the client list.</figcaption>
-        </figure>
+        <p>
+          Choose <strong>Collapse sidebar</strong> at the bottom of the sidebar to make more space for tables.
+          <strong>Expand sidebar</strong> restores labels. Atlas remembers this choice in your browser. On phones,
+          choose <strong>Open navigation</strong> in the header; Escape closes the menu and returns focus to its
+          trigger.
+        </p>
         <h3 id="favourites-and-the-dashboard">
           <a class="anchor" href="#favourites-and-the-dashboard">Favourites and the dashboard</a>
         </h3>
         <p>
           Click the star beside a client, asset or document to add it to the <strong>Favorites</strong> card on your
-          dashboard. In the rail and sidebar styles, starred clients also appear in the menu.
+          dashboard.
         </p>
         <p>
           Choose <strong>Customize</strong> on the dashboard to show, hide and reorder its cards. Your layout is yours
@@ -350,7 +316,7 @@
                 <td>Everything, including other owners and vault policies</td>
               </tr>
               <tr>
-                <td><strong>Admin</strong></td>
+                <td><strong>Administration</strong></td>
                 <td>Service managers, senior technicians</td>
                 <td>Every client, including passwords</td>
                 <td>People, settings, imports, system</td>

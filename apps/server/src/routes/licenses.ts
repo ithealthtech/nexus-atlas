@@ -59,7 +59,11 @@ export function registerLicenseRoutes(
     if (!link) throw new HttpError(404, 'No Microsoft 365 tenant is linked to this client.');
     if (saved?.authMode !== 'gdap')
       throw new HttpError(409, 'Connect Microsoft 365 through GDAP to manage this client’s licenses.');
-    return { scope, tenantId: link.tenantId, client: await gdapClient(settings, scope.actor.orgId, deps.fetcher) };
+    return {
+      scope,
+      tenantId: link.tenantId,
+      client: await gdapClient(settings, scope.actor.orgId, deps.fetcher, true),
+    };
   };
   app.get<{ Params: Params }>(base + '/microsoft', authed, async (req, reply) => {
     reply.header('cache-control', 'no-store');

@@ -33,6 +33,7 @@ COPY --from=build --chown=node:node /app/packages/db/dist packages/db/dist
 COPY --from=build --chown=node:node /app/packages/db/drizzle packages/db/drizzle
 COPY --from=build --chown=node:node /app/apps/server/package.json apps/server/
 COPY --from=build --chown=node:node /app/apps/server/dist apps/server/dist
+COPY --from=build --chown=node:node /app/apps/server/report-fonts apps/server/report-fonts
 COPY --from=build --chown=node:node /app/apps/web/dist apps/web/dist
 USER node
 VOLUME /data

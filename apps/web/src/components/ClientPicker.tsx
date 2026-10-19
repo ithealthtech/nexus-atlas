@@ -46,7 +46,7 @@ export function ClientPicker({ orgName, onNavigate }: { orgName: string; onNavig
         <Menu.Content
           align="start"
           sideOffset={6}
-          className="z-50 w-(--radix-dropdown-menu-trigger-width) min-w-60 rounded-xl border border-border bg-surface p-1.5 text-text shadow-xl"
+          className="z-50 w-(--radix-dropdown-menu-trigger-width) min-w-60 rounded-xl border border-border bg-surface p-1.5 text-text"
         >
           {clients.length > 8 && (
             <label className="relative mb-1 block">

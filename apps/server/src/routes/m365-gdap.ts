@@ -160,10 +160,14 @@ export async function gdapClient(
   settings: SettingsService,
   orgId: string,
   fetcher: typeof fetch = fetch,
+  requireDelegated = false,
 ): Promise<M365Client> {
   const saved = await settings.m365(orgId);
   if (!saved) throw new HttpError(400, 'Connect Microsoft 365 first.');
-  if (saved.authMode !== 'gdap') return new M365Client(saved.clientId, saved.clientSecret, fetcher);
+  if (saved.authMode !== 'gdap') {
+    if (requireDelegated) throw new HttpError(409, 'Connect Microsoft 365 through GDAP to read this inventory.');
+    return new M365Client(saved.clientId, saved.clientSecret, fetcher);
+  }
   const customers = await gdapCustomers(settings, orgId, fetcher);
   return new M365Client(saved.clientId, saved.clientSecret, fetcher, async (tenant) => {
     // Customer GUIDs must be selected explicitly; domains cannot identify a delegated authorization boundary.

@@ -67,6 +67,7 @@ export const CLIENT_SECTIONS = [
   'locations',
   'checklists',
   'licenses',
+  'reports',
   'map',
   'activity',
 ] as const;

@@ -63,6 +63,47 @@ export const orgs = pgTable('orgs', {
   createdAt: created(),
 });
 
+export const reportTemplates = pgTable(
+  'report_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    definition: jsonb('definition').notNull(),
+    version: integer('version').notNull().default(1),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [index('report_templates_owner').on(t.orgId, t.ownerId)],
+);
+
+export const reportRuns = pgTable(
+  'report_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    clientIds: jsonb('client_ids').$type<string[]>().notNull(),
+    clients: jsonb('clients').$type<{ id: string; name: string }[]>().notNull(),
+    warningCount: integer('warning_count').notNull(),
+    rowCount: integer('row_count').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    createdAt: created(),
+  },
+  (t) => [index('report_runs_owner').on(t.orgId, t.ownerId, t.createdAt)],
+);
+
 export const users = pgTable(
   'users',
   {
