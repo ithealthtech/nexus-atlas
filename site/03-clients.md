@@ -41,7 +41,7 @@ Opening a client shows:
 
 - **The header:** the client's name and type, your access, and the star to add it to your favourites. **Monthly report**, **Export**, **Edit client**, and for administrators **Delete**, are on the right.
 - **The quick note:** a short note at the top of every page for this client, for the thing everyone should know before they touch anything.
-- **The tabs:** **Overview**, **Assets**, **Documents**, **Passwords**, **Contacts**, **Locations**, **Checklists**, **Map** and **Activity**, each with a count. The **Trackers** row underneath has **Domain Tracker** and **SSL Tracker**. A tracker count turns amber when something needs attention.
+- **The tabs:** **Overview**, **Assets**, **Documents**, **Passwords**, **Contacts**, **Locations**, **Checklists**, **Licenses**, **Map** and **Activity**. Counts appear for the sections that provide them. The **Trackers** row underneath has **Domain Tracker** and **SSL Tracker**. A tracker count turns amber when something needs attention.
 
 ### Hide tabs you don't use
 
@@ -88,6 +88,16 @@ The **Contacts** and **Locations** tabs list the people and sites for this clien
 
 The **Map** tab draws how the client's assets, passwords, documents, contacts and locations link together, with the same links as a list below for keyboard and screen-reader use. It's built from the links you make under **Related** on each item.
 
+## Licenses and subscriptions
+
+![License management](../images/manual/licenses.png "Clients → a client → Licenses. Synthetic example data.")
+
+Open **Licenses** to track software subscriptions, purchased seats, assigned people or devices, per-seat costs, billing cycles, and renewal dates. Choose **Add subscription**, enter one assignment per line, and save. Assignment counts cannot exceed purchased seats. Renewals within 30 days and past renewal dates receive a badge; this page does not send renewal emails. Keep activation keys and passwords in the vault.
+
+For linked Microsoft 365 tenants, **Microsoft 365** reads subscriptions, seat availability, and users through the saved **GDAP** partner connection. Choose a subscription to inspect assignments. Atlas administrators can assign an available license to a user or remove a direct assignment after confirming the named user and product. Group-assigned licenses must be changed through Microsoft Entra group membership. Microsoft consent and the partner user's customer roles also apply; see [Data and integrations](integrations.html#microsoft-365).
+
+Microsoft seat counts and assignments remain authoritative in Microsoft. Purchases, reseller pricing, billing terms, and renewal dates are managed with your reseller. **Other software subscriptions** tracks other purchases manually and does not change vendor subscriptions. Read-only client access can view records; editing manual tracking requires client edit access. Manual changes appear in client activity and client exports.
+
 ## The monthly report
 
 **Monthly report** in the client header opens a printable page with the client's assets and documents. Use your browser's **Print**, and choose **Save as PDF** to send it to the client.
@@ -96,7 +106,7 @@ The **Map** tab draws how the client's assets, passwords, documents, contacts an
 
 **Export** downloads a zip of everything you can see for the client:
 
-- `client.json`, with the client, contacts, locations, assets and their fields, documents and links.
+- `client.json`, with the client, contacts, locations, assets and their fields, documents, manually tracked subscriptions, and links.
 - The documents as plain text.
 - The attached files.
 

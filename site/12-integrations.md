@@ -64,6 +64,10 @@ The sync runs every hour, and **Sync now** runs it straight away.
 
 **Import & export → Microsoft 365** documents each client's tenant from one multi-tenant app registration with `Directory.Read.All`, consented once per tenant. Users become contacts (with their licences and admin roles), paid subscriptions become License assets with seats bought and assigned, custom domains become Domain assets, and a Microsoft 365 asset lists the tenant's domains, subscriptions and administrators.
 
+For **GDAP**, choose **GDAP — sign in with a partner Microsoft account**, save the partner tenant and multitenant app, and connect the partner account. Add Microsoft Graph delegated **Directory.Read.All**, **DelegatedAdminRelationship.Read.All**, and **LicenseAssignment.ReadWrite.All** permissions, then grant administrator consent. Each customer also needs delegated application consent and an active GDAP relationship with suitable roles assigned to the partner user's security group. Load customers and map each tenant to its Atlas client.
+
+**Clients → a client → Licenses** reads Microsoft subscriptions and user assignments through that GDAP connection. Direct assignment/removal requires an Atlas administrator with recent authentication and a supported Microsoft customer role such as **License Administrator** through GDAP. Existing partner connections must reconnect and grant the additional license permission before making license changes. Atlas refuses an application-credential fallback when GDAP fails. Group-derived licenses remain managed through Microsoft Entra group membership; purchasing subscriptions and changing reseller billing terms remain with the reseller. Failed or unconfirmed requests are recorded in the security log; refresh before retrying an uncertain change.
+
 ## Export
 
 - **One client:** **Export** on the client's page. See [Clients](clients.html#export-a-client).

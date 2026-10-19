@@ -293,6 +293,29 @@ describe('client license management', () => {
     await t.handle.db.delete(schema.clients).where(eq(schema.clients.id, harbor));
     expect(await t.handle.db.select().from(schema.licenses)).toEqual([]);
   });
+  it('keeps license routes closed to API keys despite the parent client API scope', async () => {
+    await gdap();
+    const token = (
+      await owner.call('POST', '/api/api-keys', {
+        name: 'Synthetic integration',
+        scopes: ['read', 'write', 'passwords'],
+      })
+    ).data.token;
+    const headers = { authorization: `Bearer ${token}` };
+    for (const suffix of ['', '/microsoft', '/microsoft/assignments']) {
+      const response = await t.app.inject({
+        method: suffix.endsWith('/assignments') ? 'POST' : 'GET',
+        url: '/api/v1' + base().slice(4) + suffix,
+        headers,
+      });
+      expect(response.statusCode).toBe(403);
+    }
+    expect(
+      (await t.app.inject({ method: 'POST', url: '/api/v1' + base().slice(4), headers, payload: manual })).statusCode,
+    ).toBe(403);
+    expect(grants).toEqual([]);
+    expect(graphWrites).toBe(0);
+  });
   it('includes manual subscription tracking in client exports', async () => {
     await owner.call('POST', base(), manual);
     const exported = await t.app.inject({

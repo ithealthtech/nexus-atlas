@@ -276,6 +276,24 @@
           custom domains become Domain assets, and a Microsoft 365 asset lists the tenant's domains, subscriptions and
           administrators.
         </p>
+        <p>
+          For <strong>GDAP</strong>, choose <strong>GDAP — sign in with a partner Microsoft account</strong>, save the
+          partner tenant and multitenant app, and connect the partner account. Add Microsoft Graph delegated
+          <strong>Directory.Read.All</strong>, <strong>DelegatedAdminRelationship.Read.All</strong>, and
+          <strong>LicenseAssignment.ReadWrite.All</strong> permissions, then grant administrator consent. Each customer
+          also needs delegated application consent and an active GDAP relationship with suitable roles assigned to the
+          partner user's security group. Load customers and map each tenant to its Atlas client.
+        </p>
+        <p>
+          <strong>Clients → a client → Licenses</strong> reads Microsoft subscriptions and user assignments through that
+          GDAP connection. Direct assignment/removal requires an Atlas administrator with recent authentication and a
+          supported Microsoft customer role such as <strong>License Administrator</strong> through GDAP. Existing
+          partner connections must reconnect and grant the additional license permission before making license changes.
+          Atlas refuses an application-credential fallback when GDAP fails. Group-derived licenses remain managed
+          through Microsoft Entra group membership; purchasing subscriptions and changing reseller billing terms remain
+          with the reseller. Failed or unconfirmed requests are recorded in the security log; refresh before retrying an
+          uncertain change.
+        </p>
         <h2 id="export"><a class="anchor" href="#export">Export</a></h2>
         <ul>
           <li>
@@ -372,8 +390,8 @@
     <footer class="footer">
       <div class="footer-inner">
         <p>
-          MSP Atlas 1.7.34. Documentation, passwords and client operations for managed service providers, on a server
-          you own.
+          MSP Atlas 1.8.0. Documentation, passwords and client operations for managed service providers, on a server you
+          own.
         </p>
         <p>
           <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>

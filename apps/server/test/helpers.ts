@@ -13,7 +13,11 @@ import type { ShowUnit } from '../src/services/system-services.js';
 import type { AuthorityFetch, ChainProbe } from '../src/services/portal-certificate.js';
 import type { CertProbe } from '../src/services/cert-probe.js';
 
-export const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5432/postgres';
+// Browser tests may use these helpers too; CI supplies E2E_DATABASE_URL with its own credentials.
+const e2eAdmin = process.env.E2E_DATABASE_URL ? new URL(process.env.E2E_DATABASE_URL) : null;
+if (e2eAdmin) e2eAdmin.pathname = '/postgres';
+export const ADMIN_URL =
+  process.env.TEST_DATABASE_URL ?? e2eAdmin?.toString() ?? 'postgres://postgres@127.0.0.1:5432/postgres';
 export const SETUP_CODE = 'test-setup-code-123';
 export const OWNER = {
   name: 'Avery Owner',
