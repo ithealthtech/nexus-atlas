@@ -217,6 +217,7 @@ public sealed partial class SearchWindow : Window
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
             canWrite = session.CanWrite;
+            screenConnect = session.ScreenConnect;
             ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
             AccountInitials.Text = Initials(session.User.Name);
             AppTitleBar.Subtitle = session.Organization.Name;
@@ -374,6 +375,8 @@ public sealed partial class SearchWindow : Window
         // A document says whether you may change it once it's open (see ShowDocument).
         var editable = canWrite && place.Item is { Kind: "password" or "asset" };
         EditHereButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+        ConnectButton.Visibility = Visibility.Collapsed;
+        connectLink = null;
         ArchiveButton.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
         ListPanel.Visibility = isItem || isOverview || isEditor ? Visibility.Collapsed : Visibility.Visible;
         DetailScroll.Visibility = isItem || isOverview || isEditor ? Visibility.Visible : Visibility.Collapsed;
@@ -1547,6 +1550,38 @@ public sealed partial class SearchWindow : Window
         }
     }
 
+    // ---------- ScreenConnect ----------
+    private ScreenConnectInfo? screenConnect;
+    private Uri? connectLink;
+
+    /// <summary>Connect, for a device, when the organization has set its ScreenConnect address in Atlas.</summary>
+    private void ShowConnect(AssetSummary asset)
+    {
+        layouts.TryGetValue(asset.LayoutId, out var layout);
+        connectLink = screenConnect?.LinkFor(asset, layout);
+        if (connectLink is null)
+        {
+            ConnectButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var joins = ScreenConnectInfo.SessionIdOf(asset, layout) is not null;
+        ConnectText.Text = joins ? "Connect" : "Find in ScreenConnect";
+        var tip = joins
+            ? "Join this device's ScreenConnect session."
+            : $"Open ScreenConnect searching for {ScreenConnectInfo.NameToFind(asset, layout)}. Add the session ID to the asset to join it directly.";
+        ToolTipService.SetToolTip(ConnectButton, tip);
+        AutomationProperties.SetName(ConnectButton, ConnectText.Text);
+        ConnectButton.Visibility = Visibility.Visible;
+    }
+
+    private void Connect_Click(object sender, RoutedEventArgs e)
+    {
+        if (connectLink is null)
+            return;
+        _ = Launcher.LaunchUriAsync(connectLink);
+        Show(ConnectText.Text == "Connect" ? "Opening the session in ScreenConnect…" : "Opening ScreenConnect…", InfoBarSeverity.Informational);
+    }
+
     // ---------- updating the app ----------
     private string? dismissedUpdate;
     private bool installingUpdate;
@@ -2387,6 +2422,7 @@ public sealed partial class SearchWindow : Window
 
     private void ShowAsset(AssetSummary asset)
     {
+        ShowConnect(asset);
         var facts = KeyFacts(asset);
         if (facts.Count > 0)
             Detail.Children.Add(Facts([.. facts.Take(6).Select(f => (f.Label, f.Value))]));

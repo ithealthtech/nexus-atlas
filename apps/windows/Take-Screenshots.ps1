@@ -148,6 +148,8 @@ try {
   Press (ById 'SaveButton') 'the asset form''s save button'
   Check ((Title) -eq 'HDG-SW-01') 'a new asset saves and opens'
   Shot '05-asset'
+  $connect = ById 'ConnectButton'
+  Check ($connect -and $connect.Current.Name -eq 'Find in ScreenConnect') 'a device without a ScreenConnect session ID offers to find it'
 
   # A document: open it, change its text, save.
   Open 'Documents'; Open 'Firewall reboot procedure*'

@@ -28,6 +28,8 @@ import {
   type WarrantySettings,
   trackerSettingsSchema,
   type TrackerSettings,
+  screenConnectSettingsSchema,
+  type ScreenConnectSettings,
   assetStatsSettingsSchema,
   type AssetStatsSettings,
   smtpSettingsSchema,
@@ -82,6 +84,7 @@ interface StoredSettings {
   entra?: StoredEntra;
   saml?: StoredSaml;
   trackers?: TrackerSettings;
+  screenConnect?: ScreenConnectSettings;
   rmmHealth?: RmmHealthSettings;
   rotation?: RotationSettings;
   warranty?: StoredWarranty;
@@ -368,6 +371,16 @@ export class SettingsService {
   async saveTrackers(orgId: string, input: unknown): Promise<TrackerSettings> {
     const body = trackerSettingsSchema.parse(input);
     await this.put(orgId, 'trackers', body);
+    return body;
+  }
+
+  async screenConnect(orgId: string): Promise<ScreenConnectSettings> {
+    return screenConnectSettingsSchema.parse((await this.load(orgId)).screenConnect ?? {});
+  }
+
+  async saveScreenConnect(orgId: string, input: unknown): Promise<ScreenConnectSettings> {
+    const body = screenConnectSettingsSchema.parse(input);
+    await this.put(orgId, 'screenConnect', body);
     return body;
   }
 

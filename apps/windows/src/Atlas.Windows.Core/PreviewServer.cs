@@ -76,6 +76,7 @@ public sealed class PreviewServer : HttpMessageHandler
                 new { key = "serial", label = "Serial number", type = "text" },
                 new { key = "os", label = "Operating system", type = "text" },
                 new { key = "warranty", label = "Warranty expires", type = "date" },
+                new { key = "screenconnect", label = "ScreenConnect session", type = "text" },
             },
         },
         new
@@ -97,7 +98,7 @@ public sealed class PreviewServer : HttpMessageHandler
         Asset("a-dc", Harbor, "Harbor Dental Group", "l-config", "Configurations", "HDG-DC-01",
             new { type = "Server", hostname = "hdg-dc-01.harbor.local", ip = "10.20.0.10", manufacturer = "Dell", model = "PowerEdge T350", serial = "7HX2K93", os = "Windows Server 2022", warranty = "2027-03-31" }),
         Asset("a-fw", Harbor, "Harbor Dental Group", "l-config", "Configurations", "HDG-FW-01",
-            new { type = "Firewall", ip = "10.20.0.1", manufacturer = "Fortinet", model = "FortiGate 60F", serial = "FGT60FTK2209", os = "FortiOS 7.4.4" }),
+            new { type = "Firewall", ip = "10.20.0.1", manufacturer = "Fortinet", model = "FortiGate 60F", serial = "FGT60FTK2209", os = "FortiOS 7.4.4", screenconnect = "6f1c2a9e-4b7d-4e2a-9c31-0d5b8e7f4a12" }),
         Asset("a-domain", Harbor, "Harbor Dental Group", "l-domain", "Domains", "harbordental.demo", new { registrar = "Cloudflare", expires = "2026-10-28" }),
         Asset("a-nas", Northline, "Northline Architecture", "l-config", "Configurations", "NLA-NAS-01",
             new { type = "Storage", ip = "10.30.0.20", manufacturer = "Synology", model = "RS1221+", serial = "2290QWR8N1", os = "DSM 7.2" }),
@@ -465,6 +466,7 @@ public sealed class PreviewServer : HttpMessageHandler
         organization = new { id = "o-1", name = "IT Done Right" },
         deviceName = Environment.MachineName,
         scopes = new[] { "read", "write", "reveal" },
+        screenConnect = new { url = "https://itdoneright.screenconnect.demo", group = "All Machines" },
     };
 
     private static object[] Filter(object[] items, string? client) =>
