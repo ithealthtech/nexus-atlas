@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Runs the built app and its setup program for real, on the build machine: the app's self-test, a first install,
-  an upgrade over a running copy, and an uninstall.
+  an upgrade over a running copy, opening it again while it is hidden or minimized, and an uninstall.
 
 .DESCRIPTION
   Everything here is per-user and is undone by the uninstall at the end. It exists because compiling the app says
@@ -33,8 +33,11 @@ function WaitUntil([scriptblock]$condition, [int]$seconds, [string]$failure) {
   }
   throw $failure
 }
-function Install([string]$log) {
-  $p = Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log" -PassThru -Wait
+function Install([string]$log, [string[]]$extra = @()) {
+  # Wait for setup itself only: -Wait would also wait for the app it opens with /relaunch=1.
+  $p = Start-Process $setup -ArgumentList (@('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log") + $extra) -PassThru
+  $null = $p.Handle  # keeps the exit code readable once it ends
+  if (-not $p.WaitForExit(300000)) { throw 'Setup did not finish in five minutes.' }
   if ($p.ExitCode -ne 0) {
     if (Test-Path $log) { Get-Content $log -Tail 60 }
     throw "Setup exited with code $($p.ExitCode)."
@@ -77,6 +80,87 @@ if (-not (Select-String -Path $log -SimpleMatch 'closed when asked' -Quiet)) {
 if (StartupCommand) { throw 'An upgrade turned Start with Windows back on.' }
 if (-not (Test-Path $exe)) { throw 'The upgrade removed the app.' }
 
+Step 'Opening the app again brings back a window hidden in the tray, or minimized'
+Add-Type @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class AppWin {
+  delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc proc, IntPtr lParam);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder name, int max);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int max);
+  // Every top-level window the process owns, as "handle class 'title' visible".
+  public static List<string> Describe(int pid) {
+    var all = new List<string>();
+    EnumWindows((h, _) => {
+      uint owner; GetWindowThreadProcessId(h, out owner);
+      if (owner == pid) {
+        var name = new StringBuilder(256); GetClassName(h, name, 256);
+        var text = new StringBuilder(256); GetWindowText(h, text, 256);
+        all.Add(h + " " + name + " '" + text + "' " + (IsWindowVisible(h) ? "visible" : "hidden"));
+      }
+      return true;
+    }, IntPtr.Zero);
+    return all;
+  }
+  // The app's main window, visible or not: the one titled "Atlas" (the tray's menu has a window of its own).
+  public static IntPtr Main(int pid) {
+    var found = IntPtr.Zero;
+    EnumWindows((h, _) => {
+      uint owner; GetWindowThreadProcessId(h, out owner);
+      if (owner != pid) return true;
+      var text = new StringBuilder(256); GetWindowText(h, text, 256);
+      if (text.ToString() == "Atlas") { found = h; return false; }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+}
+'@
+function MainWindow { $p = Get-Process AtlasForWindows -ErrorAction SilentlyContinue | Select-Object -First 1; if ($p) { [AppWin]::Main($p.Id) } else { [IntPtr]::Zero } }
+function ShowWindows { Get-Process AtlasForWindows -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Windows of process $($_.Id):"; [AppWin]::Describe($_.Id) | ForEach-Object { Write-Host "  $_" } } }
+Start-Process $exe
+try { WaitUntil { (MainWindow) -ne [IntPtr]::Zero -and [AppWin]::IsWindowVisible((MainWindow)) } 30 'The app did not open its window.' }
+catch { ShowWindows; throw }
+Start-Sleep -Seconds 6
+$window = MainWindow
+# Closing the window hides it; the app stays in the tray.
+[AppWin]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+WaitUntil { -not [AppWin]::IsWindowVisible($window) } 15 'Closing the window did not hide it.'
+if (-not (Running)) { throw 'Closing the window quit the app instead of hiding it in the tray.' }
+Start-Process $exe
+try { WaitUntil { [AppWin]::IsWindowVisible($window) } 20 'Opening the app again did not bring back its window from the tray.' }
+catch { ShowWindows; throw }
+if ([AppWin]::GetForegroundWindow() -eq $window) { Write-Host 'The window came to the front.' }
+else { Write-Warning 'The window came back but is not in front (this build machine may not allow it).' }
+# The copy that handed off exits on its own; it must not stay behind.
+try { WaitUntil { @(Get-Process AtlasForWindows -ErrorAction SilentlyContinue).Count -eq 1 } 15 'Opening the app again left two copies running.' }
+catch { Get-Process AtlasForWindows | Format-Table Id, StartTime, MainWindowTitle -AutoSize | Out-String | Write-Host; throw }
+# Minimized: opening it again restores it.
+[AppWin]::ShowWindow($window, 6) | Out-Null
+WaitUntil { [AppWin]::IsIconic($window) } 10 'The window did not minimize.'
+Start-Process $exe
+WaitUntil { -not [AppWin]::IsIconic($window) } 20 'Opening the app again did not restore its minimized window.'
+Start-Process $exe -ArgumentList '--quit' -Wait
+WaitUntil { -not (Running) } 30 'The app did not quit when asked.'
+
+Step 'An update the app installs itself opens the app again'
+$log = Join-Path $env:TEMP 'atlas-setup-3.log'
+Install $log @('/relaunch=1')
+WaitUntil { Running } 30 'After an update started with /relaunch=1, the app did not open again.'
+Start-Sleep -Seconds 8
+if (-not (Running)) { throw 'The app opened again after the update and then stopped.' }
+Start-Process $exe -ArgumentList '--quit' -Wait
+WaitUntil { -not (Running) } 30 'The app did not quit when asked.'
+
 Step 'Uninstall'
 New-Item -ItemType Directory -Force -Path $data | Out-Null
 Set-Content (Join-Path $data 'settings.json') '{}'
@@ -92,4 +176,4 @@ if (Running) { throw 'Uninstalling left the app running.' }
 if (StartupCommand) { throw 'Uninstalling left Start with Windows behind.' }
 if (Test-Path $shortcut) { throw 'Uninstalling left the Start menu shortcut.' }
 
-Write-Host "`nSetup works: self-test, install, upgrade over a running copy, and uninstall."
+Write-Host "`nSetup works: self-test, install, upgrade over a running copy, an update that reopens the app, and uninstall."

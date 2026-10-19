@@ -51,6 +51,9 @@
                             <MenuFlyoutItem Text="Refresh" Click="Refresh_Click">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE72C;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Name="CheckUpdatesItem" Text="Check for updates" Click="CheckUpdates_Click">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE895;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
                             <MenuFlyoutSeparator />
                             <MenuFlyoutItem Text="Sign out" Click="SignOut_Click">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xF3B1;" /></MenuFlyoutItem.Icon>
@@ -112,6 +115,17 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
+                <StackPanel>
+                <!-- A newer version of this app, ready to install. -->
+                <InfoBar x:Name="UpdateBar" Margin="20,12,24,0" IsOpen="False" Closed="UpdateBar_Closed">
+                    <InfoBar.ActionButton>
+                        <Button x:Name="UpdateButton" Content="Install and restart" Click="InstallUpdate_Click" Style="{StaticResource AccentButtonStyle}" />
+                    </InfoBar.ActionButton>
+                    <StackPanel Spacing="6" Margin="0,0,0,8">
+                        <ProgressBar x:Name="UpdateProgress" Maximum="100" Visibility="Collapsed" />
+                        <HyperlinkButton x:Name="UpdateBrowserLink" Content="Download it in your browser instead" Click="UpdateBrowser_Click" Padding="0" Visibility="Collapsed" />
+                    </StackPanel>
+                </InfoBar>
                 <!-- Where you are, and the way back. -->
                 <Grid Padding="20,14,24,0" ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -124,6 +138,7 @@
                     </Button>
                     <BreadcrumbBar x:Name="Crumbs" Grid.Column="1" VerticalAlignment="Center" ItemClicked="Crumbs_ItemClicked" />
                 </Grid>
+                </StackPanel>
 
                 <!-- The page's title, and ways to narrow it down. -->
                 <Grid Grid.Row="1" Padding="24,10,24,8" ColumnSpacing="10">

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Atlas.Windows.Core;
 using H.NotifyIcon;
 using H.NotifyIcon.Core;
@@ -59,6 +60,12 @@ public partial class App : Application
 
     internal AtlasClient? Client => client;
 
+    /// <summary>A newer version of this app that Atlas offers, if there is one.</summary>
+    internal AppRelease? AvailableUpdate => update;
+
+    /// <summary>Raised when the offered update appears or goes away.</summary>
+    internal event Action? UpdateChanged;
+
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var arguments = Environment.GetCommandLineArgs();
@@ -80,6 +87,9 @@ public partial class App : Application
         var main = AppInstance.FindOrRegisterForKey("main");
         if (!main.IsCurrent)
         {
+            // Without this, Windows keeps the running copy from coming to the front, and its window can open
+            // behind whatever is in use (or not show at all) when it was hidden in the tray.
+            Native.AllowSetForegroundWindow(main.ProcessId);
             await main.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs());
             Exit();
             return;
@@ -192,7 +202,7 @@ public partial class App : Application
     private void CreateTray()
     {
         signInItem = new MenuFlyoutItem { Command = new RelayCommand(() => _ = SignInOrOut()) };
-        updateItem = new MenuFlyoutItem { Command = new RelayCommand(OpenUpdate), Visibility = Visibility.Collapsed };
+        updateItem = new MenuFlyoutItem { Command = new RelayCommand(() => _ = InstallFromTrayAsync()), Visibility = Visibility.Collapsed };
         startupItem = new ToggleMenuFlyoutItem { Text = "Start with Windows", Command = new RelayCommand(() => _ = ToggleStartupAsync()) };
         var menu = new MenuFlyout();
         menu.Items.Add(new MenuFlyoutItem { Text = "Search Atlas    Ctrl+Shift+Space", Command = new RelayCommand(ShowSearch) });
@@ -232,9 +242,10 @@ public partial class App : Application
             signInItem.Text = client is { SignedIn: true } ? "Sign out" : "Sign in…";
         if (updateItem is not null)
         {
-            updateItem.Text = update is null ? "" : $"Get version {update.LatestVersion}…";
+            updateItem.Text = update is null ? "" : $"Install version {update.LatestVersion} and restart";
             updateItem.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
         }
+        UpdateChanged?.Invoke();
     }
 
     private static bool HasArgument(string[] arguments, string name) =>
@@ -326,13 +337,14 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Asks Atlas which version of this app it offers. A newer one is added to the tray menu and mentioned once;
-    /// the app never downloads or replaces itself.
+    /// Asks Atlas which version of this app it offers. A newer one shows in the window and the tray menu, is
+    /// mentioned once, and installs when the person chooses to (see <see cref="InstallUpdateAsync"/>).
     /// </summary>
-    private async Task CheckForUpdateAsync()
+    /// <returns>Whether there's a newer version, or null if Atlas couldn't be asked.</returns>
+    private async Task<bool?> CheckForUpdateAsync()
     {
         if (client is not { SignedIn: true })
-            return;
+            return null;
         try
         {
             var session = await client.GetSessionAsync();
@@ -345,23 +357,60 @@ public partial class App : Application
                 store.SaveSettings(settings);
                 Notify(
                     $"Atlas for Windows {update.LatestVersion} is available",
-                    $"Choose “Get version {update.LatestVersion}” in the tray menu to download it.");
+                    "Choose Install and restart at the top of the window, or in the tray menu.");
             }
+            return update is not null;
         }
         catch (SessionEndedException)
         {
             SessionEnded();
+            return null;
         }
         catch (Exception e) when (e is HttpRequestException or AtlasApiException or TaskCanceledException or System.Text.Json.JsonException)
         {
             // Offline or Atlas unavailable; try again at the next check.
+            return null;
         }
     }
 
-    private void OpenUpdate()
+    /// <summary>For "Check for updates" in the window: asks now, whatever the schedule.</summary>
+    internal Task<bool?> CheckForUpdateNowAsync() => CheckForUpdateAsync();
+
+    /// <summary>
+    /// Downloads the offered version's setup program, checks it (see <see cref="AppUpdater"/>), starts it, and quits.
+    /// Setup installs over this copy without asking anything and opens the app again when it's done. Throws if the
+    /// download or the check fails; nothing is installed then.
+    /// </summary>
+    internal async Task InstallUpdateAsync(IProgress<double>? progress)
     {
-        if (update?.DownloadLink is { } link)
-            _ = global::Windows.System.Launcher.LaunchUriAsync(link);
+        if (update is not { } release)
+            return;
+        // A new, empty folder each time, so nothing left from an earlier try can be picked up.
+        var folder = Path.Combine(Path.GetTempPath(), "AtlasForWindows-update", Guid.NewGuid().ToString("N"));
+        using var updater = new AppUpdater();
+        var setup = await updater.DownloadAsync(release, folder, progress);
+        Process.Start(new ProcessStartInfo(setup)
+        {
+            Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /relaunch=1",
+            UseShellExecute = true,
+            WorkingDirectory = folder,
+        })?.Dispose();
+        Quit();
+    }
+
+    private async Task InstallFromTrayAsync()
+    {
+        if (update is not { } release)
+            return;
+        Notify($"Updating to Atlas for Windows {release.LatestVersion}", "It downloads, installs, and opens again by itself in a moment.");
+        try
+        {
+            await InstallUpdateAsync(null);
+        }
+        catch (Exception ex) when (ex is UpdateFailedException or HttpRequestException or IOException or TaskCanceledException or System.ComponentModel.Win32Exception)
+        {
+            Notify("The update didn't install", ex is UpdateFailedException ? ex.Message : "Check the connection and try again from the tray menu.");
+        }
     }
 
     /// <summary>Mentions items coming due in the next 14 days, once a day.</summary>
