@@ -853,6 +853,27 @@ export interface EntraView {
   redirectUri: string;
 }
 
+// ---------- ScreenConnect ----------
+/**
+ * The organization's ScreenConnect (ConnectWise Control), which the desktop app's Connect button opens on a device:
+ * the session itself when the asset records its session ID, else the device's sessions found by name.
+ */
+export const screenConnectSettingsSchema = z.object({
+  /** The address technicians sign in at, for example https://itdoneright.screenconnect.com. Blank turns Connect off. */
+  url: z
+    .string()
+    .trim()
+    .max(300)
+    .refine((v) => v === '' || /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/i.test(v), {
+      message: 'Use the https:// address you sign in to ScreenConnect at.',
+    })
+    .transform((v) => v.replace(/\/+$/, ''))
+    .default(''),
+  /** The Access session group machines are listed under. */
+  group: z.string().trim().min(1, 'Name the session group.').max(120).default('All Machines'),
+});
+export type ScreenConnectSettings = z.infer<typeof screenConnectSettingsSchema>;
+
 // ---------- domain and SSL trackers ----------
 /** Scheduled re-checks of Domains assets (RDAP) and served certificates (TLS). Set per organization. */
 export const trackerSettingsSchema = z.object({

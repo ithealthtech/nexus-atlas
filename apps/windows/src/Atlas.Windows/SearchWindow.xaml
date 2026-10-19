@@ -379,6 +379,12 @@
                                 <TextBlock Text="Edit" />
                             </StackPanel>
                         </Button>
+                        <Button x:Name="ConnectButton" Click="Connect_Click" Visibility="Collapsed" AutomationProperties.AutomationId="ConnectButton">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE7F4;" FontSize="14" />
+                                <TextBlock x:Name="ConnectText" Text="Connect" />
+                            </StackPanel>
+                        </Button>
                         <Button Click="Edit_Click" AutomationProperties.Name="Open in Atlas">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE8A7;" FontSize="14" />
