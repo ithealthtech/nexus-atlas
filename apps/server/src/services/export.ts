@@ -14,6 +14,7 @@ import { Scope } from './scope.js';
 import type { FileStorage } from './storage.js';
 import type { VaultService } from './vault.js';
 import { cleanRichText } from './richtext.js';
+import { LicenseService } from './licenses.js';
 
 const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024;
 const safeName = (s: string) =>
@@ -105,6 +106,7 @@ export async function exportClient(
     exportedBy: actor.name,
     client: { id: client.id, name: client.name, type: client.type, status: client.status, notes: client.notes },
     contacts: contactList,
+    licenses: await new LicenseService().list(scope, clientId),
     locations: locationList,
     assets: [...activeAssets, ...archivedAssets],
     documents: fullDocs,

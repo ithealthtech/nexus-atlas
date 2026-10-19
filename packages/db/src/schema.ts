@@ -20,6 +20,40 @@ import {
 const created = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const updated = () => timestamp('updated_at', { withTimezone: true }).notNull().defaultNow();
 
+export const licenses = pgTable(
+  'licenses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    vendor: text('vendor').notNull().default(''),
+    seats: integer('seats').notNull(),
+    assignments: jsonb('assignments').$type<string[]>().notNull().default([]),
+    unitCostCents: integer('unit_cost_cents').notNull().default(0),
+    currency: text('currency').notNull().default('USD'),
+    billingCycle: text('billing_cycle').notNull().default('monthly'),
+    renewalDate: date('renewal_date'),
+    autoRenew: boolean('auto_renew').notNull().default(false),
+    status: text('status').notNull().default('active'),
+    notes: text('notes').notNull().default(''),
+    version: integer('version').notNull().default(1),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    index('licenses_client_idx').on(t.orgId, t.clientId),
+    check('licenses_seats_check', sql`${t.seats} > 0 and jsonb_array_length(${t.assignments}) <= ${t.seats}`),
+    check('licenses_cost_check', sql`${t.unitCostCents} >= 0`),
+    check('licenses_status_check', sql`${t.status} in ('active', 'cancelled')`),
+    check('licenses_cycle_check', sql`${t.billingCycle} in ('monthly', 'annual', 'one_time')`),
+  ],
+);
+
 // The MSP tenant. v1 runs one organization per installation; every tenant table still carries org_id.
 export const orgs = pgTable('orgs', {
   id: uuid('id').primaryKey().defaultRandom(),

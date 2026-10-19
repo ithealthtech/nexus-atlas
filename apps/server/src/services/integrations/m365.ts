@@ -7,6 +7,7 @@ import {
   type ContactView,
   type LayoutField,
   type M365TenantLink,
+  type MicrosoftLicenseView,
 } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { AssetService } from '../assets.js';
@@ -30,7 +31,10 @@ const TOKEN_HINTS: [RegExp, string][] = [
     'This tenant hasn’t granted consent to the app yet. Open the consent link as one of its Global Administrators.',
   ],
   [/AADSTS90002|AADSTS900023|AADSTS90072/, 'Microsoft doesn’t know that tenant. Check the tenant ID or domain.'],
-  [/AADSTS700027|AADSTS50194/, 'The app isn’t multi-tenant. Set Supported account types to “Multiple Entra ID tenants”.'],
+  [
+    /AADSTS700027|AADSTS50194/,
+    'The app isn’t multi-tenant. Set Supported account types to “Multiple Entra ID tenants”.',
+  ],
 ];
 
 /** Friendly names for the subscriptions MSPs see most; anything else shows its part number. */
@@ -108,41 +112,50 @@ export class M365Client {
     if (cached && cached.expires > Date.now() + 60_000) return cached.token;
     let res: Response;
     try {
-      res = await this.fetcher(
-        `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'client_credentials',
-            client_id: this.appId,
-            client_secret: this.secret,
-            scope: 'https://graph.microsoft.com/.default',
-          }),
-          signal: AbortSignal.timeout(20_000),
-        },
-      );
+      res = await this.fetcher(`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: this.appId,
+          client_secret: this.secret,
+          scope: 'https://graph.microsoft.com/.default',
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
     } catch {
       throw new HttpError(502, 'Microsoft could not be reached from this server.');
     }
-    const body = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string };
+    const body = (await res.json().catch(() => ({}))) as {
+      access_token?: string;
+      expires_in?: number;
+      error_description?: string;
+    };
     if (!res.ok || !body.access_token) {
       const said = body.error_description ?? '';
       const hint = TOKEN_HINTS.find(([pattern]) => pattern.test(said))?.[1];
-      throw new HttpError(400, hint ?? `Microsoft refused the sign-in: ${said.split('\r\n')[0]?.slice(0, 200) || res.status}`);
+      throw new HttpError(
+        400,
+        hint ?? `Microsoft refused the sign-in: ${said.split('\r\n')[0]?.slice(0, 200) || res.status}`,
+      );
     }
     this.tokens.set(key, { token: body.access_token, expires: Date.now() + (body.expires_in ?? 3600) * 1000 });
     return body.access_token;
   }
 
   /** Every item of a Graph collection, following @odata.nextLink. */
-  private async all(tenant: string, path: string, max = 20_000): Promise<Json[]> {
+  private async all(tenant: string, path: string, max = 20_000, strict = false): Promise<Json[]> {
     const token = await this.token(tenant);
     const out: Json[] = [];
     let url: string | undefined = `${GRAPH}${path}`;
+    const visited = new Set<string>();
     while (url && out.length < max) {
       // Only follow links back to Graph itself.
-      if (!url.startsWith(`${GRAPH}/`)) break;
+      if (!url.startsWith(`${GRAPH}/`) || visited.has(url) || visited.size >= 100) {
+        if (strict) throw new HttpError(502, 'Microsoft returned an invalid or oversized license collection.');
+        break;
+      }
+      visited.add(url);
       let res: Response;
       try {
         res = await this.fetcher(url, {
@@ -162,13 +175,90 @@ export class M365Client {
         );
       if (!res.ok) throw new HttpError(502, `Microsoft Graph answered ${res.status} for ${path.split('?')[0]}.${detail}`);
       const body = (await res.json()) as { value?: Json[]; '@odata.nextLink'?: string };
+      if (
+        strict &&
+        (!Array.isArray(body.value) ||
+          (body['@odata.nextLink'] !== undefined && typeof body['@odata.nextLink'] !== 'string'))
+      )
+        throw new HttpError(502, 'Microsoft returned an invalid license collection.');
       out.push(...(body.value ?? []));
       url = body['@odata.nextLink'];
     }
+    if (strict && (url || out.length > max))
+      throw new HttpError(
+        502,
+        'Microsoft returned too many license records. Narrow the tenant before managing assignments.',
+      );
     return out;
   }
 
   /** Signs in to the tenant and reads its name; used to check a link. */
+  async licenses(tenant: string): Promise<MicrosoftLicenseView> {
+    const skus = (await this.all(tenant, '/subscribedSkus', 20_000, true)).map((s) => ({
+      id: String(s.skuId),
+      part: String(s.skuPartNumber ?? ''),
+      name: skuName(String(s.skuPartNumber ?? '')),
+      enabled: Number((s.prepaidUnits as Json | undefined)?.enabled ?? 0),
+      assigned: Number(s.consumedUnits ?? 0),
+      status: String(s.capabilityStatus ?? ''),
+    }));
+    const users = (
+      await this.all(
+        tenant,
+        '/users?$select=id,displayName,userPrincipalName,assignedLicenses,licenseAssignmentStates&$top=999',
+        20_000,
+        true,
+      )
+    ).map((u) => {
+      if (Array.isArray(u.assignedLicenses) && u.assignedLicenses.length && !Array.isArray(u.licenseAssignmentStates))
+        throw new HttpError(
+          502,
+          'Microsoft did not return license assignment sources. Refresh before managing this tenant.',
+        );
+      return {
+        id: String(u.id).toLowerCase(),
+        name: String(u.displayName ?? u.userPrincipalName ?? ''),
+        upn: String(u.userPrincipalName ?? ''),
+        skuIds: ((u.assignedLicenses as Json[] | undefined) ?? []).map((l) => String(l.skuId).toLowerCase()),
+        groupSkuIds: ((u.licenseAssignmentStates as Json[] | undefined) ?? [])
+          .filter((s) => s.assignedByGroup)
+          .map((s) => String(s.skuId).toLowerCase()),
+      };
+    });
+    return { tenantId: tenant, checkedAt: new Date().toISOString(), skus, users };
+  }
+
+  /** License writes always require delegated access; application credentials are never used. */
+  async assignLicense(tenant: string, userId: string, skuId: string, action: 'assign' | 'remove') {
+    if (!this.delegatedToken)
+      throw new HttpError(409, 'Connect this client through GDAP to manage Microsoft 365 licenses.');
+    const token = await this.token(tenant);
+    let res: Response;
+    try {
+      res = await this.fetcher(`${GRAPH}/users/${encodeURIComponent(userId)}/assignLicense`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          addLicenses: action === 'assign' ? [{ skuId, disabledPlans: [] }] : [],
+          removeLicenses: action === 'remove' ? [skuId] : [],
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch {
+      throw new HttpError(502, 'Microsoft did not confirm the license change. Refresh before trying again.');
+    }
+    if (res.status === 401 || res.status === 403)
+      throw new HttpError(
+        403,
+        'Microsoft refused the license change. Check delegated LicenseAssignment.ReadWrite.All consent and the partner user’s GDAP License Administrator role.',
+      );
+    if (!res.ok)
+      throw new HttpError(
+        502,
+        `Microsoft rejected the license change (HTTP ${res.status}). Check available seats, usage location, and group licensing, then refresh.`,
+      );
+  }
+
   async check(tenant: string): Promise<{ tenantId: string; name: string }> {
     const [org] = await this.all(tenant, '/organization?$select=id,displayName');
     if (!org) throw new HttpError(400, 'Microsoft returned no organization for that tenant.');
@@ -197,22 +287,22 @@ export class M365Client {
     });
     // Users are read even when they aren't made into contacts: the tenant summary counts them and names its admins.
     const users = (
-          await this.all(
-            tenant,
-            '/users?$select=id,displayName,userPrincipalName,mail,jobTitle,businessPhones,mobilePhone,accountEnabled,assignedLicenses,userType&$top=999',
-          )
-        ).map((u) => ({
-          id: String(u.id),
-          name: String(u.displayName ?? u.userPrincipalName ?? ''),
-          upn: String(u.userPrincipalName ?? '').toLowerCase(),
-          email: String(u.mail ?? '').toLowerCase(),
-          title: String(u.jobTitle ?? ''),
-          phone: String(((u.businessPhones as string[] | undefined) ?? [])[0] ?? ''),
-          mobile: String(u.mobilePhone ?? ''),
-          enabled: u.accountEnabled !== false,
-          member: u.userType !== 'Guest',
-          skuIds: ((u.assignedLicenses as Json[] | undefined) ?? []).map((l) => String(l.skuId)),
-        }));
+      await this.all(
+        tenant,
+        '/users?$select=id,displayName,userPrincipalName,mail,jobTitle,businessPhones,mobilePhone,accountEnabled,assignedLicenses,userType&$top=999',
+      )
+    ).map((u) => ({
+      id: String(u.id),
+      name: String(u.displayName ?? u.userPrincipalName ?? ''),
+      upn: String(u.userPrincipalName ?? '').toLowerCase(),
+      email: String(u.mail ?? '').toLowerCase(),
+      title: String(u.jobTitle ?? ''),
+      phone: String(((u.businessPhones as string[] | undefined) ?? [])[0] ?? ''),
+      mobile: String(u.mobilePhone ?? ''),
+      enabled: u.accountEnabled !== false,
+      member: u.userType !== 'Guest',
+      skuIds: ((u.assignedLicenses as Json[] | undefined) ?? []).map((l) => String(l.skuId)),
+    }));
     const roles = (await this.all(tenant, '/directoryRoles?$expand=members($select=id)'))
       .map((r) => ({
         name: String(r.displayName ?? ''),
@@ -473,8 +563,16 @@ export async function runM365Sync(
         }
       if (archived) run.note(`${snap.name}: archived ${archived} ${kind} Microsoft 365 no longer reports.`);
     };
-    if (licenseLayout) await archiveGone('licenses', paid.map((s) => s.id));
-    if (domainLayout) await archiveGone('domains', snap.domains.filter((x) => !x.initial).map((d) => d.name));
+    if (licenseLayout)
+      await archiveGone(
+        'licenses',
+        paid.map((s) => s.id),
+      );
+    if (domainLayout)
+      await archiveGone(
+        'domains',
+        snap.domains.filter((x) => !x.initial).map((d) => d.name),
+      );
 
     if (options.users) {
       const existing = await contacts.list(scope, clientId);

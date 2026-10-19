@@ -85,6 +85,7 @@ import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
 import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl } from './services/request-log.js';
 import { registerRequestLogRoutes } from './routes/request-log.js';
+import { registerLicenseRoutes } from './routes/licenses.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -963,6 +964,7 @@ export async function buildApp({
     agentLimiter: failureLimiter(20, 15 * 60_000),
   });
   registerRequestLogRoutes(app, { db, authed, recent, requestLog });
+  registerLicenseRoutes(app, { db, authed, recent, settings, fetcher: m365Fetch });
   registerM365Routes(app, {
     db,
     authed,

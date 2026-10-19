@@ -41,6 +41,7 @@ const SECTION_LABELS: Record<ClientSection, string> = {
   contacts: 'Contacts',
   locations: 'Locations',
   checklists: 'Checklists',
+  licenses: 'Licenses',
   map: 'Map',
   activity: 'Activity',
 };

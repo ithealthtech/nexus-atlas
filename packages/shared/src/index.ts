@@ -17,3 +17,4 @@ export * from './templates.js';
 export * from './bitlocker.js';
 export * from './personal-vault.js';
 export * from './webhooks.js';
+export * from './licenses.js';

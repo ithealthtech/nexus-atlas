@@ -219,10 +219,11 @@ export function M365Sync() {
                     </code>
                     <p className="mt-2">
                       Add Microsoft Graph <strong>delegated</strong> permissions
-                      <strong> Directory.Read.All</strong> and <strong>DelegatedAdminRelationship.Read.All</strong>.
-                      Grant partner admin consent. Each customer also needs delegated application consent, an active
-                      GDAP relationship, and a suitable role assigned to the partner user’s security group. Require MFA
-                      for the partner account.
+                      <strong> Directory.Read.All</strong>, <strong>DelegatedAdminRelationship.Read.All</strong>, and
+                      <strong> LicenseAssignment.ReadWrite.All</strong> for license management. Grant partner admin
+                      consent. Each customer also needs delegated application consent, an active GDAP relationship, and
+                      a suitable role assigned to the partner user’s security group. Require MFA for the partner
+                      account.
                     </p>
                   </div>
                 </>

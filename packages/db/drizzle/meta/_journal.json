@@ -246,6 +246,13 @@
       "when": 1791505429926,
       "tag": "0034_personal_vaults",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792439114244,
+      "tag": "0035_slippery_synch",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,9 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  licenseSchema,
+  licenseUpdateSchema,
+  type LicenseView,
   remoteAccessRequestSchema,
   type RemoteAccessView,
   CHECKLIST_TEMPLATES,
@@ -847,6 +850,42 @@ const find = <T extends { id: string }>(list: T[], id: string, what = 'Item') =>
   return item;
 };
 const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_passwords' });
+
+// Client license tracking in the clickable demo. Microsoft writes are never simulated as live changes.
+const licenseRecords: LicenseView[] = [];
+on('GET', '/clients/:id/licenses', (m) => {
+  find(db.clients, m[1]!, 'Client');
+  return { licenses: licenseRecords.filter((l) => l.clientId === m[1]), microsoft: null };
+});
+on('POST', '/clients/:id/licenses', (m, b) => {
+  find(db.clients, m[1]!, 'Client');
+  const item = { ...licenseSchema.parse(b), id: crypto.randomUUID(), clientId: m[1]!, version: 1, updatedAt: now() };
+  licenseRecords.push(item);
+  return item;
+});
+on('PUT', '/clients/:client/licenses/:id', (m, b) => {
+  const item = find(
+    licenseRecords.filter((l) => l.clientId === m[1]),
+    m[2]!,
+    'License',
+  );
+  const body = licenseUpdateSchema.parse(b);
+  if (item.version !== body.version) throw new MockError(409, 'This subscription changed. Refresh and try again.');
+  Object.assign(item, body.license, { version: item.version + 1, updatedAt: now() });
+  return item;
+});
+on('DELETE', '/clients/:client/licenses/:id', (m, b) => {
+  const item = find(
+    licenseRecords.filter((l) => l.clientId === m[1]),
+    m[2]!,
+    'License',
+  );
+  if (item.version !== b.version) throw new MockError(409, 'This subscription changed. Refresh and try again.');
+  licenseRecords.splice(licenseRecords.indexOf(item), 1);
+  return { ok: true };
+});
+on('GET', '/clients/:client/licenses/microsoft', () => notInDemo('GDAP license management'));
+on('POST', '/clients/:client/licenses/microsoft/assignments', () => notInDemo('GDAP license management'));
 
 // session and account
 on('GET', '/setup', () => ({ needed: false, passwordReset: true }));
