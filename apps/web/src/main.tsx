@@ -22,6 +22,7 @@ import { applyTheme, storedTheme } from '@/lib/theme';
 import { Dashboard } from '@/pages/Dashboard';
 import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
+import { ClientLicenses } from '@/pages/client/Licenses';
 import { ClientOverview } from '@/pages/client/ClientOverview';
 import { ClientReport } from '@/pages/client/ClientReport';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
@@ -210,6 +211,7 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/contacts', component: ClientContacts }),
   createRoute({ getParentRoute: () => clientRoute, path: '/locations', component: ClientLocations }),
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/licenses', component: ClientLicenses }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
   createRoute({ getParentRoute: () => clientRoute, path: '/trackers/domains', component: DomainTracker }),

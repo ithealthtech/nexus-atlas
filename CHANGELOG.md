@@ -2,11 +2,19 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-10-19
+
+### Added
+
+- Client **Licenses** section: track software subscriptions, seats, user/device assignments, per-seat costs, billing cycles, renewal dates, and cancellation status. Edits detect stale versions; changes appear in client activity and tracking records are included in client exports.
+- Microsoft 365 license inventory and direct user assignment/removal through the existing **GDAP** partner connection. Tenant IDs come from the saved client link; active relationships and delegated access are checked before each operation, with no application-credential fallback. Writes require an Atlas administrator, recent authentication, Microsoft delegated license permission, and the partner user's GDAP role. Group-assigned licenses remain managed through Microsoft Entra.
+
 ## [1.7.34] - 2026-10-19
 
 ### Fixed
 
 - **Microsoft 365 connection diagnostics.** Failed Graph reads now include recognized Microsoft error codes, a safe explanation, and a validated Microsoft request ID when available. Customer checks retain those details for troubleshooting without exposing raw response messages, tokens, client secrets, or authentication challenges.
+
 
 ## [1.7.33] - 2026-10-19
 

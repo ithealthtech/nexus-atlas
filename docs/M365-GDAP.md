@@ -7,7 +7,7 @@ Under **Administration → Import & export → Microsoft 365**, choose **GDAP �
 1. Register a **multitenant** app in your MSP's partner Entra tenant, supporting accounts in any organizational directory.
 2. Add a **Web** redirect URI: https://your-atlas-host/api/integrations/m365/gdap/callback, replacing https://your-atlas-host with Atlas's public HTTPS origin. Atlas displays the complete address in the GDAP settings. Local HTTP is for loopback development only.
 3. Create a client secret. Use its **Value**, not its Secret ID.
-4. Add Microsoft Graph **delegated** permissions **Directory.Read.All** (the existing directory documentation sync) and **DelegatedAdminRelationship.Read.All** (relationship discovery). Grant administrator consent in the partner tenant. Atlas also requests OpenID Connect identity scopes and offline_access for background sync.
+4. Add Microsoft Graph **delegated** permissions **Directory.Read.All** (directory documentation and license inventory), **DelegatedAdminRelationship.Read.All** (relationship discovery), and **LicenseAssignment.ReadWrite.All** (license assignment/removal). Grant administrator consent in the partner tenant. Atlas also requests OpenID Connect identity scopes and offline_access for background sync. Existing partner connections must reconnect and grant the additional license permission before using assignment changes.
 5. Use a partner account protected by MFA/Conditional Access. An active customer-approved GDAP relationship must assign that user suitable directory read roles through a partner security group. Discovering a relationship does not prove the user has access; the customer token exchange and Graph calls enforce the actual assignment.
 6. Grant the app the required **delegated application consent in each customer tenant**. GDAP does not automatically supply application consent. A customer's administrator can grant consent, or a separately authorized Partner Center consent workflow can do so. Atlas does not create GDAP relationships, change roles, or grant consent for customers.
 
@@ -18,6 +18,18 @@ Save the partner Directory (tenant) ID, app ID, and app secret. Choose **Sign in
 Only active, unexpired GDAP relationships are offered. Each customer is explicitly mapped to an existing Atlas client; discovery does not provision clients or users and never assigns Atlas permissions. GDAP uses customer tenant GUIDs. Domain-based links made in application mode should be relinked using the discovered customer ID.
 
 The existing **Application consent in each customer tenant** option remains available for installations using application permissions. GDAP mode never falls back to application credentials when delegated access fails.
+
+## Client license management
+
+Open **Clients → a client → Licenses**. For a linked Microsoft 365 tenant, Atlas reads subscriptions, enabled/assigned seats, users, and group assignment indicators directly through GDAP. This is separate from the documentation sync and does not create editable copies of Microsoft seat counts. An application-mode connection must be switched to GDAP before this section can read or change Microsoft licensing.
+
+Atlas administrators can assign an available SKU to a user or remove a direct assignment after confirming the named user and product. The server derives the tenant from the client's saved mapping, validates the user and SKU against that tenant, and requires a fresh Atlas authentication. Microsoft also requires delegated **LicenseAssignment.ReadWrite.All** and a supported customer role such as **License Administrator**, assigned to the partner user's GDAP group. Missing consent, expired relationships, and Microsoft refusals are surfaced without using application credentials. Each attempted change and its confirmed/unconfirmed outcome is recorded in the security log. A timeout is an unknown outcome: refresh before retrying.
+
+Group-derived licenses are shown as **Assigned by group** and must be changed through Microsoft Entra group membership. Existing licensed users cannot be assigned the same SKU again, preserving any existing disabled service plans. Atlas does not change a user's usage location; configure it in Microsoft before assignment when required. Microsoft remains authoritative for seat availability and may take time to reflect successful changes. Purchases, reseller pricing, billing terms, and renewal dates are not provided by this directory API.
+
+Use **Other software subscriptions** for manual tracking of other vendors: purchased seats, assignments (one person or device per line), per-seat cost per billing period, currency, renewal date, auto-renewal, and status. These records do not change vendor subscriptions. Activation keys and secrets belong in the password vault. Client read/edit permissions apply; manual edits use version checks to prevent overwriting concurrent changes, and the records are included in client exports and database backups. Renewal badges highlight dates within 30 days and past dates; this section does not send renewal notifications.
+
+Microsoft API reference: [user assignLicense](https://learn.microsoft.com/en-us/graph/api/user-assignlicense?view=graph-rest-1.0).
 
 ## Sessions, tokens, and recovery
 

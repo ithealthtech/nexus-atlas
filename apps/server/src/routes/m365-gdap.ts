@@ -11,7 +11,7 @@ import type { SettingsService, StoredEntra, StoredM365 } from '../services/setti
 const BASE = '/api/integrations/m365/gdap';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const SCOPES =
-  'openid profile email offline_access https://graph.microsoft.com/Directory.Read.All https://graph.microsoft.com/DelegatedAdminRelationship.Read.All';
+  'openid profile email offline_access https://graph.microsoft.com/Directory.Read.All https://graph.microsoft.com/DelegatedAdminRelationship.Read.All https://graph.microsoft.com/LicenseAssignment.ReadWrite.All';
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Connection = StoredM365 & { clientSecret: string };
 export function partnerSettings(saved: Connection): StoredEntra & { clientSecret: string } {

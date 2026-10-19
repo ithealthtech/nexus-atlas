@@ -208,9 +208,10 @@
           <li>
             <strong>The tabs:</strong> <strong>Overview</strong>, <strong>Assets</strong>, <strong>Documents</strong>,
             <strong>Passwords</strong>, <strong>Contacts</strong>, <strong>Locations</strong>,
-            <strong>Checklists</strong>, <strong>Map</strong> and <strong>Activity</strong>, each with a count. The
-            <strong>Trackers</strong> row underneath has <strong>Domain Tracker</strong> and
-            <strong>SSL Tracker</strong>. A tracker count turns amber when something needs attention.
+            <strong>Checklists</strong>, <strong>Licenses</strong>, <strong>Map</strong> and <strong>Activity</strong>.
+            Counts appear for the sections that provide them. The <strong>Trackers</strong> row underneath has
+            <strong>Domain Tracker</strong> and <strong>SSL Tracker</strong>. A tracker count turns amber when something
+            needs attention.
           </li>
         </ul>
         <h3 id="hide-tabs-you-don-t-use">
@@ -328,6 +329,37 @@
           together, with the same links as a list below for keyboard and screen-reader use. It's built from the links
           you make under <strong>Related</strong> on each item.
         </p>
+        <h2 id="licenses-and-subscriptions">
+          <a class="anchor" href="#licenses-and-subscriptions">Licenses and subscriptions</a>
+        </h2>
+        <figure>
+          <a href="../images/manual/licenses.png"
+            ><img src="../images/manual/licenses.png" alt="License management" loading="lazy"
+          /></a>
+          <figcaption>Clients → a client → Licenses. Synthetic example data.</figcaption>
+        </figure>
+        <p>
+          Open <strong>Licenses</strong> to track software subscriptions, purchased seats, assigned people or devices,
+          per-seat costs, billing cycles, and renewal dates. Choose <strong>Add subscription</strong>, enter one
+          assignment per line, and save. Assignment counts cannot exceed purchased seats. Renewals within 30 days and
+          past renewal dates receive a badge; this page does not send renewal emails. Keep activation keys and passwords
+          in the vault.
+        </p>
+        <p>
+          For linked Microsoft 365 tenants, <strong>Microsoft 365</strong> reads subscriptions, seat availability, and
+          users through the saved <strong>GDAP</strong> partner connection. Choose a subscription to inspect
+          assignments. Atlas administrators can assign an available license to a user or remove a direct assignment
+          after confirming the named user and product. Group-assigned licenses must be changed through Microsoft Entra
+          group membership. Microsoft consent and the partner user's customer roles also apply; see
+          <a href="integrations.html#microsoft-365">Data and integrations</a>.
+        </p>
+        <p>
+          Microsoft seat counts and assignments remain authoritative in Microsoft. Purchases, reseller pricing, billing
+          terms, and renewal dates are managed with your reseller. <strong>Other software subscriptions</strong> tracks
+          other purchases manually and does not change vendor subscriptions. Read-only client access can view records;
+          editing manual tracking requires client edit access. Manual changes appear in client activity and client
+          exports.
+        </p>
         <h2 id="the-monthly-report"><a class="anchor" href="#the-monthly-report">The monthly report</a></h2>
         <p>
           <strong>Monthly report</strong> in the client header opens a printable page with the client's assets and
@@ -338,8 +370,8 @@
         <p><strong>Export</strong> downloads a zip of everything you can see for the client:</p>
         <ul>
           <li>
-            <code>client.json</code>, with the client, contacts, locations, assets and their fields, documents and
-            links.
+            <code>client.json</code>, with the client, contacts, locations, assets and their fields, documents, manually
+            tracked subscriptions, and links.
           </li>
           <li>The documents as plain text.</li>
           <li>The attached files.</li>
@@ -383,6 +415,7 @@
           <li><a href="#quick-notes">Quick notes</a></li>
           <li><a href="#contacts-and-locations">Contacts and locations</a></li>
           <li><a href="#the-relationship-map">The relationship map</a></li>
+          <li><a href="#licenses-and-subscriptions">Licenses and subscriptions</a></li>
           <li><a href="#the-monthly-report">The monthly report</a></li>
           <li><a href="#export-a-client">Export a client</a></li>
           <li><a href="#change-or-delete-a-client">Change or delete a client</a></li>
@@ -392,8 +425,8 @@
     <footer class="footer">
       <div class="footer-inner">
         <p>
-          MSP Atlas 1.7.34. Documentation, passwords and client operations for managed service providers, on a server
-          you own.
+          MSP Atlas 1.8.0. Documentation, passwords and client operations for managed service providers, on a server you
+          own.
         </p>
         <p>
           <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
