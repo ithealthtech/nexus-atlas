@@ -10,6 +10,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Fixed
 
+- Client tracker links wrap at phone widths so the section customization control remains fully visible across system fonts.
 - Global search stays open when reopened immediately with Ctrl+K after closing it. A delayed native dialog event no longer dismisses the new search session.
 
 - Saved report snapshots and templates are removed for every client-deletion path, including duplicate merges and organization erasure. A new migration also clears reports left for clients that no longer exist; existing migrations remain unchanged. Report client IDs are normalized before validation so letter case cannot interfere with access or cleanup.
