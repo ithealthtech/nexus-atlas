@@ -112,6 +112,7 @@ Open **Overview → Reports** for reporting across clients, or a client's **Repo
 - Domains & SSL
 - Documentation health
 - Endpoint health
+- Software & sign-ins
 
 Choose a report and up to 25 clients, set the report title and any lookahead, and choose **Run report**.
 
@@ -123,6 +124,7 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 
 **Security posture** shows, for each client, passwords with problems (breached, weak, reused, overdue, expired, or unchanged for a year), devices that are offline or unprotected, BitLocker encryption reported by the collector, and the last result of automatic password rotation. Password names appear only for clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and recovery keys are never included.
 **Domains & SSL** lists each client's domains and SSL certificates with their registrar or issuer, expiry date, days left, and the result of the latest automatic check, soonest first. A summary counts what has expired, what expires within the chosen window, and failed checks. Records the trackers haven't checked yet show the dates as entered.
+**Software & sign-ins** reads the inventory the ConnectWise RMM sync saves. It lists every application installed on each client's devices, with versions, how many devices have it, and the same flags as the client's Software tab: end of life, no license recorded, or more installs than licensed seats. It also lists the accounts that sign in to each device, with the matching contact. Devices that haven't reported an inventory are counted in the report's notices rather than treated as having nothing installed.
 
 Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
 

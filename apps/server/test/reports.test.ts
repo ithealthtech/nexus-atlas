@@ -290,6 +290,54 @@ describe('private client reports', () => {
       selectReportSection(snapshot, reportSelectionSchema.parse({ section: 1, attention: true })).rows.map((r) => r[1]),
     ).toEqual(['harbordental.example']);
   });
+  it('reports installed software with flags and who signs in, from the RMM inventory', async () => {
+    await seed();
+    const [layout] = await t.handle.db
+      .select({ id: schema.assetLayouts.id })
+      .from(schema.assetLayouts)
+      .where(eq(schema.assetLayouts.key, 'report-workstation'));
+    const [pc] = await t.handle.db
+      .insert(schema.assets)
+      .values({ orgId, clientId, layoutId: layout!.id, name: 'Reception PC' })
+      .returning();
+    await t.handle.db.insert(schema.rmmDeviceStatus).values({
+      orgId,
+      clientId,
+      assetId: pc!.id,
+      source: 'test',
+      externalId: '2',
+      kind: 'workstation',
+      online: true,
+      software: [
+        { name: 'Adobe Flash Player 32', version: '32.0', publisher: 'Adobe', installedAt: null },
+        { name: '7-Zip 23.01', version: '23.01', publisher: 'Igor Pavlov', installedAt: null },
+      ],
+      signIns: [{ username: 'avery', domain: 'HDG', lastLogonAt: '2026-10-01T08:00:00.000Z', contactId: null }],
+      inventoryAt: new Date(),
+    });
+    const run = await generate('software');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual(['Summary', 'Software', 'Sign-ins']);
+    expect(snapshot.sections[0]!.rows).toEqual([['Harbor Dental', '1 of 2', '2', '1', '0', '0', '1']]);
+    expect(snapshot.sections[1]!.rows[0]).toEqual([
+      'Harbor Dental',
+      'Adobe Flash Player 32',
+      'Adobe',
+      '32.0',
+      '1',
+      'End of life',
+      expect.any(String),
+    ]);
+    expect(snapshot.sections[1]!.rows[1]!.slice(1, 2)).toEqual(['7-Zip 23.01']);
+    expect(snapshot.sections[2]!.rows).toEqual([
+      ['Harbor Dental', 'Reception PC', 'HDG\\avery', '', '2026-10-01T08:00:00.000Z'],
+    ]);
+    expect(snapshot.warnings).toContain('Harbor Dental: 1 of 2 devices have not reported software or sign-ins.');
+    expect(
+      selectReportSection(snapshot, reportSelectionSchema.parse({ section: 1, attention: true })).rows.map((r) => r[1]),
+    ).toEqual(['Adobe Flash Player 32']);
+  });
   it('collects every report type without private contents, archived records or other clients', async () => {
     await seed();
     for (const kind of REPORT_KINDS) {

@@ -9,6 +9,7 @@ export const REPORT_KINDS = [
   'domains',
   'documentation',
   'endpoints',
+  'software',
 ] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const REPORT_INFO: Record<ReportKind, { name: string; description: string }> = {
@@ -44,6 +45,10 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
   endpoints: {
     name: 'Endpoint health',
     description: 'RMM online status, last check-in, and endpoint protection coverage.',
+  },
+  software: {
+    name: 'Software & sign-ins',
+    description: 'Installed software with end-of-life and license flags, and who signs in to each device.',
   },
 };
 export const reportDefinitionSchema = z.object({
@@ -139,6 +144,8 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     )
       return Number(value) > 0;
     if (column === 'Last check') return value.startsWith('Failed');
+    if (['End of life', 'Unlicensed', 'Over seats'].includes(column)) return Number(value) > 0;
+    if (column === 'Flag') return value !== '';
     return false;
   });
 }

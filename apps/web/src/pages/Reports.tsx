@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   Download,
+  AppWindow,
   FileCheck2,
   FileText,
   History,
@@ -60,6 +61,7 @@ const ICONS = {
   domains: Globe,
   documentation: FileCheck2,
   endpoints: Activity,
+  software: AppWindow,
 };
 /** The client page each report's "open client" link goes to; reports not listed open the client's overview. */
 const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
@@ -69,6 +71,7 @@ const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
   domains: '/trackers/domains',
   documentation: '/documents',
   endpoints: '/assets',
+  software: '/assets',
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
   executive: 'Your client environment at a glance',
@@ -79,6 +82,7 @@ const REPORT_SUBTITLE: Record<ReportKind, string> = {
   domains: 'Domain and certificate expiry',
   documentation: 'Coverage, ownership and review dates',
   endpoints: 'Device status and protection',
+  software: 'Applications and who signs in',
 };
 const REPORT_STEPS = [
   { icon: Building2, title: 'Choose your scope', detail: 'One client or up to 25 workspaces.' },

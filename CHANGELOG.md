@@ -19,6 +19,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Each record shows its registrar or issuer, expiry date, days left, auto-renew setting, and the result of the latest automatic check.
   - A summary counts what has expired, what expires within the chosen window (30 days to a year), and failed checks.
   - **Needs review** picks out expired and expiring records and failed checks.
+- **Software & sign-ins report.** A new built-in report under Reports, read from the ConnectWise RMM inventory.
+  - It lists every application on each client's devices, flagged ones first, with the same flags as the client's Software tab: end of life, no license recorded, or over seats.
+  - It also lists who signs in to each device, matched to contacts.
+  - A summary counts devices reporting, applications, flags, and sign-in accounts.
 
 ## [1.8.3] - 2026-10-20
 
