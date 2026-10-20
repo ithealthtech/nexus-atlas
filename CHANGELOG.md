@@ -2,6 +2,16 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Service review report.** A new built-in report under Reports that looks back over a chosen period, from the last 30 days to a year. It suits a monthly or quarterly review with a client.
+  - It counts tickets opened and closed, tickets still open, checklists completed, documentation updated, assets added, and changes recorded.
+  - It shows each client's device health at the start of the period against now.
+  - It lists the tickets, completed checklists, and activity.
+  - Password changes are counted only where you can open that client's passwords, and are never listed.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed

@@ -1,11 +1,23 @@
 import { z } from 'zod';
 
-export const REPORT_KINDS = ['executive', 'assets', 'licenses', 'renewals', 'documentation', 'endpoints'] as const;
+export const REPORT_KINDS = [
+  'executive',
+  'service',
+  'assets',
+  'licenses',
+  'renewals',
+  'documentation',
+  'endpoints',
+] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const REPORT_INFO: Record<ReportKind, { name: string; description: string }> = {
   executive: {
     name: 'Executive summary',
     description: 'Assets, documentation, subscriptions, and endpoint coverage at a glance.',
+  },
+  service: {
+    name: 'Service review',
+    description: 'What was done for each client over a period: tickets, checklists, changes, and device health trend.',
   },
   assets: {
     name: 'Asset inventory',

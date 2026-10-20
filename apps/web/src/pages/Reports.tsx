@@ -11,6 +11,7 @@ import {
   FileCheck2,
   FileText,
   History,
+  Handshake,
   Settings2,
   ListFilter,
   Play,
@@ -51,6 +52,7 @@ import { DEMO } from '@/lib/demo';
 
 const ICONS = {
   executive: ChartNoAxesCombined,
+  service: Handshake,
   assets: Archive,
   licenses: ShieldCheck,
   renewals: CalendarDays,
@@ -59,6 +61,7 @@ const ICONS = {
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
   executive: 'Your client environment at a glance',
+  service: 'Work done over a period',
   assets: 'Hardware, systems and infrastructure',
   licenses: 'Subscriptions, seats and assignments',
   renewals: 'Upcoming dates and overdue items',
@@ -189,15 +192,15 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
       <FormError message={error} />
       {DEMO && (
         <p className="mb-4 rounded-md border border-border bg-surface p-3 text-sm text-muted">
-          Report generation and PDF export require a connected Atlas server. The live application includes six report
-          types, private templates, and snapshot history.
+          Report generation and PDF export require a connected Atlas server. The live application includes{' '}
+          {REPORT_KINDS.length} report types, private templates, and snapshot history.
         </p>
       )}
       <div className="report-studio grid min-w-0 overflow-hidden rounded-md border border-border bg-surface xl:grid-cols-[204px_minmax(0,1fr)] 2xl:grid-cols-[204px_minmax(0,1fr)_216px]">
         <div className="min-w-0 border-b border-border bg-surface-2 xl:border-r xl:border-b-0">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Report library</h2>
-            <p className="mt-1 text-xs text-muted">6 built-in reports</p>
+            <p className="mt-1 text-xs text-muted">{REPORT_KINDS.length} built-in reports</p>
           </div>
           <div className="flex border-b border-border p-1" aria-label="Report collections">
             {(['library', 'templates', 'history'] as const).map((tab) => (
@@ -418,8 +421,8 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       ))}
                   </div>
                 </fieldset>
-                {definition.kind === 'renewals' && (
-                  <Field label="Renewal lookahead">
+                {(definition.kind === 'renewals' || definition.kind === 'service') && (
+                  <Field label={definition.kind === 'service' ? 'Period' : 'Renewal lookahead'}>
                     {(p) => (
                       <Select
                         {...p}
@@ -433,7 +436,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       >
                         {[30, 60, 90, 180, 365].map((day) => (
                           <option key={day} value={day}>
-                            {day} days, including overdue
+                            {definition.kind === 'service' ? `Last ${day} days` : `${day} days, including overdue`}
                           </option>
                         ))}
                       </Select>
