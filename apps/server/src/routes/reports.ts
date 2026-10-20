@@ -63,7 +63,15 @@ export function registerReportRoutes(
       const run = await service.load(scopeOf(req), req.params.id);
       let content: Buffer | string;
       try {
-        content = format === 'pdf' ? await reportPdf(run.snapshot, selection) : reportCsv(run.snapshot, selection);
+        if (format === 'pdf') {
+          // Exports carry the organization's own name, logo and accent colour (Administration → Theme).
+          const brand = await deps.settings.branding(req.session!.actor.orgId);
+          content = await reportPdf(run.snapshot, selection, {
+            name: brand.brandName,
+            logo: brand.logo,
+            accent: brand.accent,
+          });
+        } else content = reportCsv(run.snapshot, selection);
       } catch (error) {
         if (error instanceof HttpError) throw error;
         throw new HttpError(422, 'The report could not be exported. Check the selected section and columns.');

@@ -110,6 +110,8 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 
 **Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
 
+PDF exports carry your organization's look from **Administration → Theme**: the logo (PNG or JPEG; an SVG logo shows your brand name instead), the brand name, and the accent colour. The first page summarizes the report: how many clients and rows it covers, how many rows need review, and any notices. It also charts what needs review in each section, the spread of status columns (online, protection, encryption, status), and due or expiry dates by month.
+
 Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
 
 ## The monthly report
