@@ -12,6 +12,7 @@ import {
   FileCheck2,
   FileText,
   History,
+  Handshake,
   Settings2,
   Globe,
   ListFilter,
@@ -55,6 +56,7 @@ import { DEMO } from '@/lib/demo';
 const ICONS = {
   executive: ChartNoAxesCombined,
   security: LockKeyhole,
+  service: Handshake,
   assets: Archive,
   licenses: ShieldCheck,
   renewals: CalendarDays,
@@ -73,9 +75,16 @@ const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
   endpoints: '/assets',
   software: '/assets',
 };
+/** Reports with a time window (`withinDays`), and what the setting is called for each. */
+const WINDOW_LABEL: Partial<Record<ReportKind, string>> = {
+  renewals: 'Renewal lookahead',
+  domains: 'Expiring within',
+  service: 'Period',
+};
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
   executive: 'Your client environment at a glance',
   security: 'Passwords, protection and encryption',
+  service: 'Work done over a period',
   assets: 'Hardware, systems and infrastructure',
   licenses: 'Subscriptions, seats and assignments',
   renewals: 'Upcoming dates and overdue items',
@@ -437,8 +446,8 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       ))}
                   </div>
                 </fieldset>
-                {(definition.kind === 'renewals' || definition.kind === 'domains') && (
-                  <Field label={definition.kind === 'domains' ? 'Expiring within' : 'Renewal lookahead'}>
+                {WINDOW_LABEL[definition.kind] && (
+                  <Field label={WINDOW_LABEL[definition.kind]}>
                     {(p) => (
                       <Select
                         {...p}
@@ -452,7 +461,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       >
                         {[30, 60, 90, 180, 365].map((day) => (
                           <option key={day} value={day}>
-                            {day} days, including overdue
+                            {definition.kind === 'service' ? `Last ${day} days` : `${day} days, including overdue`}
                           </option>
                         ))}
                       </Select>

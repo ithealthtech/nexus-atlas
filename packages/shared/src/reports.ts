@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const REPORT_KINDS = [
   'executive',
   'security',
+  'service',
   'assets',
   'licenses',
   'renewals',
@@ -20,6 +21,10 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
   security: {
     name: 'Security posture',
     description: 'Password health, endpoint protection, disk encryption, and automatic password rotation.',
+  },
+  service: {
+    name: 'Service review',
+    description: 'What was done for each client over a period: tickets, checklists, changes, and device health trend.',
   },
   assets: {
     name: 'Asset inventory',

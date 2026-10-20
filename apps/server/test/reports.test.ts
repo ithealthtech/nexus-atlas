@@ -338,6 +338,94 @@ describe('private client reports', () => {
       selectReportSection(snapshot, reportSelectionSchema.parse({ section: 1, attention: true })).rows.map((r) => r[1]),
     ).toEqual(['Adobe Flash Player 32']);
   });
+  it('reviews the work done for a client over the chosen period', async () => {
+    await seed();
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000);
+    const ticket = { orgId, source: 'test', companyId: '1' };
+    await t.handle.db.insert(schema.tickets).values([
+      {
+        ...ticket,
+        externalId: 't1',
+        clientId,
+        number: '1001',
+        summary: 'Printer offline',
+        status: 'Closed',
+        closed: true,
+        openedAt: ago(10),
+        closedAt: ago(9),
+      },
+      { ...ticket, externalId: 't2', clientId, number: '1002', summary: 'New starter laptop', openedAt: ago(3) },
+      {
+        ...ticket,
+        externalId: 't3',
+        clientId,
+        number: '0900',
+        summary: 'Long-closed ticket',
+        closed: true,
+        openedAt: ago(200),
+        closedAt: ago(150),
+      },
+      {
+        ...ticket,
+        externalId: 't4',
+        clientId: otherId,
+        number: '2001',
+        summary: 'Other client ticket',
+        openedAt: ago(2),
+      },
+    ]);
+    await t.handle.db.insert(schema.checklistRuns).values([
+      { orgId, clientId, title: 'Monthly patch review', completedAt: ago(5) },
+      { orgId, clientId, title: 'Unfinished onboarding' },
+    ]);
+    const change = { orgId, clientId, actorName: 'Avery', action: 'Updated' };
+    await t.handle.db.insert(schema.activity).values([
+      { ...change, entityType: 'document', entityId: randomUUID(), title: 'Network guide' },
+      {
+        ...change,
+        action: 'Changed the password for',
+        entityType: 'password',
+        entityId: randomUUID(),
+        title: 'Firewall admin login',
+      },
+      { ...change, entityType: 'asset', entityId: randomUUID(), title: 'Last year change', createdAt: ago(400) },
+    ]);
+    const counts = (total: number, online: number, protectionRunning: number, offlineServers: number) => ({
+      total,
+      online,
+      protectionRunning,
+      offlineServers,
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    await t.handle.db.insert(schema.rmmHealthSnapshots).values([
+      { orgId, clientId, day: ago(20).toISOString().slice(0, 10), counts: counts(4, 3, 2, 1) },
+      { orgId, clientId, day: today, counts: counts(5, 5, 5, 0) },
+    ]);
+    const run = await generate('service');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual([
+      expect.stringMatching(/^Service summary, \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/),
+      'Device health trend',
+      'Tickets',
+      'Completed checklists',
+      'Activity',
+    ]);
+    const summary = snapshot.sections[0]!.rows[0]!;
+    // Opened in the period, closed in the period, still open, checklists, documentation, assets added.
+    expect(summary.slice(0, 7)).toEqual(['Harbor Dental', '2', '1', '1', '1', '1', '1']);
+    expect(Number(summary[7])).toBeGreaterThanOrEqual(2);
+    expect(snapshot.sections[1]!.rows).toEqual([
+      ['Harbor Dental', ago(20).toISOString().slice(0, 10), today, '4 → 5', '3 → 5', '2 → 5', '1 → 0'],
+    ]);
+    expect(snapshot.sections[2]!.rows.map((r) => r[1])).toEqual(['1001', '1002']);
+    expect(snapshot.sections[3]!.rows.map((r) => r[1])).toEqual(['Monthly patch review']);
+    const activity = JSON.stringify(snapshot.sections[4]);
+    expect(activity).toContain('Network guide');
+    const serialized = JSON.stringify(snapshot);
+    for (const hidden of ['Firewall admin login', 'Last year change', 'Long-closed ticket', 'Other client ticket'])
+      expect(serialized).not.toContain(hidden);
+  });
   it('collects every report type without private contents, archived records or other clients', async () => {
     await seed();
     for (const kind of REPORT_KINDS) {
