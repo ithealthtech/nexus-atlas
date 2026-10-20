@@ -116,6 +116,33 @@ export interface ReportRunDetail extends ReportRunView {
   snapshot: ReportSnapshot;
 }
 
+// ---------- sharing a report by link ----------
+export const createReportShareSchema = z.object({
+  /** Days until the link stops working. Report links always expire. */
+  expiresDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
+});
+export interface ReportShareView {
+  id: string;
+  url: string;
+  createdByName: string | null;
+  createdAt: string;
+  expiresAt: string;
+  views: number;
+  lastViewedAt: string | null;
+  status: 'active' | 'expired' | 'revoked';
+}
+/** What someone with a report link sees: the snapshot's contents and whose it is. No people or internal IDs. */
+export interface SharedReport {
+  title: string;
+  organization: string;
+  client: string;
+  generatedAt: string;
+  expiresAt: string;
+  sections: ReportSection[];
+  warnings: string[];
+  sources: ReportSnapshot['sources'];
+}
+
 export const reportSelectionSchema = z.object({
   section: z.number().int().min(0).max(20).default(0),
   query: z.string().max(200).default(''),

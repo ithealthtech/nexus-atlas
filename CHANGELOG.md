@@ -39,6 +39,14 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - **Changes only** narrows the table to what moved.
   - Values that change on every run, such as check-in times, don't count as changes.
 
+- **Share a report with the client.** A report run for one client can be shared by a link that works for 7, 30 or 90 days.
+  - The client sees that snapshot without an account: every section, its notes and sources, and a PDF of each section.
+  - The page names your organization and the client, never the technician who ran it.
+  - The **Share** dialog shows how often each link was opened, and **Revoke** stops a link at once.
+  - Deleting the report or the client stops its links.
+  - Only the person who ran the report can share it, and only with edit access to that client.
+  - Making and revoking links are in the security log, and wrong links are rate-limited.
+
 ### Changed
 
 - **Branded report PDFs with charts.** PDF exports now use your logo, brand name, and accent colour from Administration → Theme, instead of a fixed blue.

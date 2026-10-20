@@ -267,6 +267,13 @@
       "when": 1792461918561,
       "tag": "0037_report_client_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792538451963,
+      "tag": "0038_report_shares",
+      "breakpoints": true
     }
   ]
 }

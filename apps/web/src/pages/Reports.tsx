@@ -16,6 +16,7 @@ import {
   Handshake,
   Settings2,
   Globe,
+  Share2,
   ListFilter,
   LockKeyhole,
   Play,
@@ -41,6 +42,7 @@ import {
   type ReportTemplateView,
 } from '@atlas/shared';
 import { AppLink } from '@/components/AppLink';
+import { ReportShareDialog } from '@/components/ReportShare';
 import {
   Badge,
   Button,
@@ -167,6 +169,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [template, setTemplate] = useState<ReportTemplateView | null>(null);
   const [libraryTab, setLibraryTab] = useState<'library' | 'templates' | 'history'>('library');
@@ -474,7 +477,22 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   <FileText />
                   PDF
                 </Button>
+                {/* Only a single-client snapshot can go outside Atlas. */}
+                {run?.snapshot.clients.length === 1 && !DEMO && (
+                  <Button variant="secondary" disabled={busy} onClick={() => setSharing(true)}>
+                    <Share2 />
+                    Share
+                  </Button>
+                )}
               </div>
+              {sharing && run && (
+                <ReportShareDialog
+                  runId={run.id}
+                  title={run.title}
+                  client={run.snapshot.clients[0]?.name ?? ''}
+                  onClose={() => setSharing(false)}
+                />
+              )}
             </div>
             <details
               key={run?.id ?? definition.kind}

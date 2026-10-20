@@ -974,6 +974,8 @@ export async function buildApp({
       passwordHealth: (scope) => health.report(scope),
       rotationTargets: (scope) => rotation.targets(scope.actor),
     },
+    publicOrigin: config.publicOrigin,
+    shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerLicenseRoutes(app, { db, authed, recent, settings, fetcher: m365Fetch });
   registerM365Routes(app, {

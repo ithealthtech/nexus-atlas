@@ -586,6 +586,79 @@ describe('private client reports', () => {
     ).toBe(400);
   });
   it('collects every report type without private contents, archived records or other clients', async () => {
+    it('shares a single-client snapshot by an expiring link, without people or IDs, until revoked', async () => {
+      await seed();
+      const run = (await generate('assets')).data;
+      const made = await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: 7 });
+      expect(made.status, JSON.stringify(made.data)).toBe(201);
+      expect(made.data.url).toMatch(/\/report\/[A-Za-z0-9_-]{32}$/);
+      expect(made.data.status).toBe('active');
+      const token = made.data.url.split('/').pop() as string;
+      const open = (path = '') => t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}${path}` });
+
+      const shared = await open();
+      expect(shared.statusCode).toBe(200);
+      expect(shared.headers['cache-control']).toBe('no-store');
+      const body = shared.json();
+      expect(body).toMatchObject({ title: 'assets report', client: 'Harbor Dental' });
+      expect(body.sections[0].rows[0]).toContain('Office workstation');
+      // Who ran it and the report's settings (with client IDs) stay inside Atlas.
+      const runner = (await owner.call('GET', '/api/session')).data.actor.name as string;
+      expect(JSON.stringify(body)).not.toContain(runner);
+      expect(JSON.stringify(body)).not.toContain(clientId);
+      const pdf = await open('/pdf?section=0');
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+      expect((await open('/pdf?section=9')).statusCode).toBe(400);
+      const listed = (await owner.call('GET', `/api/reports/runs/${run.id}/shares`)).data;
+      // Each opening counts: the page, the PDF, and the request for a section that doesn't exist.
+      expect(listed[0]).toMatchObject({ views: 3, status: 'active' });
+
+      // Only one client's report can go outside Atlas.
+      const both = (await generate('assets', [clientId, otherId])).data;
+      expect((await owner.call('POST', `/api/reports/runs/${both.id}/shares`, {})).status).toBe(400);
+      // Links never last forever.
+      expect((await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: null })).status).toBe(400);
+
+      // Someone else can't see or share this person's report.
+      const temporary = 'temporary share pass 1234';
+      await owner.call('POST', '/api/users', {
+        email: 'share-viewer@atlas.test',
+        name: 'Share Viewer',
+        role: 'client_viewer',
+        password: temporary,
+        grants: [{ clientId, level: 'read' }],
+      });
+      const { b } = await signIn(t.app, 'share-viewer@atlas.test', temporary);
+      await b.call('POST', '/api/account/password', { current: temporary, next: 'replaced share pass 4321' });
+      expect((await b.call('GET', `/api/reports/runs/${run.id}/shares`)).status).toBe(404);
+      expect((await b.call('POST', `/api/reports/runs/${run.id}/shares`, {})).status).toBe(404);
+      expect((await b.call('DELETE', `/api/report-shares/${made.data.id}`)).status).toBe(404);
+
+      // Revoked, expired, mistyped or deleted: all look like no link at all.
+      expect((await owner.call('DELETE', `/api/report-shares/${made.data.id}`)).data[0].status).toBe('revoked');
+      expect((await open()).statusCode).toBe(404);
+      expect((await t.app.inject({ method: 'GET', url: '/api/shared-reports/short' })).statusCode).toBe(404);
+      const second = (await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: 30 })).data;
+      await t.handle.db
+        .update(schema.reportShares)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(schema.reportShares.id, second.id));
+      expect(
+        (await t.app.inject({ method: 'GET', url: `/api/shared-reports/${second.url.split('/').pop()}` })).statusCode,
+      ).toBe(404);
+      const events = await t.handle.db
+        .select({ action: schema.securityEvents.action })
+        .from(schema.securityEvents)
+        .where(eq(schema.securityEvents.orgId, orgId));
+      expect(events.map((e) => e.action)).toEqual(
+        expect.arrayContaining(['Report shared by link', 'Report link revoked']),
+      );
+      expect((await owner.call('DELETE', `/api/reports/runs/${run.id}`)).status).toBe(200);
+      expect(await t.handle.db.select().from(schema.reportShares).where(eq(schema.reportShares.runId, run.id))).toEqual(
+        [],
+      );
+    });
     await seed();
     for (const kind of REPORT_KINDS) {
       const result = await generate(kind);
