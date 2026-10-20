@@ -1155,24 +1155,24 @@ async function signInFully(page: Page, email: string, password: string, given: s
   await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
 }
 
-// Primary areas stay in the sidebar; page links live in the workspace.
+// The default menu is the rail: five areas down the edge, and the pages of the one you're in beside them.
 const AREA: Record<string, string> = {
   Dashboard: 'Overview',
   Expirations: 'Overview',
-  Assets: 'Documentation',
-  'Knowledge base': 'Documentation',
-  Checklists: 'Documentation',
-  Passwords: 'Password Vault',
-  'My vault': 'Password Vault',
-  'Password health': 'Password Vault',
-  Send: 'Password Vault',
-  'Password rotation': 'Password Vault',
-  'BitLocker collector': 'Password Vault',
+  Assets: 'Docs',
+  'Knowledge base': 'Docs',
+  Checklists: 'Docs',
+  Passwords: 'Vault',
+  'My vault': 'Vault',
+  'Password health': 'Vault',
+  Send: 'Vault',
+  'Password rotation': 'Vault',
+  'BitLocker collector': 'Vault',
 };
 const nav = async (page: Page, name: string) => {
   const menu = page.getByRole('navigation', { name: 'Main', exact: true });
   if (!(await menu.isVisible())) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
-  const area = name === 'Clients' ? 'Clients' : (AREA[name] ?? 'Administration');
+  const area = name === 'Clients' ? 'Clients' : (AREA[name] ?? 'Admin');
   await menu.getByRole('link', { name: area, exact: true }).click();
   if (name !== 'Clients')
     await page
