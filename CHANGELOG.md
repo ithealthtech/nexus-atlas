@@ -4,6 +4,12 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Fixed
+
+- Saved report snapshots and templates are removed for every client-deletion path, including duplicate merges and organization erasure. A new migration also clears reports left for clients that no longer exist; existing migrations remain unchanged. Report client IDs are normalized before validation so letter case cannot interfere with access or cleanup.
+
+## [1.8.1] - 2026-10-19
+
 ### Added
 
 - Reports workspace and client Reports tab with executive summaries, asset inventory, license utilization, upcoming renewals, documentation health, and endpoint health. Private templates and immutable snapshot history retain source timestamps and missing-data notices. Search fields, attention filters, and visible columns apply to both CSV and server-generated PDF exports. Microsoft inventory uses GDAP exclusively. Scheduled reports, automatic triggers, and email delivery are planned for Phase 2.

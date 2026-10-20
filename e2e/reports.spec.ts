@@ -55,8 +55,16 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await page.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Search Atlas' })).toBeHidden();
     await page.keyboard.press('Control+k');
+    const searchDialog = page.getByRole('dialog', { name: 'Search Atlas' });
+    await expect(searchDialog).toBeVisible();
+    await expect(searchDialog.getByRole('combobox')).toBeFocused();
     for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+    await expect(searchDialog.getByRole('option', { name: 'Reports Go to', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
     await page
