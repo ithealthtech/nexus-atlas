@@ -2,17 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.8.2] - 2026-10-20
 
 ### Changed
 
-- Refined the application shell with clearer workspace tabs and restrained system typography. Reports now use a connected three-panel workspace with compact library entries and integrated review metrics. Dashboard totals use consistent tiles, client work appears before operational integrations, and empty integration panels use compact responsive columns.
+- **A look and menus modelled on the ITHealthTech portal.** A #f6f8fb page with white surfaces and thin borders, navy and slate type, one controlled blue (#315fbc), and Inter. The sidebar is white with a soft blue current item; the header carries the breadcrumb, a **Search or switch client** box (Ctrl K), and your name and email with sign-out. A client opens with an initials tile and its sections as one row of tabs with icons, with Checklists, Licenses, Reports, Map, Activity, and the domain and SSL trackers under **More** (which counts anything expired or expiring). Administration lists its pages in groups beside the page, like a settings screen. The Theme page's **Round** corners now stay within 5–8px. If an earlier theme made Atlas look off (a navy sidebar, large text, round corners), choose **Atlas defaults** under Administration → Theme and re-add your logo and name. (#218)
+- Refined the application shell with clearer workspace tabs. Reports now use a connected three-panel workspace with compact library entries and integrated review metrics. Dashboard totals use consistent tiles, client work appears before operational integrations, and empty integration panels use compact responsive columns.
 
 ### Fixed
 
-- Client tracker links wrap at phone widths so the section customization control remains fully visible across system fonts.
+- **Atlas reports its real version.** 1.8.1 changed only the top-level version number, so a server running 1.8.1 still called itself 1.8.0 and the updater could keep offering an update that was already installed. Every package, and the browser extension, now carries the release version.
 - Global search stays open when reopened immediately with Ctrl+K after closing it. A delayed native dialog event no longer dismisses the new search session.
-
 - Saved report snapshots and templates are removed for every client-deletion path, including duplicate merges and organization erasure. A new migration also clears reports left for clients that no longer exist; existing migrations remain unchanged. Report client IDs are normalized before validation so letter case cannot interfere with access or cleanup.
 
 ## [1.8.1] - 2026-10-19
