@@ -20,8 +20,9 @@ for that by name.**
 
 ### Protected features
 
-These were removed by mistake before, or are features the owner relies on. Each must keep working. The e2e suite
-checks several of them.
+These were removed by mistake before, or are features the owner relies on. Each must keep working.
+`e2e/protected.spec.ts` checks them in CI. If it fails, put the feature back. Don't weaken or delete the test, unless
+the owner asked for that feature to go.
 
 **Web app: layout and personal settings**
 - **Three menu styles**, chosen per person under **Your account → Menu**: **Rail and panel** (the default),
