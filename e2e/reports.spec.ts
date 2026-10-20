@@ -119,8 +119,18 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await page.getByRole('button', { name: 'templates', exact: true }).click();
     await page.getByRole('button', { name: 'Monthly client licenses', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Run report', exact: true })).toBeVisible();
+    // Running the same report again offers a comparison with the first run.
+    await page.getByRole('button', { name: 'Run report', exact: true }).click();
+    await page.getByRole('button', { name: /^Compare with / }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Compared with' })).toContainText(
+      '0 new · 0 changed · 0 removed',
+    );
+    await page.getByRole('button', { name: 'Stop comparing', exact: true }).click();
     await page.getByRole('button', { name: 'history', exact: true }).click();
-    await page.getByRole('button', { name: /^License utilization/ }).click();
+    await page
+      .getByRole('button', { name: /^License utilization/ })
+      .first()
+      .click();
     await expect(page.getByRole('heading', { name: 'Detailed results', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Built-in', exact: true }).click();
     for (const dismiss of await page.getByRole('button', { name: 'Dismiss', exact: true }).all()) await dismiss.click();

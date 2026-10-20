@@ -107,7 +107,10 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     return false;
   });
 }
-export function selectReportSection(snapshot: ReportSnapshot, selection: ReportSelection): ReportSection {
+export function selectReportSection(
+  snapshot: ReportSnapshot,
+  selection: ReportSelection,
+): ReportSection & { indexes: number[] } {
   const source = snapshot.sections[selection.section];
   if (!source) throw new Error('Choose a report section.');
   const columns = selection.columns ?? source.columns.map((_, i) => i);
@@ -117,17 +120,101 @@ export function selectReportSection(snapshot: ReportSnapshot, selection: ReportS
   )
     throw new Error('Choose valid report columns.');
   const query = selection.query.trim().toLocaleLowerCase();
-  const rows = source.rows.filter(
-    (row) =>
-      (!selection.attention || reportNeedsAttention(source, row)) &&
-      (!query ||
-        (selection.field === undefined ? row.join(' ') : (row[selection.field] ?? ''))
-          .toLocaleLowerCase()
-          .includes(query)),
+  // Where each matching row sits in the section, so a view can line it up with other data (a comparison).
+  const indexes = source.rows.flatMap((row, i) =>
+    (!selection.attention || reportNeedsAttention(source, row)) &&
+    (!query ||
+      (selection.field === undefined ? row.join(' ') : (row[selection.field] ?? ''))
+        .toLocaleLowerCase()
+        .includes(query))
+      ? [i]
+      : [],
   );
   return {
     title: source.title,
     columns: columns.map((i) => source.columns[i]!),
-    rows: rows.map((row) => columns.map((i) => row[i] ?? '')),
+    rows: indexes.map((r) => columns.map((i) => source.rows[r]![i] ?? '')),
+    indexes,
   };
+}
+
+// ---------- comparing a run with the one before it ----------
+/** Columns that move on every capture (check-in times, days left), so a comparison doesn't call them changes. */
+const VOLATILE_COLUMNS = new Set([
+  'Last updated',
+  'Last check-in',
+  'Last sync',
+  'Last sign-in',
+  'Last rotated',
+  'Days left',
+  'Next due',
+]);
+/** "Last check" carries the check's date: only OK against Failed is a change. */
+const comparable = (column: string, value: string) =>
+  column === 'Last check' ? value.replace(/ \d{4}-\d{2}-\d{2}/, '') : value;
+
+export interface ReportSectionDiff {
+  /** Rows of the current section that weren't in the previous one (their indexes). */
+  added: number[];
+  /** Rows in both whose values moved: the current row's index, the columns that moved, and the previous row. */
+  changed: { index: number; columns: number[]; previous: string[] }[];
+  /** Previous rows no longer present, laid out in the current columns ('' where a column didn't exist). */
+  removed: string[][];
+}
+
+/**
+ * Lines the previous run's section up with the current one: rows match on their first column (the client, in
+ * per-client summaries) or, where that repeats, on the first two (client and item). Columns match by name.
+ */
+export function compareReportSections(previous: ReportSection, current: ReportSection): ReportSectionDiff {
+  const from = current.columns.map((c) => previous.columns.indexOf(c));
+  const aligned = previous.rows.map((row) => from.map((i) => (i < 0 ? '' : (row[i] ?? ''))));
+  const unique = (rows: string[][]) => new Set(rows.map((r) => r[0])).size === rows.length;
+  const byFirst = unique(current.rows) && unique(aligned);
+  const keys = (rows: string[][]) => {
+    const seen = new Map<string, number>();
+    return rows.map((r) => {
+      const base = byFirst ? (r[0] ?? '') : `${r[0] ?? ''}\u0000${r[1] ?? ''}`;
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      return n ? `${base}\u0000${n}` : base;
+    });
+  };
+  const before = new Map(keys(aligned).map((k, i) => [k, aligned[i]!]));
+  const now = keys(current.rows);
+  const diff: ReportSectionDiff = { added: [], changed: [], removed: [] };
+  now.forEach((key, index) => {
+    const old = before.get(key);
+    if (!old) return void diff.added.push(index);
+    const row = current.rows[index]!;
+    const columns = current.columns.flatMap((column, j) =>
+      !VOLATILE_COLUMNS.has(column) &&
+      from[j]! >= 0 &&
+      comparable(column, row[j] ?? '') !== comparable(column, old[j] ?? '')
+        ? [j]
+        : [],
+    );
+    if (columns.length) diff.changed.push({ index, columns, previous: old });
+  });
+  const present = new Set(now);
+  for (const [key, row] of before) if (!present.has(key)) diff.removed.push(row);
+  return diff;
+}
+
+/** The run to compare with: the same report for the same clients, captured most recently before this one. */
+export function previousReportRun<T extends Pick<ReportRunView, 'id' | 'kind' | 'createdAt' | 'clients'>>(
+  runs: T[],
+  current: Pick<ReportRunView, 'id' | 'kind' | 'createdAt' | 'clients'>,
+): T | null {
+  const scope = (r: Pick<ReportRunView, 'clients'>) =>
+    r.clients
+      .map((c) => c.id)
+      .sort()
+      .join();
+  return (
+    runs
+      .filter((r) => r.id !== current.id && r.kind === current.kind && r.createdAt < current.createdAt)
+      .filter((r) => scope(r) === scope(current))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
+  );
 }

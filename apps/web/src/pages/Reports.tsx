@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import {
@@ -10,6 +10,7 @@ import {
   Download,
   FileCheck2,
   FileText,
+  GitCompare,
   History,
   Settings2,
   ListFilter,
@@ -22,6 +23,8 @@ import {
 import {
   REPORT_INFO,
   REPORT_KINDS,
+  compareReportSections,
+  previousReportRun,
   reportNeedsAttention,
   selectReportSection,
   type ReportDefinition,
@@ -48,6 +51,7 @@ import {
 import { api, download } from '@/lib/api';
 import { useClients } from '@/lib/queries';
 import { DEMO } from '@/lib/demo';
+import { cn } from '@/lib/cn';
 
 const ICONS = {
   executive: ChartNoAxesCombined,
@@ -102,6 +106,36 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const history = useQuery({ queryKey: ['report-history'], queryFn: () => api<ReportRunView[]>('/reports/runs') });
   const currentSection = run?.snapshot.sections[selection.section];
   const visible = run ? selectReportSection(run.snapshot, selection) : null;
+  // The same report for the same clients, captured before this one, and (once asked for) what changed since.
+  const [compare, setCompare] = useState<{ runId: string; previous: ReportRunDetail } | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [changesOnly, setChangesOnly] = useState(false);
+  const previous = run && history.data ? previousReportRun(history.data, run) : null;
+  const against = compare && run && compare.runId === run.id ? compare.previous : null;
+  const diff = useMemo(() => {
+    const before = against?.snapshot.sections[selection.section];
+    return before && currentSection ? compareReportSections(before, currentSection) : null;
+  }, [against, currentSection, selection.section]);
+  const added = new Set(diff?.added);
+  const changed = new Map(diff?.changed.map((c) => [c.index, c]));
+  const shownColumns = selection.columns ?? currentSection?.columns.map((_, i) => i) ?? [];
+  const shownRows = (visible?.rows ?? [])
+    .map((row, i) => ({ row, index: visible!.indexes[i]! }))
+    .filter(({ index }) => !diff || !changesOnly || added.has(index) || changed.has(index));
+  const startCompare = async () => {
+    if (!run || !previous) return;
+    setComparing(true);
+    setError(null);
+    try {
+      setCompare({ runId: run.id, previous: await api<ReportRunDetail>(`/reports/runs/${previous.id}`) });
+      setChangesOnly(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setComparing(false);
+    }
+  };
+  const when = (iso: string) => new Date(iso).toLocaleString();
   const attention = currentSection?.rows.filter((row) => reportNeedsAttention(currentSection, row)).length ?? 0;
   const selectKind = (kind: ReportKind) => {
     setDefinition((d) => ({ ...d, kind, title: REPORT_INFO[kind].name }));
@@ -517,6 +551,30 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   <p className="text-xs text-muted">
                     Captured {new Date(run.snapshot.generatedAt).toLocaleString()} · {run.snapshot.generatedBy}
                   </p>
+                  {previous && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      {against && diff ? (
+                        <>
+                          <p className="text-xs" role="status">
+                            <span className="font-semibold">Compared with {when(against.snapshot.generatedAt)}:</span>{' '}
+                            {diff.added.length} new · {diff.changed.length} changed · {diff.removed.length} removed
+                          </p>
+                          <Checkbox
+                            label="Changes only"
+                            checked={changesOnly}
+                            onChange={(e) => setChangesOnly(e.currentTarget.checked)}
+                          />
+                          <Button size="sm" variant="ghost" onClick={() => setCompare(null)}>
+                            Stop comparing
+                          </Button>
+                        </>
+                      ) : (
+                        <Button size="sm" variant="secondary" loading={comparing} onClick={() => void startCompare()}>
+                          <GitCompare className="size-4" aria-hidden /> Compare with {when(previous.createdAt)}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   {run.snapshot.sections.length > 1 && (
                     <Field label="Report section">
                       {(p) => (
@@ -622,19 +680,83 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {visible?.rows.slice(0, 500).map((row, i) => (
-                        <tr key={i} className="border-b border-border last:border-0 hover:bg-surface-2">
-                          {row.map((value, j) => (
-                            <td key={j} className="max-w-64 min-w-28 px-4 py-3 align-top break-words">
-                              {value || '—'}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
+                      {shownRows.slice(0, 500).map(({ row, index }) => {
+                        const isNew = added.has(index);
+                        const change = changed.get(index);
+                        return (
+                          <tr
+                            key={index}
+                            className={cn(
+                              'border-b border-border last:border-0 hover:bg-surface-2',
+                              isNew && 'bg-success-soft',
+                            )}
+                          >
+                            {row.map((value, j) => {
+                              const column = shownColumns[j]!;
+                              const moved = !!change?.columns.includes(column);
+                              return (
+                                <td
+                                  key={j}
+                                  className={cn(
+                                    'max-w-64 min-w-28 px-4 py-3 align-top break-words',
+                                    moved && 'bg-warning-soft',
+                                  )}
+                                >
+                                  {j === 0 && isNew && (
+                                    <Badge tone="success" className="mr-1.5">
+                                      New
+                                    </Badge>
+                                  )}
+                                  {value || '—'}
+                                  {moved && (
+                                    <span className="mt-0.5 block text-[11px] text-muted">
+                                      <span className="sr-only">Previously </span>
+                                      <span className="line-through">{change!.previous[column] || '—'}</span>
+                                    </span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
-                  {!visible?.rows.length && (
-                    <p className="p-8 text-center text-sm text-muted">No rows match this selection.</p>
+                  {!shownRows.length && (
+                    <p className="p-8 text-center text-sm text-muted">
+                      {diff && changesOnly
+                        ? 'Nothing new or changed in this selection.'
+                        : 'No rows match this selection.'}
+                    </p>
+                  )}
+                  {against && diff && diff.removed.length > 0 && (
+                    <details className="border-t border-border px-4 py-3">
+                      <summary className="cursor-pointer text-xs font-semibold">
+                        {diff.removed.length} removed since {when(against.snapshot.generatedAt)}
+                      </summary>
+                      <table className="mt-2 w-full text-left text-xs text-muted">
+                        <thead>
+                          <tr>
+                            {shownColumns.map((c) => (
+                              <th key={c} scope="col" className="px-4 py-2 font-semibold whitespace-nowrap">
+                                {currentSection?.columns[c]}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {diff.removed.slice(0, 200).map((row, i) => (
+                            <tr key={i} className="border-t border-border">
+                              {shownColumns.map((c) => (
+                                <td key={c} className="max-w-64 px-4 py-2 align-top break-words line-through">
+                                  {row[c] || '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </details>
                   )}
                 </div>
                 {visible && visible.rows.length > 500 && (

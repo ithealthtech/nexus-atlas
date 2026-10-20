@@ -110,6 +110,8 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 
 **Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
 
+When you have run the same report for the same clients before, **Compare with** shows what changed since the most recent earlier run. New rows are marked **New**, changed values are highlighted with the previous value beneath, and rows that have gone are listed under **removed since**. **Changes only** hides everything else. Values that move on every run, such as check-in times or days left, don't count as changes.
+
 Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
 
 ## The monthly report

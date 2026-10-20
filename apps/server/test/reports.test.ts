@@ -6,6 +6,8 @@ import { eq, sql } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import {
   REPORT_KINDS,
+  compareReportSections,
+  previousReportRun,
   reportDefinitionSchema,
   reportSelectionSchema,
   selectReportSection,
@@ -51,6 +53,89 @@ const sample: ReportSnapshot = {
     },
   ],
 };
+
+describe('comparing report runs', () => {
+  it('finds new, changed and removed rows, ignoring values that move on every capture', () => {
+    const columns = ['Client', 'Device', 'Online', 'Protection', 'Last check-in'];
+    const previous = {
+      title: 'Endpoint health',
+      columns,
+      rows: [
+        ['Harbor', 'HDG-01', 'Online', 'running', '2026-10-01T08:00:00.000Z'],
+        ['Harbor', 'HDG-02', 'Online', 'running', '2026-10-01T08:00:00.000Z'],
+        ['Harbor', 'HDG-03', 'Offline', 'missing', '2026-10-01T08:00:00.000Z'],
+      ],
+    };
+    const current = {
+      title: 'Endpoint health',
+      // A column added since (Type) is not a change; columns line up by name.
+      columns: ['Client', 'Device', 'Type', 'Online', 'Protection', 'Last check-in'],
+      rows: [
+        ['Harbor', 'HDG-01', 'workstation', 'Online', 'running', '2026-10-20T08:00:00.000Z'],
+        ['Harbor', 'HDG-02', 'workstation', 'Offline', 'running', '2026-10-20T08:00:00.000Z'],
+        ['Harbor', 'HDG-04', 'server', 'Online', 'running', '2026-10-20T08:00:00.000Z'],
+      ],
+    };
+    const diff = compareReportSections(previous, current);
+    expect(diff.added).toEqual([2]);
+    expect(diff.changed).toEqual([
+      { index: 1, columns: [3], previous: ['Harbor', 'HDG-02', '', 'Online', 'running', '2026-10-01T08:00:00.000Z'] },
+    ]);
+    expect(diff.removed).toEqual([['Harbor', 'HDG-03', '', 'Offline', 'missing', '2026-10-01T08:00:00.000Z']]);
+    // Per-client summaries match on the client alone; a check's date isn't a change, OK against Failed is.
+    const summary = (failed: string, checked: string) => ({
+      title: 'Summary',
+      columns: ['Client', 'Failed checks', 'Last check'],
+      rows: [
+        ['Harbor', failed, checked],
+        ['Northline', '0', 'OK 2026-10-01'],
+      ],
+    });
+    expect(compareReportSections(summary('0', 'OK 2026-10-01'), summary('0', 'OK 2026-10-20')).changed).toEqual([]);
+    expect(
+      compareReportSections(summary('0', 'OK 2026-10-01'), summary('1', 'Failed 2026-10-20: timeout')).changed,
+    ).toEqual([{ index: 0, columns: [1, 2], previous: ['Harbor', '0', 'OK 2026-10-01'] }]);
+  });
+  it('compares with the latest earlier run of the same report for the same clients', () => {
+    const run = (id: string, kind: string, createdAt: string, clients: string[]) => ({
+      id,
+      kind: kind as 'endpoints',
+      createdAt,
+      clients: clients.map((c) => ({ id: c, name: c })),
+    });
+    const current = run('now', 'endpoints', '2026-10-20T10:00:00Z', ['a', 'b']);
+    const runs = [
+      current,
+      run('older', 'endpoints', '2026-10-01T10:00:00Z', ['b', 'a']),
+      run('latest', 'endpoints', '2026-10-15T10:00:00Z', ['a', 'b']),
+      run('other-kind', 'assets', '2026-10-19T10:00:00Z', ['a', 'b']),
+      run('other-clients', 'endpoints', '2026-10-19T10:00:00Z', ['a']),
+      run('later', 'endpoints', '2026-10-21T10:00:00Z', ['a', 'b']),
+    ];
+    expect(previousReportRun(runs, current)?.id).toBe('latest');
+    expect(previousReportRun(runs, runs[1]!)).toBeNull();
+  });
+  it('says where each selected row sits in its section', () => {
+    const snapshot = {
+      ...({} as ReportSnapshot),
+      sections: [
+        {
+          title: 'S',
+          columns: ['Client', 'Status'],
+          rows: [
+            ['A', 'active'],
+            ['B', 'inactive'],
+            ['C', 'active'],
+          ],
+        },
+      ],
+    };
+    expect(selectReportSection(snapshot, reportSelectionSchema.parse({ query: 'active', field: 1 })).indexes).toEqual([
+      0, 1, 2,
+    ]);
+    expect(selectReportSection(snapshot, reportSelectionSchema.parse({ attention: true })).indexes).toEqual([1]);
+  });
+});
 
 describe('report exports', () => {
   it('matches field search, attention filters and selected columns and neutralizes CSV formulas', () => {
