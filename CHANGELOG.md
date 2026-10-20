@@ -32,6 +32,13 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Templates remember the choice.
   - Long text fields are never included.
   - A field that no longer exists is left out, with a notice.
+- **Compare a report with its last run.** After running a report you've run before for the same clients, choose **Compare with** to see what changed since the most recent earlier run.
+  - New rows are marked **New**.
+  - Changed values are highlighted, with the previous value shown.
+  - Rows that have gone are listed separately.
+  - **Changes only** narrows the table to what moved.
+  - Values that change on every run, such as check-in times, don't count as changes.
+
 ### Changed
 
 - **Branded report PDFs with charts.** PDF exports now use your logo, brand name, and accent colour from Administration → Theme, instead of a fixed blue.
