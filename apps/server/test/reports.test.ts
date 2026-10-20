@@ -110,6 +110,28 @@ describe('report exports', () => {
       ),
     ).rejects.toThrow('2,000');
   });
+  it('brands PDFs with the organization logo and accent, and falls back to its name', async () => {
+    // A 1×1 PNG.
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const selection = reportSelectionSchema.parse({});
+    const branded = await reportPdf(sample, selection, {
+      name: 'Harbor IT',
+      logo: `data:image/png;base64,${png}`,
+      accent: '#0f766e',
+    });
+    expect(branded.toString('latin1')).toContain('/Subtype /Image');
+    // SVG can't be embedded and a bad colour is ignored: the name and Atlas blue are used instead.
+    const fallback = await reportPdf(sample, selection, {
+      name: 'Harbor IT',
+      logo: 'data:image/svg+xml;base64,PHN2Zy8+',
+      accent: 'not-a-colour',
+    });
+    expect(fallback.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(fallback.toString('latin1')).not.toContain('/Subtype /Image');
+    // A broken image is skipped rather than failing the export.
+    const broken = await reportPdf(sample, selection, { name: '', logo: 'data:image/png;base64,AAAA', accent: null });
+    expect(broken.subarray(0, 5).toString()).toBe('%PDF-');
+  });
 });
 
 describe('private client reports', () => {

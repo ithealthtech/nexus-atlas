@@ -32,6 +32,13 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Templates remember the choice.
   - Long text fields are never included.
   - A field that no longer exists is left out, with a notice.
+### Changed
+
+- **Branded report PDFs with charts.** PDF exports now use your logo, brand name, and accent colour from Administration → Theme, instead of a fixed blue.
+  - The first page shows summary tiles (clients, rows, needs review, notices).
+  - Up to three charts follow, drawn from the report itself: what needs review in each section, the spread of status columns such as online, protection or encryption, and due or expiry dates by month with overdue items first.
+  - Timestamps in tables read as "2026-10-20 12:41 UTC", and alternate rows are shaded.
+  - A PNG or JPEG logo is used; an SVG logo, which PDF can't embed, falls back to the brand name.
 
 ## [1.8.3] - 2026-10-20
 
