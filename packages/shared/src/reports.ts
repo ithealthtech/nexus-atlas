@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-export const REPORT_KINDS = ['executive', 'assets', 'licenses', 'renewals', 'documentation', 'endpoints'] as const;
+export const REPORT_KINDS = [
+  'executive',
+  'assets',
+  'licenses',
+  'renewals',
+  'domains',
+  'documentation',
+  'endpoints',
+] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const REPORT_INFO: Record<ReportKind, { name: string; description: string }> = {
   executive: {
@@ -18,6 +26,11 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
   renewals: {
     name: 'Upcoming renewals',
     description: 'Subscription renewals and asset expiration dates, including overdue items.',
+  },
+  domains: {
+    name: 'Domains & SSL',
+    description:
+      'Registered domains and SSL certificates: expiry, registrar or issuer, and the latest automatic check.',
   },
   documentation: {
     name: 'Documentation health',
@@ -100,10 +113,23 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (column === 'Online') return value !== 'Online';
     if (column === 'Protection') return !['running', 'protected', 'healthy'].includes(value.toLowerCase());
     if (column === 'Status')
-      return ['overdue', 'outdated', 'inactive', 'suspended', 'warning'].includes(value.toLowerCase());
+      return ['overdue', 'outdated', 'inactive', 'suspended', 'warning', 'expired', 'expiring soon'].includes(
+        value.toLowerCase(),
+      );
     if (['Reviews overdue', 'Offline', 'Protection missing / stopped', 'Unknown protection'].includes(column))
       return Number(value) > 0 || value === 'Not available';
     if (column === 'Available') return Number(value) <= 0;
+    if (
+      [
+        'Expired domains',
+        'Expiring domains',
+        'Expired certificates',
+        'Expiring certificates',
+        'Failed checks',
+      ].includes(column)
+    )
+      return Number(value) > 0;
+    if (column === 'Last check') return value.startsWith('Failed');
     return false;
   });
 }

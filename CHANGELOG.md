@@ -2,6 +2,15 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Domains & SSL report.** A new built-in report under Reports that covers each client's domains and SSL certificates.
+  - Each record shows its registrar or issuer, expiry date, days left, auto-renew setting, and the result of the latest automatic check.
+  - A summary counts what has expired, what expires within the chosen window (30 days to a year), and failed checks.
+  - **Needs review** picks out expired and expiring records and failed checks.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed
