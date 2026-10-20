@@ -10,7 +10,7 @@ export const useBranding = () =>
 
 const DEFAULT_TITLE = 'MSP Atlas';
 const DEFAULT_FAVICON = '/favicon.svg';
-const ATLAS_BLUE = '#245fba';
+const ATLAS_BLUE = '#315fbc';
 // Atlas's own sidebar colours (styles.css), for checking a custom accent against them.
 const DEFAULT_SIDEBAR = '#ffffff';
 const DEFAULT_SIDEBAR_DARK = '#13181f';
