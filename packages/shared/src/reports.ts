@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FIELD_TYPES, type FieldType } from './docs.js';
 
 export const REPORT_KINDS = [
   'executive',
@@ -56,6 +57,9 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
     description: 'Installed software with end-of-life and license flags, and who signs in to each device.',
   },
 };
+/** Asset layout fields an asset inventory can show: everything but long text, which can hold notes and configuration. */
+export const REPORTABLE_FIELD_TYPES: readonly FieldType[] = FIELD_TYPES.filter((t) => t !== 'textarea');
+export const MAX_REPORT_ASSET_FIELDS = 12;
 export const reportDefinitionSchema = z.object({
   kind: z.enum(REPORT_KINDS),
   title: z.string().trim().min(1).max(120),
@@ -66,6 +70,12 @@ export const reportDefinitionSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, 'Choose each client once.'),
   withinDays: z.union([z.literal(30), z.literal(60), z.literal(90), z.literal(180), z.literal(365)]).default(90),
   includeMicrosoft: z.boolean().default(true),
+  /** Extra Asset inventory columns, each "layout key:field key". */
+  assetFields: z
+    .array(z.string().regex(/^[a-z0-9_-]{1,60}:[a-z][a-z0-9_]{0,39}$/))
+    .max(MAX_REPORT_ASSET_FIELDS, `Choose up to ${MAX_REPORT_ASSET_FIELDS} asset fields.`)
+    .refine((v) => new Set(v).size === v.length, 'Choose each asset field once.')
+    .optional(),
 });
 export type ReportDefinition = z.infer<typeof reportDefinitionSchema>;
 export const reportTemplateSchema = z.object({

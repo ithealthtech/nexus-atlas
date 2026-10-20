@@ -28,6 +28,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - It shows each client's device health at the start of the period against now.
   - It lists the tickets, completed checklists, and activity.
   - Password changes are counted only where you can open that client's passwords, and are never listed.
+- **Asset fields in Asset inventory.** The Asset inventory report can add up to 12 fields from your asset layouts as columns, such as serial number, model, warranty, or IP address.
+  - Templates remember the choice.
+  - Long text fields are never included.
+  - A field that no longer exists is left out, with a notice.
 
 ## [1.8.3] - 2026-10-20
 
