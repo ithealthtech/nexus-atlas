@@ -1,11 +1,23 @@
 import { z } from 'zod';
 
-export const REPORT_KINDS = ['executive', 'assets', 'licenses', 'renewals', 'documentation', 'endpoints'] as const;
+export const REPORT_KINDS = [
+  'executive',
+  'security',
+  'assets',
+  'licenses',
+  'renewals',
+  'documentation',
+  'endpoints',
+] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const REPORT_INFO: Record<ReportKind, { name: string; description: string }> = {
   executive: {
     name: 'Executive summary',
     description: 'Assets, documentation, subscriptions, and endpoint coverage at a glance.',
+  },
+  security: {
+    name: 'Security posture',
+    description: 'Password health, endpoint protection, disk encryption, and automatic password rotation.',
   },
   assets: {
     name: 'Asset inventory',
@@ -104,6 +116,10 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (['Reviews overdue', 'Offline', 'Protection missing / stopped', 'Unknown protection'].includes(column))
       return Number(value) > 0 || value === 'Not available';
     if (column === 'Available') return Number(value) <= 0;
+    if (['Password issues', 'Breached', 'Not encrypted', 'Rotation failing'].includes(column)) return Number(value) > 0;
+    if (column === 'Issues') return value !== '';
+    if (column === 'Encryption') return value === 'Not encrypted' || value === 'Unknown';
+    if (column === 'Last result') return value === 'Failed';
     return false;
   });
 }

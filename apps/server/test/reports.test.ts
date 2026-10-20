@@ -229,7 +229,7 @@ describe('private client reports', () => {
       updatedAt: new Date('2020-01-01'),
     });
   }
-  it('collects all six report types without private contents, archived records or other clients', async () => {
+  it('collects every report type without private contents, archived records or other clients', async () => {
     await seed();
     for (const kind of REPORT_KINDS) {
       const result = await generate(kind);
@@ -265,6 +265,103 @@ describe('private client reports', () => {
       (await owner.call('GET', `/api/reports/runs/${run.id}/export?format=csv&selection=${encodeURIComponent('{bad')}`))
         .status,
     ).toBe(400);
+  });
+  it('reports security posture only where the reader may see passwords and rotation', async () => {
+    await seed();
+    expect(
+      (
+        await owner.call('POST', `/api/clients/${clientId}/passwords`, {
+          name: 'Shared router login',
+          username: 'never-export-this',
+          secret: 'password1',
+        })
+      ).status,
+    ).toBe(201);
+    await owner.call('POST', `/api/clients/${otherId}/passwords`, { name: 'Other client login', secret: 'password1' });
+    const [enrollment] = await t.handle.db
+      .insert(schema.bitlockerEnrollments)
+      .values({ orgId, clientId, name: 'Report test', tokenHash: 'report-test', publicKey: 'x', privateKey: 'x' })
+      .returning();
+    await t.handle.db.insert(schema.bitlockerDevices).values({
+      orgId,
+      clientId,
+      enrollmentId: enrollment!.id,
+      machineId: randomUUID(),
+      hostname: 'HDG-LAPTOP-01',
+      volumes: [
+        {
+          volumeId: 'c',
+          mountPoint: 'C:',
+          protection: 'Off',
+          encryptionMethod: 'None',
+          encryptionPercentage: 0,
+          conversionStatus: 'FullyDecrypted',
+          keyIds: [],
+        },
+      ],
+      collectedAt: new Date(),
+    });
+    const run = await generate('security');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const { sections } = run.data.snapshot as ReportSnapshot;
+    expect(sections.map((s) => s.title)).toEqual([
+      'Security overview',
+      'Password issues',
+      'Device protection and encryption',
+      'Automatic password rotation',
+    ]);
+    const overview = sections[0]!;
+    const cell = (name: string) => overview.rows[0]![overview.columns.indexOf(name)];
+    expect([cell('Passwords'), cell('Password issues'), cell('Not encrypted'), cell('Rotation failing')]).toEqual([
+      '1',
+      '1',
+      '1',
+      '0',
+    ]);
+    expect(sections[1]!.rows).toEqual([
+      ['Harbor Dental', 'Shared router login', expect.any(String), expect.stringContaining('Weak')],
+    ]);
+    expect(sections[2]!.rows).toContainEqual([
+      'Harbor Dental',
+      'HDG-LAPTOP-01',
+      'Not in RMM',
+      'Not in RMM',
+      'Not encrypted',
+      expect.any(String),
+    ]);
+    expect(sections[2]!.rows).toContainEqual([
+      'Harbor Dental',
+      'Office workstation',
+      'Offline',
+      'Unknown',
+      'Not reported',
+      'Unknown',
+    ]);
+    const serialized = JSON.stringify(run.data);
+    for (const hidden of ['never-export-this', 'password1', 'Other client login'])
+      expect(serialized).not.toContain(hidden);
+
+    // A client account can run it too, but sees no passwords or rotation.
+    const temporary = 'temporary security pass 1234';
+    await owner.call('POST', '/api/users', {
+      email: 'security-viewer@atlas.test',
+      name: 'Security Viewer',
+      role: 'client_viewer',
+      password: temporary,
+      grants: [{ clientId, level: 'read' }],
+    });
+    const { b } = await signIn(t.app, 'security-viewer@atlas.test', temporary);
+    await b.call('POST', '/api/account/password', { current: temporary, next: 'replaced security pass 4321' });
+    const limited = await b.call('POST', '/api/reports/runs', definition('security'));
+    expect(limited.status, JSON.stringify(limited.data)).toBe(201);
+    const snapshot = limited.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual(['Security overview', 'Device protection and encryption']);
+    expect(snapshot.sections[0]!.rows[0]!.slice(1, 4)).toEqual(['Not available', 'Not available', 'Not available']);
+    expect(snapshot.warnings).toContain(
+      "Harbor Dental: passwords are not included because you don't have password access here.",
+    );
+    expect(snapshot.warnings).toContain('Automatic password rotation is shown to administrators only.');
+    expect(JSON.stringify(snapshot)).not.toContain('Shared router login');
   });
   it('keeps templates private, checks stale edits, validates inputs and purges client snapshots on deletion', async () => {
     const created = await owner.call('POST', '/api/reports/templates', {

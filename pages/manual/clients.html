@@ -369,9 +369,10 @@
         </figure>
         <p>
           Open <strong>Overview → Reports</strong> for reporting across clients, or a client's
-          <strong>Reports</strong> tab for that workspace. Choose a built-in report: executive summary, asset inventory,
-          license utilization, upcoming renewals, documentation health, or endpoint health. Choose up to 25 clients, set
-          the report title and any renewal lookahead, and choose <strong>Run report</strong>.
+          <strong>Reports</strong> tab for that workspace. Choose a built-in report: executive summary, security
+          posture, asset inventory, license utilization, upcoming renewals, documentation health, or endpoint health.
+          Choose up to 25 clients, set the report title and any renewal lookahead, and choose
+          <strong>Run report</strong>.
         </p>
         <p>
           The report captures current records; it does not infer historical activity or missing health data. Source
@@ -393,6 +394,13 @@
           while <strong>Refresh report</strong> creates a new capture. Every view and download checks current access to
           all included clients. Deleting a client removes any report or template containing that client. Report
           generation, template changes, exports, and deletions appear in the security log.
+        </p>
+        <p>
+          <strong>Security posture</strong> shows, for each client, passwords with problems (breached, weak, reused,
+          overdue, expired, or unchanged for a year), devices that are offline or unprotected, BitLocker encryption
+          reported by the collector, and the last result of automatic password rotation. Password names appear only for
+          clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and
+          recovery keys are never included.
         </p>
         <p>
           Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.

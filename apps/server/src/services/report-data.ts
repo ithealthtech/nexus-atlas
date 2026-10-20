@@ -1,12 +1,46 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { schema } from '@atlas/db';
-import type { LayoutField, ReportDefinition, ReportSnapshot } from '@atlas/shared';
+import {
+  PASSWORD_ISSUE_LABELS,
+  ROLE_INFO,
+  type LayoutField,
+  type PasswordHealthReport,
+  type ReportDefinition,
+  type ReportSnapshot,
+  type RotationRunStatus,
+  type RotationTargetView,
+} from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { requireClient } from '../authz.js';
 import { gdapClient } from '../routes/m365-gdap.js';
 import type { SettingsService } from './settings.js';
 import type { Scope } from './scope.js';
+
+/** Where the security posture report reads passwords and rotation, with each service's own access rules. */
+export interface SecuritySources {
+  /** Only what this person may see in the vault (vault access and restricted items apply). */
+  passwordHealth(scope: Scope): Promise<PasswordHealthReport>;
+  /** Administrators only; anyone else gets an error and the report leaves rotation out. */
+  rotationTargets(scope: Scope): Promise<RotationTargetView[]>;
+}
+
+const ROTATION_RESULT: Record<RotationRunStatus, string> = {
+  dispatched: 'In progress',
+  candidate: 'In progress',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+/** A machine's BitLocker state: any unprotected volume counts against it, and no volumes is not "encrypted". */
+const encryptionOf = (volumes: schema.BitlockerVolume[]) =>
+  !volumes.length
+    ? 'Unknown'
+    : volumes.some((v) => v.protection === 'Off')
+      ? 'Not encrypted'
+      : volumes.every((v) => v.protection === 'On')
+        ? 'Encrypted'
+        : 'Unknown';
 
 export const MAX_REPORT_ROWS = 10_000;
 const DAY = 86_400_000;
@@ -23,6 +57,7 @@ export async function collectReport(
   definition: ReportDefinition,
   settings: SettingsService,
   fetcher?: typeof fetch,
+  security?: SecuritySources,
 ): Promise<ReportSnapshot> {
   const db = scope.db;
   const actor = scope.actor;
@@ -57,7 +92,7 @@ export async function collectReport(
   const needAssets = ['executive', 'assets', 'renewals'].includes(definition.kind);
   const needDocs = ['executive', 'documentation'].includes(definition.kind);
   const needLicenses = ['executive', 'licenses', 'renewals'].includes(definition.kind);
-  const needEndpoints = ['executive', 'endpoints'].includes(definition.kind);
+  const needEndpoints = ['executive', 'endpoints', 'security'].includes(definition.kind);
   const assets = needAssets
     ? await db
         .select({
@@ -118,6 +153,7 @@ export async function collectReport(
     ? await db
         .select({
           clientId: schema.rmmDeviceStatus.clientId,
+          assetId: schema.rmmDeviceStatus.assetId,
           name: schema.assets.name,
           kind: schema.rmmDeviceStatus.kind,
           online: schema.rmmDeviceStatus.online,
@@ -336,6 +372,154 @@ export async function collectReport(
     result.warnings.push(
       'Microsoft reseller renewal dates are not supplied by the GDAP directory API. Missing dates are not treated as no renewal risk.',
     );
+  }
+  if (definition.kind === 'security') {
+    // Passwords only for the clients whose vault this person can open, through the vault's own access rules.
+    const vaultIds = new Set<string>();
+    if (security && ROLE_INFO[actor.role].staff)
+      for (const c of clients) if ((await scope.level(c.id)) === 'edit_passwords') vaultIds.add(c.id);
+    for (const c of clients.filter((c) => !vaultIds.has(c.id)))
+      result.warnings.push(`${c.name}: passwords are not included because you don't have password access here.`);
+    const health = vaultIds.size ? await security!.passwordHealth(scope) : null;
+    const issues = health?.items.filter((i) => vaultIds.has(i.clientId)) ?? [];
+    const totals = new Map(health?.clients.map((c) => [c.id, c]) ?? []);
+    if (health) {
+      source(
+        'Atlas password vault',
+        'Password names and health flags only. Passwords, usernames, notes and custom fields are excluded.',
+        health.breach.lastRunAt,
+      );
+      if (!health.breach.enabled)
+        result.warnings.push('Breach checks are turned off, so passwords found in data breaches are not detected.');
+      else if (health.breach.unchecked)
+        result.warnings.push(
+          'Some logins have not been checked against known breaches yet. They are not counted as breached.',
+        );
+    }
+    const devices = await db
+      .select({
+        clientId: schema.bitlockerDevices.clientId,
+        assetId: schema.bitlockerDevices.assetId,
+        hostname: schema.bitlockerDevices.hostname,
+        volumes: schema.bitlockerDevices.volumes,
+        collectedAt: schema.bitlockerDevices.collectedAt,
+      })
+      .from(schema.bitlockerDevices)
+      .where(and(selected(schema.bitlockerDevices), eq(schema.bitlockerDevices.blocked, false)))
+      .orderBy(asc(schema.bitlockerDevices.hostname))
+      .limit(MAX_REPORT_ROWS + 1);
+    if (devices.length > MAX_REPORT_ROWS)
+      throw new HttpError(422, 'This report is too large. Choose fewer clients (maximum 10,000 source rows per type).');
+    source(
+      'BitLocker collector',
+      'Volume protection reported by enrolled machines. Recovery keys are excluded.',
+      devices
+        .map((d) => iso(d.collectedAt))
+        .sort()
+        .at(-1) ?? null,
+    );
+    // Rotation is administration: anyone else's report leaves it out rather than failing.
+    const targets = security
+      ? await security
+          .rotationTargets(scope)
+          .then((all) => all.filter((r) => names.has(r.clientId)))
+          .catch(() => null)
+      : null;
+    if (targets)
+      source('Automatic password rotation', 'Rotation targets and their last result. Passwords are excluded.');
+    else result.warnings.push('Automatic password rotation is shown to administrators only.');
+    section(
+      'Security overview',
+      [
+        'Client',
+        'Passwords',
+        'Password issues',
+        'Breached',
+        'Endpoints',
+        'Offline',
+        'Protection missing / stopped',
+        'Not encrypted',
+        'Rotation failing',
+      ],
+      clients.map((c) => {
+        const vault = vaultIds.has(c.id);
+        const total = totals.get(c.id);
+        const machines = endpoints.filter((e) => e.clientId === c.id);
+        const encrypted = devices.filter((d) => d.clientId === c.id);
+        return [
+          c.name,
+          vault ? String(total?.total ?? 0) : 'Not available',
+          vault ? String(total?.withIssues ?? 0) : 'Not available',
+          vault
+            ? String(issues.filter((i) => i.clientId === c.id && i.issues.includes('breached')).length)
+            : 'Not available',
+          machines.length ? String(machines.length) : 'Not available',
+          machines.length ? String(machines.filter((e) => e.online === false).length) : 'Not available',
+          machines.length
+            ? String(machines.filter((e) => e.protection === 'missing' || e.protection === 'not_running').length)
+            : 'Not available',
+          encrypted.length
+            ? String(encrypted.filter((d) => encryptionOf(d.volumes) === 'Not encrypted').length)
+            : 'Not available',
+          targets
+            ? String(targets.filter((r) => r.clientId === c.id && r.lastStatus === 'failed').length)
+            : 'Not available',
+        ];
+      }),
+    );
+    if (health)
+      section(
+        'Password issues',
+        ['Client', 'Password', 'Category', 'Issues'],
+        issues.map((i) => [
+          names.get(i.clientId)!,
+          i.name,
+          i.category,
+          i.issues.map((x) => PASSWORD_ISSUE_LABELS[x]).join(', '),
+        ]),
+      );
+    // One row per machine: RMM devices with their BitLocker state, then BitLocker machines RMM doesn't know.
+    const byAsset = new Map(devices.filter((d) => d.assetId).map((d) => [d.assetId!, d]));
+    const machineRows = endpoints.map((e) => {
+      const disk = byAsset.get(e.assetId);
+      return [
+        names.get(e.clientId)!,
+        e.name,
+        e.online === null ? 'Unknown' : e.online ? 'Online' : 'Offline',
+        e.protection ?? 'Unknown',
+        disk ? encryptionOf(disk.volumes) : 'Not reported',
+        iso(e.lastSeenAt) || 'Unknown',
+      ];
+    });
+    const known = new Set(endpoints.map((e) => e.assetId));
+    for (const d of devices.filter((d) => !d.assetId || !known.has(d.assetId)))
+      machineRows.push([
+        names.get(d.clientId)!,
+        d.hostname,
+        'Not in RMM',
+        'Not in RMM',
+        encryptionOf(d.volumes),
+        iso(d.collectedAt),
+      ]);
+    section(
+      'Device protection and encryption',
+      ['Client', 'Device', 'Online', 'Protection', 'Encryption', 'Last check-in'],
+      machineRows.sort((a, b) => a[0]!.localeCompare(b[0]!) || a[1]!.localeCompare(b[1]!)),
+    );
+    if (targets)
+      section(
+        'Automatic password rotation',
+        ['Client', 'Device', 'Account', 'Enabled', 'Last rotated', 'Next due', 'Last result'],
+        targets.map((r) => [
+          r.clientName,
+          r.assetName,
+          r.passwordName,
+          r.enabled ? 'Yes' : 'No',
+          r.lastRotatedAt ?? 'Never',
+          r.nextDueAt ?? 'No policy',
+          r.lastStatus ? ROTATION_RESULT[r.lastStatus] : 'Not run yet',
+        ]),
+      );
   }
   if (
     result.sections.reduce((n, s) => n + s.rows.length, 0) > MAX_REPORT_ROWS ||
