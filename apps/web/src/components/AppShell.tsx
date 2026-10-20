@@ -333,7 +333,7 @@ const ICON_BUTTON =
   'grid size-[33px] shrink-0 place-items-center rounded-[5px] text-muted hover:bg-surface-2 hover:text-text';
 /** A page link in the rail's panel and the sidebar. */
 const MENU_LINK =
-  'flex items-center gap-3 rounded-lg px-[13px] text-[13px] font-[560] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active data-[status=active]:bg-sidebar-2 data-[status=active]:font-[650] data-[status=active]:text-sidebar-accent';
+  'nav-link flex items-center gap-3 rounded-lg px-[13px] text-[13px] font-[560] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active data-[status=active]:bg-sidebar-2 data-[status=active]:font-[650] data-[status=active]:text-sidebar-accent';
 const GROUP_LABEL = 'px-[13px] text-[10px] font-bold tracking-[0.12em] text-sidebar-muted uppercase';
 
 /** Grouped page links, as the rail's panel and the sidebar list them. */
@@ -414,7 +414,7 @@ function RailMenu({ list, area, clients, favorites, collapsed }: MenuData & { co
               aria-current={a.id === area.id ? 'page' : undefined}
               title={a.title}
               className={cn(
-                'flex w-14 flex-col items-center gap-1 rounded-lg pt-2 pb-1.5 text-[10.5px] leading-tight font-[560] text-sidebar-muted hover:bg-sidebar-2 hover:text-sidebar-active',
+                'primary-nav-link flex w-14 flex-col items-center gap-1 rounded-lg pt-2 pb-1.5 text-[10.5px] leading-tight font-[560] text-sidebar-muted hover:bg-sidebar-2 hover:text-sidebar-active',
                 a.id === area.id && 'bg-sidebar-2 font-[650] text-sidebar-accent hover:text-sidebar-accent',
               )}
             >
@@ -446,7 +446,8 @@ function SidebarMenu({ list, pathname, clients, favorites, collapsed }: MenuData
   const find = (id: Area['id']) => list.find((a) => a.id === id);
   const admin = find('admin');
   const vault = find('vault');
-  const inAdmin = !!admin && pathname.startsWith('/admin') && !vault?.paths.some((p) => pathname.startsWith(p));
+  // Every /admin page, the vault's automation pages included, keeps the Administration list (which lists them too).
+  const inAdmin = !!admin && pathname.startsWith('/admin');
   const starred = favorites
     .filter((f) => f.type === 'client')
     .map((f) => ({ to: `/clients/${f.id}`, label: f.name, icon: Star }));
@@ -528,7 +529,7 @@ function TopAreas({ list, area }: MenuData) {
           to={a.to}
           aria-current={a.id === area.id ? 'page' : undefined}
           className={cn(
-            'flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-[560] whitespace-nowrap text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active',
+            'top-nav-link flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-[560] whitespace-nowrap text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active',
             a.id === area.id && 'bg-sidebar-2 font-[650] text-sidebar-accent hover:text-sidebar-accent',
           )}
         >
@@ -658,7 +659,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onClick={() => setOpen(false)}
           aria-current={area.id === item.id ? 'page' : undefined}
           className={cn(
-            'flex h-10 items-center gap-3 rounded-lg px-[13px] text-[13px] font-[560] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active',
+            'primary-nav-link flex h-10 items-center gap-3 rounded-lg px-[13px] text-[13px] font-[560] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active',
             area.id === item.id && 'bg-sidebar-2 font-[650] text-sidebar-accent hover:text-sidebar-accent',
           )}
         >

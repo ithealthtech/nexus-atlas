@@ -70,7 +70,8 @@ export function MenuStylePicker() {
   const toast = useToast();
   const [saving, setSaving] = useState<MenuStyle | null>(null);
   const choose = async (menu: MenuStyle) => {
-    if (!prefs.data || prefs.data.menu === menu) return;
+    // One save at a time, so a slower earlier save can't land after (and undo) a later choice.
+    if (!prefs.data || saving || prefs.data.menu === menu) return;
     setSaving(menu);
     try {
       const saved = await api<WorkspacePrefs>('/account/workspace', {
@@ -93,7 +94,7 @@ export function MenuStylePicker() {
       {!prefs.data ? (
         <Skeleton className="m-5 h-28" />
       ) : (
-        <div role="radiogroup" aria-label="Menu style" className="grid gap-3 p-5 sm:grid-cols-3">
+        <div role="radiogroup" aria-label="Menu style" aria-busy={!!saving} className="grid gap-3 p-5 sm:grid-cols-3">
           {MENU_STYLES.map((style) => {
             const chosen = (saving ?? prefs.data.menu) === style;
             return (
@@ -102,9 +103,10 @@ export function MenuStylePicker() {
                 type="button"
                 role="radio"
                 aria-checked={chosen}
+                disabled={!!saving}
                 onClick={() => void choose(style)}
                 className={cn(
-                  'rounded-md border p-3 text-left transition-colors',
+                  'rounded-md border p-3 text-left transition-colors disabled:cursor-wait',
                   chosen ? 'border-primary bg-primary-soft' : 'border-border hover:border-border-strong',
                 )}
               >
