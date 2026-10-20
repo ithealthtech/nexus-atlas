@@ -258,11 +258,16 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('button', { name: 'Choose which sections show' }).click();
     await page.getByRole('dialog').getByLabel('Map').uncheck();
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
-    await expect(sections.getByRole('link', { name: 'Map' })).toHaveCount(0);
+    // Map lives under More; hidden, it leaves the menu.
+    await sections.getByRole('button', { name: 'More sections' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Map' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Choose which sections show' }).click();
     await page.getByRole('dialog').getByLabel('Map').check();
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
-    await expect(sections.getByRole('link', { name: 'Map' })).toBeVisible();
+    await sections.getByRole('button', { name: 'More sections' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Map' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
     await nav(page, 'Dashboard');
     const favorites = page.getByRole('region', { name: 'Clients' });
@@ -608,7 +613,11 @@ test.describe.serial('first run to restricted client access', () => {
     await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Passwords' }).click();
     await expect(page.getByText('Nothing has been shared with you yet')).toBeVisible();
     await expect(page.getByText('HDG-FW-01 admin')).toHaveCount(0);
-    await page.getByRole('navigation', { name: 'Client sections' }).getByRole('link', { name: 'Activity' }).click();
+    await page
+      .getByRole('navigation', { name: 'Client sections' })
+      .getByRole('button', { name: 'More sections' })
+      .click();
+    await page.getByRole('menuitem', { name: 'Activity' }).click();
     await expect(page.getByText(/added a password/)).toHaveCount(0);
     await page.keyboard.press('Control+k');
     await page.getByRole('dialog', { name: 'Search Atlas' }).getByRole('combobox').fill('firewall');

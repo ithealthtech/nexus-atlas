@@ -1,8 +1,9 @@
 import { AppLink } from '@/components/AppLink';
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Outlet, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, FileText, Pencil, Settings2, StickyNote, Trash2 } from 'lucide-react';
+import * as Menu from '@radix-ui/react-dropdown-menu';
+import { Outlet, useLocation, useNavigate, useParams } from '@tanstack/react-router';
+import { ArrowLeft, ChevronDown, FileText, Pencil, Settings2, StickyNote, Trash2 } from 'lucide-react';
 import {
   CLIENT_SECTIONS,
   LEVEL_INFO,
@@ -47,6 +48,13 @@ const SECTION_LABELS: Record<ClientSection, string> = {
   activity: 'Activity',
 };
 
+// The sections a technician opens most stay in the bar; the rest, and the trackers, are under More.
+const PRIMARY_SECTIONS = new Set<ClientSection | ''>(['', 'assets', 'documents', 'passwords', 'contacts', 'locations']);
+const TAB =
+  '-mb-px flex items-baseline gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text';
+const MENU_ITEM =
+  'flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-surface-3 data-[status=active]:font-semibold data-[status=active]:text-primary';
+
 export function ClientLayout() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
   const { data: client, isLoading, error } = useClient(clientId);
@@ -57,6 +65,7 @@ export function ClientLayout() {
   const counts = useClientCounts(clientId).data;
   const prefs = useWorkspacePrefs().data;
   const trackers = useTrackers(clientId).data;
+  const pathname = useLocation({ select: (l) => l.pathname });
   if (isLoading) return <Skeleton className="h-40" />;
   if (error || !client)
     return (
@@ -73,6 +82,23 @@ export function ClientLayout() {
         />
       </Card>
     );
+  const base = `/clients/${clientId}`;
+  const visible = (['', ...CLIENT_SECTIONS] as const)
+    .filter((s) => s === '' || !prefs?.hiddenSections.includes(s))
+    .filter((s) => s !== 'passwords' || client.access === 'edit_passwords' || !actor.isStaff);
+  const primary = visible.filter((s) => PRIMARY_SECTIONS.has(s));
+  const more = visible.filter((s): s is ClientSection => !PRIMARY_SECTIONS.has(s));
+  const openSection = more.find((s) => pathname === `${base}/${s}` || pathname.startsWith(`${base}/${s}/`));
+  const openTracker = (['domain', 'ssl'] as const).find((k) =>
+    pathname.startsWith(`${base}/trackers/${TRACKER[k].path}`),
+  );
+  const inMore = Boolean(openSection || openTracker);
+  const moreLabel = openSection ? SECTION_LABELS[openSection] : openTracker ? TRACKER[openTracker].title : 'More';
+  // Expired or expiring domains and certificates still show on the bar while their tracker is in the menu.
+  const attention = (['domain', 'ssl'] as const).reduce(
+    (sum, k) => sum + (trackers?.[k] ? trackers[k].expired + trackers[k].soon : 0),
+    0,
+  );
   return (
     <>
       <AppLink
@@ -124,67 +150,87 @@ export function ClientLayout() {
       </div>
       <QuickNote client={client} />
       <nav aria-label="Client sections" className="mb-7 flex items-end gap-1 border-b border-border">
-        <div className="flex min-w-0 flex-1 flex-wrap gap-x-1">
-          {(['', ...CLIENT_SECTIONS] as const)
-            .filter((s) => s === '' || !prefs?.hiddenSections.includes(s))
-            .filter((s) => s !== 'passwords' || client.access === 'edit_passwords' || !actor.isStaff)
-            .map((s) => {
-              const count = s && s in (counts ?? {}) ? counts?.[s as keyof ClientCounts] : null;
-              const label = s ? SECTION_LABELS[s] : 'Overview';
-              return (
-                <AppLink
-                  key={s || 'overview'}
-                  aria-label={typeof count === 'number' ? `${label} (${count})` : undefined}
-                  to={`/clients/${clientId}${s ? `/${s}` : ''}`}
-                  activeOptions={{ exact: s === '' }}
-                  className="-mb-px flex items-baseline gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
-                >
-                  {label}
-                  {typeof count === 'number' && (
-                    <span aria-hidden className="text-xs font-normal text-muted tabular-nums">
-                      {count}
-                    </span>
-                  )}
-                </AppLink>
-              );
-            })}
-          <div
-            role="group"
-            aria-labelledby="client-trackers"
-            className="flex max-w-full flex-wrap items-center gap-x-1 sm:ml-2 sm:border-l sm:border-border sm:pl-2"
-          >
-            <span id="client-trackers" className="px-1.5 text-xs whitespace-nowrap text-muted">
-              Trackers
-            </span>
-            {(['domain', 'ssl'] as const).map((kind) => {
-              const tracked = trackers?.[kind];
-              const attention = tracked ? tracked.expired + tracked.soon : 0;
-              return (
-                <AppLink
-                  key={kind}
-                  to={`/clients/${clientId}/trackers/${TRACKER[kind].path}`}
-                  className="relative -mb-px flex items-baseline gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium whitespace-nowrap text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-text"
-                >
-                  {TRACKER[kind].title}
-                  {tracked && (
-                    <span
-                      className={cn(
-                        'text-xs tabular-nums',
-                        attention ? 'font-semibold text-warning' : 'font-normal text-muted',
-                      )}
-                    >
-                      {tracked.total}
-                      <span className="sr-only">
-                        {' '}
-                        {tracked.total === 1 ? TRACKER[kind].noun : `${TRACKER[kind].noun}s`}
-                        {attention ? `, ${attention} expired or expiring soon` : ''}
-                      </span>
-                    </span>
-                  )}
-                </AppLink>
-              );
-            })}
-          </div>
+        <div className="flex min-w-0 flex-1 items-end gap-x-1 max-sm:overflow-x-auto">
+          {primary.map((s) => {
+            const count = s && s in (counts ?? {}) ? counts?.[s as keyof ClientCounts] : null;
+            const label = s ? SECTION_LABELS[s] : 'Overview';
+            return (
+              <AppLink
+                key={s || 'overview'}
+                aria-label={typeof count === 'number' ? `${label} (${count})` : undefined}
+                to={`${base}${s ? `/${s}` : ''}`}
+                activeOptions={{ exact: s === '' }}
+                className={TAB}
+              >
+                {label}
+                {typeof count === 'number' && (
+                  <span aria-hidden className="text-xs font-normal text-muted tabular-nums">
+                    {count}
+                  </span>
+                )}
+              </AppLink>
+            );
+          })}
+          {/* The rest of the sections and the trackers, in one menu, so the bar stays a single row. The button takes
+              the name of the page it leads to while that page is open. */}
+          <Menu.Root modal={false}>
+            <Menu.Trigger
+              className={cn(TAB, 'items-center outline-none', inMore && 'border-primary text-text')}
+              aria-label={inMore ? `${moreLabel}, more sections` : 'More sections'}
+            >
+              {moreLabel}
+              {attention > 0 && (
+                <span aria-hidden className="text-xs font-semibold text-warning tabular-nums">
+                  {attention}
+                </span>
+              )}
+              <ChevronDown className="size-3.5 self-center text-muted" aria-hidden />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content
+                align="start"
+                sideOffset={4}
+                className="z-50 min-w-56 rounded-md border border-border bg-surface p-1.5 text-text"
+              >
+                {more.map((s) => {
+                  const count = s in (counts ?? {}) ? counts?.[s as keyof ClientCounts] : null;
+                  return (
+                    <Menu.Item key={s} asChild className={MENU_ITEM}>
+                      <AppLink to={`${base}/${s}`}>
+                        <span className="flex-1">{SECTION_LABELS[s]}</span>
+                        {typeof count === 'number' && <span className="text-xs text-muted tabular-nums">{count}</span>}
+                      </AppLink>
+                    </Menu.Item>
+                  );
+                })}
+                {more.length > 0 && <Menu.Separator className="my-1 h-px bg-border" />}
+                <Menu.Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted">Trackers</Menu.Label>
+                {(['domain', 'ssl'] as const).map((kind) => {
+                  const tracked = trackers?.[kind];
+                  const due = tracked ? tracked.expired + tracked.soon : 0;
+                  return (
+                    <Menu.Item key={kind} asChild className={MENU_ITEM}>
+                      <AppLink to={`${base}/trackers/${TRACKER[kind].path}`}>
+                        <span className="flex-1">{TRACKER[kind].title}</span>
+                        {tracked && (
+                          <span
+                            className={cn('text-xs tabular-nums', due ? 'font-semibold text-warning' : 'text-muted')}
+                          >
+                            {tracked.total}
+                            <span className="sr-only">
+                              {' '}
+                              {tracked.total === 1 ? TRACKER[kind].noun : `${TRACKER[kind].noun}s`}
+                              {due ? `, ${due} expired or expiring soon` : ''}
+                            </span>
+                          </span>
+                        )}
+                      </AppLink>
+                    </Menu.Item>
+                  );
+                })}
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu.Root>
         </div>
         <Button
           variant="ghost"
