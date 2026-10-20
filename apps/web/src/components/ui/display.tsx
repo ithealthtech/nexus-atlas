@@ -88,11 +88,11 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && <p className="mb-1 text-[13px] text-muted">{eyebrow}</p>}
-        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em] text-text">{title}</h1>
-        {description && <p className="mt-1.5 max-w-2xl text-sm text-text-2">{description}</p>}
+        <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text">{title}</h1>
+        {description && <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -111,7 +111,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center px-6 py-12 text-center">
+    <div className="empty-state flex flex-col items-center px-6 py-8 text-center">
       <Icon className="mb-3 size-6 text-muted" strokeWidth={1.5} aria-hidden />
       <h3 className="font-semibold text-text">{title}</h3>
       <p className="mt-1 max-w-sm text-sm text-muted">{description}</p>
@@ -128,17 +128,19 @@ export function Stat({
   label,
   value,
   hint,
+  icon: Icon,
 }: {
   label: string;
   value: ReactNode;
   hint?: string;
-  /** Kept so callers don't change; a figure needs no decoration. */
   icon?: LucideIcon;
 }) {
   return (
-    // A figure in a row of figures, set apart by a rule rather than a box of its own.
-    <div className="border-l border-border-strong py-0.5 pl-4">
-      <div className="text-[13px] text-muted">{label}</div>
+    <div className="h-full rounded-md border border-border bg-surface px-4 py-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-muted">{label}</span>
+        {Icon && <Icon className="size-4 text-muted" aria-hidden />}
+      </div>
       <div className="mt-1 text-[28px] leading-none font-semibold tracking-[-0.02em] text-text tabular-nums">
         {value}
       </div>

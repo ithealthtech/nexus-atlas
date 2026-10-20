@@ -11,6 +11,7 @@ import {
   FileCheck2,
   FileText,
   History,
+  Settings2,
   ListFilter,
   Play,
   Save,
@@ -34,7 +35,6 @@ import { AppLink } from '@/components/AppLink';
 import {
   Badge,
   Button,
-  Card,
   Checkbox,
   Dialog,
   Field,
@@ -57,6 +57,19 @@ const ICONS = {
   documentation: FileCheck2,
   endpoints: Activity,
 };
+const REPORT_SUBTITLE: Record<ReportKind, string> = {
+  executive: 'Your client environment at a glance',
+  assets: 'Hardware, systems and infrastructure',
+  licenses: 'Subscriptions, seats and assignments',
+  renewals: 'Upcoming dates and overdue items',
+  documentation: 'Coverage, ownership and review dates',
+  endpoints: 'Device status and protection',
+};
+const REPORT_STEPS = [
+  { icon: Building2, title: 'Choose your scope', detail: 'One client or up to 25 workspaces.' },
+  { icon: ListFilter, title: 'Focus the details', detail: 'Search, review and select columns.' },
+  { icon: Download, title: 'Share your findings', detail: 'Export the current view to CSV or PDF.' },
+];
 const initialSelection = (): ReportSelection => ({ section: 0, query: '', attention: false });
 export function Reports() {
   const { clientId } = useParams({ strict: false }) as { clientId?: string };
@@ -172,11 +185,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const scoped = (ids: string[]) => !clientId || (ids.length === 1 && ids[0] === clientId);
   return (
     <>
-      <PageHeader
-        eyebrow="Insights & reporting"
-        title="Reports"
-        description="Turn client records into clear, actionable reports. Capture a snapshot, review the details, and export your selection."
-      />
+      <PageHeader title="Reports" description="Client insights, ready to review and share." />
       <FormError message={error} />
       {DEMO && (
         <p className="mb-4 rounded-md border border-border bg-surface p-3 text-sm text-muted">
@@ -184,11 +193,11 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
           types, private templates, and snapshot history.
         </p>
       )}
-      <div className="mt-4 grid min-w-0 items-start gap-4 xl:grid-cols-[210px_minmax(0,1fr)] 2xl:grid-cols-[220px_minmax(0,1fr)_230px]">
-        <Card className="min-w-0 overflow-hidden">
+      <div className="report-studio grid min-w-0 overflow-hidden rounded-md border border-border bg-surface xl:grid-cols-[204px_minmax(0,1fr)] 2xl:grid-cols-[204px_minmax(0,1fr)_216px]">
+        <div className="min-w-0 border-b border-border bg-surface-2 xl:border-r xl:border-b-0">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Report library</h2>
-            <p className="mt-1 text-xs text-muted">Choose what to review</p>
+            <p className="mt-1 text-xs text-muted">6 built-in reports</p>
           </div>
           <div className="flex border-b border-border p-1" aria-label="Report collections">
             {(['library', 'templates', 'history'] as const).map((tab) => (
@@ -196,7 +205,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 key={tab}
                 onClick={() => setLibraryTab(tab)}
                 aria-pressed={libraryTab === tab}
-                className="min-h-9 flex-1 rounded px-1 text-xs font-medium text-muted capitalize aria-pressed:bg-primary-soft aria-pressed:text-primary"
+                className="min-h-9 flex-1 rounded px-1 text-xs font-medium text-muted capitalize aria-pressed:bg-surface aria-pressed:text-text"
               >
                 {tab === 'library' ? 'Built-in' : tab}
               </button>
@@ -220,7 +229,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
               </label>
               <div className="hidden xl:block">
                 <p className="px-2 py-2 text-[10px] font-semibold tracking-wider text-muted uppercase">
-                  Client intelligence
+                  Client reports
                 </p>
                 {REPORT_KINDS.map((kind) => {
                   const Icon = ICONS[kind];
@@ -230,14 +239,12 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       onClick={() => selectKind(kind)}
                       aria-pressed={definition.kind === kind}
                       disabled={busy}
-                      className="mb-1 flex w-full gap-2.5 rounded-md px-2 py-3 text-left hover:bg-surface-2 aria-pressed:bg-primary-soft aria-pressed:text-primary disabled:opacity-60"
+                      className="mb-1 flex w-full gap-2.5 rounded-md border border-transparent px-2.5 py-2.5 text-left text-text-2 hover:bg-surface aria-pressed:border-border aria-pressed:bg-surface aria-pressed:text-primary disabled:opacity-60"
                     >
                       <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
                       <span>
                         <span className="block text-[13px] font-semibold">{REPORT_INFO[kind].name}</span>
-                        <span className="mt-1 block text-xs leading-relaxed text-muted">
-                          {REPORT_INFO[kind].description}
-                        </span>
+                        <span className="mt-1 block text-[11px] leading-4 text-muted">{REPORT_SUBTITLE[kind]}</span>
                       </span>
                     </button>
                   );
@@ -317,14 +324,20 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
               )}
             </div>
           )}
-        </Card>
-        <div className="min-w-0 space-y-4">
-          <Card className="min-w-0">
-            <div className="border-b border-border p-4">
-              <p className="text-[10px] font-semibold tracking-wider text-muted uppercase">Report workspace</p>
-              <h2 className="mt-1 text-lg font-semibold">{run?.title ?? REPORT_INFO[definition.kind].name}</h2>
-              <p className="mt-1 text-sm text-muted">{REPORT_INFO[definition.kind].description}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
+        </div>
+        <div className="min-w-0">
+          <div className="min-w-0">
+            <div className="border-b border-border px-5 py-5">
+              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted">
+                <ChartNoAxesCombined className="size-3.5" aria-hidden /> Report workspace
+              </p>
+              <h2 className="text-xl font-semibold tracking-tight">
+                {run?.title ?? REPORT_INFO[definition.kind].name}
+              </h2>
+              <p className="mt-1.5 max-w-xl text-[13px] leading-5 text-muted">
+                {REPORT_INFO[definition.kind].description}
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Button onClick={() => void generate()} loading={busy} disabled={!definition.clientIds.length || DEMO}>
                   <Play />
                   {run ? 'Refresh report' : 'Run report'}
@@ -358,8 +371,13 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 </Button>
               </div>
             </div>
-            <details key={run?.id ?? definition.kind} open={!run} className="p-4">
-              <summary className="cursor-pointer text-sm font-semibold">
+            <details
+              key={run?.id ?? definition.kind}
+              open={!run}
+              className="report-settings border-b border-border bg-surface-2 px-5 py-3"
+            >
+              <summary className="cursor-pointer text-xs font-medium text-text-2">
+                <Settings2 className="mr-1.5 inline size-3.5" aria-hidden />
                 Report settings{run ? ' · change settings, then refresh' : ''}
               </summary>
               <div className="mt-4 space-y-4">
@@ -432,40 +450,56 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 )}
               </div>
             </details>
-          </Card>
+          </div>
           {!run && (
-            <Card className="px-5 py-12 text-center">
-              <ChartNoAxesCombined className="mx-auto mb-3 size-7 text-primary" aria-hidden />
+            <div className="px-5 py-7">
               <h3 className="text-sm font-semibold">Ready when you are</h3>
-              <p className="mt-2 text-sm text-muted">
+              <p className="mt-1 text-[13px] leading-5 text-muted">
                 Choose your clients and run this report to capture current records.
               </p>
-            </Card>
+              <div className="mt-6 grid gap-4 border-t border-border pt-5 sm:grid-cols-3">
+                {REPORT_STEPS.map(({ icon: Icon, title, detail }) => (
+                  <div key={title}>
+                    <Icon className="mb-2 size-4 text-muted" aria-hidden />
+                    <p className="text-xs font-medium">{title}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted">{detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
           {run && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 border-b border-border">
                 <button
                   aria-pressed={!selection.attention}
                   onClick={() => setSelection({ ...selection, attention: false })}
-                  className="rounded-md border border-border bg-surface p-4 text-left aria-pressed:border-primary"
+                  className="border-r border-border border-b-2 border-b-transparent px-5 py-4 text-left hover:bg-surface-2 aria-pressed:border-b-primary aria-pressed:bg-primary-soft"
                 >
-                  <span className="text-xs text-muted">All records</span>
-                  <span className="mt-2 block text-2xl font-semibold tabular-nums">
+                  <span className="block min-h-8 text-xs text-muted sm:min-h-0">All records</span>
+                  <span className="mt-1 block text-[26px] leading-none font-semibold tabular-nums">
                     {currentSection?.rows.length ?? 0}
                   </span>
                 </button>
                 <button
                   aria-pressed={selection.attention}
                   onClick={() => setSelection({ ...selection, attention: true })}
-                  className="rounded-md border border-border bg-surface p-4 text-left aria-pressed:border-primary"
+                  className="border-r border-border border-b-2 border-b-transparent px-5 py-4 text-left hover:bg-surface-2 aria-pressed:border-b-primary aria-pressed:bg-primary-soft"
                 >
-                  <span className="text-xs text-muted">Needs review</span>
-                  <span className="mt-2 block text-2xl font-semibold text-warning tabular-nums">{attention}</span>
+                  <span className="block min-h-8 text-xs text-muted sm:min-h-0">Needs review</span>
+                  <span className="mt-1 block text-[26px] leading-none font-semibold text-warning tabular-nums">
+                    {attention}
+                  </span>
                 </button>
+                <div className="px-5 py-4">
+                  <span className="block min-h-8 text-xs text-muted sm:min-h-0">Clients in scope</span>
+                  <span className="mt-1 block text-[26px] leading-none font-semibold tabular-nums">
+                    {run.snapshot.clients.length}
+                  </span>
+                </div>
               </div>
               {run.snapshot.warnings.length > 0 && (
-                <div className="rounded-md border border-border bg-warning-soft p-4">
+                <div className="border-b border-border bg-warning-soft px-5 py-3">
                   <h3 className="text-sm font-semibold text-warning">Items worth reviewing</h3>
                   <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-warning">
                     {run.snapshot.warnings.map((w, i) => (
@@ -474,8 +508,8 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   </ul>
                 </div>
               )}
-              <Card className="min-w-0 overflow-hidden">
-                <div className="space-y-3 border-b border-border p-4">
+              <div className="min-w-0 overflow-hidden">
+                <div className="space-y-3 border-b border-border px-5 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold">Detailed results</h3>
                     <Badge>{visible?.rows.length ?? 0} matching rows</Badge>
@@ -571,9 +605,6 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       </Button>
                     </div>
                   </details>
-                  <p className="text-xs text-muted">
-                    CSV and PDF include this section’s matching rows and selected columns.
-                  </p>
                 </div>
                 <div className="max-h-[600px] overflow-auto" role="region" aria-label="Report results" tabIndex={0}>
                   <table className="w-full text-left text-xs">
@@ -612,16 +643,18 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                     to narrow the view; PDF supports up to 2,000 rows.
                   </p>
                 )}
-              </Card>
+                <p className="border-t border-border px-5 py-3 text-[11px] text-muted">
+                  CSV and PDF include this section’s matching rows and selected columns.
+                </p>
+              </div>
             </>
           )}
         </div>
-        <aside className="space-y-4 xl:col-start-2 2xl:col-start-auto">
-          <Card className="p-4">
-            <p className="text-[10px] font-semibold tracking-wider text-muted uppercase">Next actions</p>
+        <aside className="border-t border-border bg-surface-2 xl:col-span-2 2xl:col-span-1 2xl:border-t-0 2xl:border-l">
+          <div className="border-b border-border p-4">
             <h2 className="mt-1 text-base font-semibold">Review & act</h2>
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              Use the metrics to focus on records needing attention. Open the client workspace to make changes.
+              Review flagged records, then open a client to take action.
             </p>
             {run && (
               <Button
@@ -630,7 +663,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 className="mt-3 w-full"
                 onClick={() => setSelection({ ...selection, attention: true })}
               >
-                {attention} records to review
+                {attention} {attention === 1 ? 'record' : 'records'} to review
               </Button>
             )}
             <div className="mt-4 space-y-2">
@@ -647,8 +680,8 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 ),
               )}
             </div>
-          </Card>
-          <Card className="p-4">
+          </div>
+          <div className="p-4">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <History className="size-4" aria-hidden />
               Snapshot & sources
@@ -666,7 +699,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 <p className="mt-1 text-xs leading-relaxed text-muted">{source.detail}</p>
               </div>
             ))}
-          </Card>
+          </div>
         </aside>
       </div>
       <Dialog

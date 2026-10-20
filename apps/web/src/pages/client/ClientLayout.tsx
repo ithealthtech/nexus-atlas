@@ -151,7 +151,7 @@ export function ClientLayout() {
           <div
             role="group"
             aria-labelledby="client-trackers"
-            className="ml-2 flex shrink-0 items-center border-l border-border pl-2"
+            className="flex max-w-full flex-wrap items-center gap-x-1 sm:ml-2 sm:border-l sm:border-border sm:pl-2"
           >
             <span id="client-trackers" className="px-1.5 text-xs whitespace-nowrap text-muted">
               Trackers
@@ -189,6 +189,7 @@ export function ClientLayout() {
         <Button
           variant="ghost"
           size="icon"
+          className="shrink-0"
           aria-label="Choose which sections show"
           title="Choose which sections show"
           onClick={() => setCustomizing(true)}

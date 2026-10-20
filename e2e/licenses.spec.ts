@@ -143,6 +143,19 @@ test('client subscriptions and GDAP assignments work on desktop and mobile', asy
         });
       }
     }
+    // System font metrics vary by platform; larger text must leave the section controls reachable too.
+    const fontScale = await page.evaluate(() => {
+      const previous = document.documentElement.dataset.font;
+      document.documentElement.dataset.font = 'large';
+      return previous;
+    });
+    const largeText = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze();
+    expect(largeText.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }))).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.evaluate((previous) => {
+      if (previous) document.documentElement.dataset.font = previous;
+      else delete document.documentElement.dataset.font;
+    }, fontScale);
     await page.getByRole('button', { name: 'Remove from Avery Example', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm removal', exact: true }).click();
     await expect(page.getByText('0 assigned', { exact: true })).toBeVisible();
