@@ -32,7 +32,7 @@ export const reportDefinitionSchema = z.object({
   kind: z.enum(REPORT_KINDS),
   title: z.string().trim().min(1).max(120),
   clientIds: z
-    .array(z.uuid())
+    .array(z.uuid().transform((id) => id.toLowerCase()))
     .min(1, 'Choose at least one client.')
     .max(25, 'Choose up to 25 clients per report.')
     .refine((ids) => new Set(ids).size === ids.length, 'Choose each client once.'),

@@ -1,10 +1,16 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { schema } from '@atlas/db';
-import { REPORT_KINDS, reportSelectionSchema, selectReportSection, type ReportSnapshot } from '@atlas/shared';
+import {
+  REPORT_KINDS,
+  reportDefinitionSchema,
+  reportSelectionSchema,
+  selectReportSection,
+  type ReportSnapshot,
+} from '@atlas/shared';
 import { staticKeyProvider } from '../src/crypto/keys.js';
 import { SettingsService } from '../src/services/settings.js';
 import { reportCsv, reportPdf } from '../src/services/report-export.js';
@@ -48,6 +54,12 @@ const sample: ReportSnapshot = {
 
 describe('report exports', () => {
   it('matches field search, attention filters and selected columns and neutralizes CSV formulas', () => {
+    expect(reportDefinitionSchema.parse({ ...sample.definition, clientIds: [TENANT.toUpperCase()] }).clientIds).toEqual(
+      [TENANT],
+    );
+    expect(
+      reportDefinitionSchema.safeParse({ ...sample.definition, clientIds: [TENANT, TENANT.toUpperCase()] }).success,
+    ).toBe(false);
     const selection = reportSelectionSchema.parse({ field: 1, query: 'printer', columns: [1, 2], attention: true });
     expect(selectReportSection(sample, selection).rows).toEqual([['Printer', 'inactive']]);
     const csv = reportCsv(sample, selection);
@@ -276,6 +288,54 @@ describe('private client reports', () => {
     expect((await owner.call('GET', `/api/reports/runs/${run.id}`)).status).toBe(404);
     expect(await t.handle.db.select().from(schema.reportTemplates)).toHaveLength(0);
     expect(await t.handle.db.select().from(schema.reportRuns)).toHaveLength(0);
+  });
+  it('upgrades existing report data without retaining removed clients or deleting valid snapshots', async () => {
+    // Recreate the pre-cleanup schema in this disposable database, then apply the actual upgrade migration.
+    await t.handle.db.execute(sql`DROP TRIGGER atlas_purge_client_reports ON public.clients`);
+    await t.handle.db.execute(sql`DROP FUNCTION public.atlas_purge_client_reports()`);
+    await generate();
+    const kept = (await generate('assets', [otherId])).data;
+    await owner.call('POST', '/api/reports/templates', { name: 'Removed client', definition: definition() });
+    await owner.call('POST', '/api/reports/templates', {
+      name: 'Kept client',
+      definition: definition('assets', [otherId]),
+    });
+    await t.handle.db.delete(schema.clients).where(eq(schema.clients.id, clientId));
+    expect(await t.handle.db.select().from(schema.reportRuns)).toHaveLength(2);
+    const migration = readFileSync(
+      new URL('../../../packages/db/drizzle/0037_report_client_cleanup.sql', import.meta.url),
+      'utf8',
+    );
+    for (const statement of migration.split('--> statement-breakpoint'))
+      if (statement.trim()) await t.handle.db.execute(sql.raw(statement));
+    expect((await t.handle.db.select().from(schema.reportRuns)).map((r) => r.id)).toEqual([kept.id]);
+    expect((await t.handle.db.select().from(schema.reportTemplates)).map((r) => r.name)).toEqual(['Kept client']);
+    await t.handle.db.delete(schema.clients).where(eq(schema.clients.id, otherId));
+    expect(await t.handle.db.select().from(schema.reportRuns)).toHaveLength(0);
+    expect(await t.handle.db.select().from(schema.reportTemplates)).toHaveLength(0);
+  });
+  it('purges removed-client snapshots during merges and bulk organization deletion', async () => {
+    const removed = (await generate()).data;
+    await owner.call('POST', '/api/reports/templates', { name: 'Removed client template', definition: definition() });
+    const kept = (await generate('assets', [otherId])).data;
+    await owner.call('POST', '/api/reports/templates', {
+      name: 'Kept client template',
+      definition: definition('assets', [otherId]),
+    });
+    const merged = await owner.call('POST', '/api/duplicates/merge', {
+      type: 'clients',
+      keepId: otherId,
+      mergeIds: [clientId],
+    });
+    expect(merged.status).toBe(200);
+    expect((await owner.call('GET', `/api/reports/runs/${removed.id}`)).status).toBe(404);
+    expect((await owner.call('GET', `/api/reports/runs/${kept.id}`)).status).toBe(200);
+    expect(await t.handle.db.select().from(schema.reportRuns)).toHaveLength(1);
+    expect(await t.handle.db.select().from(schema.reportTemplates)).toHaveLength(1);
+    // Organization erasure also deletes clients in bulk rather than using the individual client service.
+    await t.handle.db.delete(schema.clients).where(eq(schema.clients.orgId, orgId));
+    expect(await t.handle.db.select().from(schema.reportRuns)).toHaveLength(0);
+    expect(await t.handle.db.select().from(schema.reportTemplates)).toHaveLength(0);
   });
   it('purges a report committed while client deletion is waiting on its shared lock', async () => {
     const initial = (await generate()).data;
