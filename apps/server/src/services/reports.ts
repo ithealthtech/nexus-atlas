@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { HttpError } from '../errors.js';
 import { requireClient } from '../authz.js';
 import { type Scope, isUuid } from './scope.js';
-import { collectReport } from './report-data.js';
+import { collectReport, type SecuritySources } from './report-data.js';
 import type { SettingsService } from './settings.js';
 
 const runs = schema.reportRuns;
@@ -59,6 +59,7 @@ export class ReportService {
   constructor(
     private settings: SettingsService,
     private fetcher?: typeof fetch,
+    private security?: SecuritySources,
   ) {}
   async authorize(scope: Scope, ids: string[]) {
     for (const id of ids) await requireClient(scope.db, scope.actor, id, 'read');
@@ -69,7 +70,7 @@ export class ReportService {
     if (active.has(key)) throw new HttpError(409, 'A report is already running. Wait for it to finish.');
     active.add(key);
     try {
-      const snapshot = await collectReport(scope, definition, this.settings, this.fetcher);
+      const snapshot = await collectReport(scope, definition, this.settings, this.fetcher, this.security);
       // Client deletion takes an exclusive lock. Never insert a snapshot after its client was deleted.
       return await scope.db.transaction(async (tx) => {
         const current = await tx

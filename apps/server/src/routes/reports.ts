@@ -7,6 +7,7 @@ import { Scope } from '../services/scope.js';
 import { reportCsv, reportPdf } from '../services/report-export.js';
 import { HttpError } from '../errors.js';
 import type { SettingsService } from '../services/settings.js';
+import type { SecuritySources } from '../services/report-data.js';
 
 export function registerReportRoutes(
   app: FastifyInstance,
@@ -15,10 +16,11 @@ export function registerReportRoutes(
     authed: { onRequest: onRequestHookHandler };
     settings: SettingsService;
     fetcher?: typeof fetch;
+    security?: SecuritySources;
   },
 ) {
   const { db, authed } = deps;
-  const service = new ReportService(deps.settings, deps.fetcher);
+  const service = new ReportService(deps.settings, deps.fetcher, deps.security);
   const scopeOf = (req: FastifyRequest) => new Scope(db, req.session!.actor);
   const audit = async (req: FastifyRequest, action: string, id: string) => {
     const actor = req.session!.actor;

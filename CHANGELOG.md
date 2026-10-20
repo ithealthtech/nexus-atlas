@@ -2,6 +2,20 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Security posture report.** A new built-in report under Reports. For each client it shows the following:
+  - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
+  - **Devices** that are offline or unprotected.
+  - **BitLocker encryption**, as reported by the collector.
+  - **Automatic password rotation** that is failing.
+
+  Further sections list each password with problems, every device with its protection and encryption state, and each rotation target with its last result. **Needs review** picks out the problems.
+
+  Access rules apply. Password names appear only for clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes and recovery keys are never included.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed
