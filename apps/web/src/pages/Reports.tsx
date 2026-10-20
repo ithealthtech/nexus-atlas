@@ -12,6 +12,7 @@ import {
   FileText,
   History,
   Settings2,
+  Globe,
   ListFilter,
   LockKeyhole,
   Play,
@@ -56,8 +57,18 @@ const ICONS = {
   assets: Archive,
   licenses: ShieldCheck,
   renewals: CalendarDays,
+  domains: Globe,
   documentation: FileCheck2,
   endpoints: Activity,
+};
+/** The client page each report's "open client" link goes to; reports not listed open the client's overview. */
+const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
+  security: '/passwords',
+  assets: '/assets',
+  licenses: '/licenses',
+  domains: '/trackers/domains',
+  documentation: '/documents',
+  endpoints: '/assets',
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
   executive: 'Your client environment at a glance',
@@ -65,6 +76,7 @@ const REPORT_SUBTITLE: Record<ReportKind, string> = {
   assets: 'Hardware, systems and infrastructure',
   licenses: 'Subscriptions, seats and assignments',
   renewals: 'Upcoming dates and overdue items',
+  domains: 'Domain and certificate expiry',
   documentation: 'Coverage, ownership and review dates',
   endpoints: 'Device status and protection',
 };
@@ -421,8 +433,8 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       ))}
                   </div>
                 </fieldset>
-                {definition.kind === 'renewals' && (
-                  <Field label="Renewal lookahead">
+                {(definition.kind === 'renewals' || definition.kind === 'domains') && (
+                  <Field label={definition.kind === 'domains' ? 'Expiring within' : 'Renewal lookahead'}>
                     {(p) => (
                       <Select
                         {...p}
@@ -674,7 +686,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 (c) => (
                   <AppLink
                     key={c.id}
-                    to={`/clients/${c.id}${definition.kind === 'licenses' ? '/licenses' : definition.kind === 'documentation' ? '/documents' : definition.kind === 'security' ? '/passwords' : definition.kind === 'assets' || definition.kind === 'endpoints' ? '/assets' : ''}`}
+                    to={`/clients/${c.id}${CLIENT_PAGE[definition.kind] ?? ''}`}
                     className="flex min-h-9 items-start gap-2 text-xs font-medium text-primary hover:underline"
                   >
                     <Building2 className="size-4 shrink-0" aria-hidden />

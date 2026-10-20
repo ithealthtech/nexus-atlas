@@ -229,6 +229,67 @@ describe('private client reports', () => {
       updatedAt: new Date('2020-01-01'),
     });
   }
+  it('reports domains and certificates by expiry, with the latest automatic check', async () => {
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
+    const domainLayout = layouts.find((l) => l.key === 'domain')!.id;
+    const sslLayout = layouts.find((l) => l.key === 'ssl_certificate')!.id;
+    const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const asset = async (client: string, layoutId: string, name: string, fields: Record<string, unknown>) => {
+      const r = await owner.call('POST', `/api/clients/${client}/assets`, { layoutId, name, fields });
+      expect(r.status, JSON.stringify(r.data)).toBe(201);
+      return r.data.id as string;
+    };
+    const expired = await asset(clientId, domainLayout, 'harbordental.example', {
+      registrar: 'Example Registrar',
+      expires: inDays(-3),
+      auto_renew: true,
+    });
+    await asset(clientId, domainLayout, 'harbor-later.example', { expires: inDays(300) });
+    await asset(clientId, sslLayout, 'Portal certificate', {
+      common_name: 'portal.harbordental.example',
+      issuer: 'Example CA',
+      expires: inDays(20),
+    });
+    await asset(otherId, domainLayout, 'other-client.example', { expires: inDays(1) });
+    await t.handle.db.insert(schema.trackerChecks).values({
+      orgId,
+      clientId,
+      assetId: expired,
+      kind: 'domain',
+      host: 'harbordental.example',
+      checkedAt: new Date(),
+      ok: false,
+      detail: 'Registry lookup failed',
+    });
+    const run = await generate('domains');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual(['Summary', 'Domains', 'SSL certificates']);
+    expect(snapshot.sections[0]!.rows).toEqual([['Harbor Dental', '2', '1', '0', '1', '0', '1', '1']]);
+    const [first, second] = snapshot.sections[1]!.rows;
+    expect(first).toEqual([
+      'Harbor Dental',
+      'harbordental.example',
+      'Example Registrar',
+      '',
+      inDays(-3),
+      '-3',
+      'Yes',
+      'Expired',
+      expect.stringMatching(/^Failed \d{4}-\d{2}-\d{2}: Registry lookup failed$/),
+    ]);
+    expect(second![7]).toBe('Active');
+    expect(snapshot.sections[2]!.rows[0]!.slice(2, 4)).toEqual(['portal.harbordental.example', 'Example CA']);
+    expect(snapshot.sections[2]!.rows[0]!.at(-2)).toBe('Expiring soon');
+    expect(snapshot.warnings).toContain(
+      '2 domain or certificate records have not been checked automatically yet. Their dates are as entered.',
+    );
+    expect(JSON.stringify(snapshot)).not.toContain('other-client.example');
+    // "Needs review" picks out the expired domain and its failed check, not the healthy one.
+    expect(
+      selectReportSection(snapshot, reportSelectionSchema.parse({ section: 1, attention: true })).rows.map((r) => r[1]),
+    ).toEqual(['harbordental.example']);
+  });
   it('collects every report type without private contents, archived records or other clients', async () => {
     await seed();
     for (const kind of REPORT_KINDS) {

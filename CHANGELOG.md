@@ -15,6 +15,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   Further sections list each password with problems, every device with its protection and encryption state, and each rotation target with its last result. **Needs review** picks out the problems.
 
   Access rules apply. Password names appear only for clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes and recovery keys are never included.
+- **Domains & SSL report.** A new built-in report under Reports that covers each client's domains and SSL certificates.
+  - Each record shows its registrar or issuer, expiry date, days left, auto-renew setting, and the result of the latest automatic check.
+  - A summary counts what has expired, what expires within the chosen window (30 days to a year), and failed checks.
+  - **Needs review** picks out expired and expiring records and failed checks.
 
 ## [1.8.3] - 2026-10-20
 

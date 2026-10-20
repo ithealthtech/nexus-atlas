@@ -369,9 +369,20 @@
         </figure>
         <p>
           Open <strong>Overview → Reports</strong> for reporting across clients, or a client's
-          <strong>Reports</strong> tab for that workspace. Choose a built-in report: executive summary, security
-          posture, asset inventory, license utilization, upcoming renewals, documentation health, or endpoint health.
-          Choose up to 25 clients, set the report title and any renewal lookahead, and choose
+          <strong>Reports</strong> tab for that workspace. The built-in reports are:
+        </p>
+        <ul>
+          <li>Executive summary</li>
+          <li>Security posture</li>
+          <li>Asset inventory</li>
+          <li>License utilization</li>
+          <li>Upcoming renewals</li>
+          <li>Domains &amp; SSL</li>
+          <li>Documentation health</li>
+          <li>Endpoint health</li>
+        </ul>
+        <p>
+          Choose a report and up to 25 clients, set the report title and any lookahead, and choose
           <strong>Run report</strong>.
         </p>
         <p>
@@ -400,7 +411,10 @@
           overdue, expired, or unchanged for a year), devices that are offline or unprotected, BitLocker encryption
           reported by the collector, and the last result of automatic password rotation. Password names appear only for
           clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and
-          recovery keys are never included.
+          recovery keys are never included. <strong>Domains &amp; SSL</strong> lists each client's domains and SSL
+          certificates with their registrar or issuer, expiry date, days left, and the result of the latest automatic
+          check, soonest first. A summary counts what has expired, what expires within the chosen window, and failed
+          checks. Records the trackers haven't checked yet show the dates as entered.
         </p>
         <p>
           Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.

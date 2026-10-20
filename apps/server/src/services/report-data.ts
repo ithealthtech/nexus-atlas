@@ -16,6 +16,7 @@ import { requireClient } from '../authz.js';
 import { gdapClient } from '../routes/m365-gdap.js';
 import type { SettingsService } from './settings.js';
 import type { Scope } from './scope.js';
+import { standing } from './trackers.js';
 
 /** Where the security posture report reads passwords and rotation, with each service's own access rules. */
 export interface SecuritySources {
@@ -520,6 +521,170 @@ export async function collectReport(
           r.lastStatus ? ROTATION_RESULT[r.lastStatus] : 'Not run yet',
         ]),
       );
+  }
+  if (definition.kind === 'domains') {
+    // The Domains and SSL certificates layouts, read the way the trackers read them.
+    const layouts = await db
+      .select({ id: schema.assetLayouts.id, key: schema.assetLayouts.key })
+      .from(schema.assetLayouts)
+      .where(
+        and(
+          eq(schema.assetLayouts.orgId, actor.orgId),
+          inArray(schema.assetLayouts.key, ['domain', 'ssl_certificate']),
+        ),
+      );
+    const isDomain = new Set(layouts.filter((l) => l.key === 'domain').map((l) => l.id));
+    const records = layouts.length
+      ? await db
+          .select({
+            id: schema.assets.id,
+            layoutId: schema.assets.layoutId,
+            clientId: schema.assets.clientId,
+            name: schema.assets.name,
+            fields: schema.assets.fields,
+          })
+          .from(schema.assets)
+          .where(
+            and(
+              selected(schema.assets),
+              eq(schema.assets.archived, false),
+              inArray(
+                schema.assets.layoutId,
+                layouts.map((l) => l.id),
+              ),
+            ),
+          )
+          .orderBy(asc(schema.assets.name))
+          .limit(MAX_REPORT_ROWS + 1)
+      : [];
+    if (records.length > MAX_REPORT_ROWS)
+      throw new HttpError(422, 'This report is too large. Choose fewer clients (maximum 10,000 source rows per type).');
+    const checks = await db
+      .select({
+        assetId: schema.trackerChecks.assetId,
+        kind: schema.trackerChecks.kind,
+        checkedAt: schema.trackerChecks.checkedAt,
+        ok: schema.trackerChecks.ok,
+        detail: schema.trackerChecks.detail,
+      })
+      .from(schema.trackerChecks)
+      .where(selected(schema.trackerChecks));
+    const checkOf = new Map(checks.map((c) => [`${c.assetId}:${c.kind}`, c]));
+    const start = Date.parse(`${today}T00:00:00Z`);
+    const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+    const items = records.map((r) => {
+      const domain = isDomain.has(r.layoutId);
+      const fields = (r.fields ?? {}) as Record<string, unknown>;
+      const expires = dateValue(fields.expires) ? fields.expires : null;
+      // "Expiring soon" follows the report's own lookahead rather than the trackers' 30 days.
+      const state = standing(expires, today, definition.withinDays);
+      const check = checkOf.get(`${r.id}:${domain ? 'domain' : 'ssl'}`);
+      return {
+        ...r,
+        domain,
+        fields,
+        expires,
+        state,
+        daysLeft: expires ? String(Math.round((Date.parse(`${expires}T00:00:00Z`) - start) / DAY)) : '',
+        status: { expired: 'Expired', soon: 'Expiring soon', active: 'Active', unknown: 'No expiry date' }[state],
+        check: !check
+          ? 'Not checked yet'
+          : check.ok
+            ? `OK ${iso(check.checkedAt).slice(0, 10)}`
+            : `Failed ${iso(check.checkedAt).slice(0, 10)}${check.detail ? `: ${check.detail}` : ''}`,
+        checkedAt: check?.checkedAt ?? null,
+      };
+    });
+    source(
+      'Atlas domain and SSL trackers',
+      'Expiry dates from Domains and SSL certificates records, with the latest automatic registration or certificate check.',
+      items
+        .map((i) => iso(i.checkedAt))
+        .filter(Boolean)
+        .sort()
+        .at(-1) ?? null,
+    );
+    const unchecked = items.filter((i) => !i.checkedAt).length;
+    if (unchecked)
+      result.warnings.push(
+        `${unchecked} domain or certificate records have not been checked automatically yet. Their dates are as entered.`,
+      );
+    const domains = items.filter((i) => i.domain);
+    const certificates = items.filter((i) => !i.domain);
+    const count = (list: typeof items, clientId: string, state: string) =>
+      String(list.filter((i) => i.clientId === clientId && i.state === state).length);
+    section(
+      'Summary',
+      [
+        'Client',
+        'Domains',
+        'Expired domains',
+        'Expiring domains',
+        'Certificates',
+        'Expired certificates',
+        'Expiring certificates',
+        'Failed checks',
+      ],
+      clients.map((c) => [
+        c.name,
+        String(domains.filter((i) => i.clientId === c.id).length),
+        count(domains, c.id, 'expired'),
+        count(domains, c.id, 'soon'),
+        String(certificates.filter((i) => i.clientId === c.id).length),
+        count(certificates, c.id, 'expired'),
+        count(certificates, c.id, 'soon'),
+        String(items.filter((i) => i.clientId === c.id && i.check.startsWith('Failed')).length),
+      ]),
+    );
+    // Soonest first; records without a date last.
+    const bySoonest = (a: (typeof items)[number], b: (typeof items)[number]) =>
+      (a.expires ?? '9999').localeCompare(b.expires ?? '9999') ||
+      names.get(a.clientId)!.localeCompare(names.get(b.clientId)!) ||
+      a.name.localeCompare(b.name);
+    section(
+      'Domains',
+      ['Client', 'Domain', 'Registrar', 'DNS host', 'Expires', 'Days left', 'Auto-renew', 'Status', 'Last check'],
+      domains
+        .sort(bySoonest)
+        .map((i) => [
+          names.get(i.clientId)!,
+          i.name,
+          text(i.fields.registrar),
+          text(i.fields.dns_host),
+          i.expires ?? 'Not recorded',
+          i.daysLeft,
+          i.fields.auto_renew === true ? 'Yes' : 'No',
+          i.status,
+          i.check,
+        ]),
+    );
+    section(
+      'SSL certificates',
+      [
+        'Client',
+        'Certificate',
+        'Common name',
+        'Issuer',
+        'Installed on',
+        'Expires',
+        'Days left',
+        'Status',
+        'Last check',
+      ],
+      certificates
+        .sort(bySoonest)
+        .map((i) => [
+          names.get(i.clientId)!,
+          i.name,
+          text(i.fields.common_name),
+          text(i.fields.issuer),
+          text(i.fields.installed_on),
+          i.expires ?? 'Not recorded',
+          i.daysLeft,
+          i.status,
+          i.check,
+        ]),
+    );
   }
   if (
     result.sections.reduce((n, s) => n + s.rows.length, 0) > MAX_REPORT_ROWS ||
