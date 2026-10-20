@@ -2,7 +2,7 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.8.3] - 2026-10-20
 
 ### Fixed
 
