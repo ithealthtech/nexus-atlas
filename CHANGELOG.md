@@ -2,6 +2,15 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Software & sign-ins report.** A new built-in report under Reports, read from the ConnectWise RMM inventory.
+  - It lists every application on each client's devices, flagged ones first, with the same flags as the client's Software tab: end of life, no license recorded, or over seats.
+  - It also lists who signs in to each device, matched to contacts.
+  - A summary counts devices reporting, applications, flags, and sign-in accounts.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed

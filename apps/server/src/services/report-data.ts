@@ -1,16 +1,22 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { schema } from '@atlas/db';
-import type { LayoutField, ReportDefinition, ReportSnapshot } from '@atlas/shared';
+import type { LayoutField, ReportDefinition, ReportSnapshot, SoftwareFlag } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { requireClient } from '../authz.js';
 import { gdapClient } from '../routes/m365-gdap.js';
 import type { SettingsService } from './settings.js';
 import type { Scope } from './scope.js';
+import { DeviceInventoryService } from './device-inventory.js';
 
 export const MAX_REPORT_ROWS = 10_000;
 const DAY = 86_400_000;
 const iso = (value: Date | null) => value?.toISOString() ?? '';
+const FLAG_LABEL: Record<SoftwareFlag, string> = {
+  end_of_life: 'End of life',
+  unlicensed: 'Unlicensed',
+  over_seats: 'Over seats',
+};
 const dateValue = (value: unknown): value is string =>
   typeof value === 'string' &&
   /^\d{4}-\d{2}-\d{2}$/.test(value) &&
@@ -335,6 +341,120 @@ export async function collectReport(
     );
     result.warnings.push(
       'Microsoft reseller renewal dates are not supplied by the GDAP directory API. Missing dates are not treated as no renewal risk.',
+    );
+  }
+  if (definition.kind === 'software') {
+    // The device inventory the RMM sync saved: never read is not the same as nothing installed.
+    const devices = await db
+      .select({
+        clientId: schema.rmmDeviceStatus.clientId,
+        name: schema.assets.name,
+        signIns: schema.rmmDeviceStatus.signIns,
+        inventoryAt: schema.rmmDeviceStatus.inventoryAt,
+      })
+      .from(schema.rmmDeviceStatus)
+      .innerJoin(schema.assets, eq(schema.assets.id, schema.rmmDeviceStatus.assetId))
+      .where(
+        and(
+          eq(schema.rmmDeviceStatus.orgId, actor.orgId),
+          inArray(schema.rmmDeviceStatus.clientId, definition.clientIds),
+          eq(schema.assets.orgId, actor.orgId),
+          eq(schema.assets.archived, false),
+        ),
+      )
+      .orderBy(asc(schema.assets.name))
+      .limit(MAX_REPORT_ROWS + 1);
+    if (devices.length > MAX_REPORT_ROWS)
+      throw new HttpError(422, 'This report is too large. Choose fewer clients (maximum 10,000 source rows per type).');
+    const inventory = new DeviceInventoryService();
+    const software = new Map<string, Awaited<ReturnType<DeviceInventoryService['forClient']>>>();
+    for (const c of clients) software.set(c.id, await inventory.forClient(scope, c.id));
+    type SignIn = { username: string; domain: string; lastLogonAt: string | null; contactId: string | null };
+    const contactIds = devices.flatMap((d) =>
+      ((d.signIns ?? []) as SignIn[]).flatMap((u) => (u.contactId ? [u.contactId] : [])),
+    );
+    const contacts = new Map(
+      contactIds.length
+        ? (
+            await db
+              .select({ id: schema.contacts.id, name: schema.contacts.name })
+              .from(schema.contacts)
+              .where(
+                and(
+                  eq(schema.contacts.orgId, actor.orgId),
+                  inArray(schema.contacts.clientId, definition.clientIds),
+                  inArray(schema.contacts.id, [...new Set(contactIds)]),
+                ),
+              )
+          ).map((c) => [c.id, c.name])
+        : [],
+    );
+    for (const c of clients) {
+      const mine = devices.filter((d) => d.clientId === c.id);
+      const last =
+        mine
+          .map((d) => iso(d.inventoryAt))
+          .filter(Boolean)
+          .sort()
+          .at(-1) ?? null;
+      source(
+        `RMM inventory: ${c.name}`,
+        'Installed applications and sign-ins from the last RMM inventory. Flags use the client license records.',
+        last,
+      );
+      const missing = mine.filter((d) => !d.inventoryAt).length;
+      if (!mine.length) result.warnings.push(`${c.name}: no RMM devices are linked to this client.`);
+      else if (missing)
+        result.warnings.push(`${c.name}: ${missing} of ${mine.length} devices have not reported software or sign-ins.`);
+    }
+    section(
+      'Summary',
+      ['Client', 'Devices reporting', 'Applications', 'End of life', 'Unlicensed', 'Over seats', 'Sign-in accounts'],
+      clients.map((c) => {
+        const apps = software.get(c.id) ?? [];
+        const mine = devices.filter((d) => d.clientId === c.id && d.inventoryAt);
+        const accounts = new Set(
+          mine.flatMap((d) => ((d.signIns ?? []) as SignIn[]).map((u) => `${u.domain}\\${u.username}`.toLowerCase())),
+        );
+        return [
+          c.name,
+          `${mine.length} of ${devices.filter((d) => d.clientId === c.id).length}`,
+          String(apps.length),
+          String(apps.filter((a) => a.flag === 'end_of_life').length),
+          String(apps.filter((a) => a.flag === 'unlicensed').length),
+          String(apps.filter((a) => a.flag === 'over_seats').length),
+          String(accounts.size),
+        ];
+      }),
+    );
+    // Flagged applications first, then the most installed, as on the client's Software tab.
+    section(
+      'Software',
+      ['Client', 'Application', 'Publisher', 'Versions', 'Devices', 'Flag', 'Reason'],
+      clients.flatMap((c) =>
+        (software.get(c.id) ?? []).map((a) => [
+          c.name,
+          a.name,
+          a.publisher,
+          a.versions.join(', '),
+          String(a.devices),
+          a.flag ? FLAG_LABEL[a.flag] : '',
+          a.flagReason,
+        ]),
+      ),
+    );
+    section(
+      'Sign-ins',
+      ['Client', 'Device', 'Account', 'Contact', 'Last sign-in'],
+      devices.flatMap((d) =>
+        ((d.signIns ?? []) as SignIn[]).map((u) => [
+          names.get(d.clientId)!,
+          d.name,
+          u.domain ? `${u.domain}\\${u.username}` : u.username,
+          (u.contactId && contacts.get(u.contactId)) || '',
+          u.lastLogonAt ?? 'Not reported',
+        ]),
+      ),
     );
   }
   if (

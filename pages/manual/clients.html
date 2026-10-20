@@ -370,8 +370,9 @@
         <p>
           Open <strong>Overview → Reports</strong> for reporting across clients, or a client's
           <strong>Reports</strong> tab for that workspace. Choose a built-in report: executive summary, asset inventory,
-          license utilization, upcoming renewals, documentation health, or endpoint health. Choose up to 25 clients, set
-          the report title and any renewal lookahead, and choose <strong>Run report</strong>.
+          license utilization, upcoming renewals, documentation health, endpoint health, or software &amp; sign-ins.
+          Choose up to 25 clients, set the report title and any renewal lookahead, and choose
+          <strong>Run report</strong>.
         </p>
         <p>
           The report captures current records; it does not infer historical activity or missing health data. Source
@@ -393,6 +394,13 @@
           while <strong>Refresh report</strong> creates a new capture. Every view and download checks current access to
           all included clients. Deleting a client removes any report or template containing that client. Report
           generation, template changes, exports, and deletions appear in the security log.
+        </p>
+        <p>
+          <strong>Software &amp; sign-ins</strong> reads the inventory the ConnectWise RMM sync saves. It lists every
+          application installed on each client's devices, with versions, how many devices have it, and the same flags as
+          the client's Software tab: end of life, no license recorded, or more installs than licensed seats. It also
+          lists the accounts that sign in to each device, with the matching contact. Devices that haven't reported an
+          inventory are counted in the report's notices rather than treated as having nothing installed.
         </p>
         <p>
           Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.

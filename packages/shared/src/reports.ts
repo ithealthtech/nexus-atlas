@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-export const REPORT_KINDS = ['executive', 'assets', 'licenses', 'renewals', 'documentation', 'endpoints'] as const;
+export const REPORT_KINDS = [
+  'executive',
+  'assets',
+  'licenses',
+  'renewals',
+  'documentation',
+  'endpoints',
+  'software',
+] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const REPORT_INFO: Record<ReportKind, { name: string; description: string }> = {
   executive: {
@@ -26,6 +34,10 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
   endpoints: {
     name: 'Endpoint health',
     description: 'RMM online status, last check-in, and endpoint protection coverage.',
+  },
+  software: {
+    name: 'Software & sign-ins',
+    description: 'Installed software with end-of-life and license flags, and who signs in to each device.',
   },
 };
 export const reportDefinitionSchema = z.object({
@@ -104,6 +116,8 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (['Reviews overdue', 'Offline', 'Protection missing / stopped', 'Unknown protection'].includes(column))
       return Number(value) > 0 || value === 'Not available';
     if (column === 'Available') return Number(value) <= 0;
+    if (['End of life', 'Unlicensed', 'Over seats'].includes(column)) return Number(value) > 0;
+    if (column === 'Flag') return value !== '';
     return false;
   });
 }

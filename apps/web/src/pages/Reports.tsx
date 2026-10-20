@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   Download,
+  AppWindow,
   FileCheck2,
   FileText,
   History,
@@ -56,6 +57,7 @@ const ICONS = {
   renewals: CalendarDays,
   documentation: FileCheck2,
   endpoints: Activity,
+  software: AppWindow,
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
   executive: 'Your client environment at a glance',
@@ -64,6 +66,7 @@ const REPORT_SUBTITLE: Record<ReportKind, string> = {
   renewals: 'Upcoming dates and overdue items',
   documentation: 'Coverage, ownership and review dates',
   endpoints: 'Device status and protection',
+  software: 'Applications and who signs in',
 };
 const REPORT_STEPS = [
   { icon: Building2, title: 'Choose your scope', detail: 'One client or up to 25 workspaces.' },
@@ -189,15 +192,15 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
       <FormError message={error} />
       {DEMO && (
         <p className="mb-4 rounded-md border border-border bg-surface p-3 text-sm text-muted">
-          Report generation and PDF export require a connected Atlas server. The live application includes six report
-          types, private templates, and snapshot history.
+          Report generation and PDF export require a connected Atlas server. The live application includes{' '}
+          {REPORT_KINDS.length} report types, private templates, and snapshot history.
         </p>
       )}
       <div className="report-studio grid min-w-0 overflow-hidden rounded-md border border-border bg-surface xl:grid-cols-[204px_minmax(0,1fr)] 2xl:grid-cols-[204px_minmax(0,1fr)_216px]">
         <div className="min-w-0 border-b border-border bg-surface-2 xl:border-r xl:border-b-0">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Report library</h2>
-            <p className="mt-1 text-xs text-muted">6 built-in reports</p>
+            <p className="mt-1 text-xs text-muted">{REPORT_KINDS.length} built-in reports</p>
           </div>
           <div className="flex border-b border-border p-1" aria-label="Report collections">
             {(['library', 'templates', 'history'] as const).map((tab) => (
@@ -671,7 +674,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 (c) => (
                   <AppLink
                     key={c.id}
-                    to={`/clients/${c.id}${definition.kind === 'licenses' ? '/licenses' : definition.kind === 'documentation' ? '/documents' : definition.kind === 'assets' || definition.kind === 'endpoints' ? '/assets' : ''}`}
+                    to={`/clients/${c.id}${definition.kind === 'licenses' ? '/licenses' : definition.kind === 'documentation' ? '/documents' : definition.kind === 'assets' || definition.kind === 'endpoints' || definition.kind === 'software' ? '/assets' : ''}`}
                     className="flex min-h-9 items-start gap-2 text-xs font-medium text-primary hover:underline"
                   >
                     <Building2 className="size-4 shrink-0" aria-hidden />
