@@ -2,6 +2,18 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Share a report with the client.** A report run for one client can be shared by a link that works for 7, 30 or 90 days.
+  - The client sees that snapshot without an account: every section, its notes and sources, and a PDF of each section.
+  - The page names your organization and the client, never the technician who ran it.
+  - The **Share** dialog shows how often each link was opened, and **Revoke** stops a link at once.
+  - Deleting the report or the client stops its links.
+  - Only the person who ran the report can share it, and only with edit access to that client.
+  - Making and revoking links are in the security log, and wrong links are rate-limited.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed

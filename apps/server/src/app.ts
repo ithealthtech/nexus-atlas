@@ -965,7 +965,14 @@ export async function buildApp({
     agentLimiter: failureLimiter(20, 15 * 60_000),
   });
   registerRequestLogRoutes(app, { db, authed, recent, requestLog });
-  registerReportRoutes(app, { db, authed, settings, fetcher: m365Fetch });
+  registerReportRoutes(app, {
+    db,
+    authed,
+    settings,
+    fetcher: m365Fetch,
+    publicOrigin: config.publicOrigin,
+    shareLimiter: failureLimiter(30, 15 * 60_000),
+  });
   registerLicenseRoutes(app, { db, authed, recent, settings, fetcher: m365Fetch });
   registerM365Routes(app, {
     db,

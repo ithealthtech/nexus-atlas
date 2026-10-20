@@ -112,6 +112,23 @@ test('premium shell and report snapshots, filters, templates and exports work on
         .subarray(0, 5)
         .toString(),
     ).toBe('%PDF-');
+    // Sharing with the client: a one-client snapshot can be shared, and its link opens without an account.
+    await expect(page.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
+    const [latest] = (await owner.call('GET', '/api/reports/runs')).data as { id: string }[];
+    const link = (await owner.call('POST', `/api/reports/runs/${latest!.id}/shares`, { expiresDays: 7 })).data
+      .url as string;
+    const visitor = await browser.newContext({ reducedMotion: 'reduce', colorScheme: 'light' });
+    const shared = await visitor.newPage();
+    await shared.goto(link);
+    await expect(shared.getByRole('heading', { name: 'License utilization', exact: true, level: 1 })).toBeVisible();
+    await expect(shared.getByRole('cell', { name: 'Design Suite', exact: true })).toBeVisible();
+    await expect(shared.getByRole('link', { name: 'Download PDF', exact: true })).toBeVisible();
+    const sharedViolations = (
+      await new AxeBuilder({ page: shared }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()
+    ).violations;
+    expect(sharedViolations.map((v) => v.id)).toEqual([]);
+    await shared.screenshot({ path: resolve(screenshots, 'atlas-shared-report.png'), fullPage: true });
+    await visitor.close();
     await page.getByRole('button', { name: 'Save template', exact: true }).click();
     await page.getByLabel('Template name', { exact: true }).fill('Monthly client licenses');
     await page.getByRole('dialog').getByRole('button', { name: 'Save template', exact: true }).click();

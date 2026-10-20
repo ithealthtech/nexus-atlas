@@ -1591,3 +1591,26 @@ export const documentShares = pgTable(
   },
   (t) => [uniqueIndex('document_shares_token').on(t.token), index('document_shares_document').on(t.documentId)],
 );
+
+// A link that shows one single-client report snapshot to someone without an account, such as the client. Unlike a
+// document link it always expires. Deleting the snapshot (or its client) removes its links.
+export const reportShares = pgTable(
+  'report_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => reportRuns.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    views: integer('views').notNull().default(0),
+    lastViewedAt: timestamp('last_viewed_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('report_shares_token').on(t.token), index('report_shares_run').on(t.runId)],
+);

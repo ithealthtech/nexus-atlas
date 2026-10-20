@@ -110,6 +110,10 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 
 **Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
 
+### Sharing a report with the client
+
+A report run for a single client can be shared with that client by link. Choose **Share**, pick how long the link works (7, 30, or 90 days; report links always expire), and choose **Create link**; the link is copied for you. Whoever has the link sees that snapshot, every section as it was captured, and can download each section as a PDF, without an account. The page names your organization and the client, never the person who ran the report. The dialog shows how often each link was opened, and **Revoke** stops a link at once. Deleting the report or the client stops its links too. Only the person who ran the report can share it, and only with edit access to the client. Making and revoking links appear in the security log.
+
 Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
 
 ## The monthly report
