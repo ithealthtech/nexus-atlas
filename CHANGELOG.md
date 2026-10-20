@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.8.3] - 2026-10-20
+
+### Fixed
+
+- **Your menu style is back.** 1.8.0 dropped the three menu layouts and ignored the one each person had chosen. They return in the new look, and your saved choice applies again. Pick one under **Your account → Menu**:
+  - **Rail and panel** (the default) shows the five areas down the left edge, with the current area's pages beside them. In Clients the panel lists every client.
+  - **Sidebar** is one list of everyday pages with icons and your starred clients. Administration opens in its place, with a way back.
+  - **Top bar** puts the areas across the top and the current area's pages in a row beneath, leaving the full width for the page.
+
+  **Collapse sidebar** still narrows the rail or sidebar to icons, and phones still use the slide-out menu.
+
 ## [1.8.2] - 2026-10-20
 
 ### Changed
