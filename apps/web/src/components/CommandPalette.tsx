@@ -68,7 +68,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   return (
     <dialog
       ref={dialog}
-      onClose={close}
+      onClose={() => {
+        // A native close event can arrive after a fast keyboard reopen.
+        if (!dialog.current?.open) close();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         close();

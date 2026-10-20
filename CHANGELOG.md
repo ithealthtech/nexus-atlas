@@ -4,7 +4,13 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Changed
+
+- Refined the application shell with clearer workspace tabs and restrained system typography. Reports now use a connected three-panel workspace with compact library entries and integrated review metrics. Dashboard totals use consistent tiles, client work appears before operational integrations, and empty integration panels use compact responsive columns.
+
 ### Fixed
+
+- Global search stays open when reopened immediately with Ctrl+K after closing it. A delayed native dialog event no longer dismisses the new search session.
 
 - Saved report snapshots and templates are removed for every client-deletion path, including duplicate merges and organization erasure. A new migration also clears reports left for clients that no longer exist; existing migrations remain unchanged. Report client IDs are normalized before validation so letter case cannot interfere with access or cleanup.
 

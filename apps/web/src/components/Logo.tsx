@@ -18,14 +18,14 @@ export function Logo({ className, compact }: { className?: string; compact?: boo
     );
   return (
     <span className={cn('inline-flex items-center gap-2.5 font-semibold', className)}>
-      <svg viewBox="0 0 32 32" className="size-9 shrink-0" aria-hidden>
+      <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
         <rect width="32" height="32" rx="5" fill="#245fba" />
         <path d="M7 24 14 8h4l7 16h-5l-1.3-3.5h-6L11.3 24Zm7-7h3.5L16 12Z" fill="#ffffff" />
       </svg>
       {!compact && (
         <span className="leading-none">
-          <span className="block text-xl tracking-tight">{theme?.brandName || theme?.name || 'Atlas'}</span>
-          <span className="mt-1 block text-[9px] font-bold tracking-[0.2em] opacity-80">
+          <span className="block text-base tracking-tight">{theme?.brandName || theme?.name || 'Atlas'}</span>
+          <span className="mt-1 block text-[8px] font-semibold tracking-[0.16em] opacity-65">
             {theme?.tagline || 'ATLAS WORKSPACE'}
           </span>
         </span>

@@ -350,13 +350,20 @@ export function AppShell({ children }: { children: ReactNode }) {
           to="/"
           aria-label="Home page"
           className={cn(
-            'flex h-16 shrink-0 items-center border-b border-border text-sidebar-active',
+            'flex h-[68px] shrink-0 items-center border-b border-border text-sidebar-active',
             collapsed ? 'justify-center' : 'px-5',
           )}
         >
           <Logo compact={collapsed} />
         </Link>
-        <div className={cn('flex-1 overflow-y-auto py-5', collapsed ? 'px-2' : 'px-3')}>{navigation(collapsed)}</div>
+        <div className={cn('flex-1 overflow-y-auto py-5', collapsed ? 'px-2' : 'px-3')}>
+          {!collapsed && (
+            <p className="mb-3 px-3 text-[10px] font-semibold tracking-[0.1em] text-sidebar-muted uppercase">
+              Workspace
+            </p>
+          )}
+          {navigation(collapsed)}
+        </div>
         <div className="border-t border-border p-3">
           <button
             onClick={toggle}
@@ -375,7 +382,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </aside>
-      <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6 print:hidden">
+      <header className="sticky top-0 z-20 flex min-h-[68px] items-center gap-3 border-b border-border bg-surface px-4 sm:px-6 print:hidden">
         <Button
           variant="ghost"
           size="icon"
@@ -440,10 +447,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main
         id="main"
         tabIndex={-1}
-        className="mx-auto w-full max-w-[100rem] min-w-0 px-4 py-6 outline-none sm:px-6 sm:py-7"
+        className="mx-auto w-full max-w-[100rem] min-w-0 px-4 py-5 outline-none sm:px-7 sm:py-6"
       >
         {area.id !== 'clients' && (
-          <nav aria-label="Workspace" className="mb-6 space-y-2 border-b border-border pb-3 print:hidden">
+          <nav aria-label="Workspace" className="mb-5 space-y-2 border-b border-border print:hidden">
             {area.groups.map((group, i) => (
               <div key={group.title ?? i} className="flex flex-wrap items-center gap-1">
                 {group.title && <span className="mr-2 text-xs font-medium text-muted">{group.title}</span>}
@@ -452,7 +459,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     key={item.to}
                     to={item.to}
                     activeOptions={{ exact: item.exact ?? false }}
-                    className="rounded-md px-3 py-2 text-[13px] font-medium text-text-2 hover:bg-surface-3 data-[status=active]:bg-primary-soft data-[status=active]:text-primary"
+                    className="relative -mb-px border-b-2 border-transparent px-3 py-3 text-[13px] font-medium text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-primary"
                   >
                     {item.label}
                   </Link>

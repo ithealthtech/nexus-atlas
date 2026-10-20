@@ -60,6 +60,13 @@ test('premium shell and report snapshots, filters, templates and exports work on
     const searchDialog = page.getByRole('dialog', { name: 'Search Atlas' });
     await expect(searchDialog).toBeVisible();
     await expect(searchDialog.getByRole('combobox')).toBeFocused();
+    for (let cycle = 0; cycle < 3; cycle++) {
+      await page.keyboard.press('Escape');
+      await expect(searchDialog).toBeHidden();
+      await page.keyboard.press('Control+k');
+      await expect(searchDialog).toBeVisible();
+      await expect(searchDialog.getByRole('combobox')).toBeFocused();
+    }
     for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
     await expect(searchDialog.getByRole('option', { name: 'Reports Go to', exact: true })).toHaveAttribute(
       'aria-selected',
@@ -115,6 +122,8 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await page.getByRole('button', { name: 'history', exact: true }).click();
     await page.getByRole('button', { name: /^License utilization/ }).click();
     await expect(page.getByRole('heading', { name: 'Detailed results', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Built-in', exact: true }).click();
+    for (const dismiss of await page.getByRole('button', { name: 'Dismiss', exact: true }).all()) await dismiss.click();
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
       for (const width of [1600, 390]) {

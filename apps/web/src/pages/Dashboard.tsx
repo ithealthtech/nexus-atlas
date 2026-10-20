@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown,
@@ -41,11 +41,11 @@ import {
 import { AppLink } from '@/components/AppLink';
 import { FavoritesCard } from '@/components/Favorites';
 import { ActivityFeed } from '@/components/panels';
-import { RmmHealthCard } from '@/components/RmmHealth';
+import { RmmHealthCard, useRmmHealth } from '@/components/RmmHealth';
 import { TrackerCard } from '@/components/Trackers';
 import { TicketsCard } from '@/components/Tickets';
 import { WarrantyCard } from '@/components/Warranty';
-import { AssetStatsCard } from '@/components/AssetStats';
+import { AssetStatsCard, useAssetStats } from '@/components/AssetStats';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
 import {
@@ -110,6 +110,8 @@ export function Dashboard() {
   const expiring = useExpirations(30);
   const domains = useExpirations(90);
   const prefs = useWorkspacePrefs();
+  const rmm = useRmmHealth();
+  const assetStats = useAssetStats();
   const [customizing, setCustomizing] = useState(false);
   const branding = useBranding().data;
   const list = clients.data ?? [];
@@ -355,16 +357,36 @@ export function Dashboard() {
   };
 
   const shown = (prefs.data ?? DEFAULT_WORKSPACE).widgets.filter((w) => w.visible);
-  const area = (a: DashboardArea) =>
+  const area = (a: DashboardArea, totalsOnly = false) =>
     shown
-      .filter((w) => DASHBOARD_WIDGET_INFO[w.id].area === a && cards[w.id])
-      .map((w) => <Fragment key={w.id}>{cards[w.id]}</Fragment>);
+      .filter(
+        (w) =>
+          DASHBOARD_WIDGET_INFO[w.id].area === a &&
+          cards[w.id] &&
+          (a !== 'top' || (totalsOnly ? w.id === 'stats' : w.id !== 'stats')),
+      )
+      .map((w) => (
+        <div
+          key={w.id}
+          className={
+            a === 'top' &&
+            (w.id === 'stats' ||
+              (w.id === 'rmm-health' && !!rmm.data?.totals.total) ||
+              (w.id === 'asset-stats' && !!assetStats.data?.totals.total))
+              ? 'md:col-span-2'
+              : 'min-w-0'
+          }
+        >
+          {cards[w.id]}
+        </div>
+      ));
+  const totals = area('top', true);
   const top = area('top');
   const main = area('main');
   const side = area('side');
 
   return (
-    <>
+    <div className="dashboard-workspace">
       <PageHeader
         eyebrow={actor.organization.name}
         title="Overview"
@@ -381,18 +403,18 @@ export function Dashboard() {
           <p className="text-sm whitespace-pre-line text-text-2">{branding.portalWelcome}</p>
         </Card>
       )}
-      {top.length > 0 && <div className="mb-7 space-y-6">{top}</div>}
+      {totals.length > 0 && <div className="mb-5">{totals}</div>}
       {main.length + side.length > 0 ? (
-        <div className={cn('grid gap-6', main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
-          {main.length > 0 && <div className="space-y-6">{main}</div>}
+        <div className={cn('grid gap-5', main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
+          {main.length > 0 && <div className="space-y-5">{main}</div>}
           {side.length > 0 && (
-            <div className={cn(main.length ? 'space-y-6' : 'grid items-start gap-6 md:grid-cols-2 xl:grid-cols-3')}>
+            <div className={cn(main.length ? 'space-y-5' : 'grid items-start gap-6 md:grid-cols-2 xl:grid-cols-3')}>
               {side}
             </div>
           )}
         </div>
       ) : (
-        top.length === 0 && (
+        top.length + totals.length === 0 && (
           <Card>
             <EmptyState
               icon={LayoutGrid}
@@ -403,15 +425,24 @@ export function Dashboard() {
           </Card>
         )
       )}
-      <p className="mt-6 px-1 text-xs text-muted">Tip: press Ctrl+K anywhere to search.</p>
+
+      {top.length > 0 && (
+        <section className="mt-6" aria-label="Operational insights">
+          <div className="mb-3 flex items-center gap-2">
+            <LayoutGrid className="size-4 text-muted" aria-hidden />
+            <h2 className="text-sm font-semibold">Operational insights</h2>
+          </div>
+          <div className="grid items-start gap-5 md:grid-cols-2">{top}</div>
+        </section>
+      )}
       {/* Mounted only while open, so it starts from the saved layout each time. */}
       {customizing && prefs.data && <CustomizeDashboard prefs={prefs.data} onClose={() => setCustomizing(false)} />}
-    </>
+    </div>
   );
 }
 
 const AREAS: [DashboardArea, string][] = [
-  ['top', 'Across the top'],
+  ['top', 'Totals and operational insights'],
   ['main', 'Main column'],
   ['side', 'Side column'],
 ];
