@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { Link, useRouterState } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
   BookOpen,
@@ -9,8 +9,7 @@ import {
   KeyRound,
   LogOut,
   Menu as MenuIcon,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelLeft,
   Monitor,
   Moon,
   Search,
@@ -20,10 +19,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { CommandPalette } from '@/components/CommandPalette';
-import { Avatar, Button, Dialog } from '@/components/ui';
+import { Avatar, Dialog } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { SECTION_TAB } from '@/lib/tabs';
 import { useClients } from '@/lib/queries';
 import { useActor, useApplySession } from '@/lib/session';
 import { useVaultPolicy } from '@/lib/vault';
@@ -39,7 +39,15 @@ export function useSignOut() {
   };
 }
 
-function UserMenu({ row, side = 'right' }: { row?: boolean; side?: 'right' | 'top' | 'bottom' }) {
+function UserMenu({
+  row,
+  header,
+  side = 'right',
+}: {
+  row?: boolean;
+  header?: boolean;
+  side?: 'right' | 'top' | 'bottom';
+}) {
   const actor = useActor();
   const signOut = useSignOut();
   const [theme, setTheme] = useState<Theme>(storedTheme);
@@ -54,12 +62,22 @@ function UserMenu({ row, side = 'right' }: { row?: boolean; side?: 'right' | 'to
       <Menu.Trigger
         className={cn(
           'rounded-md text-sidebar-text hover:bg-sidebar-2',
-          row ? 'flex w-full items-center gap-2.5 p-2 text-left text-[13.5px]' : 'grid size-11 place-items-center',
+          header
+            ? 'flex items-center gap-2.5 py-1 pr-2 pl-1 text-left hover:bg-surface-2'
+            : row
+              ? 'flex w-full items-center gap-2.5 p-2 text-left text-[13.5px]'
+              : 'grid size-11 place-items-center',
         )}
         aria-label="Account menu"
-        title={row ? undefined : actor.name}
+        title={row || header ? undefined : actor.name}
       >
         <Avatar name={actor.name} size="sm" />
+        {header && (
+          <span className="hidden min-w-0 leading-tight md:block">
+            <span className="block max-w-44 truncate text-xs font-[650] text-text">{actor.name}</span>
+            <span className="block max-w-44 truncate text-[11px] text-muted">{actor.email}</span>
+          </span>
+        )}
         {row && (
           <>
             <span className="min-w-0 flex-1">
@@ -276,11 +294,15 @@ function areaOf(list: Area[], pathname: string): Area {
 }
 
 /** One primary sidebar; section links live inside the active workspace. */
+/** The header's square icon buttons (navigation, sign out). */
+const ICON_BUTTON =
+  'grid size-[33px] shrink-0 place-items-center rounded-[5px] text-muted hover:bg-surface-2 hover:text-text';
+
 export function AppShell({ children }: { children: ReactNode }) {
   const actor = useActor();
+  const signOut = useSignOut();
   const personalVaults = useVaultPolicy().data?.personalVaults !== false;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const navigate = useNavigate();
   const clients = useClients().data ?? [];
   const list = areas(actor, personalVaults);
   const area = areaOf(list, pathname);
@@ -289,6 +311,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     .flatMap((a) => a.groups.flatMap((g) => g.items))
     .filter((p) => pathname === p.to || (p.to !== '/' && pathname.startsWith(`${p.to}/`)))
     .sort((a, b) => b.to.length - a.to.length)[0];
+  // Areas with many pages list them beside the page instead of in rows of tabs.
+  const sideNav = area.id !== 'clients' && area.groups.reduce((n, g) => n + g.items.length, 0) > 8;
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -317,9 +341,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-current={area.id === item.id ? 'page' : undefined}
           title={compact ? item.label : undefined}
           className={cn(
-            'primary-nav-link flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-text hover:bg-sidebar-2',
+            'primary-nav-link flex h-10 items-center gap-3 rounded-lg px-[13px] text-[13px] font-[560] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active',
             compact && 'justify-center px-0',
-            area.id === item.id && 'bg-sidebar-2 text-sidebar-accent',
+            area.id === item.id && 'bg-sidebar-2 font-[650] text-sidebar-accent hover:text-sidebar-accent',
           )}
         >
           <item.icon className="size-[18px] shrink-0" aria-hidden />
@@ -350,125 +374,140 @@ export function AppShell({ children }: { children: ReactNode }) {
           to="/"
           aria-label="Home page"
           className={cn(
-            'flex h-[68px] shrink-0 items-center border-b border-border text-sidebar-active',
+            'flex h-[70px] shrink-0 items-center text-sidebar-active',
             collapsed ? 'justify-center' : 'px-5',
           )}
         >
           <Logo compact={collapsed} />
         </Link>
-        <div className={cn('flex-1 overflow-y-auto py-5', collapsed ? 'px-2' : 'px-3')}>
+        <div className={cn('flex-1 overflow-y-auto pt-6 pb-5', collapsed ? 'px-2' : 'px-3')}>
           {!collapsed && (
-            <p className="mb-3 px-3 text-[10px] font-semibold tracking-[0.1em] text-sidebar-muted uppercase">
+            <p className="mb-2.5 px-[13px] text-[10px] font-bold tracking-[0.12em] text-sidebar-muted uppercase">
               Workspace
             </p>
           )}
           {navigation(collapsed)}
         </div>
-        <div className="border-t border-border p-3">
-          <button
-            onClick={toggle}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-expanded={!collapsed}
-            className="flex min-h-9 w-full items-center justify-center gap-3 rounded-md text-sm text-sidebar-text hover:bg-sidebar-2"
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="size-4" />
-            ) : (
-              <>
-                <PanelLeftClose className="size-4" />
-                <span>Collapse sidebar</span>
-              </>
-            )}
-          </button>
-        </div>
       </aside>
-      <header className="sticky top-0 z-20 flex min-h-[68px] items-center gap-3 border-b border-border bg-surface px-4 sm:px-6 print:hidden">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden"
-          aria-label="Open navigation"
-          onClick={() => setOpen(true)}
+      <header className="sticky top-0 z-20 flex h-[70px] items-center gap-3 border-b border-border bg-surface px-4 sm:px-6 lg:px-10 print:hidden">
+        <button className={cn(ICON_BUTTON, 'lg:hidden')} aria-label="Open navigation" onClick={() => setOpen(true)}>
+          <MenuIcon className="size-[18px]" aria-hidden />
+        </button>
+        <button
+          className={cn(ICON_BUTTON, 'hidden lg:grid')}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          onClick={toggle}
         >
-          <MenuIcon />
-        </Button>
-        <nav aria-label="Breadcrumb" className="min-w-0 flex-1 text-sm">
+          <PanelLeft className="size-[18px]" aria-hidden />
+        </button>
+        <nav aria-label="Breadcrumb" className="min-w-0 flex-1 text-xs">
           <ol className="flex min-w-0 items-center gap-2">
-            <li className="hidden shrink-0 text-muted sm:block">Atlas</li>
-            <li aria-hidden className="hidden text-muted sm:block">
-              /
-            </li>
-            <li>
-              <Link to={area.to} className="font-medium hover:text-primary">
-                {area.title}
-              </Link>
-            </li>
-            {(currentClient || (page && page.label !== area.title)) && (
+            {currentClient || (page && page.label !== area.title) ? (
               <>
-                <li aria-hidden className="text-muted">
+                <li className="shrink-0">
+                  <Link to={area.to} className="text-muted hover:text-text">
+                    {area.title}
+                  </Link>
+                </li>
+                <li aria-hidden className="text-border-strong">
                   /
                 </li>
-                <li className="truncate text-muted" aria-current="page">
+                <li className="truncate font-[650] text-text" aria-current="page">
                   {currentClient?.name ?? page?.label}
                 </li>
               </>
+            ) : (
+              <li className="truncate font-[650] text-text" aria-current="page">
+                {area.title}
+              </li>
             )}
           </ol>
         </nav>
-        {currentClient && (
-          <label className="hidden max-w-52 md:block">
-            <span className="sr-only">Switch client</span>
-            <select
-              value={currentClient.id}
-              onChange={(e) => void navigate({ to: `/clients/${e.target.value}` })}
-              className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-            >
-              {[...clients]
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
         <button
           onClick={() => setSearching(true)}
-          aria-label="Search"
-          className="flex h-9 items-center gap-2 rounded-md border border-border px-2.5 text-sm text-muted hover:bg-surface-2 sm:w-56"
+          aria-label="Search or switch client"
+          className="flex h-9 items-center gap-2.5 rounded-[5px] border border-border bg-surface-2 px-[11px] text-xs text-muted hover:border-border-strong hover:text-text sm:w-64"
         >
           <Search className="size-4 shrink-0" aria-hidden />
-          <span className="hidden flex-1 text-left sm:inline">Search Atlas</span>
-          <kbd className="hidden text-[11px] sm:inline">Ctrl K</kbd>
+          <span className="hidden flex-1 truncate text-left whitespace-nowrap sm:inline">Search or switch client</span>
+          <kbd className="hidden rounded-[3px] border border-border bg-surface px-1.5 py-px text-[10px] font-medium sm:inline">
+            Ctrl K
+          </kbd>
         </button>
-        <UserMenu side="bottom" />
+        <span aria-hidden className="hidden h-7 w-px bg-border sm:block" />
+        <UserMenu header side="bottom" />
+        <button className={ICON_BUTTON} aria-label="Sign out" title="Sign out" onClick={signOut}>
+          <LogOut className="size-4" aria-hidden />
+        </button>
       </header>
       <main
         id="main"
         tabIndex={-1}
-        className="mx-auto w-full max-w-[100rem] min-w-0 px-4 py-5 outline-none sm:px-7 sm:py-6"
+        className="mx-auto w-full max-w-[100rem] min-w-0 px-4 py-5 outline-none sm:px-7 sm:py-6 lg:px-[42px] lg:pt-[37px] lg:pb-16"
       >
-        {area.id !== 'clients' && (
-          <nav aria-label="Workspace" className="mb-5 space-y-2 border-b border-border print:hidden">
-            {area.groups.map((group, i) => (
-              <div key={group.title ?? i} className="flex flex-wrap items-center gap-1">
-                {group.title && <span className="mr-2 text-xs font-medium text-muted">{group.title}</span>}
-                {group.items.map((item) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    activeOptions={{ exact: item.exact ?? false }}
-                    className="relative -mb-px border-b-2 border-transparent px-3 py-3 text-[13px] font-medium text-muted hover:text-text data-[status=active]:border-primary data-[status=active]:text-primary"
-                  >
-                    {item.label}
-                  </Link>
+        {sideNav ? (
+          // Many pages (Administration): a grouped list beside the page, like a settings screen. On a phone it
+          // becomes one row that scrolls.
+          <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-10">
+            <nav
+              aria-label="Workspace"
+              className="mb-6 flex gap-x-6 overflow-x-auto border-b border-border pb-2 lg:mb-0 lg:block lg:space-y-5 lg:overflow-visible lg:border-0 lg:pb-0 print:hidden"
+            >
+              {area.groups.map((group, i) => (
+                <div key={group.title ?? i} className="flex shrink-0 items-center gap-1 lg:block">
+                  {group.title && (
+                    <p className="mr-1 px-2.5 text-[10px] font-bold tracking-[0.12em] whitespace-nowrap text-muted uppercase lg:mr-0 lg:mb-1.5">
+                      {group.title}
+                    </p>
+                  )}
+                  {group.items.map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      activeOptions={{ exact: item.exact ?? false }}
+                      className="block rounded-md px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap text-muted hover:bg-surface-3 hover:text-text data-[status=active]:bg-primary-soft data-[status=active]:font-semibold data-[status=active]:text-primary"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              ))}
+            </nav>
+            <div className="min-w-0">{children}</div>
+          </div>
+        ) : (
+          <>
+            {area.id !== 'clients' && (
+              <nav
+                aria-label="Workspace"
+                className="mb-[22px] flex flex-wrap items-center gap-x-[22px] border-b border-border print:hidden"
+              >
+                {area.groups.map((group, i) => (
+                  <div key={group.title ?? i} className="contents">
+                    {group.title && (
+                      <span className="text-[10px] font-bold tracking-[0.12em] text-muted uppercase">
+                        {group.title}
+                      </span>
+                    )}
+                    {group.items.map((item) => (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        activeOptions={{ exact: item.exact ?? false }}
+                        className={SECTION_TAB}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
                 ))}
-              </div>
-            ))}
-          </nav>
+              </nav>
+            )}
+            {children}
+          </>
         )}
-        {children}
       </main>
       <Dialog open={open} onClose={() => setOpen(false)} title="Navigation" size="sm">
         {navigation()}

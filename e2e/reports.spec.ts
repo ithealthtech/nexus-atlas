@@ -52,7 +52,7 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await page.reload();
     await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
-    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByRole('button', { name: 'Search or switch client', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Search Atlas' })).toBeHidden();
