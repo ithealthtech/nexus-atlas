@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { schema } from '@atlas/db';
-import type { LayoutField, ReportDefinition, ReportSnapshot } from '@atlas/shared';
+import { REPORTABLE_FIELD_TYPES, type LayoutField, type ReportDefinition, type ReportSnapshot } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { requireClient } from '../authz.js';
 import { gdapClient } from '../routes/m365-gdap.js';
@@ -66,6 +66,7 @@ export async function collectReport(
           status: schema.assets.status,
           updatedAt: schema.assets.updatedAt,
           fields: schema.assets.fields,
+          layoutKey: schema.assetLayouts.key,
           layoutName: schema.assetLayouts.name,
           layoutFields: schema.assetLayouts.fields,
         })
@@ -140,10 +141,13 @@ export async function collectReport(
     : [];
   if ([assets, documents, licenses, endpoints].some((list) => list.length > MAX_REPORT_ROWS))
     throw new HttpError(422, 'This report is too large. Choose fewer clients (maximum 10,000 source rows per type).');
+  const wanted = definition.kind === 'assets' ? (definition.assetFields ?? []) : [];
   if (needAssets)
     source(
       'Atlas assets',
-      'Current non-archived asset records. Custom field contents are excluded except configured expiration dates.',
+      wanted.length
+        ? 'Current non-archived asset records, with only the fields chosen for this report. Long text is never included.'
+        : 'Current non-archived asset records. Custom field contents are excluded except configured expiration dates.',
     );
   if (needDocs) source('Atlas documentation', 'Current non-archived article metadata. Article bodies are excluded.');
   if (needLicenses)
@@ -198,12 +202,51 @@ export async function collectReport(
         ];
       }),
     );
-  if (definition.kind === 'assets')
+  if (definition.kind === 'assets') {
+    // Chosen fields are read from the layouts as they are now: a field since removed, or turned into long text, is
+    // left out rather than guessed at.
+    const layoutKeys = [...new Set(wanted.map((w) => w.split(':')[0]!))];
+    const layouts = layoutKeys.length
+      ? await db
+          .select({ key: schema.assetLayouts.key, name: schema.assetLayouts.name, fields: schema.assetLayouts.fields })
+          .from(schema.assetLayouts)
+          .where(and(eq(schema.assetLayouts.orgId, actor.orgId), inArray(schema.assetLayouts.key, layoutKeys)))
+      : [];
+    const columns = wanted.flatMap((id) => {
+      const [layoutKey, fieldKey] = id.split(':') as [string, string];
+      const layout = layouts.find((l) => l.key === layoutKey);
+      const field = (layout?.fields as LayoutField[] | undefined)?.find((f) => f.key === fieldKey);
+      if (!layout || !field || !REPORTABLE_FIELD_TYPES.includes(field.type)) {
+        result.warnings.push(`The asset field "${id}" no longer exists or can't be reported, so it was left out.`);
+        return [];
+      }
+      return [{ layoutKey, fieldKey, type: field.type, label: `${layout.name}: ${field.label}` }];
+    });
+    const show = (value: unknown, type: string) =>
+      value === undefined || value === null || value === ''
+        ? ''
+        : type === 'checkbox'
+          ? value === true
+            ? 'Yes'
+            : 'No'
+          : Array.isArray(value)
+            ? value.join(', ')
+            : String(value);
     section(
       'Asset inventory',
-      ['Client', 'Asset', 'Type', 'Status', 'Last updated'],
-      assets.map((a) => [names.get(a.clientId)!, a.name, a.layoutName, a.status, iso(a.updatedAt)]),
+      ['Client', 'Asset', 'Type', 'Status', ...columns.map((c) => c.label), 'Last updated'],
+      assets.map((a) => [
+        names.get(a.clientId)!,
+        a.name,
+        a.layoutName,
+        a.status,
+        ...columns.map((c) =>
+          a.layoutKey === c.layoutKey ? show((a.fields as Record<string, unknown>)[c.fieldKey], c.type) : '',
+        ),
+        iso(a.updatedAt),
+      ]),
     );
+  }
   if (definition.kind === 'documentation')
     section(
       'Documentation health',

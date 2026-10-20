@@ -229,7 +229,59 @@ describe('private client reports', () => {
       updatedAt: new Date('2020-01-01'),
     });
   }
-  it('collects all six report types without private contents, archived records or other clients', async () => {
+  it('adds chosen asset fields to the inventory, never long text or fields that no longer exist', async () => {
+    await seed();
+    await t.handle.db
+      .update(schema.assetLayouts)
+      .set({
+        fields: [
+          { key: 'renewal', label: 'Warranty', type: 'date', expires: true },
+          { key: 'serial', label: 'Serial', type: 'text' },
+          { key: 'managed', label: 'Managed', type: 'checkbox' },
+          { key: 'notes', label: 'Build notes', type: 'textarea' },
+        ],
+      })
+      .where(eq(schema.assetLayouts.key, 'report-workstation'));
+    await t.handle.db
+      .update(schema.assets)
+      .set({ fields: { renewal: '2020-01-01', serial: 'SN-123', managed: true, notes: 'never-export-this' } })
+      .where(eq(schema.assets.name, 'Office workstation'));
+    const fields = [
+      'report-workstation:serial',
+      'report-workstation:managed',
+      'report-workstation:notes',
+      'report-workstation:gone',
+    ];
+    const run = await owner.call('POST', '/api/reports/runs', { ...definition('assets'), assetFields: fields });
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections[0]!.columns).toEqual([
+      'Client',
+      'Asset',
+      'Type',
+      'Status',
+      'Workstation: Serial',
+      'Workstation: Managed',
+      'Last updated',
+    ]);
+    expect(snapshot.sections[0]!.rows[0]!.slice(1, 6)).toEqual([
+      'Office workstation',
+      'Workstation',
+      'active',
+      'SN-123',
+      'Yes',
+    ]);
+    expect(snapshot.warnings).toEqual([
+      'The asset field "report-workstation:notes" no longer exists or can\'t be reported, so it was left out.',
+      'The asset field "report-workstation:gone" no longer exists or can\'t be reported, so it was left out.',
+    ]);
+    expect(JSON.stringify(snapshot)).not.toContain('never-export-this');
+    const tooMany = Array.from({ length: 13 }, (_, i) => `report-workstation:f${i}`);
+    expect(
+      (await owner.call('POST', '/api/reports/runs', { ...definition('assets'), assetFields: tooMany })).status,
+    ).toBe(400);
+  });
+  it('collects every report type without private contents, archived records or other clients', async () => {
     await seed();
     for (const kind of REPORT_KINDS) {
       const result = await generate(kind);

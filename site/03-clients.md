@@ -110,6 +110,8 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 
 **Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
 
+For **Asset inventory**, **Asset fields** adds up to 12 fields from your asset layouts as extra columns, such as serial number, model, warranty date, or IP address. Long text fields are never included, because they often hold notes and configuration. A field removed from its layout since a template was saved is left out, with a notice.
+
 Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
 
 ## The monthly report

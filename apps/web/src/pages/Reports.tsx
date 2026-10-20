@@ -20,6 +20,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
+  MAX_REPORT_ASSET_FIELDS,
+  REPORTABLE_FIELD_TYPES,
   REPORT_INFO,
   REPORT_KINDS,
   reportNeedsAttention,
@@ -46,7 +48,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { api, download } from '@/lib/api';
-import { useClients } from '@/lib/queries';
+import { useClients, useLayouts } from '@/lib/queries';
 import { DEMO } from '@/lib/demo';
 
 const ICONS = {
@@ -74,6 +76,47 @@ const initialSelection = (): ReportSelection => ({ section: 0, query: '', attent
 export function Reports() {
   const { clientId } = useParams({ strict: false }) as { clientId?: string };
   return <ReportWorkspace key={clientId ?? 'all'} clientId={clientId} />;
+}
+/** Extra Asset inventory columns, grouped by layout. Long text is left out: it can hold notes and configuration. */
+function AssetFieldPicker({ value, onChange }: { value: string[]; onChange: (value: string[]) => void }) {
+  const layouts = useLayouts();
+  const groups = (layouts.data ?? [])
+    .filter((l) => !l.archived)
+    .map((layout) => ({ layout, fields: layout.fields.filter((f) => REPORTABLE_FIELD_TYPES.includes(f.type)) }))
+    .filter((g) => g.fields.length);
+  return (
+    <fieldset>
+      <legend className="mb-1 text-[13px] font-semibold">Asset fields</legend>
+      <p className="mb-2 text-xs text-muted">
+        Add up to {MAX_REPORT_ASSET_FIELDS} fields as columns. Long text is never included.
+        {value.length ? ` ${value.length} chosen.` : ''}
+      </p>
+      {layouts.isLoading && <Skeleton className="h-12" />}
+      <FormError message={layouts.error?.message} />
+      <div className="max-h-56 space-y-3 overflow-y-auto">
+        {groups.map(({ layout, fields }) => (
+          <div key={layout.id}>
+            <p className="mb-1.5 text-xs font-medium text-text-2">{layout.name}</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {fields.map((f) => {
+                const id = `${layout.key}:${f.key}`;
+                const on = value.includes(id);
+                return (
+                  <Checkbox
+                    key={id}
+                    label={f.label}
+                    checked={on}
+                    disabled={!on && value.length >= MAX_REPORT_ASSET_FIELDS}
+                    onChange={(e) => onChange(e.currentTarget.checked ? [...value, id] : value.filter((x) => x !== id))}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 function ReportWorkspace({ clientId }: { clientId?: string }) {
   const clients = useClients();
@@ -439,6 +482,12 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       </Select>
                     )}
                   </Field>
+                )}
+                {definition.kind === 'assets' && (
+                  <AssetFieldPicker
+                    value={definition.assetFields ?? []}
+                    onChange={(assetFields) => setDefinition({ ...definition, assetFields })}
+                  />
                 )}
                 {definition.kind === 'licenses' && (
                   <Checkbox

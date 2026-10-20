@@ -2,6 +2,15 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Asset fields in Asset inventory.** The Asset inventory report can add up to 12 fields from your asset layouts as columns, such as serial number, model, warranty, or IP address.
+  - Templates remember the choice.
+  - Long text fields are never included.
+  - A field that no longer exists is left out, with a notice.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed
