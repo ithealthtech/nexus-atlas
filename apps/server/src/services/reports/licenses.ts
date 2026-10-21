@@ -1,6 +1,6 @@
-import { gdapClient } from '../../routes/m365-gdap.js';
 import type { MicrosoftLicenseView } from '@atlas/shared';
 import type { Collector, ReportContext } from './context.js';
+import { gdapTenants } from './microsoft.js';
 
 /** Manually tracked subscriptions, and (when asked) Microsoft 365 seats read through GDAP. */
 export const licenses: Collector = async (report) => {
@@ -29,27 +29,12 @@ export const licenses: Collector = async (report) => {
  */
 export async function microsoftInventory(report: ReportContext): Promise<Map<string, MicrosoftLicenseView>> {
   const found = new Map<string, MicrosoftLicenseView>();
-  const saved = await report.settings.m365(report.actor.orgId);
-  const linked = report.clients.filter((c) => saved?.tenants[c.id]);
-  for (const c of report.clients.filter((c) => !saved?.tenants[c.id]))
-    report.warn(`${c.name}: no Microsoft 365 tenant is linked.`);
-  if (!linked.length) return found;
-  if (saved?.authMode !== 'gdap') {
-    report.warn(
-      'Microsoft inventory is unavailable: the connection must use GDAP. Application credentials were not used.',
-    );
-    return found;
-  }
-  let microsoft;
-  try {
-    microsoft = await gdapClient(report.settings, report.actor.orgId, report.fetcher, true);
-  } catch {
-    report.warn('Microsoft inventory is unavailable. Check the GDAP connection and refresh the report.');
-    return found;
-  }
+  const tenants = await gdapTenants(report);
+  if (!tenants) return found;
+  const { microsoft, linked } = tenants;
   for (const c of linked) {
     try {
-      const data = await microsoft.licenses(saved.tenants[c.id]!.tenantId);
+      const data = await microsoft.licenses(c.tenantId);
       report.source(
         `Microsoft 365: ${c.name}`,
         'Read through GDAP. Purchased enabled seats and assignment totals; pricing and renewal dates are not provided.',

@@ -6,6 +6,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Microsoft 365 reports, like the IT Health Tech portal's.** A new **Microsoft 365** group in the report library holds two reports. Both read through the GDAP connection.
+  - **Microsoft 365 accounts** lists every account in each linked tenant: enabled or blocked, member or guest, its licenses, and its usage location. It flags blocked accounts that still hold licenses, and licensed accounts with no usage location.
+  - **Microsoft 365 usage** covers the last 30 to 180 days. It shows each licensed account's last activity in email, Teams, OneDrive and SharePoint, and flags accounts with none. It then has a section each for Exchange email (sent, received, read), Teams (chats, calls, meetings), OneDrive and SharePoint (files viewed, synced and shared), and the Microsoft 365 apps (Windows, Mac, mobile, web).
+  - **Permissions.** The usage report needs the **Reports.Read.All** permission, which Atlas now requests when the partner account connects. It also needs a GDAP role that can read usage reports, such as Reports Reader. Existing connections must reconnect once; until then, the report explains what's missing.
+  - **Hidden names.** If a tenant hides names in its reports, the report says where to turn that off.
 - **Savings finder report.** What each client pays for and doesn't use, priced per month and per year:
   - Unused seats on tracked subscriptions and in Microsoft 365, read live through GDAP.
   - Microsoft 365 licenses held by accounts whose sign-in is blocked, usually people who have left.

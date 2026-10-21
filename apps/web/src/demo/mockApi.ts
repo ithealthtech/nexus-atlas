@@ -1167,6 +1167,185 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
         ]),
       },
     );
+  } else if (definition.kind === 'accounts' || definition.kind === 'usage') {
+    // Harbor Dental Group's tenant: its accounts, and a month of made-up activity for them.
+    const people = withTenant ? HARBOR_USERS : [];
+    if (definition.kind === 'accounts') {
+      const licensed = (u: (typeof people)[0]) => u.skuIds.length > 0;
+      const location = (u: (typeof people)[0]) => (u.name === 'Scanner' || u.name === 'Billing' ? '' : 'US');
+      sections.push(
+        {
+          title: 'Account summary',
+          columns: [
+            'Client',
+            'Accounts',
+            'Members',
+            'Guests',
+            'Enabled',
+            'Blocked',
+            'Licensed',
+            'Unlicensed',
+            'Blocked & licensed',
+            'No usage location',
+          ],
+          rows: people.length
+            ? [
+                [
+                  'Harbor Dental Group',
+                  String(people.length),
+                  String(people.length),
+                  '0',
+                  String(people.filter((u) => u.enabled).length),
+                  String(people.filter((u) => !u.enabled).length),
+                  String(people.filter(licensed).length),
+                  String(people.filter((u) => !licensed(u)).length),
+                  String(people.filter((u) => !u.enabled && licensed(u)).length),
+                  String(people.filter((u) => licensed(u) && !location(u)).length),
+                ],
+              ]
+            : [],
+        },
+        {
+          title: 'Accounts',
+          columns: ['Client', 'Name', 'Sign-in name', 'Status', 'Type', 'Licenses', 'Usage location'],
+          rows: people.map((u) => [
+            'Harbor Dental Group',
+            u.name,
+            u.upn,
+            u.enabled ? 'Enabled' : 'Blocked',
+            'Member',
+            String(u.skuIds.length),
+            location(u),
+          ]),
+        },
+      );
+    } else {
+      const day = (n: number) => daysFromNow(-n);
+      // Days since each person last used email, Teams, OneDrive and SharePoint ('' for not in the period).
+      const activity: Record<string, [number | '', number | '', number | '', number | '']> = {
+        'Anika Patel': [0, 0, 1, 3],
+        'Ben Okafor': [1, 2, 5, ''],
+        'Front Desk': [0, '', '', ''],
+        'Grace Liu': [2, 1, 2, 9],
+        'Marcus Reed': [0, 4, '', 12],
+        Billing: [6, '', '', ''],
+      };
+      const licensedPeople = people.filter((u) => u.enabled && u.skuIds.length);
+      const active = licensedPeople.map((u) => {
+        const [mail, teams, drive, share] = (activity[u.name] ?? ['', '', '', '']).map((d) => (d === '' ? '' : day(d)));
+        const last = [mail, teams, drive, share].filter(Boolean).sort().at(-1) ?? '';
+        return [
+          'Harbor Dental Group',
+          u.name,
+          u.upn,
+          last ? 'Yes' : 'No',
+          last || 'Never',
+          mail || '—',
+          teams || '—',
+          drive || '—',
+          share || '—',
+        ];
+      });
+      active.sort((a, b) => a[3]!.localeCompare(b[3]!) || a[1]!.localeCompare(b[1]!));
+      const used = (i: number) => String(active.filter((r) => r[i] !== '—').length);
+      const activeCount = active.filter((r) => r[3] === 'Yes').length;
+      const rowFor = (u: (typeof people)[0], i: number, extra: (n: number) => string[]) => {
+        const d = activity[u.name]?.[i];
+        return [
+          'Harbor Dental Group',
+          u.name,
+          u.upn,
+          d === undefined || d === '' ? 'Never' : day(d),
+          ...extra(d === undefined || d === '' ? 0 : 1),
+        ];
+      };
+      sections.push(
+        {
+          title: 'Usage summary',
+          columns: ['Client', 'Licensed accounts', 'Active', 'Inactive', 'Email', 'Teams', 'OneDrive', 'SharePoint'],
+          rows: active.length
+            ? [
+                [
+                  'Harbor Dental Group',
+                  String(active.length),
+                  String(activeCount),
+                  String(active.length - activeCount),
+                  used(5),
+                  used(6),
+                  used(7),
+                  used(8),
+                ],
+              ]
+            : [],
+        },
+        {
+          title: 'Active users',
+          columns: [
+            'Client',
+            'Name',
+            'Sign-in name',
+            'Active',
+            'Last active',
+            'Email',
+            'Teams',
+            'OneDrive',
+            'SharePoint',
+          ],
+          rows: active,
+        },
+        {
+          title: 'Email (Exchange)',
+          columns: ['Client', 'Name', 'Sign-in name', 'Last activity', 'Sent', 'Received', 'Read'],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 0, (on) => [String(on * (40 + i * 17)), String(on * (120 + i * 31)), String(on * (95 + i * 23))]),
+          ),
+        },
+        {
+          title: 'Teams',
+          columns: ['Client', 'Name', 'Sign-in name', 'Last activity', 'Chat messages', 'Calls', 'Meetings'],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 1, (on) => [String(on * (60 + i * 13)), String(on * (3 + i)), String(on * (5 + i * 2))]),
+          ),
+        },
+        {
+          title: 'OneDrive',
+          columns: [
+            'Client',
+            'Name',
+            'Sign-in name',
+            'Last activity',
+            'Viewed or edited',
+            'Synced',
+            'Shared inside',
+            'Shared outside',
+          ],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 2, (on) => [
+              String(on * (25 + i * 9)),
+              String(on * (140 + i * 20)),
+              String(on * (2 + i)),
+              String(on * (i % 2)),
+            ]),
+          ),
+        },
+        {
+          title: 'SharePoint',
+          columns: [
+            'Client',
+            'Name',
+            'Sign-in name',
+            'Last activity',
+            'Viewed or edited',
+            'Synced',
+            'Pages visited',
+            'Shared outside',
+          ],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 3, (on) => [String(on * (10 + i * 4)), String(on * (30 + i * 6)), String(on * (8 + i * 3)), '0']),
+          ),
+        },
+      );
+    }
   } else if (definition.kind === 'assets') {
     sections.push({
       title: 'Asset inventory',
