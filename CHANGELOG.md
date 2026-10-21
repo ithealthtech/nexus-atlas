@@ -6,6 +6,13 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Savings finder report.** What each client pays for and doesn't use, priced per month and per year:
+  - Unused seats on tracked subscriptions and in Microsoft 365, read live through GDAP.
+  - Microsoft 365 licenses held by accounts whose sign-in is blocked, usually people who have left.
+  - Renewals coming up, with what each costs and what cutting its unused seats saves before it renews.
+
+  Microsoft seats are priced from your tracked subscription of the same name, or estimated at Microsoft's list price and marked "(list)". Nothing is guessed: subscriptions without recorded assignments are listed in a notice instead of counted.
+
 - **Cyber insurance readiness report.** The questions cyber insurers ask, answered for each client from what Atlas holds, with the evidence and its source for every answer. It covers 13 questions:
   - MFA, endpoint protection, encryption, supported operating systems, and devices managed and up to date.
   - Backups with a restore test in the last 12 months, Global Administrators, local admin rotation, and password breaches and reuse.

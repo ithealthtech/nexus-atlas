@@ -452,6 +452,7 @@
           <li>Service review</li>
           <li>Asset inventory</li>
           <li>License utilization</li>
+          <li>Savings finder</li>
           <li>Upcoming renewals</li>
           <li>Domains &amp; SSL</li>
           <li>Documentation health</li>
@@ -489,6 +490,31 @@
           reported by the collector, and the last result of automatic password rotation. Password names appear only for
           clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and
           recovery keys are never included.
+        </p>
+        <p><strong>Savings finder</strong> shows what each client pays for and doesn't use, priced per month:</p>
+        <ul>
+          <li>
+            <strong>Unused seats:</strong> seats bought but not assigned. A subscription tracked under
+            <strong>Licenses</strong> counts only when its assignments are recorded, so nothing is guessed; a notice
+            lists the ones without assignments.
+          </li>
+          <li>
+            <strong>Licenses on blocked accounts:</strong> Microsoft 365 licenses held by accounts whose sign-in is
+            blocked, usually people who have left. Remove the licenses, or convert the mailbox to a shared mailbox,
+            which needs no license under 50 GB.
+          </li>
+          <li>
+            <strong>Renewals:</strong> tracked subscriptions renewing within the window you choose, with what each
+            renewal costs, how many seats go unused, and what cutting them saves before it renews.
+          </li>
+        </ul>
+        <p>
+          The summary totals each client's monthly and yearly waste, in each currency separately. Microsoft 365 seats
+          come live through GDAP (choose <strong>Include Microsoft 365 inventory through GDAP</strong>). GDAP doesn't
+          give prices, so a Microsoft seat is priced from a tracked subscription of the same name when you have one.
+          Otherwise it's estimated at Microsoft's published list price in US dollars, marked &quot;(list)&quot;, and
+          products Atlas has no price for show as &quot;Not priced&quot;. A product Microsoft reports is counted from
+          Microsoft's live assignments, never twice.
         </p>
         <p>
           <strong>Cyber insurance readiness</strong> answers the questions cyber insurers ask, for each client, from

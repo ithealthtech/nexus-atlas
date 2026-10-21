@@ -20,6 +20,7 @@ import {
   Share2,
   ListFilter,
   LockKeyhole,
+  PiggyBank,
   Play,
   Presentation,
   Save,
@@ -75,6 +76,7 @@ const ICONS = {
   service: Handshake,
   assets: Archive,
   licenses: ShieldCheck,
+  savings: PiggyBank,
   renewals: CalendarDays,
   domains: Globe,
   documentation: FileCheck2,
@@ -95,6 +97,7 @@ const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
 const WINDOW_LABEL: Partial<Record<ReportKind, string>> = {
   review: 'Period',
   renewals: 'Renewal lookahead',
+  savings: 'Renewals within',
   domains: 'Expiring within',
   service: 'Period',
 };
@@ -106,6 +109,7 @@ const REPORT_SUBTITLE: Record<ReportKind, string> = {
   service: 'Work done over a period',
   assets: 'Hardware, systems and infrastructure',
   licenses: 'Subscriptions, seats and assignments',
+  savings: 'Unused seats and renewals, priced',
   renewals: 'Upcoming dates and overdue items',
   domains: 'Domain and certificate expiry',
   documentation: 'Coverage, ownership and review dates',
@@ -593,9 +597,11 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                           <option key={day} value={day}>
                             {definition.kind === 'service'
                               ? `Last ${day} days`
-                              : definition.kind === 'review'
-                                ? `Last ${day} days, and renewals in the next ${day}`
-                                : `${day} days, including overdue`}
+                              : definition.kind === 'savings'
+                                ? `${day} days`
+                                : definition.kind === 'review'
+                                  ? `Last ${day} days, and renewals in the next ${day}`
+                                  : `${day} days, including overdue`}
                           </option>
                         ))}
                       </Select>
@@ -608,7 +614,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                     onChange={(assetFields) => setDefinition({ ...definition, assetFields })}
                   />
                 )}
-                {definition.kind === 'licenses' && (
+                {(definition.kind === 'licenses' || definition.kind === 'savings') && (
                   <Checkbox
                     label="Include Microsoft 365 inventory through GDAP"
                     description="Linked clients are read through GDAP. Connection failures are shown as notices."

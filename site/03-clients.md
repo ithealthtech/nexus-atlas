@@ -138,6 +138,7 @@ Open **Overview → Reports** for reporting across clients, or a client's **Repo
 - Service review
 - Asset inventory
 - License utilization
+- Savings finder
 - Upcoming renewals
 - Domains & SSL
 - Documentation health
@@ -153,6 +154,13 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 **Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
 
 **Security posture** shows, for each client, passwords with problems (breached, weak, reused, overdue, expired, or unchanged for a year), devices that are offline or unprotected, BitLocker encryption reported by the collector, and the last result of automatic password rotation. Password names appear only for clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and recovery keys are never included.
+
+**Savings finder** shows what each client pays for and doesn't use, priced per month:
+- **Unused seats:** seats bought but not assigned. A subscription tracked under **Licenses** counts only when its assignments are recorded, so nothing is guessed; a notice lists the ones without assignments.
+- **Licenses on blocked accounts:** Microsoft 365 licenses held by accounts whose sign-in is blocked, usually people who have left. Remove the licenses, or convert the mailbox to a shared mailbox, which needs no license under 50 GB.
+- **Renewals:** tracked subscriptions renewing within the window you choose, with what each renewal costs, how many seats go unused, and what cutting them saves before it renews.
+
+The summary totals each client's monthly and yearly waste, in each currency separately. Microsoft 365 seats come live through GDAP (choose **Include Microsoft 365 inventory through GDAP**). GDAP doesn't give prices, so a Microsoft seat is priced from a tracked subscription of the same name when you have one. Otherwise it's estimated at Microsoft's published list price in US dollars, marked "(list)", and products Atlas has no price for show as "Not priced". A product Microsoft reports is counted from Microsoft's live assignments, never twice.
 
 **Cyber insurance readiness** answers the questions cyber insurers ask, for each client, from what Atlas holds. Each answer is **Yes**, **Partly**, **No** or **Not evidenced**, with the evidence and where it came from:
 

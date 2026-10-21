@@ -205,7 +205,7 @@ export class M365Client {
     const users = (
       await this.all(
         tenant,
-        '/users?$select=id,displayName,userPrincipalName,assignedLicenses,licenseAssignmentStates&$top=999',
+        '/users?$select=id,displayName,userPrincipalName,accountEnabled,assignedLicenses,licenseAssignmentStates&$top=999',
         20_000,
         true,
       )
@@ -219,6 +219,8 @@ export class M365Client {
         id: String(u.id).toLowerCase(),
         name: String(u.displayName ?? u.userPrincipalName ?? ''),
         upn: String(u.userPrincipalName ?? ''),
+        // Only an explicit false: an account Microsoft didn't describe isn't called blocked.
+        enabled: u.accountEnabled !== false,
         skuIds: ((u.assignedLicenses as Json[] | undefined) ?? []).map((l) => String(l.skuId).toLowerCase()),
         groupSkuIds: ((u.licenseAssignmentStates as Json[] | undefined) ?? [])
           .filter((s) => s.assignedByGroup)

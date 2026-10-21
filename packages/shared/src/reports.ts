@@ -9,6 +9,7 @@ export const REPORT_KINDS = [
   'service',
   'assets',
   'licenses',
+  'savings',
   'renewals',
   'domains',
   'documentation',
@@ -46,6 +47,11 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
   licenses: {
     name: 'License utilization',
     description: 'Purchased, assigned, and available seats; manual costs and GDAP inventory.',
+  },
+  savings: {
+    name: 'Savings finder',
+    description:
+      'Unused seats and licenses on blocked accounts, priced per month, and the renewals coming up to cut before they renew.',
   },
   renewals: {
     name: 'Upcoming renewals',
@@ -320,6 +326,9 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (column === 'Issues') return value !== '';
     if (column === 'Encryption') return value === 'Not encrypted' || value === 'Unknown';
     if (column === 'Last result') return value === 'Failed';
+    // Money being spent on nothing: unused seats, and what they cost.
+    if (['Unused', 'Seats to reclaim'].includes(column)) return Number(value) > 0;
+    if (['Monthly waste', 'Monthly cost'].includes(column)) return /[1-9]/.test(value);
     // An insurer's question answered anything but Yes, and the counts of those answers.
     if (column === 'Answer') return value !== 'Yes';
     if (['Partly', 'No', 'Not evidenced'].includes(column)) return Number(value) > 0;
