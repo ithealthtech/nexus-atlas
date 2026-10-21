@@ -64,8 +64,8 @@ public class DocumentViewTests
     [InlineData("", null)]
     public void Only_safe_links_are_kept(string href, string? expected)
     {
-        var blocks = Parse($$"""
-            {"type":"paragraph","content":[{"type":"text","text":"link","marks":[{"type":"link","attrs":{"href":{{JsonSerializer.Serialize(href)}}}}]}]}
+        var blocks = Parse($$$"""
+            {"type":"paragraph","content":[{"type":"text","text":"link","marks":[{"type":"link","attrs":{"href":{{{JsonSerializer.Serialize(href)}}}}}]}]}
             """);
         Assert.Equal(expected, Assert.Single(Assert.IsType<DocParagraph>(blocks[0]).Runs).Link);
     }
