@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.8.4] - 2026-10-21
+
+### Fixed
+
+- **Atlas recognizes the maker in models that just name it.** A model such as "HP All-in-One Desktop 27-cb0xxx", "HP Laptop 15-dy2xxx" or "Dell 24 AIO" left the Manufacturer blank, and **Fill in manufacturers** under **Device manufacturers** filled none of them. A model that starts with the maker's name (HP, Dell, Lenovo, ASUS, Acer, MSI, Samsung, Toshiba, Dynabook, Gigabyte, Microsoft or Apple) now fills it in, and HPE servers stay HPE. The operating system and the device's name don't count this way: "Microsoft Windows 11 Pro" runs on every maker's PCs, and a PC called HP-FRONTDESK may be any brand. After updating, choose **Fill in manufacturers** again to fill the assets you already have.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed
