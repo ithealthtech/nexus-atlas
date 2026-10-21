@@ -76,10 +76,13 @@ export function useSignOut() {
 function UserMenu({
   row,
   header,
+  band,
   side = 'right',
 }: {
   row?: boolean;
   header?: boolean;
+  /** On the top menu band, in the sidebar's colours, rather than on the page header. */
+  band?: boolean;
   side?: 'right' | 'top' | 'bottom';
 }) {
   const actor = useActor();
@@ -97,7 +100,10 @@ function UserMenu({
         className={cn(
           'rounded-md text-sidebar-text hover:bg-sidebar-2',
           header
-            ? 'flex items-center gap-2.5 py-1 pr-2 pl-1 text-left hover:bg-surface-2'
+            ? cn(
+                'flex items-center gap-2.5 py-1 pr-2 pl-1 text-left',
+                band ? 'hover:bg-sidebar-2' : 'hover:bg-surface-2',
+              )
             : row
               ? 'flex w-full items-center gap-2.5 p-2 text-left text-[13.5px]'
               : 'grid size-11 place-items-center',
@@ -108,8 +114,14 @@ function UserMenu({
         <Avatar name={actor.name} size="sm" />
         {header && (
           <span className="hidden min-w-0 leading-tight md:block">
-            <span className="block max-w-44 truncate text-xs font-[650] text-text">{actor.name}</span>
-            <span className="block max-w-44 truncate text-[11px] text-muted">{actor.email}</span>
+            <span
+              className={cn('block max-w-44 truncate text-xs font-[650]', band ? 'text-sidebar-active' : 'text-text')}
+            >
+              {actor.name}
+            </span>
+            <span className={cn('block max-w-44 truncate text-[11px]', band ? 'text-sidebar-muted' : 'text-muted')}>
+              {actor.email}
+            </span>
           </span>
         )}
         {row && (
@@ -332,6 +344,13 @@ const FAVORITE_PATH = { client: '/clients', asset: '/assets', document: '/docume
 /** The header's square icon buttons (navigation, sign out). */
 const ICON_BUTTON =
   'grid size-[33px] shrink-0 place-items-center rounded-[5px] text-muted hover:bg-surface-2 hover:text-text';
+/**
+ * The top menu style is one band in the sidebar's colours (Administration → Theme), like the rail and the sidebar.
+ * These restyle what sits on it; the theme works out text colours that read on any sidebar colour.
+ */
+const BAND_ICON_BUTTON = 'text-sidebar-muted hover:bg-sidebar-2 hover:text-sidebar-active';
+const BAND_TAB =
+  'text-sidebar-muted hover:text-sidebar-active data-[status=active]:border-sidebar-accent data-[status=active]:text-sidebar-accent';
 /** A page link in the rail's panel and the sidebar. */
 const MENU_LINK =
   'nav-link flex items-center gap-3 rounded-lg px-[13px] text-[13px] font-[560] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active data-[status=active]:bg-sidebar-2 data-[status=active]:font-[650] data-[status=active]:text-sidebar-accent';
@@ -546,7 +565,19 @@ function TopAreas({ list, area }: MenuData) {
  * An area's pages as one row of tabs. An area with many pages (Administration) shows the section you're in as tabs and
  * the other sections' pages under More, the way a client's page does, so the row stays short.
  */
-function WorkspaceNav({ area, current, className }: { area: Area; current?: NavItem; className?: string }) {
+function WorkspaceNav({
+  area,
+  current,
+  className,
+  band,
+}: {
+  area: Area;
+  current?: NavItem;
+  className?: string;
+  /** On the top menu band, in the sidebar's colours. */
+  band?: boolean;
+}) {
+  const tab = cn(SECTION_TAB, band && BAND_TAB);
   const many = area.groups.reduce((n, g) => n + g.items.length, 0) > 8;
   if (many) {
     const here = area.groups.find((g) => current && g.items.includes(current)) ?? area.groups[0]!;
@@ -560,17 +591,14 @@ function WorkspaceNav({ area, current, className }: { area: Area; current?: NavI
         )}
       >
         {here.items.map((item) => (
-          <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={SECTION_TAB}>
+          <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={tab}>
             {item.label}
           </Link>
         ))}
         <Menu.Root modal={false}>
-          <Menu.Trigger
-            className={cn(SECTION_TAB, 'outline-none')}
-            aria-label={`More ${area.title.toLowerCase()} pages`}
-          >
+          <Menu.Trigger className={cn(tab, 'outline-none')} aria-label={`More ${area.title.toLowerCase()} pages`}>
             More
-            <ChevronDown className="size-3.5 text-muted" aria-hidden />
+            <ChevronDown className={cn('size-3.5', band ? 'text-sidebar-muted' : 'text-muted')} aria-hidden />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content
@@ -605,10 +633,17 @@ function WorkspaceNav({ area, current, className }: { area: Area; current?: NavI
       {area.groups.map((group, i) => (
         <div key={group.title ?? i} className="contents">
           {group.title && (
-            <span className="text-[10px] font-bold tracking-[0.12em] text-muted uppercase">{group.title}</span>
+            <span
+              className={cn(
+                'text-[10px] font-bold tracking-[0.12em] uppercase',
+                band ? 'text-sidebar-muted' : 'text-muted',
+              )}
+            >
+              {group.title}
+            </span>
           )}
           {group.items.map((item) => (
-            <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={SECTION_TAB}>
+            <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={tab}>
               {item.label}
             </Link>
           ))}
@@ -618,16 +653,26 @@ function WorkspaceNav({ area, current, className }: { area: Area; current?: NavI
   );
 }
 
-function SearchBox({ onSearch }: { onSearch: () => void }) {
+function SearchBox({ onSearch, band }: { onSearch: () => void; band?: boolean }) {
   return (
     <button
       onClick={onSearch}
       aria-label="Search or switch client"
-      className="flex h-9 shrink-0 items-center gap-2.5 rounded-[5px] border border-border bg-surface-2 px-[11px] text-xs text-muted hover:border-border-strong hover:text-text sm:w-64"
+      className={cn(
+        'flex h-9 shrink-0 items-center gap-2.5 rounded-[5px] border px-[11px] text-xs sm:w-64',
+        band
+          ? 'border-transparent bg-sidebar-2 text-sidebar-muted hover:text-sidebar-active'
+          : 'border-border bg-surface-2 text-muted hover:border-border-strong hover:text-text',
+      )}
     >
       <Search className="size-4 shrink-0" aria-hidden />
       <span className="hidden flex-1 truncate text-left whitespace-nowrap sm:inline">Search or switch client</span>
-      <kbd className="hidden rounded-[3px] border border-border bg-surface px-1.5 py-px text-[10px] font-medium sm:inline">
+      <kbd
+        className={cn(
+          'hidden rounded-[3px] border px-1.5 py-px text-[10px] font-medium sm:inline',
+          band ? 'border-sidebar-muted/40 bg-sidebar' : 'border-border bg-surface',
+        )}
+      >
         Ctrl K
       </kbd>
     </button>
@@ -693,11 +738,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       ))}
     </nav>
   );
-  const account = (
+  const account = (band = false) => (
     <>
-      <span aria-hidden className="hidden h-7 w-px bg-border sm:block" />
-      <UserMenu header side="bottom" />
-      <button className={ICON_BUTTON} aria-label="Sign out" title="Sign out" onClick={signOut}>
+      <span aria-hidden className={cn('hidden h-7 w-px sm:block', band ? 'bg-sidebar-2' : 'bg-border')} />
+      <UserMenu header band={band} side="bottom" />
+      <button
+        className={cn(ICON_BUTTON, band && BAND_ICON_BUTTON)}
+        aria-label="Sign out"
+        title="Sign out"
+        onClick={signOut}
+      >
         <LogOut className="size-4" aria-hidden />
       </button>
     </>
@@ -729,17 +779,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </aside>
       ) : (
-        <div className="sticky top-0 z-20 hidden border-b border-border bg-surface lg:block print:hidden">
+        <div className="sticky top-0 z-20 hidden border-b border-border bg-sidebar lg:block print:hidden">
           <div className="flex h-[70px] items-center gap-3 px-6">
             <Link to="/" aria-label="Home page" className="mr-4 shrink-0 text-sidebar-active">
               <Logo />
             </Link>
             <TopAreas {...menu} />
             <span className="flex-1" />
-            <SearchBox onSearch={() => setSearching(true)} />
-            {account}
+            <SearchBox band onSearch={() => setSearching(true)} />
+            {account(true)}
           </div>
-          <WorkspaceNav area={area} current={page} className="border-t border-b-0 px-6" />
+          <WorkspaceNav band area={area} current={page} className="border-t border-b-0 border-sidebar-2 px-6" />
         </div>
       )}
       <header
@@ -786,7 +836,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </ol>
         </nav>
         <SearchBox onSearch={() => setSearching(true)} />
-        {account}
+        {account()}
       </header>
       <main
         id="main"
