@@ -40,6 +40,8 @@ public partial class App : Application
     private MenuFlyoutItem? updateItem;
     private ToggleMenuFlyoutItem? startupItem;
     private MenuFlyoutItem? searchItem;
+    private System.Drawing.Icon? trayIcon;
+    private static readonly string DefaultIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico");
     private DispatcherQueueTimer? checkTimer;
     private DateOnly lastExpirationNotice;
     private AppRelease? update;
@@ -97,6 +99,9 @@ public partial class App : Application
             client.UseToken(PreviewServer.Token);
             window = new SearchWindow(this);
             window.ShowSearch();
+            // The preview's icon goes in a scratch folder, never over the real one.
+            BrandIcons.Folder = Path.Combine(Path.GetTempPath(), "AtlasForWindows-preview");
+            _ = RefreshIconAsync();
             return;
         }
 
@@ -154,6 +159,8 @@ public partial class App : Application
         else
         {
             window.ShowSetup(settings.AtlasUrl);
+            // The icon needs no sign-in: the setup screen already looks like the organization's.
+            _ = RefreshIconAsync();
         }
     }
 
@@ -182,7 +189,7 @@ public partial class App : Application
         store.SaveSettings(settings);
         UpdateMenu();
         StartChecks();
-        Notify("Signed in to Atlas", $"Signed in as {token.User.Name}. Press Ctrl+Shift+Space to search.");
+        Notify("Signed in to Atlas", $"Signed in as {token.User.Name}. Press {SearchShortcut.For(settings.Shortcut).Label} to search.");
     }
 
     /// <summary>The server ended the session (signed out from the Account page, or by an administrator).</summary>
@@ -237,7 +244,7 @@ public partial class App : Application
             ToolTipText = "Atlas for Windows",
             // Loaded straight from the file next to the exe, which works installed and from a folder alike;
             // BitmapImage can't load a file: URI, and ms-appx: needs a package.
-            Icon = new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico")),
+            Icon = new System.Drawing.Icon(DefaultIcon),
             ContextMenuMode = ContextMenuMode.SecondWindow,
             ContextFlyout = menu,
             LeftClickCommand = new RelayCommand(ShowSearch),
@@ -286,6 +293,63 @@ public partial class App : Application
     {
         if (searchItem is not null)
             searchItem.Text = $"Search Atlas    {SearchShortcut.For(settings.Shortcut).Label}";
+    }
+
+    // ---------- the Atlas's icon ----------
+    /// <summary>
+    /// Uses the Atlas's own icon (its favicon) for the window, taskbar, tray, and shortcuts: the saved one at once, then
+    /// a new one if Atlas has changed it. With none (or the setting off), the app's own icon. Offline, nothing changes.
+    /// </summary>
+    internal async Task RefreshIconAsync()
+    {
+        if (window is null || client is null)
+            return;
+        if (!settings.UseAtlasIcon)
+        {
+            UseIcon(null);
+            return;
+        }
+        var from = client.Address.ToString();
+        var saved = settings.IconFrom == from ? BrandIcons.Saved() : null;
+        UseIcon(saved);
+        AppIcon answer;
+        try
+        {
+            answer = await client.GetAppIconAsync(saved is null ? null : settings.IconETag);
+        }
+        catch (Exception e) when (e is HttpRequestException or AtlasApiException or TaskCanceledException)
+        {
+            return;
+        }
+        if (answer.IsUnchanged || !settings.UseAtlasIcon)
+            return;
+        if (answer.Picture is { } picture)
+        {
+            if (!await BrandIcons.SaveAsync(picture))
+                return;
+            UpdateSettings(s => s with { IconFrom = from, IconETag = answer.ETag });
+            UseIcon(BrandIcons.Saved());
+            return;
+        }
+        BrandIcons.Forget();
+        UpdateSettings(s => s with { IconFrom = null, IconETag = null });
+        UseIcon(null);
+    }
+
+    private void UseIcon((string Icon, string Picture)? saved)
+    {
+        window?.UseIcon(saved?.Icon, saved?.Picture);
+        if (tray is not null)
+        {
+            var size = Native.SmallIconSize();
+            var icon = new System.Drawing.Icon(saved?.Icon ?? DefaultIcon, size, size);
+            tray.Icon = icon;
+            trayIcon?.Dispose();
+            trayIcon = icon;
+        }
+        // The preview leaves the real shortcuts alone.
+        if (!preview)
+            Shortcuts.UseIcon(saved?.Icon);
     }
 
     // ---------- start with Windows ----------
@@ -362,6 +426,7 @@ public partial class App : Application
 
     private async Task RunChecksAsync()
     {
+        await RefreshIconAsync();
         await CheckForUpdateAsync();
         if (settings.NotifyExpiring)
             await CheckExpirationsAsync();

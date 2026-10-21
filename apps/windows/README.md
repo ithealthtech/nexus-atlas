@@ -6,6 +6,7 @@ A tray app for technicians, so everyday lookups don't need a browser tab. .NET 1
 - **Credentials:** copy the username, the password, or the current one-time code, or open the sign-in address. Copies go through Atlas's reveal endpoint, so they're checked and recorded exactly like the web app's copy button (including required reasons). Secrets are kept out of clipboard history and cloud clipboard, and cleared after 30 seconds unless you've copied something else since.
 - **Documentation:** a summary of the selected record, documents drawn with their formatting (headings, lists, checklists, quotes, code with a copy button, and tables), and **Open in Atlas** for the full page.
 - **Settings** (account menu, or Ctrl+,): light, dark, or the Windows theme; the search shortcut (Ctrl+Shift+Space, Ctrl+Alt+Space, Ctrl+Shift+K, or Ctrl+Alt+K, for when another app already uses one); Windows Hello and locking; the daily notice; Start with Windows; updates; and the account.
+- **Your icon:** the app takes your Atlas's favicon (Administration → Theme) for its window, taskbar button, tray icon, title bar, and its Start menu, desktop, and pinned shortcuts. It checks again with each update check, fetching the picture only when it has changed. Turn it off in Settings.
 - **Tray:** sign in and out, **Start with Windows**, a daily notice about items expiring in the next 14 days, and the newer version of the app when Atlas offers one.
 
 ## Installing
@@ -34,7 +35,7 @@ The app is a public client using the authorization code flow with PKCE and a one
 
 ## What it stores
 
-Only the Atlas address and preferences (`%LOCALAPPDATA%\Atlas for Windows\settings.json`) and the session token, encrypted with DPAPI for your Windows account (`session.bin`). No passwords, no offline copy of anything from the vault. Signing out, or signing the app out from your account page, ends the session on the server. Start with Windows is a value under your own `Run` registry key.
+Only the Atlas address and preferences (`%LOCALAPPDATA%\Atlas for Windows\settings.json`), the session token, encrypted with DPAPI for your Windows account (`session.bin`), and your Atlas's icon (`icon-*.ico` and `.png`). No passwords, no offline copy of anything from the vault. Signing out, or signing the app out from your account page, ends the session on the server. Start with Windows is a value under your own `Run` registry key.
 
 ## Security posture
 

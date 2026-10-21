@@ -89,6 +89,36 @@ function applySidebar(theme: Branding, dark: boolean) {
   });
 }
 
+/**
+ * The favicon as a square PNG, for Atlas for Windows: Windows can't draw an SVG favicon, and a 16-pixel ICO makes a
+ * blurry taskbar icon. Drawn by the browser (which reads PNG, SVG, and ICO), centred and scaled to fit; a smaller
+ * size is tried if the PNG would be too big to save. Null if the browser can't draw it.
+ */
+export async function appIconFrom(favicon: string): Promise<string | null> {
+  const image = new Image();
+  image.src = favicon;
+  try {
+    await image.decode();
+  } catch {
+    return null;
+  }
+  for (const size of [256, 128]) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const width = image.naturalWidth || size;
+    const height = image.naturalHeight || size;
+    const scale = Math.min(size / width, size / height);
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(image, (size - width * scale) / 2, (size - height * scale) / 2, width * scale, height * scale);
+    const png = canvas.toDataURL('image/png');
+    // The theme accepts up to 200 KB (as base64, about 273,000 characters).
+    if (png.length < 270_000) return png;
+  }
+  return null;
+}
+
 function setFavicon(href: string) {
   let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
   if (!link) {

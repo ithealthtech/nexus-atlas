@@ -602,6 +602,9 @@ public sealed class PreviewServer : HttpMessageHandler
         return null;
     }
 
+    // A 128-pixel orange square with "ID" on it, standing in for an organization's icon.
+    private const string PreviewIcon = "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAFGklEQVR42u2cX2hbVRzHv+fe/E+a1rR0A+umc2wWRTco6KxOUFSYRWTCVvYiCr7Y4cuUjgllyEAEHZU9CGU+KIKj0mrRMXEoTCnr6Cxjf7rN1rGu1djYmbikSW+Se68Pvm3WntR05J7z/TzfpO35fc73d+7tPQcghBBCiI6I2/nDUp0xl0O+NM1HckIJAVjw2hdCsPB6iyBYeL1FECy83iIYLL53qcbYGyy+3hIIFl7vlmCw+HqngcHi6y2BwSHTG4OzX+8UMFh8vSUwWHy9JeAagGsAzn6dU4AJwATg7Nc5BZgATADOfp1TgAnABCAUgFAA9n891wFMACYAoQCEAhAKQCgAoQCEAhAKQCgAoQCEAhAKQCgAoQCEAhAKQCgAoQCEAhA18NXSL5M4dAFm05olr8v0PInSxGjVvm9RHBtuyYJbWoCbS8PJzMJJJ2H/9jPK0+MoXxmD/cc1CqBuPpoQwQhEMALEEjBX33vLJXZqCqVz32NhuB+lS8OA67IF6ITZvBahp15GQ88xJHrPIfz0qxD+EAXQVYbYKweR6D2DYFsHBdC2cyTuRHzPZ4h3HYYIhCmArgQf24mG/d/CiDdRAG1vs+7ZhPp9QxDRBgqgrQRrH0R890eAELwNrEWyfV2wZy7eNDJBGHUJiFgCZmML/K3t8K1vW/YKP7DpGYS37Ubh6CEKUGvYMxelHiwJfxCBtg5EXngDvjUPVPxzoi/ugzXcDyczyxbgRdySBevkANJ7H8WND16CW8hW9HkRjiGyfS/XAN43wYU1Moj0W1th/3q5oo+Gtu6CiNRTACVaR3ISmQPPwUkn5VMgGEHo8U4KoApOZhY3Du4CykX5BWENPSWkAFWgNHkaheOH5QVobf/nH0wUQB3yX/XCLVlyF5t++O5+iAIo1QrSSVgjg/L33+s2UwDlWsH5E9LXmqvWUQDVKI7/ID/wjS0UQLk2MDcNt5CTG/iGVRRASQlyf0o+DwhTABVxs3NyAvgpgJoCOI7shRRARYxYQq7+xTwFUFOAO+QEkFwsUgAPIUJRiGi99B0DBVAM/4YtgJAb0lrZUUQBqilAa7v0teVr5ymAWvkvKtoMUpocpQAqEdj8LMyW++TiP3WVawDVZn/k+T3Sl1unhvhCiEpEOl6Hf+Mj8gIM91MAZRZ+G7cgunO/fO8f/xHlqbMUQJW+X989CJjy2yvyQ++DG0O83vL9QYS3dSG6owcwTOnPFceOoXj2Owrg2cIHIwi270B0e3fFL3S4hSxyH78J7g2sQczV6+EWb3qh0+eHUdcII94Eo+kuBO5/Av4NDwO+AJa9/zA1RQFqkbrX+lb0+/OD78Ia+QLcHq4hhW8+xPznB8BTwqDf/sH5/reR//I98Jg4zXCy15Hr64J1+ih4TqBuu4ZPDiD3STecv1LgQZH6vAiI4pnjmB94B+VffgJPCtWE8vQFFEe/xsKJT2GnroJHxaqGXYZbXIBrzcPJ/A57bgZ2cgLlK2MoTYzCuT7j+T/xlmOrUp0xl5VXl+YjOcHnAIQCEApAKAChABSAUABCARa7TyTqPgNgAhAKQAEIBeA6QM/+zwQgiwvAFFB/9jMByH8LwBRQe/YzAcjSAjAF1J390glACdQsfkUtgBKoV3yuAUhlAjAF1Jr9y0oASqBO8YF/2RdQCdxD4N3CV2UNwDTwdvGrsgikBN4t/v9uAWwJ3i38ighAEbxT+BUVgCLUfuFviwAUgusqQgghhNQmfwMFvbi39KnpEAAAAABJRU5ErkJggg==";
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         await Task.Delay(60, cancellationToken).ConfigureAwait(false);
@@ -619,6 +622,13 @@ public sealed class PreviewServer : HttpMessageHandler
             return changedPerson;
         if (await ChangeDocumentsAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedDocument)
             return changedDocument;
+        // The organization's own icon (its favicon), so the preview shows the app taking it.
+        if (tail == "branding/app-icon")
+        {
+            var picture = new ByteArrayContent(Convert.FromBase64String(PreviewIcon));
+            picture.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = picture };
+        }
         if (tail.EndsWith("/password-folders", StringComparison.Ordinal))
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Array.Empty<object>()) };
         var clientPage = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)(/contacts|/locations)?$");

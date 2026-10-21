@@ -3,6 +3,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.System;
 
 namespace Atlas.Windows;
@@ -51,6 +52,30 @@ public sealed partial class SearchWindow
         bar.ButtonInactiveForegroundColor = dark ? ColorHelper.FromArgb(0x80, 0xFF, 0xFF, 0xFF) : ColorHelper.FromArgb(0x80, 0, 0, 0);
     }
 
+    // ---------- the icon ----------
+    /// <summary>The Atlas's icon in the title bar and on the taskbar, or the app's own when there's none.</summary>
+    internal async void UseIcon(string? icon, string? picture)
+    {
+        AppWindow.SetIcon(icon ?? Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico"));
+        if (picture is null)
+        {
+            AppTitleBar.IconSource = new FontIconSource { Glyph = "\uE72E" };
+            return;
+        }
+        try
+        {
+            // From the bytes: an unpackaged app's BitmapImage can't load a file: address.
+            var image = new BitmapImage();
+            using var stream = await BrandIcons.StreamOf(await File.ReadAllBytesAsync(picture));
+            await image.SetSourceAsync(stream);
+            AppTitleBar.IconSource = new ImageIconSource { ImageSource = image };
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        {
+            AppTitleBar.IconSource = new FontIconSource { Glyph = "\uE72E" };
+        }
+    }
+
     // ---------- search shortcut ----------
     /// <summary>Swaps the shortcut that opens search. False, keeping the old one, when another app already uses it.</summary>
     private bool ChangeShortcut(SearchShortcut shortcut)
@@ -89,7 +114,19 @@ public sealed partial class SearchWindow
             // Cards drawn in code took their colours from the old theme: draw this page again.
             ShowPlace();
         };
-        Detail.Children.Add(Card("Appearance", SettingRow("Theme", "Light or dark, or the same as Windows.", theme)));
+        var icon = Switch("Use your Atlas's icon", settings.UseAtlasIcon);
+        icon.Toggled += (_, _) =>
+        {
+            app.UpdateSettings(s => s with { UseAtlasIcon = icon.IsOn });
+            _ = app.RefreshIconAsync();
+        };
+        Detail.Children.Add(Card(
+            "Appearance",
+            SettingRow("Theme", "Light or dark, or the same as Windows.", theme),
+            SettingRow(
+                "Use your Atlas's icon",
+                "The window, taskbar, tray, and Start menu show the favicon set in Atlas under Administration › Theme.",
+                icon)));
 
         // The shortcut.
         var shortcuts = SearchShortcut.Choices;

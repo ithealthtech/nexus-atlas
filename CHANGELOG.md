@@ -6,6 +6,12 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Atlas for Windows uses your favicon as its icon.**
+  - The favicon set under **Administration → Theme** becomes the app's icon: its window and title bar, taskbar button, tray icon, and its Start menu, desktop, and pinned taskbar shortcuts.
+  - Windows can't draw SVG, so when the theme is saved the browser also makes a 256-pixel PNG of the favicon for the app. PNG and ICO favicons are used as they are.
+  - The app picks up a new icon when it starts and with each six-hourly check. It downloads the picture only when it has changed (the server answers `304 Not Modified` otherwise), and goes back to its own icon if the favicon is removed.
+  - Turn it off under **Settings → Use your Atlas's icon**.
+  - The icon comes from a new public endpoint, `/api/v1/branding/app-icon`, which serves the same picture as the favicon.
 - **Atlas for Windows: a Settings page.** Open it from the account menu or with Ctrl+,. It brings the app's choices together:
   - **Theme:** light, dark, or the same as Windows. The window's caption buttons follow the theme too.
   - **Search shortcut:** Ctrl+Shift+Space, Ctrl+Alt+Space, Ctrl+Shift+K or Ctrl+Alt+K. Useful when another app already uses one; if the chosen one is taken, the app says so and keeps the old one.

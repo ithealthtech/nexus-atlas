@@ -29,6 +29,12 @@ internal static partial class Native
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
+
+    /// <summary>The size of a tray icon at this display's scale (16 at 100%, 24 at 150%).</summary>
+    public static int SmallIconSize() => Math.Max(16, GetSystemMetrics(49));
+
     [StructLayout(LayoutKind.Sequential)]
     private struct LastInputInfo
     {
