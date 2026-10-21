@@ -2956,7 +2956,7 @@ public sealed partial class SearchWindow : Window
             var row = new Grid { ColumnSpacing = 16 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            Grid.SetColumn(children[i + 1], 1);
+            Grid.SetColumn((FrameworkElement)children[i + 1], 1);
             row.Children.Add(children[i]);
             row.Children.Add(children[i + 1]);
             form.Children.Add(row);
