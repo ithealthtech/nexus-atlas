@@ -46,6 +46,7 @@ import type { VaultService } from '../services/vault.js';
 import { AssetService } from '../services/assets.js';
 import { LayoutService } from '../services/layouts.js';
 import { runBitlockerSync } from '../services/integrations/cw-bitlocker.js';
+import { Repeating, type ErrorLog } from '../services/repeating.js';
 
 const HOUR = 3_600_000;
 
@@ -55,7 +56,7 @@ async function startSync(
   settings: SettingsService,
   actor: Actor,
   fetcher: typeof fetch | undefined,
-  log: (error: unknown) => void,
+  log: ErrorLog,
   warranty?: WarrantyLookup,
   publicUrl?: string,
   vault?: VaultService,
@@ -328,12 +329,12 @@ export function registerIntegrationRoutes(
 
 /** Runs each organization's sync about hourly, as the administrator who connected it. */
 export class CwRmmScheduler {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly schedule = new Repeating(() => this.tick());
 
   constructor(
     private readonly db: Database,
     private readonly settings: SettingsService,
-    private readonly log: (error: unknown) => void,
+    private readonly log: ErrorLog,
     private readonly fetcher?: typeof fetch,
     private readonly warranty?: WarrantyLookup,
     private readonly publicUrl?: string,
@@ -341,12 +342,11 @@ export class CwRmmScheduler {
   ) {}
 
   start(intervalMs = 10 * 60_000) {
-    this.timer = setInterval(() => void this.tick().catch(this.log), intervalMs);
-    this.timer.unref();
+    this.schedule.start(intervalMs, this.log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   async tick(now = Date.now()) {

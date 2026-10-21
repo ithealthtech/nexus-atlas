@@ -86,6 +86,7 @@ import { openApiSpec } from './openapi.js';
 import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl } from './services/request-log.js';
 import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
+import type { ErrorLog } from './services/repeating.js';
 import { registerLicenseRoutes } from './routes/licenses.js';
 
 declare module 'fastify' {
@@ -869,29 +870,32 @@ export async function buildApp({
     // Nothing is running yet, so an import still marked running was cut off by the restart (an update, say).
     const interrupted = await failInterruptedJobs(db);
     if (interrupted) app.log.warn({ interrupted }, 'Imports stopped by the restart were marked as stopped');
-    notifier.start();
-    siem.start();
-    backups.start();
-    sends.start();
+    // Every background job reports its failures to the server log, named so they can be told apart.
+    const failuresOf =
+      (job: string): ErrorLog =>
+      (err) =>
+        app.log.error({ err }, job);
+    notifier.start(failuresOf('Background notifications'));
+    siem.start(failuresOf('SIEM forwarding'));
+    backups.start(failuresOf('Scheduled backup'));
+    sends.start(failuresOf('Send cleanup'));
     const cwRmm = new CwRmmScheduler(
       db,
       settings,
-      (err) => app.log.error({ err }, 'ConnectWise RMM sync'),
+      failuresOf('ConnectWise RMM sync'),
       cwRmmFetch,
       warranty,
       config.PUBLIC_URL,
       vault,
     );
     cwRmm.start();
-    const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
+    const m365 = new M365Scheduler(db, settings, failuresOf('Microsoft 365 sync'), m365Fetch);
     m365.start();
-    const rotations = new RotationScheduler(db, rotation, (err) => app.log.error({ err }, 'Password rotation'));
+    const rotations = new RotationScheduler(db, rotation, failuresOf('Password rotation'));
     rotations.start();
-    const trackerSchedule = new TrackerScheduler(database, settings, trackers, (err) =>
-      app.log.error({ err }, 'Domain and SSL tracker'),
-    );
+    const trackerSchedule = new TrackerScheduler(database, settings, trackers, failuresOf('Domain and SSL tracker'));
     trackerSchedule.start();
-    requestLog.start();
+    requestLog.start(failuresOf('Request log pruning'));
     app.addHook('onClose', async () => {
       trackerSchedule.stop();
       notifier.stop();
