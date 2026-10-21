@@ -80,6 +80,8 @@ import {
   type ChainProbe,
 } from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerClientHealthRoutes } from './routes/client-health.js';
+import { ClientHealthService } from './services/client-health.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
@@ -789,10 +791,13 @@ export async function buildApp({
   });
   const reportShares = new ReportShareService(db, config.publicOrigin);
   const reportSchedules = new ReportScheduleService(db, { reports, shares: reportShares, mail, settings });
+  const clientHealth = new ClientHealthService(db, { settings, passwords: health, trackers });
+  registerClientHealthRoutes(app, { db, authed, health: clientHealth });
   const notifier = registerAdminRoutes(app, {
     emergency,
     health,
     reports: reportSchedules,
+    clientHealth,
     db,
     authed,
     recent,

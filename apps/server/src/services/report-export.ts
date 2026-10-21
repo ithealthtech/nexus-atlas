@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit';
 import { fileURLToPath } from 'node:url';
 import {
   REPORT_INFO,
+  healthGrade,
   REVIEW_PACK_PARTS,
   reportNeedsAttention,
   selectReportSection,
@@ -443,17 +444,33 @@ export async function reportPdf(
         .fillColor(MUTED)
         .text(`Prepared for ${client} by ${brandName}`, left + 10, doc.y + 4, { width: width - 10 });
       y = Math.max(doc.y + 34, 300);
-      // One tile per part: how much of it needs review.
+      // The client's health score first (when the pack has one), then a tile per part: how much needs review.
+      const health = snapshot.sections.find((s) => s.title === 'Client health')?.rows[0]?.[1] ?? '';
+      const grade = /^\d+$/.test(health) ? healthGrade(Number(health)) : null;
+      const gradeColor = { success: GOOD, primary: accent, warning: WARN, danger: BAD, neutral: MUTED };
       drawTiles(
-        parts.map((p) => {
-          const flagged = flaggedIn(p.sections);
-          return {
-            label: p.name,
-            value: flagged ? `${flagged} to review` : 'All clear',
-            color: flagged ? WARN : GOOD,
-            bar: flagged ? WARN : GOOD,
-          };
-        }),
+        [
+          ...(grade
+            ? [
+                {
+                  label: `Health score · ${grade.label}`,
+                  value: health,
+                  color: gradeColor[grade.tone],
+                  bar: gradeColor[grade.tone],
+                },
+              ]
+            : []),
+          ...parts.map((p) => {
+            const flagged = flaggedIn(p.sections);
+            return {
+              label: p.name,
+              value: flagged ? `${flagged} to review` : 'All clear',
+              color: flagged ? WARN : GOOD,
+              bar: flagged ? WARN : GOOD,
+            };
+          }),
+        ],
+        5,
       );
       const contentsTop = y + 4;
 

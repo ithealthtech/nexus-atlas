@@ -39,13 +39,40 @@ You need edit access to every client to add one. Administrators always have it.
 
 Opening a client shows:
 
-- **The header:** the client's name and type, your access, and the star to add it to your favourites. **Monthly report**, **Review pack**, **Export**, **Edit client**, and for administrators **Delete**, are on the right. **Review pack** downloads this client's quarterly business review as one PDF (see [Client review pack](#client-review-pack)).
+- **The header:** the client's name and type, your access, the star to add it to your favourites, and for staff the client's health score (see [Client health](#client-health)). **Monthly report**, **Review pack**, **Export**, **Edit client**, and for administrators **Delete**, are on the right. **Review pack** downloads this client's quarterly business review as one PDF (see [Client review pack](#client-review-pack)).
 - **The quick note:** a short note at the top of every page for this client, for the thing everyone should know before they touch anything.
 - **The tabs:** **Overview**, **Assets**, **Documents**, **Passwords**, **Contacts**, **Locations**, **Checklists**, **Licenses**, **Map** and **Activity**. Counts appear for the sections that provide them. The **Trackers** row underneath has **Domain Tracker** and **SSL Tracker**. A tracker count turns amber when something needs attention.
 
 ### Hide tabs you don't use
 
 Choose **Choose which sections show** (the sliders at the right of the tabs) and untick the sections you don't need. This only changes your own view; other people still see every tab.
+
+### Client health
+
+Every client has a health score from 0 to 100, beside its name, with a word for how it's doing:
+- **Healthy:** 90 and over.
+- **Good:** 75 to 89.
+- **Needs attention:** 60 to 74.
+- **At risk:** under 60.
+
+An arrow shows how far it has moved in the last 30 days.
+
+The score is made of four parts, weighted by how much they matter:
+
+| Part | Weight | What it measures |
+| --- | --- | --- |
+| **Security** | 30% | Passwords without issues, endpoint protection running, and disks encrypted (where the BitLocker collector reports). |
+| **Endpoints** | 25% | Devices online, and devices that checked in with the RMM on time. |
+| **Documentation** | 25% | A primary contact, a location, assets, and documents on record, and documents reviewed by their review date. |
+| **Renewals** | 20% | Domains, SSL certificates, warranties and subscriptions in date. An expired item counts fully against it; one due soon counts half. |
+
+A part with nothing to measure, such as a client with no RMM devices, is left out and the others count for more. It is never assumed to be healthy.
+
+Choose the score to see each part and **What would raise it most**: each thing pulling the score down, with how many points fixing it would add, linked to where you fix it.
+
+Atlas works the scores out every hour with the owner's view, so everyone on staff sees the same number. It keeps one score per client per day, for the trend. Scores are for staff only; client accounts don't see them.
+
+The dashboard's **Client health** card lists every client you can open, lowest first, with its trend; **Customize** moves or hides it. The client list has a **Health** column. The **Executive summary** report includes each client's score and its parts, and the [Client review pack](#client-review-pack) shows the score on its cover.
 
 ## The overview
 

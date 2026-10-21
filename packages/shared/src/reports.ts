@@ -314,6 +314,8 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (column === 'Issues') return value !== '';
     if (column === 'Encryption') return value === 'Not encrypted' || value === 'Unknown';
     if (column === 'Last result') return value === 'Failed';
+    // Below "Good" (see healthGrade): needs attention or at risk.
+    if (column === 'Health score') return /^\d+$/.test(value) && Number(value) < 75;
     if (
       [
         'Expired domains',

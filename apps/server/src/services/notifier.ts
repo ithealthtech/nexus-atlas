@@ -44,6 +44,8 @@ export class Notifier {
       health?: { nightly(orgId: string): Promise<void> };
       /** Scheduled reports that have come due. Records each outcome on its schedule rather than throwing. */
       reports?: { runDue(orgId: string, now?: Date): Promise<void> };
+      /** Keeps each client's health score current through the day, for its trend. */
+      clientHealth?: { refresh(orgId: string): Promise<void> };
       publicOrigin: string;
       /** Local hour (0–23) after which the day's emails go out. */
       sendHour: number;
@@ -73,6 +75,7 @@ export class Notifier {
           await this.deps.emergency?.announceStarts(org.id, now).catch(() => undefined);
           await this.deps.health?.nightly(org.id).catch(() => undefined);
           await this.deps.reports?.runDue(org.id, now);
+          await this.deps.clientHealth?.refresh(org.id).catch(() => undefined);
           await this.deps.audit.checkpoint(org.id);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
         }

@@ -1170,6 +1170,26 @@ export const rmmHealthSnapshots = pgTable(
   (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('rmm_health_snapshots_day').on(t.orgId, t.day)],
 );
 
+// Each client's health score, one row per day (refreshed through the day), for its trend. The parts and what
+// lowered them are kept, so a day can be explained later.
+export const clientHealth = pgTable(
+  'client_health',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    /** 0–100, or null when nothing could be measured. */
+    score: integer('score'),
+    parts: jsonb('parts').notNull(),
+    updatedAt: updated(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('client_health_day').on(t.orgId, t.day)],
+);
+
 // Tickets synced from the ConnectWise platform, read-only in Atlas: every open ticket of each linked company, and
 // those closed in the last 90 days. A ticket ConnectWise stops returning is deleted when its company is read in full.
 export const tickets = pgTable(

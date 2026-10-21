@@ -6,6 +6,14 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Client health score.** Every client has a score from 0 to 100, beside its name: Healthy, Good, Needs attention or At risk, with how far it moved in 30 days.
+  - It is made of four weighted parts: security (passwords, endpoint protection, encryption), endpoints (online and checking in), documentation (the essentials on record and reviews on time), and renewals (domains, certificates, warranties and subscriptions in date).
+  - A part with nothing to measure is left out, never assumed healthy.
+  - Choose the score to see each part and **What would raise it most**: every gap, with the points fixing it would add, linked to where you fix it.
+  - Atlas keeps a score per client per day, so each has a trend.
+  - The dashboard's new **Client health** card lists clients lowest first, and the client list has a **Health** column.
+  - The executive summary report includes the scores, and the review pack shows the score on its cover. Scores are for staff only.
+
 - **Client review pack.** A quarterly business review for one client in a single branded PDF, from one click on **Review pack** in the client's header.
   - It brings together the executive summary, security posture, service review and upcoming renewals for the last quarter, or any period from 30 days to a year.
   - It opens with a cover page: the client, the period, how much of each report needs review, and contents with page numbers. Each report follows on its own pages with its charts, and one-client summaries show as figures.

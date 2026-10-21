@@ -51,6 +51,7 @@ import { useActor } from '@/lib/session';
 import { ExportButton } from '@/components/ExportButton';
 import { FavoriteStar } from '@/components/Favorites';
 import { QuickNote } from '@/components/QuickNote';
+import { HealthBadge } from '@/components/ClientHealth';
 import { ReviewPackButton } from '@/components/ReviewPack';
 import { TRACKER, useTrackers } from '@/components/Trackers';
 import { ClientForm, statusTone } from '../Clients';
@@ -160,6 +161,7 @@ export function ClientLayout() {
                 )}
               </h1>
               <FavoriteStar type="client" id={client.id} name={client.name} />
+              <HealthBadge clientId={client.id} />
             </div>
             <p className="mt-1 text-sm text-muted">
               {client.type} · {LEVEL_INFO[client.access].label}

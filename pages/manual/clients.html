@@ -197,8 +197,9 @@
         <p>Opening a client shows:</p>
         <ul>
           <li>
-            <strong>The header:</strong> the client's name and type, your access, and the star to add it to your
-            favourites. <strong>Monthly report</strong>, <strong>Review pack</strong>, <strong>Export</strong>,
+            <strong>The header:</strong> the client's name and type, your access, the star to add it to your favourites,
+            and for staff the client's health score (see <a href="#client-health">Client health</a>).
+            <strong>Monthly report</strong>, <strong>Review pack</strong>, <strong>Export</strong>,
             <strong>Edit client</strong>, and for administrators <strong>Delete</strong>, are on the right.
             <strong>Review pack</strong> downloads this client's quarterly business review as one PDF (see
             <a href="#client-review-pack">Client review pack</a>).
@@ -222,6 +223,76 @@
         <p>
           Choose <strong>Choose which sections show</strong> (the sliders at the right of the tabs) and untick the
           sections you don't need. This only changes your own view; other people still see every tab.
+        </p>
+        <h3 id="client-health"><a class="anchor" href="#client-health">Client health</a></h3>
+        <p>Every client has a health score from 0 to 100, beside its name, with a word for how it's doing:</p>
+        <ul>
+          <li><strong>Healthy:</strong> 90 and over.</li>
+          <li><strong>Good:</strong> 75 to 89.</li>
+          <li><strong>Needs attention:</strong> 60 to 74.</li>
+          <li><strong>At risk:</strong> under 60.</li>
+        </ul>
+        <p>An arrow shows how far it has moved in the last 30 days.</p>
+        <p>The score is made of four parts, weighted by how much they matter:</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Part</th>
+                <th>Weight</th>
+                <th>What it measures</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Security</strong></td>
+                <td>30%</td>
+                <td>
+                  Passwords without issues, endpoint protection running, and disks encrypted (where the BitLocker
+                  collector reports).
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Endpoints</strong></td>
+                <td>25%</td>
+                <td>Devices online, and devices that checked in with the RMM on time.</td>
+              </tr>
+              <tr>
+                <td><strong>Documentation</strong></td>
+                <td>25%</td>
+                <td>
+                  A primary contact, a location, assets, and documents on record, and documents reviewed by their review
+                  date.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Renewals</strong></td>
+                <td>20%</td>
+                <td>
+                  Domains, SSL certificates, warranties and subscriptions in date. An expired item counts fully against
+                  it; one due soon counts half.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A part with nothing to measure, such as a client with no RMM devices, is left out and the others count for
+          more. It is never assumed to be healthy.
+        </p>
+        <p>
+          Choose the score to see each part and <strong>What would raise it most</strong>: each thing pulling the score
+          down, with how many points fixing it would add, linked to where you fix it.
+        </p>
+        <p>
+          Atlas works the scores out every hour with the owner's view, so everyone on staff sees the same number. It
+          keeps one score per client per day, for the trend. Scores are for staff only; client accounts don't see them.
+        </p>
+        <p>
+          The dashboard's <strong>Client health</strong> card lists every client you can open, lowest first, with its
+          trend; <strong>Customize</strong> moves or hides it. The client list has a <strong>Health</strong> column. The
+          <strong>Executive summary</strong> report includes each client's score and its parts, and the
+          <a href="#client-review-pack">Client review pack</a> shows the score on its cover.
         </p>
         <h2 id="the-overview"><a class="anchor" href="#the-overview">The overview</a></h2>
         <p>The overview is the client at a glance. Scroll down for the detail.</p>

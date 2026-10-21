@@ -40,6 +40,7 @@ import {
 } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
 import { FavoritesCard } from '@/components/Favorites';
+import { ClientHealthCard } from '@/components/ClientHealth';
 import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard, useRmmHealth } from '@/components/RmmHealth';
 import { TrackerCard } from '@/components/Trackers';
@@ -183,6 +184,7 @@ export function Dashboard() {
     trackers: <TrackerCard />,
     tickets: <TicketsCard />,
     'asset-stats': <AssetStatsCard />,
+    health: <ClientHealthCard />,
     favorites: <FavoritesCard />,
     'recent-clients': (
       <Card>

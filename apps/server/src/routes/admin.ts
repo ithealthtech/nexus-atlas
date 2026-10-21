@@ -46,6 +46,8 @@ export function registerAdminRoutes(
     health?: { nightly(orgId: string): Promise<void> };
     /** Scheduled reports, sent on the notifier's pass. */
     reports?: { runDue(orgId: string, now?: Date): Promise<void> };
+    /** Client health scores, kept current on the notifier's pass. */
+    clientHealth?: { refresh(orgId: string): Promise<void> };
     graphPermissions?: (config: SmtpConfig) => Promise<{ roles: string[]; canSend: boolean }>;
   },
 ): Notifier {
@@ -314,6 +316,7 @@ export function registerAdminRoutes(
     emergency: deps.emergency,
     health: deps.health,
     reports: deps.reports,
+    clientHealth: deps.clientHealth,
     publicOrigin: deps.publicOrigin,
     sendHour: deps.sendHour,
   });
