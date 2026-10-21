@@ -12,6 +12,7 @@ import {
   CalendarClock,
   ChartColumn,
   ChevronRight,
+  ChevronDown,
   ChevronsUpDown,
   ClipboardCheck,
   Cog,
@@ -52,11 +53,11 @@ import {
 } from 'lucide-react';
 import type { MenuStyle } from '@atlas/shared';
 import { CommandPalette } from '@/components/CommandPalette';
-import { Avatar, Dialog } from '@/components/ui';
+import { Avatar, Drawer } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { SECTION_TAB } from '@/lib/tabs';
+import { SECTION_TAB, TAB_MENU_ITEM } from '@/lib/tabs';
 import { useClients, useFavorites, useWorkspacePrefs } from '@/lib/queries';
 import { useActor, useApplySession } from '@/lib/session';
 import { useVaultPolicy } from '@/lib/vault';
@@ -75,10 +76,13 @@ export function useSignOut() {
 function UserMenu({
   row,
   header,
+  band,
   side = 'right',
 }: {
   row?: boolean;
   header?: boolean;
+  /** On the top menu band, in the sidebar's colours, rather than on the page header. */
+  band?: boolean;
   side?: 'right' | 'top' | 'bottom';
 }) {
   const actor = useActor();
@@ -96,7 +100,10 @@ function UserMenu({
         className={cn(
           'rounded-md text-sidebar-text hover:bg-sidebar-2',
           header
-            ? 'flex items-center gap-2.5 py-1 pr-2 pl-1 text-left hover:bg-surface-2'
+            ? cn(
+                'flex items-center gap-2.5 py-1 pr-2 pl-1 text-left',
+                band ? 'hover:bg-sidebar-2' : 'hover:bg-surface-2',
+              )
             : row
               ? 'flex w-full items-center gap-2.5 p-2 text-left text-[13.5px]'
               : 'grid size-11 place-items-center',
@@ -107,8 +114,14 @@ function UserMenu({
         <Avatar name={actor.name} size="sm" />
         {header && (
           <span className="hidden min-w-0 leading-tight md:block">
-            <span className="block max-w-44 truncate text-xs font-[650] text-text">{actor.name}</span>
-            <span className="block max-w-44 truncate text-[11px] text-muted">{actor.email}</span>
+            <span
+              className={cn('block max-w-44 truncate text-xs font-[650]', band ? 'text-sidebar-active' : 'text-text')}
+            >
+              {actor.name}
+            </span>
+            <span className={cn('block max-w-44 truncate text-[11px]', band ? 'text-sidebar-muted' : 'text-muted')}>
+              {actor.email}
+            </span>
           </span>
         )}
         {row && (
@@ -331,6 +344,13 @@ const FAVORITE_PATH = { client: '/clients', asset: '/assets', document: '/docume
 /** The header's square icon buttons (navigation, sign out). */
 const ICON_BUTTON =
   'grid size-[33px] shrink-0 place-items-center rounded-[5px] text-muted hover:bg-surface-2 hover:text-text';
+/**
+ * The top menu style is one band in the sidebar's colours (Administration → Theme), like the rail and the sidebar.
+ * These restyle what sits on it; the theme works out text colours that read on any sidebar colour.
+ */
+const BAND_ICON_BUTTON = 'text-sidebar-muted hover:bg-sidebar-2 hover:text-sidebar-active';
+const BAND_TAB =
+  'text-sidebar-muted hover:text-sidebar-active data-[status=active]:border-sidebar-accent data-[status=active]:text-sidebar-accent';
 /** A page link in the rail's panel and the sidebar. */
 const MENU_LINK =
   'nav-link flex items-center gap-3 rounded-lg px-[13px] text-[13px] font-[560] text-sidebar-text hover:bg-sidebar-2 hover:text-sidebar-active data-[status=active]:bg-sidebar-2 data-[status=active]:font-[650] data-[status=active]:text-sidebar-accent';
@@ -541,37 +561,71 @@ function TopAreas({ list, area }: MenuData) {
   );
 }
 
-/** An area's pages as one row of tabs, or a grouped list beside the page when there are many (Administration). */
-function WorkspaceNav({ area, beside, className }: { area: Area; beside?: boolean; className?: string }) {
-  return beside ? (
-    <nav
-      aria-label="Workspace"
-      className={cn(
-        'mb-6 flex gap-x-6 overflow-x-auto border-b border-border pb-2 lg:mb-0 lg:block lg:space-y-5 lg:overflow-visible lg:border-0 lg:pb-0 print:hidden',
-        className,
-      )}
-    >
-      {area.groups.map((group, i) => (
-        <div key={group.title ?? i} className="flex shrink-0 items-center gap-1 lg:block">
-          {group.title && (
-            <p className="mr-1 px-2.5 text-[10px] font-bold tracking-[0.12em] whitespace-nowrap text-muted uppercase lg:mr-0 lg:mb-1.5">
-              {group.title}
-            </p>
-          )}
-          {group.items.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              activeOptions={{ exact: item.exact ?? false }}
-              className="block rounded-md px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap text-muted hover:bg-surface-3 hover:text-text data-[status=active]:bg-primary-soft data-[status=active]:font-semibold data-[status=active]:text-primary"
+/**
+ * An area's pages as one row of tabs. An area with many pages (Administration) shows the section you're in as tabs and
+ * the other sections' pages under More, the way a client's page does, so the row stays short.
+ */
+function WorkspaceNav({
+  area,
+  current,
+  className,
+  band,
+}: {
+  area: Area;
+  current?: NavItem;
+  className?: string;
+  /** On the top menu band, in the sidebar's colours. */
+  band?: boolean;
+}) {
+  const tab = cn(SECTION_TAB, band && BAND_TAB);
+  const many = area.groups.reduce((n, g) => n + g.items.length, 0) > 8;
+  if (many) {
+    const here = area.groups.find((g) => current && g.items.includes(current)) ?? area.groups[0]!;
+    const others = area.groups.filter((g) => g !== here);
+    return (
+      <nav
+        aria-label="Workspace"
+        className={cn(
+          'flex items-end gap-x-[22px] border-b border-border max-sm:overflow-x-auto print:hidden',
+          className,
+        )}
+      >
+        {here.items.map((item) => (
+          <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={tab}>
+            {item.label}
+          </Link>
+        ))}
+        <Menu.Root modal={false}>
+          <Menu.Trigger className={cn(tab, 'outline-none')} aria-label={`More ${area.title.toLowerCase()} pages`}>
+            More
+            <ChevronDown className={cn('size-3.5', band ? 'text-sidebar-muted' : 'text-muted')} aria-hidden />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content
+              align="start"
+              sideOffset={4}
+              className="z-50 max-h-[70vh] min-w-56 overflow-y-auto rounded-md border border-border bg-surface p-1.5 text-text"
             >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      ))}
-    </nav>
-  ) : (
+              {others.map((group, i) => (
+                <Menu.Group key={group.title ?? i}>
+                  {i > 0 && <Menu.Separator className="my-1 h-px bg-border" />}
+                  {group.title && (
+                    <Menu.Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted">{group.title}</Menu.Label>
+                  )}
+                  {group.items.map((item) => (
+                    <Menu.Item key={item.to} asChild className={TAB_MENU_ITEM}>
+                      <Link to={item.to}>{item.label}</Link>
+                    </Menu.Item>
+                  ))}
+                </Menu.Group>
+              ))}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
+      </nav>
+    );
+  }
+  return (
     <nav
       aria-label="Workspace"
       className={cn('flex flex-wrap items-center gap-x-[22px] border-b border-border print:hidden', className)}
@@ -579,10 +633,17 @@ function WorkspaceNav({ area, beside, className }: { area: Area; beside?: boolea
       {area.groups.map((group, i) => (
         <div key={group.title ?? i} className="contents">
           {group.title && (
-            <span className="text-[10px] font-bold tracking-[0.12em] text-muted uppercase">{group.title}</span>
+            <span
+              className={cn(
+                'text-[10px] font-bold tracking-[0.12em] uppercase',
+                band ? 'text-sidebar-muted' : 'text-muted',
+              )}
+            >
+              {group.title}
+            </span>
           )}
           {group.items.map((item) => (
-            <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={SECTION_TAB}>
+            <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={tab}>
               {item.label}
             </Link>
           ))}
@@ -592,16 +653,26 @@ function WorkspaceNav({ area, beside, className }: { area: Area; beside?: boolea
   );
 }
 
-function SearchBox({ onSearch }: { onSearch: () => void }) {
+function SearchBox({ onSearch, band }: { onSearch: () => void; band?: boolean }) {
   return (
     <button
       onClick={onSearch}
       aria-label="Search or switch client"
-      className="flex h-9 shrink-0 items-center gap-2.5 rounded-[5px] border border-border bg-surface-2 px-[11px] text-xs text-muted hover:border-border-strong hover:text-text sm:w-64"
+      className={cn(
+        'flex h-9 shrink-0 items-center gap-2.5 rounded-[5px] border px-[11px] text-xs sm:w-64',
+        band
+          ? 'border-transparent bg-sidebar-2 text-sidebar-muted hover:text-sidebar-active'
+          : 'border-border bg-surface-2 text-muted hover:border-border-strong hover:text-text',
+      )}
     >
       <Search className="size-4 shrink-0" aria-hidden />
       <span className="hidden flex-1 truncate text-left whitespace-nowrap sm:inline">Search or switch client</span>
-      <kbd className="hidden rounded-[3px] border border-border bg-surface px-1.5 py-px text-[10px] font-medium sm:inline">
+      <kbd
+        className={cn(
+          'hidden rounded-[3px] border px-1.5 py-px text-[10px] font-medium sm:inline',
+          band ? 'border-sidebar-muted/40 bg-sidebar' : 'border-border bg-surface',
+        )}
+      >
         Ctrl K
       </kbd>
     </button>
@@ -627,8 +698,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     .flatMap((a) => a.groups.flatMap((g) => g.items))
     .filter((p) => pathname === p.to || (p.to !== '/' && pathname.startsWith(`${p.to}/`)))
     .sort((a, b) => b.to.length - a.to.length)[0];
-  // Areas with many pages list them beside the page instead of in rows of tabs.
-  const beside = area.groups.reduce((n, g) => n + g.items.length, 0) > 8;
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -649,7 +718,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   const side = style !== 'top';
   // Whether the menu on a computer already lists the area's pages; if so the page doesn't repeat them.
-  const menuHasPages = (style === 'rail' && !collapsed) || style === 'sidebar' || (style === 'top' && !beside);
+  const menuHasPages = (style === 'rail' && !collapsed) || style === 'sidebar' || style === 'top';
   const navigation = () => (
     <nav aria-label="Main" className="space-y-1">
       {list.map((item) => (
@@ -669,11 +738,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       ))}
     </nav>
   );
-  const account = (
+  const account = (band = false) => (
     <>
-      <span aria-hidden className="hidden h-7 w-px bg-border sm:block" />
-      <UserMenu header side="bottom" />
-      <button className={ICON_BUTTON} aria-label="Sign out" title="Sign out" onClick={signOut}>
+      <span aria-hidden className={cn('hidden h-7 w-px sm:block', band ? 'bg-sidebar-2' : 'bg-border')} />
+      <UserMenu header band={band} side="bottom" />
+      <button
+        className={cn(ICON_BUTTON, band && BAND_ICON_BUTTON)}
+        aria-label="Sign out"
+        title="Sign out"
+        onClick={signOut}
+      >
         <LogOut className="size-4" aria-hidden />
       </button>
     </>
@@ -705,17 +779,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </aside>
       ) : (
-        <div className="sticky top-0 z-20 hidden border-b border-border bg-surface lg:block print:hidden">
+        <div className="sticky top-0 z-20 hidden border-b border-border bg-sidebar lg:block print:hidden">
           <div className="flex h-[70px] items-center gap-3 px-6">
             <Link to="/" aria-label="Home page" className="mr-4 shrink-0 text-sidebar-active">
               <Logo />
             </Link>
             <TopAreas {...menu} />
             <span className="flex-1" />
-            <SearchBox onSearch={() => setSearching(true)} />
-            {account}
+            <SearchBox band onSearch={() => setSearching(true)} />
+            {account(true)}
           </div>
-          {!beside && <WorkspaceNav area={area} className="border-t border-b-0 px-6" />}
+          <WorkspaceNav band area={area} current={page} className="border-t border-b-0 border-sidebar-2 px-6" />
         </div>
       )}
       <header
@@ -762,7 +836,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </ol>
         </nav>
         <SearchBox onSearch={() => setSearching(true)} />
-        {account}
+        {account()}
       </header>
       <main
         id="main"
@@ -773,21 +847,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             chosen menu style leaves them out. A client's own sections are tabs on the client page instead. */}
         {area.id === 'clients' ? (
           children
-        ) : beside ? (
-          <div className={cn('lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-10', menuHasPages && 'lg:block')}>
-            <WorkspaceNav area={area} beside className={cn(menuHasPages && 'lg:hidden')} />
-            <div className="min-w-0">{children}</div>
-          </div>
         ) : (
           <>
-            <WorkspaceNav area={area} className={cn('mb-[22px]', menuHasPages && 'lg:hidden')} />
+            <WorkspaceNav area={area} current={page} className={cn('mb-[22px]', menuHasPages && 'lg:hidden')} />
             {children}
           </>
         )}
       </main>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Navigation" size="sm">
+      <Drawer side="left" open={open} onClose={() => setOpen(false)} title="Navigation" size="sm">
         {navigation()}
-      </Dialog>
+      </Drawer>
       <CommandPalette open={searching} onOpenChange={setSearching} />
     </div>
   );

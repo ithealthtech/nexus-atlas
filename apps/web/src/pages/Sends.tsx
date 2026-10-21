@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -18,6 +17,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { ApiError, api } from '@/lib/api';
@@ -158,7 +158,7 @@ function NewSendDialog({ onClose }: { onClose: () => void }) {
   };
   const fields = error instanceof ApiError ? error.fields : undefined;
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -293,7 +293,7 @@ function NewSendDialog({ onClose }: { onClose: () => void }) {
           <FormError message={error ? error.message : null} />
         </div>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

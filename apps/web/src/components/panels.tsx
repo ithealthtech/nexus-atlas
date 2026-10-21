@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { diffLines } from 'diff';
 import { Download, FileText, History, Paperclip, Plus, RotateCcw, Search, Trash2, Upload, X } from 'lucide-react';
 import type { ActivityView, ItemType, RevisionView } from '@atlas/shared';
-import { Button, Card, CardHeader, Dialog, Input, Skeleton, useToast } from '@/components/ui';
+import { Button, Card, CardHeader, Dialog, Input, Skeleton, useToast, Drawer } from '@/components/ui';
 import { ItemIcon, itemHref } from '@/components/ItemIcon';
 import { api, getCsrf } from '@/lib/api';
 import { AppLink } from '@/components/AppLink';
@@ -399,7 +399,7 @@ function DiffDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -445,7 +445,7 @@ function DiffDialog({
           )}
         </pre>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

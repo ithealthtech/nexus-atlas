@@ -189,7 +189,7 @@ function PolicyForm({ onSaved }: { onSaved: () => Promise<unknown> }) {
   return (
     <form onSubmit={save} className="space-y-4 border-t border-border p-5" noValidate>
       <p className="text-sm font-semibold">Add or replace a policy</p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Client">
           {(p) => (
             <Select {...p} name="clientId" defaultValue="">
@@ -353,7 +353,7 @@ function AddAccount({ onAdded }: { onAdded: () => Promise<unknown> }) {
   return (
     <form onSubmit={save} className="space-y-4 border-t border-border p-5" noValidate>
       <p className="text-sm font-semibold">Rotate a password</p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Client">
           {(p) => (
             <Select {...p} value={clientId} onChange={(e) => setClientId(e.target.value)}>
@@ -603,7 +603,7 @@ export function PasswordRotation() {
   return (
     <>
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Vault"
         title="Password rotation"
         description="Change local administrator and AD service account passwords on a schedule, and keep the new ones in the vault. Every rotation is in the password's history and access log."
       />

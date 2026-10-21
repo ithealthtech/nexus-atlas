@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -16,6 +15,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ActivityFeed } from '@/components/panels';
 import { ApiError, api } from '@/lib/api';
@@ -74,7 +74,7 @@ function EntityDialog<T extends ContactView | LocationView>({
     </Field>
   );
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={item ? `Edit ${item.name}` : kind === 'contacts' ? 'Add a contact' : 'Add a location'}
@@ -131,7 +131,7 @@ function EntityDialog<T extends ContactView | LocationView>({
         />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -172,7 +172,7 @@ export function ClientContacts() {
       ) : (
         <ul className="grid divide-y divide-border sm:grid-cols-2 sm:divide-y-0">
           {data.map((c) => (
-            <li key={c.id} className="group border-border p-5 sm:border-b sm:odd:border-r">
+            <li key={c.id} className="group border-border p-5 sm:border-b sm:odd:not-last:border-r">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 font-semibold">

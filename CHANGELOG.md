@@ -93,6 +93,17 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Changed
 
+- **A client's Licenses, redesigned.** It now has two list panels in the IT Health Tech portal style, with counts across the top that filter the list, a search bar, column labels, and rows with a status pill and quiet row actions.
+  - **Subscriptions & seats** lists Microsoft 365 subscriptions, read live through GDAP, alongside the ones tracked in Atlas. Each shows seats used against bought, with a bar, its cost and renewal, and filters for seats available, fully used, and renewing within 30 days. Free products with thousands of placeholder seats show as having no seat limit.
+  - **People & licenses** lists everyone in the tenant with their account state and licenses, filtered by licensed, unlicensed, and blocked but still licensed.
+  - Who holds a subscription, and one person's licenses, open in drawers, where administrators assign and remove licenses as before.
+- **Drawers for longer work.** Forms for a record, and lists opened from a card, now slide in from the right as a full-height drawer, with the page still visible behind them.
+  - The forms are passwords, assets, clients, contacts and locations, subscriptions, people, groups, asset layouts, checklists, webhooks and Sends.
+  - The lists are devices, tickets, warranties, trackers and applications from the overview cards, plus note and version history, webhook deliveries, sharing, and customizing the dashboard.
+  - A long form scrolls inside the drawer with **Save** always in reach. A click on the dimmed page closes it, as Escape does.
+  - On a phone the drawer fills the screen, and the menu slides in from the left.
+  - Confirmations and short prompts stay as dialogs in the middle of the screen.
+- **Administration has tabs like every other area.** Instead of a list beside the page (or a scrolling strip of buttons on smaller screens), its pages are underlined tabs, as in Overview. The tabs show the section you're in, such as People and security, and **More** lists the other pages under their headings: Data, System and Settings.
 - **Branded report PDFs with charts.** PDF exports now use your logo, brand name, and accent colour from Administration → Theme, instead of a fixed blue.
   - The first page shows summary tiles (clients, rows, needs review, notices).
   - Up to three charts follow, drawn from the report itself: what needs review in each section, the spread of status columns such as online, protection or encryption, and due or expiry dates by month with overdue items first.
@@ -103,6 +114,21 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 - **Service review device trend.** Its online count (for example "35 → 38") was counted as needing review, and its arrow printed as an empty box in PDFs. It now isn't flagged, and PDFs read "35 to 38".
 - Report PDFs no longer draw a one-bar "Needs review, by section" chart for a report with one section, say "1 row" rather than "1 rows", and show source times as "2026-10-21 13:05 UTC".
+- **The Top bar menu style takes the sidebar colour,** like Rail and panel and Sidebar. With a Sidebar colour set under Administration → Theme, the whole top bar uses it: the areas, search, your account, and the row of pages beneath them. Before, it stayed white while its links used the sidebar's text colours.
+- **Phones.** No page scrolls sideways any more. Five pages used to: the dashboard, a client's overview, Assets, the security log and Duplicates.
+  - Rows that were squeezed to a word or two read properly again: password names, webhooks, groups and checklist runs.
+  - The password list keeps the two copy buttons on a phone and leaves the rest to the password's page.
+  - The asset list shows each asset's client under its name.
+  - A client's header fits without the star dropping to its own line.
+  - The dashboard and Password health show their figures in pairs.
+- **Computers.**
+  - **Webhooks** and **Duplicates** use the page's full width like other lists. **API keys** lines up with its heading.
+  - Password health's figures sit in two even rows.
+  - A client's Assets card shows full layout names.
+  - Password rotation and QR label dropdowns show their whole choice.
+  - A single contact no longer has a divider beside it.
+  - Password rotation and BitLocker collector say "Vault" above their titles, where they live.
+- The demo's **Updates** page loads, instead of showing empty placeholders.
 
 ## [1.8.3] - 2026-10-20
 

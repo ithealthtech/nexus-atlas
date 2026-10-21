@@ -7,7 +7,7 @@ import { formatDate } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
 import { StatusChart, type Slice } from './StatusChart';
-import { Card, CardHeader, Dialog, EmptyState, Skeleton } from './ui';
+import { Card, CardHeader, EmptyState, Skeleton, Drawer } from './ui';
 
 export const useWarranty = (clientId?: string) =>
   useQuery({
@@ -49,7 +49,7 @@ function AssetList({
   });
   const list = assets.data ?? [];
   return (
-    <Dialog
+    <Drawer
       open={!!filter}
       onClose={onClose}
       size="lg"
@@ -99,7 +99,7 @@ function AssetList({
           </tbody>
         </table>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 
