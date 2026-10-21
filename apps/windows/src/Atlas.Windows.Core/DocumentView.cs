@@ -206,9 +206,9 @@ public static class DocumentView
     private static string? TypeOf(JsonElement node) =>
         node.ValueKind == JsonValueKind.Object && node.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
 
-    private static IEnumerable<JsonElement> Children(JsonElement node) =>
+    private static List<JsonElement> Children(JsonElement node) =>
         node.ValueKind == JsonValueKind.Object && node.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.Array
-            ? c.EnumerateArray()
+            ? [.. c.EnumerateArray()]
             : [];
 
     private static JsonElement? Attr(JsonElement node, string name) =>
