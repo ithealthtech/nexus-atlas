@@ -67,6 +67,8 @@ internal sealed class DocumentRenderer(Uri? atlas, Action<string> copyCode)
         text.FontSize = heading.Level switch { 1 => 24, 2 => 20, 3 => 17, _ => 15 };
         text.FontWeight = FontWeights.SemiBold;
         text.LineHeight = 0;
+        // Named, so a screen reader's list of headings shows the words.
+        AutomationProperties.SetName(text, string.Concat(heading.Runs.Select(r => r.Text)).Trim());
         AutomationProperties.SetHeadingLevel(text, heading.Level switch
         {
             1 => AutomationHeadingLevel.Level1,
