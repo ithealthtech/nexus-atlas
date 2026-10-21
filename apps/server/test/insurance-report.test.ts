@@ -179,7 +179,7 @@ describe('cyber insurance readiness report', () => {
     // DMARC was looked up for each domain; the one that failed is a notice, not "no record".
     expect(lookups.sort()).toEqual(['broken.example', 'harbor-mail.example', 'harbor.example']);
     expect(row('Is email')[2]).toBe('Partly');
-    expect(row('Is email')[3]).toBe('harbor.example: p=quarantine; harbor-mail.example: no DMARC record.');
+    expect(row('Is email')[3]).toBe('harbor-mail.example: no DMARC record; harbor.example: p=quarantine.');
     expect(snapshot.warnings).toContain('Harbor Dental: DMARC for broken.example could not be looked up.');
 
     // Gaps: every answer that isn't Yes, refusals first, each with what to do.
