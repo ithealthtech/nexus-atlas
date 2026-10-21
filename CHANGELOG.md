@@ -114,6 +114,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 - **Service review device trend.** Its online count (for example "35 → 38") was counted as needing review, and its arrow printed as an empty box in PDFs. It now isn't flagged, and PDFs read "35 to 38".
 - Report PDFs no longer draw a one-bar "Needs review, by section" chart for a report with one section, say "1 row" rather than "1 rows", and show source times as "2026-10-21 13:05 UTC".
+- **The Top bar menu style takes the sidebar colour,** like Rail and panel and Sidebar. With a Sidebar colour set under Administration → Theme, the whole top bar uses it: the areas, search, your account, and the row of pages beneath them. Before, it stayed white while its links used the sidebar's text colours.
 - **Phones.** No page scrolls sideways any more. Five pages used to: the dashboard, a client's overview, Assets, the security log and Duplicates.
   - Rows that were squeezed to a word or two read properly again: password names, webhooks, groups and checklist runs.
   - The password list keeps the two copy buttons on a phone and leaves the rest to the password's page.
