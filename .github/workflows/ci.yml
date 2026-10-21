@@ -152,9 +152,13 @@ jobs:
       - name: Inno Setup
         shell: pwsh
         run: if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+      # In the same steps a release takes, where it signs in between (docs/CODE-SIGNING.md).
+      - name: Build the app
+        shell: pwsh
+        run: apps/windows/build-installer.ps1 -Step publish
       - name: Build the setup program
         shell: pwsh
-        run: apps/windows/build-installer.ps1
+        run: apps/windows/build-installer.ps1 -Step setup
       # Compiling says nothing about whether the window loads or setup can replace a running copy, so do it: the
       # app's self-test, a first install, an upgrade over a running copy, and an uninstall.
       - name: Install, upgrade, and uninstall

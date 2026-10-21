@@ -6,6 +6,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Code signing for Atlas for Windows.**
+  - Once Azure Artifact Signing is set up, releases sign the app and its setup program, so Windows names your organization as the publisher instead of warning about an unknown one.
+  - Setup takes about ten minutes plus Microsoft's organization check, costs about US$10 a month, and stores no password in GitHub. It's described in `docs/CODE-SIGNING.md`.
+  - Until it's set up, releases are built unsigned, as before.
 - **Atlas for Windows runs natively on Arm PCs.** The setup program now carries an ARM64 build alongside the x64 one and installs whichever matches the PC. It's the same download and the same in-app update. Upgrades also start from a clean app folder, so nothing is left over from an older version.
 - **Atlas for Windows works with screen readers and contrast themes.**
   - Every page is checked with Axe.Windows (the engine behind Accessibility Insights) on each build.

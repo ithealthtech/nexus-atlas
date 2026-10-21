@@ -129,11 +129,24 @@ jobs:
   # The desktop app's setup program. Every release carries it under the same file name, so
   # releases/latest/download/AtlasForWindowsSetup.exe always works; the app has its own version number
   # (apps/windows/Directory.Build.props), which only changes when the app does.
+  #
+  # Signed with Azure Artifact Signing when it's set up (docs/CODE-SIGNING.md): the repository variable
+  # ARTIFACT_SIGNING_ACCOUNT, with ARTIFACT_SIGNING_ENDPOINT and ARTIFACT_SIGNING_PROFILE, and the secrets
+  # AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID for an identity GitHub signs in as (OpenID Connect, no
+  # stored password). The app's own files are signed before they go into the setup program, then the setup program
+  # itself, then its checksum is taken. Without it, the release is built unsigned, as before.
   client:
     name: Atlas for Windows
     needs: check
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    # Azure trusts this environment's runs (and nothing else in the repository) to sign.
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SIGN: ${{ vars.ARTIFACT_SIGNING_ACCOUNT != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -144,9 +157,57 @@ jobs:
       - name: Inno Setup
         shell: pwsh
         run: if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+      - name: Build the app
+        shell: pwsh
+        run: apps/windows/build-installer.ps1 -Step publish
+      - name: Sign in to Azure
+        if: env.SIGN == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign the app
+        if: env.SIGN == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: |
+            ${{ github.workspace }}\apps\windows\dist\app\AtlasForWindows.exe
+            ${{ github.workspace }}\apps\windows\dist\app\AtlasForWindows.dll
+            ${{ github.workspace }}\apps\windows\dist\app\Atlas.Windows.Core.dll
+            ${{ github.workspace }}\apps\windows\dist\app-arm64\AtlasForWindows.exe
+            ${{ github.workspace }}\apps\windows\dist\app-arm64\AtlasForWindows.dll
+            ${{ github.workspace }}\apps\windows\dist\app-arm64\Atlas.Windows.Core.dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
       - name: Build the setup program
         shell: pwsh
-        run: apps/windows/build-installer.ps1
+        run: apps/windows/build-installer.ps1 -Step setup
+      - name: Sign the setup program
+        if: env.SIGN == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\apps\windows\dist\AtlasForWindowsSetup.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      # Signing changes the file, so the checksum is taken again; and a signed release must really be signed.
+      - name: Check the signature and take the checksum
+        shell: pwsh
+        run: |
+          $setup = 'apps/windows/dist/AtlasForWindowsSetup.exe'
+          $signature = Get-AuthenticodeSignature $setup
+          if ($env:SIGN -eq 'true' -and $signature.Status -ne 'Valid') { throw "The setup program isn't validly signed: $($signature.StatusMessage)" }
+          if ($env:SIGN -ne 'true') { Write-Host '::warning::Atlas for Windows is unsigned: code signing is not set up (docs/CODE-SIGNING.md).' }
+          else { Write-Host "Signed by $($signature.SignerCertificate.Subject)" }
+          apps/windows/build-installer.ps1 -Step checksum
       - uses: actions/upload-artifact@v4
         with:
           name: windows-app

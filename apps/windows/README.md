@@ -15,7 +15,7 @@ Download **AtlasForWindowsSetup.exe** from **Desktop apps** on your account page
 
 - **One download for every PC.** The setup program carries an x64 and an ARM64 build (Snapdragon and other Arm PCs) and installs the one that matches, so Arm PCs run it natively rather than under emulation.
 - **It installs for the person running it**, into `%LOCALAPPDATA%\Programs\Atlas for Windows`, and needs no administrator rights. Nothing else has to be installed first.
-- **It isn't code-signed**, so Windows SmartScreen says it doesn't recognise the publisher. Choose **More info**, then **Run anyway**. The `.sha256` file published beside the download lets you check you have the file from the release.
+- **It's code-signed** once signing is set up for releases ([Code signing](../../docs/CODE-SIGNING.md)), and Windows names your organization as the publisher. Until then, Windows SmartScreen says it doesn't recognise the publisher: choose **More info**, then **Run anyway**. The `.sha256` file published beside the download lets you check you have the file from the release.
 - **A newer setup program upgrades in place.** It asks the running copy to quit, replaces the files, and keeps your sign-in and settings. It leaves Start with Windows as you set it in the app.
 - **Uninstalling** (Settings > Apps) removes the app, its Start with Windows setting, and its saved address and session token. Sign out from the tray menu first, or sign the app out on your account page, to end the session on the server as well.
 - **From an RMM:** run `AtlasForWindowsSetup.exe /VERYSILENT /SUPPRESSMSGBOXES` as the person who will use it, not as SYSTEM. A silent install doesn't start the app.
@@ -67,4 +67,4 @@ CI runs all three on every pull request. `Test-Setup.ps1` starts the app with `-
 
 ## Not in this version
 
-Code signing (so Windows asks before running the setup program), MSIX packaging, and updates that install without being asked. Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
+MSIX packaging, and updates that install without being asked. Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
