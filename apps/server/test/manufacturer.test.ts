@@ -52,6 +52,10 @@ describe('manufacturer detection', () => {
     expect(detectManufacturer({ model: 'Nexus 9300' })).toBe('Cisco');
     // A brand at the start of a PC's name is often just where it sits.
     expect(detectManufacturer({ name: 'HP-FRONTDESK', hostname: 'dell-lab' })).toBe('');
+    // Windows runs on every maker's PCs, so a Microsoft OS doesn't make a Microsoft device.
+    expect(detectManufacturer({ os: 'Microsoft Windows 11 Pro' })).toBe('');
+    expect(detectManufacturer({ os: 'Microsoft Windows Server 2022 Standard' })).toBe('');
+    expect(detectManufacturer({ model: 'HP All-in-One Desktop 27-cb0xxx', os: 'Microsoft Windows 11 Pro' })).toBe('HP');
     // An Intel network card says nothing about who made the PC.
     expect(detectManufacturer({ model: '', mac: '3C:A9:F4:00:11:22' })).toBe('');
   });

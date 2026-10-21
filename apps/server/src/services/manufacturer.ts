@@ -92,20 +92,26 @@ const PRODUCT_LINES: [RegExp, string, modelOnly?: boolean][] = [
   [/\b(konica|bizhub)\b/i, 'Konica Minolta'],
   [/\bzebra\b/i, 'Zebra'],
   [/\b(zt|zd)\d{3}\b/i, 'Zebra', true],
-  // A model that just names its maker ("HP All-in-One Desktop 27-cb0xxx", "Dell 24 AIO"), after every product line
-  // so "HPE ProLiant" and the like are already settled. Model or OS only: "HP-FRONTDESK" may be any PC near a printer.
-  [/^\s*(hp|hewlett[- ]?packard)\b/i, 'HP', true],
-  [/^\s*dell\b/i, 'Dell', true],
-  [/^\s*lenovo\b/i, 'Lenovo', true],
-  [/^\s*(asus|asustek)\b/i, 'ASUS', true],
-  [/^\s*acer\b/i, 'Acer', true],
-  [/^\s*msi\b|^\s*micro-star\b/i, 'MSI', true],
-  [/^\s*samsung\b/i, 'Samsung', true],
-  [/^\s*toshiba\b/i, 'Toshiba', true],
-  [/^\s*dynabook\b/i, 'Dynabook', true],
-  [/^\s*gigabyte\b/i, 'Gigabyte', true],
-  [/^\s*microsoft\b/i, 'Microsoft', true],
-  [/^\s*apple\b/i, 'Apple', true],
+];
+
+/**
+ * A model that just names its maker ("HP All-in-One Desktop 27-cb0xxx", "Dell 24 AIO"), checked after every product
+ * line so "HPE ProLiant" and the like are already settled. Model only: the OS is "Microsoft Windows 11 Pro" on any
+ * PC, and "HP-FRONTDESK" may be any PC near a printer.
+ */
+const MAKER_PREFIXES: [RegExp, string][] = [
+  [/^\s*(hp|hewlett[- ]?packard)\b/i, 'HP'],
+  [/^\s*dell\b/i, 'Dell'],
+  [/^\s*lenovo\b/i, 'Lenovo'],
+  [/^\s*(asus|asustek)\b/i, 'ASUS'],
+  [/^\s*acer\b/i, 'Acer'],
+  [/^\s*msi\b|^\s*micro-star\b/i, 'MSI'],
+  [/^\s*samsung\b/i, 'Samsung'],
+  [/^\s*toshiba\b/i, 'Toshiba'],
+  [/^\s*dynabook\b/i, 'Dynabook'],
+  [/^\s*gigabyte\b/i, 'Gigabyte'],
+  [/^\s*microsoft\b/i, 'Microsoft'],
+  [/^\s*apple\b/i, 'Apple'],
 ];
 
 // Raw manufacturer strings from firmware and RMM agents, and the name Atlas shows for each.
@@ -196,15 +202,17 @@ export function detectManufacturer(d: {
   os?: string;
   mac?: string;
 }): string {
-  const sources: [string | undefined, boolean][] = [
-    [d.model, true],
+  const sources: [string | undefined, boolean, isModel?: boolean][] = [
+    [d.model, true, true],
     [d.os, true],
     [d.name, false],
     [d.hostname, false],
   ];
-  for (const [text, trusted] of sources) {
+  for (const [text, trusted, isModel] of sources) {
     if (!text) continue;
-    const found = PRODUCT_LINES.find(([pattern, , modelOnly]) => (trusted || !modelOnly) && pattern.test(text));
+    const found =
+      PRODUCT_LINES.find(([pattern, , modelOnly]) => (trusted || !modelOnly) && pattern.test(text)) ??
+      (isModel ? MAKER_PREFIXES.find(([pattern]) => pattern.test(text)) : undefined);
     if (found) return found[1];
   }
   // Each MAC in a list (agents report several), skipping locally administered and randomized ones.
