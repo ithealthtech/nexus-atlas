@@ -125,7 +125,13 @@ test('client subscriptions and GDAP assignments work on desktop and mobile', asy
     await page.getByRole('button', { name: 'Confirm assignment', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Remove from Avery Example', exact: true })).toBeVisible();
     expect(assigned).toBe(true);
-    for (const dismiss of await page.getByRole('button', { name: 'Dismiss', exact: true }).all()) await dismiss.click();
+    // One at a time: each notification also closes itself after a few seconds, so a list taken up front goes stale.
+    const toasts = page.getByRole('button', { name: 'Dismiss', exact: true });
+    while ((await toasts.count()) > 0)
+      await toasts
+        .first()
+        .click({ timeout: 2000 })
+        .catch(() => undefined);
     // Desktop/mobile, light/dark: check labels, contrast, and horizontal overflow on the completed page.
     for (const dark of [false, true]) {
       await page.evaluate((dark) => {

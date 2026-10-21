@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
 import { Download, FileQuestion } from 'lucide-react';
-import { reportNeedsAttention, type SharedReport as ReportData } from '@atlas/shared';
+import { reportNeedsAttention, reportSectionGroups, type SharedReport as ReportData } from '@atlas/shared';
 import { Logo } from '@/components/Logo';
 import { Badge, Card, Skeleton } from '@/components/ui';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -12,7 +12,7 @@ const SHOWN_ROWS = 1000;
 
 /**
  * Public page for a report shared by link. No account is needed and none is offered: the reader gets this one
- * snapshot, as it was captured, and a PDF of each section.
+ * snapshot, as it was captured, and a PDF of all of it or of one section.
  */
 export function SharedReport() {
   const { token } = useParams({ strict: false }) as { token: string };
@@ -61,13 +61,23 @@ function Report({ token }: { token: string }) {
       <div className="mx-auto w-full max-w-6xl">
         <div className="mb-6 flex items-center justify-between gap-4">
           <Logo />
-          {current && (
-            <a
-              href={`/api/shared-reports/${encodeURIComponent(token)}/pdf?section=${section}`}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-surface-3 [&_svg]:size-4"
-            >
-              <Download aria-hidden /> Download PDF
-            </a>
+          {current && report && (
+            <div className="flex flex-wrap justify-end gap-2">
+              {report.sections.length > 1 && (
+                <a
+                  href={`/api/shared-reports/${encodeURIComponent(token)}/pdf?section=${section}`}
+                  className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-surface-3"
+                >
+                  This section
+                </a>
+              )}
+              <a
+                href={`/api/shared-reports/${encodeURIComponent(token)}/pdf?section=${report.sections.length > 1 ? 'all' : section}`}
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-surface-3 [&_svg]:size-4"
+              >
+                <Download aria-hidden /> Download PDF
+              </a>
+            </div>
           )}
         </div>
         {error ? (
@@ -99,16 +109,24 @@ function Report({ token }: { token: string }) {
               </div>
             )}
             {report.sections.length > 1 && (
-              <nav aria-label="Report sections" className="flex flex-wrap gap-2">
-                {report.sections.map((s, i) => (
-                  <button
-                    key={i}
-                    aria-pressed={i === section}
-                    onClick={() => setSection(i)}
-                    className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm hover:bg-surface-3 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:font-semibold aria-pressed:text-primary"
-                  >
-                    {s.title} <span className="text-muted">({s.rows.length})</span>
-                  </button>
+              <nav aria-label="Report sections" className="space-y-3">
+                {/* A review pack's sections, under the report each belongs to. */}
+                {reportSectionGroups(report.sections).map(({ part, items }) => (
+                  <div key={part || 'sections'}>
+                    {part && <h2 className="mb-1.5 text-xs font-semibold text-muted">{part}</h2>}
+                    <div className="flex flex-wrap gap-2">
+                      {items.map(({ section: s, index: i }) => (
+                        <button
+                          key={i}
+                          aria-pressed={i === section}
+                          onClick={() => setSection(i)}
+                          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm hover:bg-surface-3 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:font-semibold aria-pressed:text-primary"
+                        >
+                          {s.title} <span className="text-muted">({s.rows.length})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </nav>
             )}

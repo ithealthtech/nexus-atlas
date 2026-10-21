@@ -129,6 +129,17 @@ test('premium shell and report snapshots, filters, templates and exports work on
     expect(sharedViolations.map((v) => v.id)).toEqual([]);
     await shared.screenshot({ path: resolve(screenshots, 'atlas-shared-report.png'), fullPage: true });
     await visitor.close();
+    // Scheduling it: saved to the Scheduled tab. With email not set up, Send now records why it wasn't sent.
+    await page.getByRole('button', { name: 'Schedule', exact: true }).click();
+    const scheduleDialog = page.getByRole('dialog', { name: 'Schedule this report' });
+    await scheduleDialog.getByLabel('Send to').fill('office.manager@harbor.example');
+    await scheduleDialog.getByRole('button', { name: 'Schedule report', exact: true }).click();
+    await expect(scheduleDialog).toHaveCount(0);
+    await page.getByRole('button', { name: 'scheduled', exact: true }).click();
+    await expect(page.getByText('Every month on day 1 at 07:00')).toBeVisible();
+    await page.getByRole('button', { name: 'Send now', exact: true }).click();
+    await expect(page.getByText(/Not delivered to office\.manager@harbor\.example: Email is not set up/)).toBeVisible();
+    await page.getByRole('button', { name: 'Built-in', exact: true }).click();
     await page.getByRole('button', { name: 'Save template', exact: true }).click();
     await page.getByLabel('Template name', { exact: true }).fill('Monthly client licenses');
     await page.getByRole('dialog').getByRole('button', { name: 'Save template', exact: true }).click();
@@ -150,7 +161,13 @@ test('premium shell and report snapshots, filters, templates and exports work on
       .click();
     await expect(page.getByRole('heading', { name: 'Detailed results', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Built-in', exact: true }).click();
-    for (const dismiss of await page.getByRole('button', { name: 'Dismiss', exact: true }).all()) await dismiss.click();
+    // One at a time: each notification also closes itself after a few seconds, so a list taken up front goes stale.
+    const toasts = page.getByRole('button', { name: 'Dismiss', exact: true });
+    while ((await toasts.count()) > 0)
+      await toasts
+        .first()
+        .click({ timeout: 2000 })
+        .catch(() => undefined);
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
       for (const width of [1600, 390]) {
@@ -174,6 +191,23 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await expect(page.getByRole('heading', { name: 'Client workspaces', exact: true })).toBeVisible();
     await page.goto(`${base}/clients/${client.id}/reports`);
     await expect(page.getByRole('checkbox', { name: 'Harbor Dental Group', exact: true })).toBeChecked();
+    // One click on the client's page: the quarterly review pack, as one PDF named after the client.
+    await page.setViewportSize({ width: 1600, height: 1100 });
+    const packEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Review pack', exact: true }).click();
+    const pack = await packEvent;
+    expect(pack.suggestedFilename()).toMatch(/^Harbor Dental Group quarterly review \d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(
+      readFileSync((await pack.path())!)
+        .subarray(0, 5)
+        .toString(),
+    ).toBe('%PDF-');
+    await pack.saveAs(resolve(screenshots, 'atlas-review-pack.pdf'));
+    // It's kept in the client's report history, grouped by the reports it's made of.
+    await page.getByRole('button', { name: 'history', exact: true }).click();
+    await page.getByRole('button', { name: /^Harbor Dental Group quarterly review/ }).click();
+    await expect(page.getByRole('button', { name: 'Review pack PDF', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Report section').locator('optgroup')).toHaveCount(4);
     expect(errors).toEqual([]);
   } finally {
     await context.close();

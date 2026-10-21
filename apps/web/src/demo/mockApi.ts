@@ -39,6 +39,9 @@ import {
   type CsvImportResult,
   type ImportJobView,
   type ExpirationItem,
+  type ClientHealthDetail,
+  type ClientHealthSummary,
+  type HealthPartScore,
   type RmmHealthCounts,
   type RmmHealthDevice,
   type RmmHealthFilter,
@@ -853,6 +856,7 @@ const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_pass
 
 on('GET', '/reports/templates', () => []);
 on('GET', '/reports/runs', () => []);
+on('GET', '/reports/schedules', () => []);
 
 on('GET', '/reports/templates', () => []);
 on('GET', '/reports/runs', () => []);
@@ -2053,6 +2057,148 @@ on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
 on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+// Client health: one client healthy, one needing attention, one at risk, each with 90 days of history.
+const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] = [
+  {
+    score: 91,
+    drift: 6,
+    parts: [
+      {
+        part: 'security',
+        score: 94,
+        detail: '18 passwords, protection on 24 devices, BitLocker on 20',
+        findings: [{ text: '1 of 18 passwords has issues', gain: 2, section: '/passwords' }],
+      },
+      {
+        part: 'endpoints',
+        score: 96,
+        detail: '24 devices in the RMM',
+        findings: [{ text: '1 device not checked in within 7 days', gain: 1, section: '/assets' }],
+      },
+      {
+        part: 'documentation',
+        score: 88,
+        detail: '31 assets, 12 documents',
+        findings: [{ text: '2 documents past their review date', gain: 3, section: '/documents' }],
+      },
+      {
+        part: 'renewals',
+        score: 85,
+        detail: '9 dated items',
+        findings: [{ text: '1 SSL certificate expiring soon', gain: 2, section: '/trackers/ssl' }],
+      },
+    ],
+  },
+  {
+    score: 72,
+    drift: -4,
+    parts: [
+      {
+        part: 'security',
+        score: 67,
+        detail: '9 passwords, protection on 12 devices',
+        findings: [
+          { text: '3 of 9 passwords have issues, 1 found in a data breach', gain: 10, section: '/passwords' },
+          { text: '1 device without endpoint protection running', gain: 1, section: '/assets' },
+        ],
+      },
+      {
+        part: 'endpoints',
+        score: 88,
+        detail: '12 devices in the RMM',
+        findings: [{ text: '1 device not online', gain: 1, section: '/assets' }],
+      },
+      {
+        part: 'documentation',
+        score: 62,
+        detail: '14 assets, 2 documents',
+        findings: [
+          { text: 'No locations', gain: 4, section: '/locations' },
+          { text: '1 document past its review date', gain: 3, section: '/documents' },
+        ],
+      },
+      {
+        part: 'renewals',
+        score: 75,
+        detail: '6 dated items',
+        findings: [{ text: '1 warranty expired', gain: 3, section: '/assets' }],
+      },
+    ],
+  },
+  {
+    score: 54,
+    drift: -11,
+    parts: [
+      {
+        part: 'security',
+        score: 48,
+        detail: '6 passwords, protection on 9 devices, BitLocker on 4',
+        findings: [
+          { text: '1 device with a disk not encrypted', gain: 6, section: '/assets' },
+          { text: '2 of 6 passwords have issues', gain: 3, section: '/passwords' },
+        ],
+      },
+      {
+        part: 'endpoints',
+        score: 61,
+        detail: '9 devices in the RMM',
+        findings: [{ text: '3 devices not checked in within 7 days', gain: 4, section: '/assets' }],
+      },
+      {
+        part: 'documentation',
+        score: 50,
+        detail: '6 assets, 0 documents',
+        findings: [{ text: 'No documents yet', gain: 4, section: '/documents' }],
+      },
+      {
+        part: 'renewals',
+        score: 58,
+        detail: '5 dated items',
+        findings: [{ text: '1 SSL certificate expired', gain: 4, section: '/trackers/ssl' }],
+      },
+    ],
+  },
+];
+const demoHealth = (clientId: string, days = 90) => {
+  const client = find(db.clients, clientId, 'Client');
+  const h = DEMO_HEALTH[db.clients.indexOf(client) % DEMO_HEALTH.length]!;
+  // A gentle walk from where it started to today's score.
+  const trend = Array.from({ length: days }, (_, i) => ({
+    day: ago((days - 1 - i) * 24 * 60).slice(0, 10),
+    score: Math.round(h.score - h.drift * (1 - i / (days - 1)) + Math.sin(i / 3) * 1.5),
+  }));
+  trend[days - 1]!.score = h.score;
+  return { client, h, trend };
+};
+on('GET', '/clients/:id/health', (m): ClientHealthDetail => {
+  const { client, h, trend } = demoHealth(m[1]!);
+  return {
+    clientId: client.id,
+    clientName: client.name,
+    score: h.score,
+    parts: h.parts,
+    computedAt: ago(20),
+    trend,
+    change: h.score - trend[Math.max(0, trend.length - 30)]!.score,
+  };
+});
+on('GET', '/client-health', (): ClientHealthSummary[] =>
+  db.clients
+    .map((c) => {
+      const { h, trend } = demoHealth(c.id, 30);
+      const weakest = [...h.parts].sort((a, b) => a.score! - b.score!)[0]!;
+      return {
+        clientId: c.id,
+        clientName: c.name,
+        score: h.score,
+        change: h.score - trend[0]!.score,
+        weakest: weakest.score! < 90 ? weakest.part : null,
+        trend: trend.map((p) => p.score),
+      };
+    })
+    .sort((a, b) => a.score - b.score),
+);
+
 // ConnectWise security and compliance is read live, so the demo has none: the cards stay hidden.
 on('GET', '/clients/:id/security', () => ({ linked: false }));
 on('GET', '/assets/:id/security', () => ({ linked: false }));

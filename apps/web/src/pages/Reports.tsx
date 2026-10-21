@@ -6,6 +6,7 @@ import {
   Archive,
   Building2,
   CalendarDays,
+  CalendarClock,
   ChartNoAxesCombined,
   Download,
   AppWindow,
@@ -19,13 +20,17 @@ import {
   Share2,
   ListFilter,
   LockKeyhole,
+  PiggyBank,
   Play,
+  Presentation,
   Save,
   Search,
   ShieldCheck,
   Trash2,
+  Umbrella,
 } from 'lucide-react';
 import {
+  type ReportScheduleView,
   MAX_REPORT_ASSET_FIELDS,
   REPORTABLE_FIELD_TYPES,
   REPORT_INFO,
@@ -33,6 +38,7 @@ import {
   compareReportSections,
   previousReportRun,
   reportNeedsAttention,
+  reportSectionGroups,
   selectReportSection,
   type ReportDefinition,
   type ReportKind,
@@ -43,6 +49,7 @@ import {
 } from '@atlas/shared';
 import { AppLink } from '@/components/AppLink';
 import { ReportShareDialog } from '@/components/ReportShare';
+import { ScheduleDialog, ScheduleList } from '@/components/ReportSchedules';
 import {
   Badge,
   Button,
@@ -62,11 +69,14 @@ import { DEMO } from '@/lib/demo';
 import { cn } from '@/lib/cn';
 
 const ICONS = {
+  review: Presentation,
   executive: ChartNoAxesCombined,
   security: LockKeyhole,
+  insurance: Umbrella,
   service: Handshake,
   assets: Archive,
   licenses: ShieldCheck,
+  savings: PiggyBank,
   renewals: CalendarDays,
   domains: Globe,
   documentation: FileCheck2,
@@ -85,16 +95,21 @@ const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
 };
 /** Reports with a time window (`withinDays`), and what the setting is called for each. */
 const WINDOW_LABEL: Partial<Record<ReportKind, string>> = {
+  review: 'Period',
   renewals: 'Renewal lookahead',
+  savings: 'Renewals within',
   domains: 'Expiring within',
   service: 'Period',
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
+  review: 'A business review in one PDF',
   executive: 'Your client environment at a glance',
   security: 'Passwords, protection and encryption',
+  insurance: 'What insurers ask, with evidence',
   service: 'Work done over a period',
   assets: 'Hardware, systems and infrastructure',
   licenses: 'Subscriptions, seats and assignments',
+  savings: 'Unused seats and renewals, priced',
   renewals: 'Upcoming dates and overdue items',
   domains: 'Domain and certificate expiry',
   documentation: 'Coverage, ownership and review dates',
@@ -172,7 +187,9 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const [sharing, setSharing] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [template, setTemplate] = useState<ReportTemplateView | null>(null);
-  const [libraryTab, setLibraryTab] = useState<'library' | 'templates' | 'history'>('library');
+  const [libraryTab, setLibraryTab] = useState<'library' | 'templates' | 'history' | 'scheduled'>('library');
+  // A schedule being made ('new') or changed.
+  const [scheduling, setScheduling] = useState<ReportScheduleView | 'new' | null>(null);
   const templates = useQuery({
     queryKey: ['report-templates'],
     queryFn: () => api<ReportTemplateView[]>('/reports/templates'),
@@ -212,7 +229,13 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const when = (iso: string) => new Date(iso).toLocaleString();
   const attention = currentSection?.rows.filter((row) => reportNeedsAttention(currentSection, row)).length ?? 0;
   const selectKind = (kind: ReportKind) => {
-    setDefinition((d) => ({ ...d, kind, title: REPORT_INFO[kind].name }));
+    // A review pack is for one client.
+    setDefinition((d) => ({
+      ...d,
+      kind,
+      title: REPORT_INFO[kind].name,
+      clientIds: kind === 'review' ? d.clientIds.slice(0, 1) : d.clientIds,
+    }));
     setRun(null);
     setTemplate(null);
     setSelection(initialSelection());
@@ -275,13 +298,15 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
       setError((e as Error).message);
     }
   };
+  // A review pack's PDF is the whole pack, with its cover; other reports export the section as shown.
+  const wholePdf = run?.kind === 'review';
   const exportReport = async (format: 'csv' | 'pdf') => {
     if (!run) return;
     setExporting(true);
     setError(null);
     try {
       await download(
-        `/reports/runs/${run.id}/export?format=${format}&selection=${encodeURIComponent(JSON.stringify(selection))}`,
+        `/reports/runs/${run.id}/export?format=${format}&selection=${encodeURIComponent(JSON.stringify(selection))}${format === 'pdf' && wholePdf ? '&whole=1' : ''}`,
         `atlas-report.${format}`,
       );
     } catch (e) {
@@ -307,8 +332,8 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
             <h2 className="text-sm font-semibold">Report library</h2>
             <p className="mt-1 text-xs text-muted">{REPORT_KINDS.length} built-in reports</p>
           </div>
-          <div className="flex border-b border-border p-1" aria-label="Report collections">
-            {(['library', 'templates', 'history'] as const).map((tab) => (
+          <div className="grid grid-cols-2 gap-1 border-b border-border p-1" aria-label="Report collections">
+            {(['library', 'templates', 'history', 'scheduled'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setLibraryTab(tab)}
@@ -397,6 +422,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
               )}
             </div>
           )}
+          {libraryTab === 'scheduled' && <ScheduleList scoped={scoped} onEdit={(s) => setScheduling(s)} />}
           {libraryTab === 'history' && (
             <div className="space-y-2 p-3">
               <p className="text-xs text-muted">Your latest 100 snapshots. Access is checked each time.</p>
@@ -463,6 +489,14 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 </Button>
                 <Button
                   variant="secondary"
+                  disabled={busy || !definition.clientIds.length || DEMO}
+                  onClick={() => setScheduling('new')}
+                >
+                  <CalendarClock />
+                  Schedule
+                </Button>
+                <Button
+                  variant="secondary"
                   disabled={!run || exporting || busy}
                   onClick={() => void exportReport('csv')}
                 >
@@ -475,7 +509,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   onClick={() => void exportReport('pdf')}
                 >
                   <FileText />
-                  PDF
+                  {wholePdf ? 'Review pack PDF' : 'PDF'}
                 </Button>
                 {/* Only a single-client snapshot can go outside Atlas. */}
                 {run?.snapshot.clients.length === 1 && !DEMO && (
@@ -515,7 +549,9 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   )}
                 </Field>
                 <fieldset>
-                  <legend className="mb-2 text-[13px] font-semibold">Clients {clientId ? '' : '(up to 25)'}</legend>
+                  <legend className="mb-2 text-[13px] font-semibold">
+                    {definition.kind === 'review' ? 'Client' : `Clients ${clientId ? '' : '(up to 25)'}`}
+                  </legend>
                   {clients.isLoading && <Skeleton className="h-12" />}
                   <FormError message={clients.error?.message} />
                   <div className="grid max-h-44 gap-3 overflow-y-auto sm:grid-cols-2">
@@ -532,8 +568,11 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                           onChange={(e) =>
                             setDefinition({
                               ...definition,
+                              // A review pack is for one client: choosing another replaces it.
                               clientIds: e.currentTarget.checked
-                                ? [...definition.clientIds, c.id]
+                                ? definition.kind === 'review'
+                                  ? [c.id]
+                                  : [...definition.clientIds, c.id]
                                 : definition.clientIds.filter((id) => id !== c.id),
                             })
                           }
@@ -556,7 +595,13 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       >
                         {[30, 60, 90, 180, 365].map((day) => (
                           <option key={day} value={day}>
-                            {definition.kind === 'service' ? `Last ${day} days` : `${day} days, including overdue`}
+                            {definition.kind === 'service'
+                              ? `Last ${day} days`
+                              : definition.kind === 'savings'
+                                ? `${day} days`
+                                : definition.kind === 'review'
+                                  ? `Last ${day} days, and renewals in the next ${day}`
+                                  : `${day} days, including overdue`}
                           </option>
                         ))}
                       </Select>
@@ -569,7 +614,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                     onChange={(assetFields) => setDefinition({ ...definition, assetFields })}
                   />
                 )}
-                {definition.kind === 'licenses' && (
+                {(definition.kind === 'licenses' || definition.kind === 'savings') && (
                   <Checkbox
                     label="Include Microsoft 365 inventory through GDAP"
                     description="Linked clients are read through GDAP. Connection failures are shown as notices."
@@ -678,11 +723,20 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                           value={selection.section}
                           onChange={(e) => setSelection({ ...initialSelection(), section: Number(e.target.value) })}
                         >
-                          {run.snapshot.sections.map((s, i) => (
-                            <option key={i} value={i}>
-                              {s.title}
-                            </option>
-                          ))}
+                          {reportSectionGroups(run.snapshot.sections).map(({ part, items }) => {
+                            const options = items.map(({ section, index }) => (
+                              <option key={index} value={index}>
+                                {section.title}
+                              </option>
+                            ));
+                            return part ? (
+                              <optgroup key={part} label={part}>
+                                {options}
+                              </optgroup>
+                            ) : (
+                              options
+                            );
+                          })}
                         </Select>
                       )}
                     </Field>
@@ -919,6 +973,13 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
           </div>
         </aside>
       </div>
+      {scheduling && (
+        <ScheduleDialog
+          definition={definition}
+          schedule={scheduling === 'new' ? undefined : scheduling}
+          onClose={() => setScheduling(null)}
+        />
+      )}
       <Dialog
         open={saving}
         onClose={() => setSaving(false)}

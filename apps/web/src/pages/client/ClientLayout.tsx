@@ -51,6 +51,8 @@ import { useActor } from '@/lib/session';
 import { ExportButton } from '@/components/ExportButton';
 import { FavoriteStar } from '@/components/Favorites';
 import { QuickNote } from '@/components/QuickNote';
+import { HealthBadge } from '@/components/ClientHealth';
+import { ReviewPackButton } from '@/components/ReviewPack';
 import { TRACKER, useTrackers } from '@/components/Trackers';
 import { ClientForm, statusTone } from '../Clients';
 
@@ -159,6 +161,7 @@ export function ClientLayout() {
                 )}
               </h1>
               <FavoriteStar type="client" id={client.id} name={client.name} />
+              <HealthBadge clientId={client.id} />
             </div>
             <p className="mt-1 text-sm text-muted">
               {client.type} · {LEVEL_INFO[client.access].label}
@@ -174,6 +177,7 @@ export function ClientLayout() {
               <FileText className="size-4" aria-hidden /> Monthly report
             </AppLink>
           )}
+          {actor.isStaff && <ReviewPackButton clientId={client.id} clientName={client.name} />}
           {actor.isStaff && <ExportButton clientId={client.id} canIncludePasswords={actor.isAdmin} />}
           {atLeast(client.access, 'edit') && (
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>

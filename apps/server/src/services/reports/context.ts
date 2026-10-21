@@ -25,12 +25,14 @@ export function capped<T>(rows: T[], advice = 'Choose fewer clients (maximum 10,
   return rows;
 }
 
-/** Where the security posture report reads passwords and rotation, with each service's own access rules. */
+/** Where the security reports read passwords, rotation and DMARC, with each service's own access rules. */
 export interface SecuritySources {
   /** Only what this person may see in the vault (vault access and restricted items apply). */
   passwordHealth(scope: Scope): Promise<PasswordHealthReport>;
   /** Administrators only; anyone else gets an error and the report leaves rotation out. */
   rotationTargets(scope: Scope): Promise<RotationTargetView[]>;
+  /** A domain's DMARC record, or null when it has none; left out where DNS isn't looked up (tests). */
+  dmarc?(domain: string): Promise<string | null>;
 }
 
 /**

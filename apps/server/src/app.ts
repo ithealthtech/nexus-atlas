@@ -29,6 +29,7 @@ import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
 import { DomainLookup } from './services/domain-lookup.js';
 import { certProbe as realCertProbe, type CertProbe } from './services/cert-probe.js';
+import { dmarcRecord } from './services/dmarc.js';
 import { TrackerScheduler, TrackerService } from './services/trackers.js';
 import { registerTrackerRoutes } from './routes/trackers.js';
 import { registerScreenConnectRoutes } from './routes/screenconnect.js';
@@ -80,6 +81,8 @@ import {
   type ChainProbe,
 } from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerClientHealthRoutes } from './routes/client-health.js';
+import { ClientHealthService } from './services/client-health.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
@@ -87,6 +90,9 @@ import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl 
 import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
 import type { ErrorLog } from './services/repeating.js';
+import { ReportService } from './services/reports.js';
+import { ReportShareService } from './services/report-shares.js';
+import { ReportScheduleService } from './services/report-schedules.js';
 import { registerLicenseRoutes } from './routes/licenses.js';
 import { securityEvent } from './services/security-log.js';
 
@@ -122,6 +128,8 @@ export interface AppOptions {
   domainLookup?: DomainLookup;
   /** Replaces reading served certificates for the SSL tracker. Tests leave it out, so nothing is connected to. */
   certProbe?: CertProbe;
+  /** Replaces looking up DMARC records for the insurance readiness report. Tests leave it out, so nothing is looked up. */
+  dmarcLookup?: (domain: string) => Promise<string | null>;
   /** Replaces asking systemd about the services Atlas runs on (tests use a fake). */
   serviceShow?: ShowUnit;
   /** Replaces connecting to the portal's own address to read its certificate. */
@@ -191,6 +199,7 @@ export async function buildApp({
   entraFetch,
   domainLookup,
   certProbe,
+  dmarcLookup,
   updateFetch,
   serviceShow,
   portalProbe,
@@ -780,9 +789,22 @@ export async function buildApp({
     siem,
     requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA,
   });
+  // Reports, shared by their routes and the background pass that sends scheduled ones.
+  const reports = new ReportService(settings, m365Fetch, {
+    passwordHealth: (scope) => health.report(scope),
+    // Rotation is built just below; this runs only when a report does.
+    rotationTargets: (scope) => rotation.targets(scope.actor),
+    dmarc: dmarcLookup ?? (config.NODE_ENV === 'test' ? undefined : (domain) => dmarcRecord(domain)),
+  });
+  const reportShares = new ReportShareService(db, config.publicOrigin);
+  const reportSchedules = new ReportScheduleService(db, { reports, shares: reportShares, mail, settings });
+  const clientHealth = new ClientHealthService(db, { settings, passwords: health, trackers });
+  registerClientHealthRoutes(app, { db, authed, health: clientHealth });
   const notifier = registerAdminRoutes(app, {
     emergency,
     health,
+    reports: reportSchedules,
+    clientHealth,
     db,
     authed,
     recent,
@@ -974,12 +996,9 @@ export async function buildApp({
     db,
     authed,
     settings,
-    fetcher: m365Fetch,
-    security: {
-      passwordHealth: (scope) => health.report(scope),
-      rotationTargets: (scope) => rotation.targets(scope.actor),
-    },
-    publicOrigin: config.publicOrigin,
+    service: reports,
+    shares: reportShares,
+    schedules: reportSchedules,
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerLicenseRoutes(app, { db, authed, recent, settings, fetcher: m365Fetch });

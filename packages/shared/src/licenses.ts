@@ -42,6 +42,8 @@ export interface MicrosoftLicenseView {
     id: string;
     name: string;
     upn: string;
+    /** False when sign-in is blocked: often someone who has left, still holding licenses. */
+    enabled: boolean;
     skuIds: string[];
     groupSkuIds: string[];
   }[];
