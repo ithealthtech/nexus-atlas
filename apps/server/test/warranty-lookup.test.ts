@@ -3,6 +3,7 @@ import {
   cleanSerial,
   dellExpiry,
   hpProductNumber,
+  hpRefusal,
   latestEndDate,
   textDate,
   warrantyVendor,
@@ -65,6 +66,19 @@ describe('warranty lookup values', () => {
       '4K1A3UT#ABA',
     );
   });
+
+  it('tells HP turning a request away from HP having no warranty', () => {
+    // HP answers 200 with its own code in the body.
+    expect(
+      hpRefusal({ code: 406, data: null, message: 'Bad data in payload. invalid captcha.', status: 'NOT_ACCEPTABLE' }),
+    ).toMatch(/captcha/);
+    expect(hpRefusal({ code: 500, message: 'Internal error' })).toMatch(
+      /turned the request away \(500: Internal error\)/,
+    );
+    expect(hpRefusal({ code: 200, data: { warrantyEndDate: '2026-11-30' } })).toBe('');
+    expect(hpRefusal({ data: { warrantyEndDate: '2026-11-30' } })).toBe('');
+    expect(hpRefusal([])).toBe('');
+  });
 });
 
 describe('warranty lookup', () => {
@@ -95,6 +109,14 @@ describe('warranty lookup', () => {
     if (url.pathname.includes('warranty/specs')) {
       const body = JSON.parse(String(init?.body));
       if (body.productNumber !== '4K1A3UT#ABA') return json({}, 400);
+      // HP's anonymous check asking for a captcha, as it now does.
+      if (body.serialNumber === '8CC31815ZT')
+        return json({
+          code: 406,
+          data: null,
+          message: 'Bad data in payload. invalid captcha.',
+          status: 'NOT_ACCEPTABLE',
+        });
       return json({ data: { warrantyEndDate: '2026-11-30' } });
     }
     return json({}, 500);
@@ -159,5 +181,13 @@ describe('warranty lookup', () => {
     expect((await owner.call('POST', `/api/assets/${apple.id}/warranty-check`)).status).toBe(400);
     const blank = await asset('HDG-WS-06', { manufacturer: 'Dell' });
     expect((await owner.call('POST', `/api/assets/${blank.id}/warranty-check`)).status).toBe(400);
+
+    // HP asking for a captcha is said as such, not as "no warranty on record", and nothing is saved.
+    const aio = await asset('AHMGHACKDT015', { model: 'HP All-in-One 24-df1224 PC', serial_number: '8CC31815ZT' });
+    const refused = await owner.call('POST', `/api/assets/${aio.id}/warranty-check`);
+    expect(refused.status).toBe(502);
+    expect(JSON.stringify(refused.data)).toMatch(/captcha/);
+    expect(JSON.stringify(refused.data)).not.toMatch(/no warranty on record/);
+    expect((await owner.call('GET', `/api/assets/${aio.id}`)).data.fields.warranty_expires ?? '').toBe('');
   });
 });
