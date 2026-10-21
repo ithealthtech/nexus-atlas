@@ -28,6 +28,12 @@ foreach (var window in output.WindowScanOutputs)
         static string Property(ElementInfo? of, string name) => of?.Properties is { } p && p.TryGetValue(name, out var v) ? v : "";
         if (allowed.Contains($"{error.Rule.ID}:{Property(element, "Name")}"))
             continue;
+        // The Windows App SDK's own window for popups (tooltips, menus): once a popup has opened, the hidden host stays,
+        // and its input window is as big as the app's. Nothing a person can reach; not the app's to fix.
+        if (error.Rule.ID.ToString() == "BoundingRectangleCompletelyObscuresContainer"
+            && Property(element, "ClassName") == "InputSiteWindowClass"
+            && Property(element?.Parent, "ClassName") == "Microsoft.UI.Content.PopupWindowSiteBridge")
+            continue;
         problems++;
         string Describe(ElementInfo? of) => of is null ? "nothing" : string.Create(
             CultureInfo.InvariantCulture,
