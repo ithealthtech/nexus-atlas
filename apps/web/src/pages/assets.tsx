@@ -245,7 +245,7 @@ function AssetTable({ assets, layout, showClient }: { assets: AssetView[]; layou
         <thead className="bg-surface-2 text-xs text-muted">
           <tr>
             <th className="px-5 py-3 font-medium">Name</th>
-            {showClient && <th className="px-5 py-3 font-medium">Client</th>}
+            {showClient && <th className="hidden px-5 py-3 font-medium sm:table-cell">Client</th>}
             {columns.map((c) => (
               <th key={c.key} className="hidden px-5 py-3 font-medium md:table-cell">
                 {c.label}
@@ -264,10 +264,12 @@ function AssetTable({ assets, layout, showClient }: { assets: AssetView[]; layou
                   <span className="min-w-0">
                     <span className="block font-semibold hover:underline">{a.name}</span>
                     {!layout && <span className="block text-xs text-muted">{a.layoutName}</span>}
+                    {/* On a phone the client column gives way, so the client shows here. */}
+                    {showClient && <span className="block text-xs text-muted sm:hidden">{a.clientName}</span>}
                   </span>
                 </AppLink>
               </td>
-              {showClient && <td className="px-5 py-3 text-text-2">{a.clientName}</td>}
+              {showClient && <td className="hidden px-5 py-3 text-text-2 sm:table-cell">{a.clientName}</td>}
               {columns.map((c) => (
                 <td key={c.key} className="hidden max-w-56 truncate px-5 py-3 text-text-2 md:table-cell">
                   <FieldValue field={c} value={a.fields[c.key]} />
@@ -322,7 +324,7 @@ export function AssetsView({ clientId }: { clientId?: string }) {
           description="Every documented device, service, and subscription you can access."
         />
       )}
-      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label="Asset layouts" className="flex gap-1 overflow-x-auto lg:flex-col">
           <button
             onClick={() => setLayout(undefined)}

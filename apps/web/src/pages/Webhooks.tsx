@@ -191,7 +191,7 @@ export function Webhooks() {
           </Button>
         }
       />
-      <div className="grid max-w-4xl gap-6">
+      <div className="grid gap-6">
         {secret && (
           <Card>
             <CardHeader
@@ -232,7 +232,7 @@ export function Webhooks() {
             <ul className="divide-y divide-border">
               {list.data.map((w) => (
                 <li key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3.5 text-sm">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-64">
                     <p className="flex flex-wrap items-center gap-2 font-medium">
                       {w.name}
                       {w.paused ? (

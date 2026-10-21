@@ -85,11 +85,12 @@ export function PasswordHealth() {
         }
       />
       {report.isLoading || !data ? (
-        <Skeleton className="h-64 max-w-4xl" />
+        <Skeleton className="h-64" />
       ) : (
-        <div className="grid max-w-5xl gap-6">
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            <Card className="p-4 sm:col-span-3 lg:col-span-2">
+        <div className="grid gap-6">
+          {/* The score and six counts: two even rows of four on a computer, pairs on a phone. */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Card className="col-span-2 p-4">
               <p className="text-xs text-muted">Overall health</p>
               <p className="mt-1 flex items-baseline gap-2">
                 <span className="text-4xl font-semibold tabular-nums">

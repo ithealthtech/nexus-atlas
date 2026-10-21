@@ -138,7 +138,7 @@ export function ClientLayout() {
         <div className="flex min-w-0 items-center gap-4">
           <span
             aria-hidden
-            className="grid size-11 shrink-0 place-items-center rounded-md border border-border bg-surface-2 text-sm font-bold text-text-2"
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-border bg-surface-2 text-sm font-bold text-text-2 max-sm:hidden"
           >
             {client.name
               .split(/\s+/)
@@ -149,7 +149,7 @@ export function ClientLayout() {
           <div className="min-w-0">
             <p className="mb-1.5 text-[10px] font-bold tracking-[0.12em] text-muted uppercase">Client workspace</p>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="flex flex-wrap items-center gap-3 text-[29px] leading-tight font-bold tracking-[-0.03em]">
+              <h1 className="flex flex-wrap items-center gap-3 text-2xl leading-tight font-bold tracking-[-0.03em] sm:text-[29px]">
                 {client.name}
                 {client.status !== 'active' && (
                   <Badge tone={statusTone[client.status]} className="capitalize">

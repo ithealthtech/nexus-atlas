@@ -207,7 +207,7 @@ export function Groups() {
                 <span className="grid size-10 place-items-center rounded-lg bg-primary-soft text-primary">
                   <UsersRound className="size-5" aria-hidden />
                 </span>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-48">
                   <p className="font-semibold">{g.name}</p>
                   <p className="truncate text-sm text-muted">
                     {g.description ||

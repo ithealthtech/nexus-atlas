@@ -62,6 +62,23 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Timestamps in tables read as "2026-10-20 12:41 UTC", and alternate rows are shaded.
   - A PNG or JPEG logo is used; an SVG logo, which PDF can't embed, falls back to the brand name.
 
+### Fixed
+
+- **Phones.** No page scrolls sideways any more. Five pages used to: the dashboard, a client's overview, Assets, the security log and Duplicates.
+  - Rows that were squeezed to a word or two read properly again: password names, webhooks, groups and checklist runs.
+  - The password list keeps the two copy buttons on a phone and leaves the rest to the password's page.
+  - The asset list shows each asset's client under its name.
+  - A client's header fits without the star dropping to its own line.
+  - The dashboard and Password health show their figures in pairs.
+- **Computers.**
+  - **Webhooks** and **Duplicates** use the page's full width like other lists. **API keys** lines up with its heading.
+  - Password health's figures sit in two even rows.
+  - A client's Assets card shows full layout names.
+  - Password rotation and QR label dropdowns show their whole choice.
+  - A single contact no longer has a divider beside it.
+  - Password rotation and BitLocker collector say "Vault" above their titles, where they live.
+- The demo's **Updates** page loads, instead of showing empty placeholders.
+
 ## [1.8.3] - 2026-10-20
 
 ### Fixed

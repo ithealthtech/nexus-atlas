@@ -133,6 +133,10 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  /* Browsers keep a fieldset at least as wide as its content, which pushes a phone layout sideways. */
+  fieldset {
+    min-width: 0;
+  }
   dialog::backdrop {
     background: rgb(5 8 12 / 0.62);
   }
