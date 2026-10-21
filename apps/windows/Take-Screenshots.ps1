@@ -220,6 +220,21 @@ try {
   Check ((Title) -eq 'Printer setup' -and (Shows '*Print a test page*')) 'a new document saves'
   Shot '09-new-document'
 
+  # Settings, from the account menu; then the dark theme on a few pages.
+  Press (ById 'AccountButton') 'the account menu'
+  Press (Named $CT::MenuItem 'Settings') 'Settings in the account menu'
+  Check ((Title) -eq 'Settings') 'Settings opens from the account menu'
+  Check ([bool](Named $CT::ComboBox 'Search shortcut')) 'Settings offers a choice of search shortcut'
+  Shot '10-settings'
+  Choose 'Theme' 'Dark'
+  Shot '10b-settings-dark'
+  Open 'Home'
+  Shot '11-home-dark'
+  Open 'Passwords'
+  Shot '11b-passwords-dark'
+  Open 'Documents'; Open 'New client onboarding checklist*'
+  Shot '11c-document-dark'
+
   $p.Refresh()
   Check $p.Responding 'the app is still responding'
 }

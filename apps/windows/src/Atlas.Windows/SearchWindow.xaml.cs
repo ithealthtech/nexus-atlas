@@ -45,6 +45,7 @@ public sealed partial class SearchWindow : Window
     private readonly List<Row> recent = [];
     // The signed-in person's first name, for the greeting on Home.
     private string firstName = "";
+    private string accountEmail = "";
     // On Home, how many items are coming due, for the line under the title.
     private int dueSoon;
     private readonly Dictionary<string, LayoutInfo> layouts = [];
@@ -79,6 +80,8 @@ public sealed partial class SearchWindow : Window
         clipboard = new ClipboardGuard(new Native.Clipboard(hwnd), TimeProvider.System);
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
         _ = SetUpHelloAsync();
+        ApplyTheme();
+        Root.ActualThemeChanged += (_, _) => ColorCaptionButtons();
 
         // An update found before this window opened shows at once; one found later shows when it's found. A closed
         // window stops listening.
@@ -121,6 +124,8 @@ public sealed partial class SearchWindow : Window
         Accelerator(VirtualKey.T, VirtualKeyModifiers.Control, () => _ = CopySecretAsync(SecretField.OneTimeCode));
         Accelerator(VirtualKey.U, VirtualKeyModifiers.Control, CopyUsername);
         Accelerator(VirtualKey.Left, VirtualKeyModifiers.Menu, Back);
+        // Ctrl+comma, as in most Windows apps.
+        Accelerator((VirtualKey)188, VirtualKeyModifiers.Control, OpenSettings);
         Accelerator(VirtualKey.Escape, VirtualKeyModifiers.None, () =>
         {
             if (QueryBox.Text.Length > 0)
@@ -147,7 +152,7 @@ public sealed partial class SearchWindow : Window
         Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
     }
 
-    public bool RegisterHotkey() => Native.RegisterSearchHotkey(hwnd, HotkeyId);
+    public bool RegisterHotkey() => Native.RegisterSearchHotkey(hwnd, HotkeyId, SearchShortcut.For(app.Settings.Shortcut));
 
     public void ClearClipboard() => clipboard.ClearNow();
 
@@ -234,6 +239,7 @@ public sealed partial class SearchWindow : Window
         {
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
+            accountEmail = session.User.Email;
             firstName = session.User.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
             if (trail.LastOrDefault()?.Kind == "home")
                 Render();
@@ -388,7 +394,7 @@ public sealed partial class SearchWindow : Window
 
         var isItem = place.Kind == "item";
         var isOverview = place.Kind == "client" && place.Tab == "overview";
-        var isEditor = place.Kind == "edit";
+        var isEditor = place.Kind is "edit" or "settings";
         var showsPasswords = place.Kind == "passwords" || (place.Kind == "client" && place.Tab == "passwords");
         var showsAssets = place.Kind == "assets" || (place.Kind == "client" && place.Tab == "assets");
         var showsDocuments = place.Kind == "documents" || (place.Kind == "client" && place.Tab == "documents");
@@ -414,6 +420,12 @@ public sealed partial class SearchWindow : Window
         PageTitle.Text = place.Title;
         PageInfo.Text = "";
         ShowStar();
+        if (place.Kind == "settings")
+        {
+            PageInfo.Text = "These apply to Atlas for Windows on this PC, for your Windows account.";
+            ShowSettings();
+            return;
+        }
         if (isEditor)
         {
             PageInfo.Text = place.Item is null ? "Saved encrypted in the client's vault, and recorded under your name." : "Only what you change is saved. The old password is kept in the entry's history.";
@@ -2072,6 +2084,8 @@ public sealed partial class SearchWindow : Window
     }
 
     private void SignOut_Click(object sender, RoutedEventArgs e) => _ = app.SignOutAsync();
+
+    private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
 
     // ---------- list pages ----------
     private async Task LoadPageAsync()

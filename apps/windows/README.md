@@ -2,9 +2,10 @@
 
 A tray app for technicians, so everyday lookups don't need a browser tab. .NET 10 and WinUI 3, installed per person by a setup program.
 
-- **Quick search:** Ctrl+Shift+Space (or the tray icon) searches the clients, assets, documents, contacts, locations, and password entries you can see, as you type.
+- **Quick search:** Ctrl+Shift+Space, or another shortcut chosen in Settings (or the tray icon), searches the clients, assets, documents, contacts, locations, and password entries you can see, as you type.
 - **Credentials:** copy the username, the password, or the current one-time code, or open the sign-in address. Copies go through Atlas's reveal endpoint, so they're checked and recorded exactly like the web app's copy button (including required reasons). Secrets are kept out of clipboard history and cloud clipboard, and cleared after 30 seconds unless you've copied something else since.
 - **Documentation:** a summary of the selected record, documents drawn with their formatting (headings, lists, checklists, quotes, code with a copy button, and tables), and **Open in Atlas** for the full page.
+- **Settings** (account menu, or Ctrl+,): light, dark, or the Windows theme; the search shortcut (Ctrl+Shift+Space, Ctrl+Alt+Space, Ctrl+Shift+K, or Ctrl+Alt+K, for when another app already uses one); Windows Hello and locking; the daily notice; Start with Windows; updates; and the account.
 - **Tray:** sign in and out, **Start with Windows**, a daily notice about items expiring in the next 14 days, and the newer version of the app when Atlas offers one.
 
 ## Installing

@@ -42,6 +42,12 @@ public sealed record AppSettings
 
     /// <summary>Minutes without keyboard or mouse use before the app locks; 0 never locks.</summary>
     public int LockAfterMinutes { get; init; } = 15;
+
+    /// <summary>"system" to follow Windows, or "light" or "dark".</summary>
+    public string Theme { get; init; } = "system";
+
+    /// <summary>The <see cref="SearchShortcut"/> that opens search from anywhere.</summary>
+    public string Shortcut { get; init; } = SearchShortcut.Default.Id;
 }
 
 /// <summary>

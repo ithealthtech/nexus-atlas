@@ -6,6 +6,15 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Atlas for Windows: a Settings page.** Open it from the account menu or with Ctrl+,. It brings the app's choices together:
+  - **Theme:** light, dark, or the same as Windows. The window's caption buttons follow the theme too.
+  - **Search shortcut:** Ctrl+Shift+Space, Ctrl+Alt+Space, Ctrl+Shift+K or Ctrl+Alt+K. Useful when another app already uses one; if the chosen one is taken, the app says so and keeps the old one.
+  - **Windows Hello and locking.**
+  - **The daily notice** about what's coming due.
+  - **Start with Windows.**
+  - **Updates:** your version and Check for updates.
+  - **Account:** the Atlas address, Open Atlas, and Sign out.
+  - A note on what the app keeps on the PC.
 - **Atlas for Windows: a Home page worth opening.** Under your favorites, **Coming due** lists what's overdue or due in the next two weeks, soonest first: password rotations, expiring domains, warranties, and document reviews. The line under the title greets you and says how many items are due.
 - **Atlas for Windows: pages use the window.**
   - Item pages and the client overview fill the page up to a readable width instead of shrinking to their content.

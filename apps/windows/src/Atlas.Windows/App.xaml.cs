@@ -39,11 +39,13 @@ public partial class App : Application
     private MenuFlyoutItem? signInItem;
     private MenuFlyoutItem? updateItem;
     private ToggleMenuFlyoutItem? startupItem;
+    private MenuFlyoutItem? searchItem;
     private DispatcherQueueTimer? checkTimer;
     private DateOnly lastExpirationNotice;
     private AppRelease? update;
     private Mutex? running;
     private bool selfTest;
+    private bool preview;
 
     public App()
     {
@@ -66,8 +68,13 @@ public partial class App : Application
     internal void UpdateSettings(Func<AppSettings, AppSettings> change)
     {
         settings = change(settings);
-        store.SaveSettings(settings);
+        // The preview's choices last only while it runs: it never touches the real settings.
+        if (!preview)
+            store.SaveSettings(settings);
     }
+
+    /// <summary>Showing made-up data (--preview): nothing is saved, and Windows settings aren't changed.</summary>
+    internal bool IsPreview => preview;
 
     /// <summary>A newer version of this app that Atlas offers, if there is one.</summary>
     internal AppRelease? AvailableUpdate => update;
@@ -85,6 +92,7 @@ public partial class App : Application
         }
         if (HasArgument(arguments, PreviewArgument))
         {
+            preview = true;
             client = new AtlasClient(PreviewServer.Address, new PreviewServer());
             client.UseToken(PreviewServer.Token);
             window = new SearchWindow(this);
@@ -128,7 +136,7 @@ public partial class App : Application
         window = new SearchWindow(this);
         CreateTray();
         if (!window.RegisterHotkey())
-            Notify("Shortcut unavailable", "Another app uses Ctrl+Shift+Space. Open search from the tray icon instead.");
+            Notify("Shortcut unavailable", $"Another app uses {SearchShortcut.For(settings.Shortcut).Label}. Open search from the tray icon, or choose another shortcut in Settings.");
 
         if (settings.AtlasUrl is { } url && AtlasAddress.TryParse(url, out var address, out _))
         {
@@ -214,7 +222,9 @@ public partial class App : Application
         updateItem = new MenuFlyoutItem { Command = new RelayCommand(() => _ = InstallFromTrayAsync()), Visibility = Visibility.Collapsed };
         startupItem = new ToggleMenuFlyoutItem { Text = "Start with Windows", Command = new RelayCommand(() => _ = ToggleStartupAsync()) };
         var menu = new MenuFlyout();
-        menu.Items.Add(new MenuFlyoutItem { Text = "Search Atlas    Ctrl+Shift+Space", Command = new RelayCommand(ShowSearch) });
+        searchItem = new MenuFlyoutItem { Command = new RelayCommand(ShowSearch) };
+        ShortcutChanged();
+        menu.Items.Add(searchItem);
         menu.Items.Add(updateItem);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(startupItem);
@@ -271,30 +281,42 @@ public partial class App : Application
         && activation.Data is ILaunchActivatedEventArgs launch
         && launch.Arguments.Contains(QuitArgument, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Shows the search shortcut chosen in Settings in the tray menu.</summary>
+    internal void ShortcutChanged()
+    {
+        if (searchItem is not null)
+            searchItem.Text = $"Search Atlas    {SearchShortcut.For(settings.Shortcut).Label}";
+    }
+
     // ---------- start with Windows ----------
     // Installed from the setup program (or run from a folder), the app registers itself under the person's own Run
     // key. Packaged as MSIX, Windows keeps the setting as a startup task instead.
+    /// <summary>Whether the app starts with Windows, or null when Windows won't say (and won't let it change).</summary>
+    internal async Task<bool?> StartsWithWindowsAsync()
+    {
+        if (!Native.IsPackaged())
+            return StartupRegistration.IsEnabled();
+        try
+        {
+            var task = await StartupTask.GetAsync(StartupTaskId);
+            return task.State is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return null;
+        }
+    }
+
     private async Task RefreshStartupItemAsync()
     {
         if (startupItem is null)
             return;
-        if (!Native.IsPackaged())
-        {
-            startupItem.IsChecked = StartupRegistration.IsEnabled();
-            return;
-        }
-        try
-        {
-            var task = await StartupTask.GetAsync(StartupTaskId);
-            startupItem.IsChecked = task.State is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
-        }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
-        {
-            startupItem.IsEnabled = false;
-        }
+        var on = await StartsWithWindowsAsync();
+        startupItem.IsEnabled = on is not null;
+        startupItem.IsChecked = on == true;
     }
 
-    private async Task ToggleStartupAsync()
+    internal async Task ToggleStartupAsync()
     {
         if (!Native.IsPackaged())
         {
