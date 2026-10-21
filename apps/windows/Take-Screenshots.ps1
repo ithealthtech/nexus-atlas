@@ -75,12 +75,18 @@ try {
   }
   function Title { $t = ById 'PageTitle'; if ($t) { $t.Current.Name } else { '' } }
   function Shows($pattern) { [bool](All $CT::Text | Where-Object { $_.Current.Name -like $pattern } | Select-Object -First 1) }
-  function Shot([string]$name) {
-    [Win]::SetForegroundWindow($hwnd) | Out-Null
-    # The pointer off the window, so no tooltip from the last click shows in the picture.
+  # No tooltip left open: the pointer off the window, and keyboard focus on the search box rather than the last button
+  # clicked (a focused button keeps its tooltip, which would show in the picture and the accessibility check).
+  function Quiet {
     $r = New-Object Win+RECT
     [Win]::GetWindowRect($hwnd, [ref]$r) | Out-Null
     [Win]::SetCursorPos($r.Right + 40, $r.Bottom + 40) | Out-Null
+    $box = ById 'QueryBox'
+    if ($box) { try { $box.SetFocus() } catch { } }
+  }
+  function Shot([string]$name) {
+    [Win]::SetForegroundWindow($hwnd) | Out-Null
+    Quiet
     Start-Sleep -Milliseconds 900
     $r = New-Object Win+RECT
     [Win]::GetWindowRect($hwnd, [ref]$r) | Out-Null
@@ -101,6 +107,7 @@ try {
   $madeUpNames = @('NameExcludesControlType:Harbor Dental Group', 'NameExcludesLocalizedControlType:Harbor Dental Group')
   function Scan([string]$name) {
     if (-not (Test-Path $Scanner)) { return }
+    Quiet; Start-Sleep -Milliseconds 600
     $lines = @(& $Scanner $p.Id $name @madeUpNames 2>&1 | ForEach-Object { "$_" })
     $lines | ForEach-Object { Write-Host "  a11y  $_" }
     if ($LASTEXITCODE -ne 0) { $script:a11y += $lines | Where-Object { $_ -notmatch 'accessibility problem\(s\)\.$' } }
