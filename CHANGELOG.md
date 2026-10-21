@@ -6,6 +6,12 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Atlas for Windows: pages use the window.**
+  - Item pages and the client overview fill the page up to a readable width instead of shrinking to their content.
+  - When the window is wide, About, Related, Files and Earlier passwords sit in a column beside the page.
+  - Forms put short fields two to a row.
+  - The asset form's first choice is now called **Asset layout**, as in Atlas, so it no longer has two fields called Type.
+  - IP address and web address labels are no longer drawn in the code font.
 - **Atlas for Windows: documents look the way they do in Atlas.** Headings, bold, italic, underlined, struck and highlighted text, inline code, links, bulleted and numbered lists (nested too), checklists with what's done ticked, quotes, lines, and tables are drawn properly instead of as plain text. Code blocks have a **Copy** button. Links open in your browser, and links to Atlas pages open on your Atlas. The editor's **Preview** draws the same way.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.

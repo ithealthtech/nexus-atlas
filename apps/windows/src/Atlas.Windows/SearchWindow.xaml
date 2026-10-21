@@ -399,8 +399,20 @@
                 </Grid>
 
                 <!-- An item page. -->
-                <ScrollViewer x:Name="DetailScroll" Grid.Row="3" Padding="24,8,24,24" Visibility="Collapsed">
-                    <StackPanel x:Name="Detail" MaxWidth="760" HorizontalAlignment="Left" />
+                <!-- The page's own cards on the left; About, Related, and the like beside them when there's room, or under them. -->
+                <ScrollViewer x:Name="DetailScroll" Grid.Row="3" Padding="24,8,24,24" Visibility="Collapsed" SizeChanged="DetailScroll_SizeChanged">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MaxWidth="760" />
+                            <ColumnDefinition x:Name="DetailSideColumn" Width="0" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel x:Name="Detail" />
+                        <StackPanel x:Name="DetailSide" Grid.Row="1" />
+                    </Grid>
                 </ScrollViewer>
                 
                 <Border x:Name="DetailBar" Grid.Row="4" Visibility="Collapsed" Padding="24,10"

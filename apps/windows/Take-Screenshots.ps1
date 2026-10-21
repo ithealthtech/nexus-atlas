@@ -27,6 +27,10 @@ public static class Win {
 '@
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
+# CI machines start at 1024 x 768, too small to see the app at its usual size (1180 x 780). Windows Server can change it.
+if ($env:GITHUB_ACTIONS -and (Get-Command Set-DisplayResolution -ErrorAction SilentlyContinue)) {
+  try { Set-DisplayResolution -Width 1920 -Height 1080 -Force; Start-Sleep -Seconds 2 } catch { Write-Warning "Couldn't change the screen size: $($_.Exception.Message)" }
+}
 $p = Start-Process $App -ArgumentList '--preview' -PassThru
 $failed = @()
 try {
@@ -71,6 +75,10 @@ try {
   function Shows($pattern) { [bool](All $CT::Text | Where-Object { $_.Current.Name -like $pattern } | Select-Object -First 1) }
   function Shot([string]$name) {
     [Win]::SetForegroundWindow($hwnd) | Out-Null
+    # The pointer off the window, so no tooltip from the last click shows in the picture.
+    $r = New-Object Win+RECT
+    [Win]::GetWindowRect($hwnd, [ref]$r) | Out-Null
+    [Win]::SetCursorPos($r.Right + 40, $r.Bottom + 40) | Out-Null
     Start-Sleep -Milliseconds 900
     $r = New-Object Win+RECT
     [Win]::GetWindowRect($hwnd, [ref]$r) | Out-Null
@@ -142,7 +150,7 @@ try {
   Check (Shows 'Warranty expires') 'an asset shows what is coming due'
   Shot '03d-assets'
   Press (ById 'NewButton') 'New asset'
-  Choose 'Client' 'Harbor Dental Group'; Choose 'Type' 'Configurations'
+  Choose 'Client' 'Harbor Dental Group'; Choose 'Asset layout' 'Configurations'
   Fill 'Name' 'HDG-SW-01'; Choose 'Type *' 'Switch'
   Shot '04-asset-form'
   Press (ById 'SaveButton') 'the asset form''s save button'

@@ -525,7 +525,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -551,7 +551,7 @@ public sealed partial class SearchWindow : Window
         if (cancel.IsCancellationRequested)
             return;
 
-        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var form = new StackPanel { Spacing = 14, Margin = new Thickness(0, 8, 0, 24) };
         ComboBox? clientBox = null;
         if (existing is null && place.ClientId is null)
         {
@@ -621,6 +621,7 @@ public sealed partial class SearchWindow : Window
         buttons.Children.Add(cancelButton);
         foreach (var control in new UIElement[] { name, username, secretRow, url, totp, removeTotp, folder, rotation, notes, error, buttons })
             form.Children.Add(control);
+        PairShortFields(form);
         Detail.Children.Add(form);
         name.Focus(FocusState.Programmatic);
 
@@ -702,7 +703,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -729,7 +730,7 @@ public sealed partial class SearchWindow : Window
         if (existing is not null && existing.Notes.Contains("Synced from", StringComparison.OrdinalIgnoreCase))
             PageInfo.Text = "This asset is kept up to date by a sync: fields it fills are replaced at the next sync. Fields you add yourself are kept.";
 
-        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var form = new StackPanel { Spacing = 14, Margin = new Thickness(0, 8, 0, 24) };
         ComboBox? clientBox = null;
         if (existing is null && place.ClientId is null)
         {
@@ -745,7 +746,7 @@ public sealed partial class SearchWindow : Window
 
         // The layout can only be chosen for a new asset; its fields are drawn below and redrawn when it changes.
         var layoutList = layouts.Values.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        var layoutBox = new ComboBox { Header = "Type", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = layoutList.Select(l => l.Name).ToList() };
+        var layoutBox = new ComboBox { Header = "Asset layout", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = layoutList.Select(l => l.Name).ToList() };
         if (existing is not null)
         {
             layoutBox.SelectedIndex = layoutList.FindIndex(l => l.Id == existing.LayoutId);
@@ -769,6 +770,7 @@ public sealed partial class SearchWindow : Window
                 fieldsPanel.Children.Add(control);
                 readers.Add((field, read));
             }
+            PairShortFields(fieldsPanel);
         }
         layoutBox.SelectionChanged += (_, _) => DrawFields();
         var notes = new TextBox { Header = "Notes", Text = existing?.Notes ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxLength = 20000 };
@@ -782,6 +784,7 @@ public sealed partial class SearchWindow : Window
         buttons.Children.Add(cancelButton);
         foreach (var control in new UIElement[] { layoutBox, name, status, fieldsPanel, notes, error, buttons })
             form.Children.Add(control);
+        PairShortFields(form);
         Detail.Children.Add(form);
         DrawFields();
         (existing is null ? (Control)layoutBox : name).Focus(FocusState.Programmatic);
@@ -792,7 +795,7 @@ public sealed partial class SearchWindow : Window
             var clientId = existing?.ClientId ?? place.ClientId ?? (clientBox?.SelectedIndex is >= 0 and var i ? clients[i].Id : null);
             var missing = readers.FirstOrDefault(r => r.Field.Required && IsEmpty(r.Read()));
             string? problem = clientId is null ? "Choose the client it belongs to."
-                : layoutBox.SelectedIndex < 0 ? "Choose what type of asset it is."
+                : layoutBox.SelectedIndex < 0 ? "Choose the asset layout."
                 : name.Text.Trim().Length == 0 ? "Give it a name."
                 : missing.Field is not null ? $"{missing.Field.Label} is required."
                 : null;
@@ -895,7 +898,12 @@ public sealed partial class SearchWindow : Window
             {
                 var box = new TextBox { Header = label, Text = text, MaxLength = field.Type == "phone" ? 40 : 500, PlaceholderText = field.Help ?? "" };
                 if (field.Type is "ip" or "url")
+                {
+                    // The code font is for what's typed; the label keeps the normal one.
                     box.FontFamily = new FontFamily("Cascadia Mono, Consolas");
+                    box.Header = new TextBlock { Text = label, FontFamily = FontFamily.XamlAutoFontFamily };
+                    AutomationProperties.SetName(box, label);
+                }
                 return (box, () => box.Text.Trim().Length > 0 ? box.Text.Trim() : null);
             }
         }
@@ -952,14 +960,14 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         var isContact = place.Editing == "contact";
         var contact = place.Subject as ContactInfo;
         var location = place.Subject as LocationInfo;
         var adding = place.Subject is null;
 
-        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var form = new StackPanel { Spacing = 14, Margin = new Thickness(0, 8, 0, 24) };
         var owner = clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
         form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
         TextBox Box(string header, string text, int max, string hint = "")
@@ -1021,6 +1029,7 @@ public sealed partial class SearchWindow : Window
         buttons.Children.Add(cancelButton);
         foreach (var control in new UIElement[] { notes, primary, error, buttons })
             form.Children.Add(control);
+        PairShortFields(form);
         Detail.Children.Add(form);
         name.Focus(FocusState.Programmatic);
 
@@ -1089,7 +1098,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -1325,7 +1334,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -1594,11 +1603,11 @@ public sealed partial class SearchWindow : Window
         if (cancel.IsCancellationRequested || current != row)
             return;
         if (relatedTask.Result is { Count: > 0 } related)
-            Detail.Children.Add(Card("Related", [.. related.Select(RelatedRow)]));
+            AddSide(Card("Related", [.. related.Select(RelatedRow)]));
         if (filesTask.Result is { Count: > 0 } files)
-            Detail.Children.Add(Card("Files", [.. files.Select(f => FileRow(row, f))]));
+            AddSide(Card("Files", [.. files.Select(f => FileRow(row, f))]));
         if (historyTask.Result is { Count: > 0 } history)
-            Detail.Children.Add(Card("Earlier passwords", [.. history.Select(v => VersionRow(row, v))]));
+            AddSide(Card("Earlier passwords", [.. history.Select(v => VersionRow(row, v))]));
     }
 
     private UIElement RelatedRow(RelatedItem item) => Field(
@@ -2689,7 +2698,7 @@ public sealed partial class SearchWindow : Window
         var cancel = detailCancel = new CancellationTokenSource();
         HideSecrets();
         password = null;
-        Detail.Children.Clear();
+        ClearDetail();
         current = null;
         if (row is null || app.Client is not { } client)
             return;
@@ -2789,7 +2798,7 @@ public sealed partial class SearchWindow : Window
         if (entry.RequireReason)
             about.Add(Field("Reason", Value("This client asks for a reason before a password is shown or copied.")));
         about.Add(Field("Updated", Value(When(entry.UpdatedAt))));
-        Detail.Children.Add(Card("About", [.. about]));
+        AddSide(Card("About", [.. about]));
         Detail.Children.Add(Footnote("Every time a password is shown or copied, Atlas records it in the password's access history."));
     }
 
@@ -2838,7 +2847,7 @@ public sealed partial class SearchWindow : Window
         }
         if (asset.Notes.Trim().Length > 0)
             Detail.Children.Add(Card("Notes", Text(asset.Notes.Trim(), selectable: true)));
-        Detail.Children.Add(Card(
+        AddSide(Card(
             "About",
             Field("Client", Value(asset.ClientName)),
             Field("Type", Value(asset.LayoutName)),
@@ -2883,7 +2892,7 @@ public sealed partial class SearchWindow : Window
         EditHereButton.Visibility = editable;
         ArchiveButton.Visibility = editable;
         Detail.Children.Add(Card("Document", DocumentBody(document.Content, "This document is empty.")));
-        Detail.Children.Add(Card(
+        AddSide(Card(
             "About",
             Field("Where", Value(document.ClientName ?? "Knowledge base")),
             Field("Updated", Value(Join(When(document.UpdatedAt), document.UpdatedByName)))));
@@ -2904,6 +2913,63 @@ public sealed partial class SearchWindow : Window
 
     private static bool IsWebAddress(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+
+    // ---------- the page's layout ----------
+    private void ClearDetail()
+    {
+        Detail.Children.Clear();
+        DetailSide.Children.Clear();
+        LayOutDetail();
+    }
+
+    /// <summary>A card for beside the page's own (About, Related, and the like), or under them in a narrow window.</summary>
+    private void AddSide(UIElement card)
+    {
+        DetailSide.Children.Add(card);
+        LayOutDetail();
+    }
+
+    private void DetailScroll_SizeChanged(object sender, SizeChangedEventArgs e) => LayOutDetail();
+
+    private void LayOutDetail()
+    {
+        // Room for a readable page (560) and the side column (300) with a gap between: the side cards move up beside it.
+        var wide = DetailSide.Children.Count > 0 && DetailScroll.ActualWidth - 48 >= 884;
+        DetailSideColumn.Width = new GridLength(wide ? 324 : 0);
+        Grid.SetRow(DetailSide, wide ? 0 : 1);
+        Grid.SetColumn(DetailSide, wide ? 1 : 0);
+        DetailSide.Margin = new Thickness(wide ? 24 : 0, 0, 0, 0);
+    }
+
+    /// <summary>Short fields side by side, two to a row, so a form fills the page rather than running down a narrow column.</summary>
+    private static void PairShortFields(Panel form)
+    {
+        var children = form.Children.ToList();
+        form.Children.Clear();
+        for (var i = 0; i < children.Count; i++)
+        {
+            if (!IsShortField(children[i]) || i + 1 >= children.Count || !IsShortField(children[i + 1]))
+            {
+                form.Children.Add(children[i]);
+                continue;
+            }
+            var row = new Grid { ColumnSpacing = 16 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(children[i + 1], 1);
+            row.Children.Add(children[i]);
+            row.Children.Add(children[i + 1]);
+            form.Children.Add(row);
+            i++;
+        }
+    }
+
+    private static bool IsShortField(UIElement element) => element switch
+    {
+        TextBox box => !box.AcceptsReturn,
+        ComboBox or NumberBox or CalendarDatePicker => true,
+        _ => false,
+    };
 
     // ---------- building the cards ----------
     /// <summary>The first card: what it is, its name, and the client it belongs to.</summary>
