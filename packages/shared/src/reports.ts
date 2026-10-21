@@ -307,6 +307,102 @@ export function reportSectionGroups(sections: ReportSection[]) {
   return groups;
 }
 
+// ---------- the figures at the top of a report ----------
+export interface ReportHighlight {
+  label: string;
+  value: string;
+  /** How the figure reads: worth a look ('warning'), fine ('success'), or just a figure. */
+  tone?: 'warning' | 'success';
+}
+
+const count = (value: string | undefined) => {
+  const n = Number((value ?? '').replace(/,/g, ''));
+  return Number.isFinite(n) ? n : 0;
+};
+/** Microsoft's free and trial products report 10,000 or more seats: they aren't seats anyone bought. */
+const UNLIMITED_SEATS = 10_000;
+
+/** Adds money written as "USD 1,234.00" (or several, joined by " + "), keeping each currency apart. */
+export function addMoney(values: string[]): string {
+  const totals = new Map<string, number>();
+  for (const value of values)
+    for (const [, currency, amount] of value.matchAll(/([A-Z]{3}) (-?[\d,]+(?:\.\d+)?)/g))
+      totals.set(currency!, (totals.get(currency!) ?? 0) + Number(amount!.replace(/,/g, '')));
+  if (!totals.size) return '—';
+  return [...totals]
+    .map(
+      ([currency, amount]) =>
+        `${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    )
+    .join(' + ');
+}
+
+/**
+ * The few figures a report leads with, from its sections: seats and how full they are for a license report, money
+ * going to waste for the savings finder, and for every report how many rows need review and how many clients it covers.
+ */
+export function reportHighlights(
+  snapshot: Pick<ReportSnapshot, 'definition' | 'sections' | 'clients'>,
+): ReportHighlight[] {
+  const { sections } = snapshot;
+  const column = (section: ReportSection, name: string) => section.columns.indexOf(name);
+  const total = (names: string[], filter: (s: ReportSection) => boolean = () => true) =>
+    sections.filter(filter).reduce((sum, s) => {
+      const i = names.map((n) => column(s, n)).find((x) => x >= 0) ?? -1;
+      return i < 0 ? sum : sum + s.rows.reduce((n, r) => n + count(r[i]), 0);
+    }, 0);
+  const review = sections.reduce((n, s) => n + s.rows.filter((r) => reportNeedsAttention(s, r)).length, 0);
+  const common: ReportHighlight[] = [
+    { label: 'Needs review', value: String(review), tone: review ? 'warning' : 'success' },
+    { label: snapshot.clients.length === 1 ? 'Client' : 'Clients', value: String(snapshot.clients.length) },
+  ];
+
+  if (snapshot.definition.kind === 'licenses') {
+    const seated = (s: ReportSection) => column(s, 'Assigned') >= 0;
+    // Seats per row, leaving out free products (which would swamp the totals).
+    let seats = 0;
+    let assigned = 0;
+    let products = 0;
+    for (const s of sections.filter(seated)) {
+      const seatColumn = [column(s, 'Seats'), column(s, 'Enabled seats')].find((i) => i >= 0) ?? -1;
+      for (const row of s.rows) {
+        products++;
+        const bought = count(row[seatColumn]);
+        if (bought >= UNLIMITED_SEATS) continue;
+        seats += bought;
+        assigned += count(row[column(s, 'Assigned')]);
+      }
+    }
+    const available = Math.max(0, seats - assigned);
+    return [
+      { label: 'Products', value: String(products) },
+      { label: 'Seats purchased', value: seats.toLocaleString('en-US') },
+      { label: 'Assigned', value: assigned.toLocaleString('en-US') },
+      { label: 'Available', value: available.toLocaleString('en-US'), tone: available ? 'warning' : undefined },
+      { label: 'In use', value: seats ? `${Math.round((assigned / seats) * 100)}%` : '—' },
+      common[0]!,
+    ];
+  }
+  if (snapshot.definition.kind === 'savings') {
+    const summary = sections.find((s) => s.title === 'Savings summary');
+    const money = (name: string) =>
+      summary && column(summary, name) >= 0 ? addMoney(summary.rows.map((r) => r[column(summary, name)] ?? '')) : '—';
+    const reclaim = total(['Seats to reclaim'], (s) => s === summary);
+    return [
+      { label: 'Seats to reclaim', value: String(reclaim), tone: reclaim ? 'warning' : 'success' },
+      { label: 'Monthly waste', value: money('Monthly waste') },
+      { label: 'Yearly waste', value: money('Yearly waste') },
+      { label: 'Renewals due', value: String(total(['Renewals due'], (s) => s === summary)) },
+      common[0]!,
+    ];
+  }
+  return [
+    { label: 'Records', value: sections.reduce((n, s) => n + s.rows.length, 0).toLocaleString('en-US') },
+    ...common,
+    ...(sections.length > 1 ? [{ label: 'Sections', value: String(sections.length) }] : []),
+  ];
+}
+
 /** Shared by the workspace and exports so they show exactly the same rows and columns. */
 export function reportNeedsAttention(section: ReportSection, row: string[]): boolean {
   return section.columns.some((column, i) => {

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
 import { Download, FileQuestion } from 'lucide-react';
-import { reportNeedsAttention, reportSectionGroups, type SharedReport as ReportData } from '@atlas/shared';
+import { reportNeedsAttention, type SharedReport as ReportData } from '@atlas/shared';
 import { Logo } from '@/components/Logo';
-import { Badge, Card, Skeleton } from '@/components/ui';
+import { ReportCell, figureColumns, reportBodyCell, reportHeadCell } from '@/components/ReportTable';
+import { Card, PanelHeader, Skeleton } from '@/components/ui';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
@@ -12,7 +13,7 @@ const SHOWN_ROWS = 1000;
 
 /**
  * Public page for a report shared by link. No account is needed and none is offered: the reader gets this one
- * snapshot, as it was captured, and a PDF of all of it or of one section.
+ * snapshot, as it was captured: every section on the page, and a PDF of all of it.
  */
 export function SharedReport() {
   const { token } = useParams({ strict: false }) as { token: string };
@@ -23,7 +24,6 @@ export function SharedReport() {
 function Report({ token }: { token: string }) {
   const [report, setReport] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [section, setSection] = useState(0);
 
   useEffect(() => {
     // Shared links shouldn't turn up in search results.
@@ -55,24 +55,15 @@ function Report({ token }: { token: string }) {
     };
   }, [token]);
 
-  const current = report?.sections[section];
   return (
     <main id="main" className="min-h-screen bg-bg px-4 py-10">
       <div className="mx-auto w-full max-w-6xl">
         <div className="mb-6 flex items-center justify-between gap-4">
           <Logo />
-          {current && report && (
+          {report && (
             <div className="flex flex-wrap justify-end gap-2">
-              {report.sections.length > 1 && (
-                <a
-                  href={`/api/shared-reports/${encodeURIComponent(token)}/pdf?section=${section}`}
-                  className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-surface-3"
-                >
-                  This section
-                </a>
-              )}
               <a
-                href={`/api/shared-reports/${encodeURIComponent(token)}/pdf?section=${report.sections.length > 1 ? 'all' : section}`}
+                href={`/api/shared-reports/${encodeURIComponent(token)}/pdf?section=${report.sections.length > 1 ? 'all' : 0}`}
                 className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:bg-surface-3 [&_svg]:size-4"
               >
                 <Download aria-hidden /> Download PDF
@@ -88,7 +79,7 @@ function Report({ token }: { token: string }) {
             <h1 className="text-lg font-semibold">This report isn&rsquo;t available</h1>
             <p className="mt-1 max-w-sm text-sm text-muted">{error} Ask whoever sent it for a new link.</p>
           </Card>
-        ) : !report || !current ? (
+        ) : !report ? (
           <Skeleton className="h-80" />
         ) : (
           <article className="space-y-5">
@@ -108,74 +99,64 @@ function Report({ token }: { token: string }) {
                 </ul>
               </div>
             )}
-            {report.sections.length > 1 && (
-              <nav aria-label="Report sections" className="space-y-3">
-                {/* A review pack's sections, under the report each belongs to. */}
-                {reportSectionGroups(report.sections).map(({ part, items }) => (
-                  <div key={part || 'sections'}>
-                    {part && <h2 className="mb-1.5 text-xs font-semibold text-muted">{part}</h2>}
-                    <div className="flex flex-wrap gap-2">
-                      {items.map(({ section: s, index: i }) => (
-                        <button
-                          key={i}
-                          aria-pressed={i === section}
-                          onClick={() => setSection(i)}
-                          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm hover:bg-surface-3 aria-pressed:border-primary aria-pressed:bg-primary-soft aria-pressed:font-semibold aria-pressed:text-primary"
-                        >
-                          {s.title} <span className="text-muted">({s.rows.length})</span>
-                        </button>
-                      ))}
+            {report.sections.map((current, index) => {
+              const figures = figureColumns(current.columns, current.rows);
+              return (
+                <Card key={index} className="overflow-hidden p-0">
+                  <PanelHeader
+                    eyebrow={current.part}
+                    title={current.title}
+                    description={`${current.rows.length.toLocaleString()} ${current.rows.length === 1 ? 'row' : 'rows'}`}
+                  />
+                  {current.rows.length > 0 ? (
+                    <div className="max-h-[70vh] overflow-auto" role="region" aria-label={current.title} tabIndex={0}>
+                      <table className="w-full border-separate border-spacing-0 text-left">
+                        <thead className="sticky top-0 z-[1]">
+                          <tr>
+                            {current.columns.map((c, i) => (
+                              <th key={i} scope="col" className={cn(reportHeadCell, figures.has(i) && 'text-right')}>
+                                {c}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {current.rows.slice(0, SHOWN_ROWS).map((row, i) => (
+                            <tr key={i} className="group">
+                              {row.map((_, j) => (
+                                <td
+                                  key={j}
+                                  className={cn(
+                                    reportBodyCell,
+                                    'max-w-80 min-w-28 border-b border-border break-words group-last:border-b-0',
+                                    j === 0 && 'font-semibold',
+                                    // A row that may need attention carries an amber edge.
+                                    j === 0 &&
+                                      reportNeedsAttention(current, row) &&
+                                      'shadow-[inset_3px_0_0_var(--warning)]',
+                                    figures.has(j) && 'text-right whitespace-nowrap tabular-nums',
+                                  )}
+                                >
+                                  <ReportCell columns={current.columns} row={row} index={j} />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  </div>
-                ))}
-              </nav>
-            )}
-            <Card className="overflow-hidden p-0">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">
-                <h2 className="text-sm font-semibold">{current.title}</h2>
-                <Badge>{current.rows.length} rows</Badge>
-              </div>
-              <div className="max-h-[70vh] overflow-auto" role="region" aria-label={current.title} tabIndex={0}>
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-surface-2">
-                    <tr>
-                      {current.columns.map((c, i) => (
-                        <th
-                          key={i}
-                          scope="col"
-                          className="border-b border-border px-4 py-3 font-semibold whitespace-nowrap"
-                        >
-                          {c}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {current.rows.slice(0, SHOWN_ROWS).map((row, i) => (
-                      <tr
-                        key={i}
-                        className={cn(
-                          'border-b border-border last:border-0',
-                          reportNeedsAttention(current, row) && 'bg-warning-soft',
-                        )}
-                      >
-                        {row.map((value, j) => (
-                          <td key={j} className="max-w-64 min-w-28 px-4 py-3 align-top break-words">
-                            {value || '—'}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!current.rows.length && <p className="p-8 text-center text-sm text-muted">Nothing to show here.</p>}
-              </div>
-              {current.rows.length > SHOWN_ROWS && (
-                <p className="border-t border-border px-5 py-3 text-xs text-muted">
-                  Showing the first {SHOWN_ROWS.toLocaleString()} of {current.rows.length.toLocaleString()} rows.
-                </p>
-              )}
-            </Card>
+                  ) : (
+                    <p className="px-[21px] py-6 text-sm text-muted">Nothing to list.</p>
+                  )}
+                  {current.rows.length > SHOWN_ROWS && (
+                    <p className="border-t border-border px-5 py-3 text-xs text-muted">
+                      Showing the first {SHOWN_ROWS.toLocaleString()} of {current.rows.length.toLocaleString()} rows.
+                      The PDF has them all.
+                    </p>
+                  )}
+                </Card>
+              );
+            })}
             <details className="text-xs text-muted">
               <summary className="cursor-pointer font-semibold">Sources and coverage</summary>
               <ul className="mt-2 space-y-1">
@@ -187,8 +168,8 @@ function Report({ token }: { token: string }) {
                 ))}
               </ul>
               <p className="mt-2">
-                Highlighted rows may need attention. This is a snapshot of the records available when it was captured;
-                missing data is not evidence that everything is fine.
+                Rows marked in amber may need attention. This is a snapshot of the records available when it was
+                captured; missing data is not evidence that everything is fine.
               </p>
             </details>
             <p className="text-xs text-muted">This link stops working on {formatDate(report.expiresAt)}.</p>

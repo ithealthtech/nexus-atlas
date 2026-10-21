@@ -1,6 +1,13 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  REPORT_INFO,
+  reportDefinitionSchema,
+  type ReportDefinition,
+  type ReportRunDetail,
+  type ReportRunView,
+  type ReportSection,
+  type ReportSnapshot,
   licenseSchema,
   licenseUpdateSchema,
   type LicenseView,
@@ -857,11 +864,7 @@ const find = <T extends { id: string }>(list: T[], id: string, what = 'Item') =>
 const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_passwords' });
 
 on('GET', '/reports/templates', () => []);
-on('GET', '/reports/runs', () => []);
 on('GET', '/reports/schedules', () => []);
-
-on('GET', '/reports/templates', () => []);
-on('GET', '/reports/runs', () => []);
 
 // Client license tracking in the clickable demo. Microsoft writes are never simulated as live changes.
 // Harbor Dental Group has a Microsoft 365 tenant linked through GDAP, and two subscriptions tracked in Atlas.
@@ -1006,6 +1009,242 @@ on('GET', '/clients/:client/licenses/microsoft', (m): MicrosoftLicenseView => {
   return { tenantId: 'harbordental.example', checkedAt: ago(4), skus: HARBOR_SKUS, users: HARBOR_USERS };
 });
 on('POST', '/clients/:client/licenses/microsoft/assignments', () => notInDemo('GDAP license management'));
+
+// Reports in the demo: built from the sample data the way the server builds them, kept in memory as history.
+// Licensing and savings use Harbor Dental Group's tracked subscriptions and Microsoft 365 tenant.
+const reportRuns: ReportRunDetail[] = [];
+// List prices per seat per month, as the server's Microsoft price list has them.
+const DEMO_PRICES: Record<string, number> = {
+  'Microsoft 365 Business Premium': 2200,
+  'Exchange Online (Plan 1)': 400,
+  'Exchange Online Archiving': 300,
+};
+const usd = (cents: number) =>
+  `USD ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : 'Not recorded');
+function demoReport(definition: ReportDefinition): ReportRunDetail {
+  const chosen = db.clients.filter((c) => definition.clientIds.includes(c.id));
+  const name = (id: string | null) => chosen.find((c) => c.id === id)?.name ?? '';
+  const sections: ReportSection[] = [];
+  const sources: ReportSnapshot['sources'] = [];
+  const warnings: string[] = [];
+  const tracked = licenseRecords.filter((l) => definition.clientIds.includes(l.clientId));
+  const withTenant = harbor && definition.clientIds.includes(harbor.id) && definition.includeMicrosoft;
+  for (const c of chosen) if (c.id !== harbor?.id) warnings.push(`${c.name}: no Microsoft 365 tenant is linked.`);
+  if (withTenant)
+    sources.push({
+      name: 'Microsoft 365: Harbor Dental Group',
+      updatedAt: ago(4),
+      detail:
+        'Read through GDAP. Purchased enabled seats and assignment totals; pricing and renewal dates are not provided.',
+    });
+  if (definition.kind === 'licenses') {
+    sections.push({
+      title: 'Manually tracked subscriptions',
+      columns: ['Client', 'Product', 'Status', 'Seats', 'Assigned', 'Available', 'Cost / billing period', 'Renewal'],
+      rows: tracked.map((l) => [
+        name(l.clientId),
+        l.name,
+        l.status,
+        String(l.seats),
+        String(l.assignments.length),
+        String(Math.max(0, l.seats - l.assignments.length)),
+        `${l.currency} ${((l.unitCostCents * l.seats) / 100).toFixed(2)} / ${l.billingCycle}`,
+        day(l.renewalDate),
+      ]),
+    });
+    if (withTenant)
+      sections.push({
+        title: 'Microsoft 365 via GDAP',
+        columns: ['Client', 'Product', 'Status', 'Enabled seats', 'Assigned', 'Available'],
+        rows: HARBOR_SKUS.map((s) => [
+          'Harbor Dental Group',
+          s.name,
+          s.status,
+          String(s.enabled),
+          String(s.assigned),
+          String(Math.max(0, s.enabled - s.assigned)),
+        ]),
+      });
+  } else if (definition.kind === 'savings') {
+    const unused = [
+      ...tracked.map((l) => ({
+        client: name(l.clientId),
+        subscription: l.name,
+        source: 'Tracked in Atlas',
+        seats: l.seats,
+        assigned: l.assignments.length,
+        price: Math.round(l.billingCycle === 'annual' ? l.unitCostCents / 12 : l.unitCostCents),
+      })),
+      ...(withTenant
+        ? HARBOR_SKUS.filter((s) => DEMO_PRICES[s.name]).map((s) => ({
+            client: 'Harbor Dental Group',
+            subscription: s.name,
+            source: 'Microsoft 365',
+            seats: s.enabled,
+            assigned: s.assigned,
+            price: DEMO_PRICES[s.name]!,
+          }))
+        : []),
+    ].filter((u) => u.seats > u.assigned);
+    const blocked = withTenant
+      ? HARBOR_USERS.filter((u) => !u.enabled && u.skuIds.length).map((u) => ({
+          account: u.upn,
+          subscriptions: u.skuIds.map((id) => HARBOR_SKUS.find((s) => s.id === id)!.name),
+          price: u.skuIds.reduce((n, id) => n + (DEMO_PRICES[HARBOR_SKUS.find((s) => s.id === id)!.name] ?? 0), 0),
+        }))
+      : [];
+    const renewals = tracked.filter(
+      (l) => l.renewalDate && new Date(l.renewalDate).getTime() - Date.now() < definition.withinDays * 86_400_000,
+    );
+    const waste =
+      unused.reduce((n, u) => n + u.price * (u.seats - u.assigned), 0) + blocked.reduce((n, b) => n + b.price, 0);
+    sections.push(
+      {
+        title: 'Savings summary',
+        columns: ['Client', 'Seats to reclaim', 'Monthly waste', 'Yearly waste', 'Renewals due', 'Renewal value'],
+        rows: chosen.map((c) => {
+          const mine = c.name === 'Harbor Dental Group';
+          return [
+            c.name,
+            String(mine ? unused.reduce((n, u) => n + u.seats - u.assigned, 0) + blocked.length : 0),
+            mine ? usd(waste) : 'USD 0.00',
+            mine ? usd(waste * 12) : 'USD 0.00',
+            String(mine ? renewals.length : 0),
+            mine ? usd(renewals.reduce((n, l) => n + l.unitCostCents * l.seats, 0)) : 'USD 0.00',
+          ];
+        }),
+      },
+      {
+        title: 'Unused seats',
+        columns: [
+          'Client',
+          'Subscription',
+          'Source',
+          'Seats',
+          'Assigned',
+          'Unused',
+          'Price / seat / month',
+          'Monthly waste',
+        ],
+        rows: unused.map((u) => [
+          u.client,
+          u.subscription,
+          u.source,
+          String(u.seats),
+          String(u.assigned),
+          String(u.seats - u.assigned),
+          usd(u.price),
+          usd(u.price * (u.seats - u.assigned)),
+        ]),
+      },
+      {
+        title: 'Licenses on blocked accounts',
+        columns: ['Client', 'Account', 'Subscriptions', 'Monthly cost'],
+        rows: blocked.map((b) => ['Harbor Dental Group', b.account, b.subscriptions.join(', '), usd(b.price)]),
+      },
+      {
+        title: `Renewals in the next ${definition.withinDays} days`,
+        columns: [
+          'Client',
+          'Subscription',
+          'Renewal',
+          'Seats',
+          'Unused',
+          'Renewal value',
+          'Auto-renew',
+          'Before it renews',
+        ],
+        rows: renewals.map((l) => [
+          name(l.clientId),
+          l.name,
+          day(l.renewalDate),
+          String(l.seats),
+          String(l.seats - l.assignments.length),
+          usd(l.unitCostCents * l.seats),
+          l.autoRenew ? 'Yes' : 'No',
+          l.seats > l.assignments.length ? `Reduce to ${l.assignments.length} seats` : 'Confirm it is still needed',
+        ]),
+      },
+    );
+  } else if (definition.kind === 'assets') {
+    sections.push({
+      title: 'Asset inventory',
+      columns: ['Client', 'Asset', 'Type', 'Status', 'Last updated'],
+      rows: assets
+        .filter((a) => definition.clientIds.includes(a.clientId))
+        .map((a) => [
+          name(a.clientId),
+          a.name,
+          db.layouts.find((l) => l.id === a.layoutId)?.name ?? '',
+          a.status[0]!.toUpperCase() + a.status.slice(1),
+          day(a.updatedAt),
+        ]),
+    });
+  } else if (definition.kind === 'documentation') {
+    sections.push({
+      title: 'Documentation health',
+      columns: ['Client', 'Article', 'Status', 'Review due', 'Last updated', 'Attention'],
+      rows: documents
+        .filter((d) => d.clientId && definition.clientIds.includes(d.clientId))
+        .map((d) => [
+          name(d.clientId),
+          d.title,
+          d.status === 'needs_review' ? 'Outdated' : d.status[0]!.toUpperCase() + d.status.slice(1),
+          day(d.reviewDate),
+          day(d.updatedAt),
+          d.status === 'needs_review' ? 'Review overdue' : 'No date-based issue detected',
+        ]),
+    });
+  } else {
+    // The other reports read sources the demo doesn't have (RMM, tickets, password health): a summary per client.
+    sections.push({
+      title: 'Client summary',
+      columns: ['Client', 'Assets', 'Documents', 'Subscriptions', 'Status'],
+      rows: chosen.map((c) => [
+        c.name,
+        String(assets.filter((a) => a.clientId === c.id).length),
+        String(documents.filter((d) => d.clientId === c.id).length),
+        String(licenseRecords.filter((l) => l.clientId === c.id).length),
+        'Active',
+      ]),
+    });
+    warnings.push(
+      `The demo shows a sample of ${REPORT_INFO[definition.kind].name}: the full report needs a connected Atlas server.`,
+    );
+  }
+  const snapshot: ReportSnapshot = {
+    schemaVersion: 1,
+    organization: 'IT Done Right',
+    definition,
+    generatedAt: now(),
+    generatedBy: 'Alex Rivera',
+    clients: chosen.map((c) => ({ id: c.id, name: c.name })),
+    sources,
+    warnings,
+    sections,
+  };
+  const run: ReportRunDetail = {
+    id: uuid(),
+    title: definition.title,
+    kind: definition.kind,
+    createdAt: snapshot.generatedAt,
+    clients: snapshot.clients,
+    warningCount: warnings.length,
+    rowCount: sections.reduce((n, s) => n + s.rows.length, 0),
+    snapshot,
+  };
+  reportRuns.unshift(run);
+  return run;
+}
+const reportRunView = ({ snapshot: _snapshot, ...view }: ReportRunDetail): ReportRunView => view;
+on('POST', '/reports/runs', (_m, b) => demoReport(reportDefinitionSchema.parse(b)));
+on('GET', '/reports/runs', () => reportRuns.map(reportRunView));
+on('GET', '/reports/runs/:id', (m) => find(reportRuns, m[1]!, 'Report'));
+on('DELETE', '/reports/runs/:id', (m) => {
+  reportRuns.splice(reportRuns.indexOf(find(reportRuns, m[1]!, 'Report')), 1);
+  return { ok: true };
+});
 
 // session and account
 on('GET', '/setup', () => ({ needed: false, passwordReset: true }));

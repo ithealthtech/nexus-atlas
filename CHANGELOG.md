@@ -93,6 +93,14 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Changed
 
+- **Reports read like the IT Health Tech portal's.** The library, the workspace, and the results are separate cards with room to breathe, instead of one crowded box.
+  - **Library.** Reports are grouped by what they answer: client reviews, licensing & spend, security & compliance, infrastructure & documentation. It folds away once a report is open; **Change report** brings it back.
+  - **At a glance.** A report opens with its figures. A license report shows products, seats purchased, assigned, available, and how much is in use. The savings finder shows seats to reclaim and monthly and yearly waste. Every report shows how many rows need review, and pressing that figure filters the report.
+  - **Everything at once.** Every section shows on the page, one under another, with no list to pick a section from. One search and a **Needs review only** switch cover the whole report.
+  - **Easier to scan.** States show as coloured pills. Figures and amounts line up on the right. A subscription's assigned seats show as a bar against what was bought. Rows that need review carry an amber edge.
+  - **Exports.** **PDF** exports the whole report. Each section has its own **CSV**.
+  - **Shared links.** A shared report link shows every section the same way.
+  - **Demo.** The demo now runs reports on its sample data.
 - **A client's Licenses, redesigned.** It now has two list panels in the IT Health Tech portal style, with counts across the top that filter the list, a search bar, column labels, and rows with a status pill and quiet row actions.
   - **Subscriptions & seats** lists Microsoft 365 subscriptions, read live through GDAP, alongside the ones tracked in Atlas. Each shows seats used against bought, with a bar, its cost and renewal, and filters for seats available, fully used, and renewing within 30 days. Free products with thousands of placeholder seats show as having no seat limit.
   - **People & licenses** lists everyone in the tenant with their account state and licenses, filtered by licensed, unlicensed, and blocked but still licensed.
