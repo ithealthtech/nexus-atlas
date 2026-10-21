@@ -312,7 +312,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
             <h2 className="text-sm font-semibold">Report library</h2>
             <p className="mt-1 text-xs text-muted">{REPORT_KINDS.length} built-in reports</p>
           </div>
-          <div className="flex border-b border-border p-1" aria-label="Report collections">
+          <div className="grid grid-cols-2 gap-1 border-b border-border p-1" aria-label="Report collections">
             {(['library', 'templates', 'history', 'scheduled'] as const).map((tab) => (
               <button
                 key={tab}
