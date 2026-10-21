@@ -53,7 +53,7 @@ import {
 } from 'lucide-react';
 import type { MenuStyle } from '@atlas/shared';
 import { CommandPalette } from '@/components/CommandPalette';
-import { Avatar, Dialog } from '@/components/ui';
+import { Avatar, Drawer } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -804,9 +804,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </>
         )}
       </main>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Navigation" size="sm">
+      <Drawer side="left" open={open} onClose={() => setOpen(false)} title="Navigation" size="sm">
         {navigation()}
-      </Dialog>
+      </Drawer>
       <CommandPalette open={searching} onOpenChange={setSearching} />
     </div>
   );

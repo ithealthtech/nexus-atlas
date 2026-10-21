@@ -49,6 +49,12 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Changed
 
+- **Drawers for longer work.** Forms for a record, and lists opened from a card, now slide in from the right as a full-height drawer, with the page still visible behind them.
+  - The forms are passwords, assets, clients, contacts and locations, subscriptions, people, groups, asset layouts, checklists, webhooks and Sends.
+  - The lists are devices, tickets, warranties, trackers and applications from the overview cards, plus note and version history, webhook deliveries, sharing, and customizing the dashboard.
+  - A long form scrolls inside the drawer with **Save** always in reach. A click on the dimmed page closes it, as Escape does.
+  - On a phone the drawer fills the screen, and the menu slides in from the left.
+  - Confirmations and short prompts stay as dialogs in the middle of the screen.
 - **Administration has tabs like every other area.** Instead of a list beside the page (or a scrolling strip of buttons on smaller screens), its pages are underlined tabs, as in Overview. The tabs show the section you're in, such as People and security, and **More** lists the other pages under their headings: Data, System and Settings.
 - **Branded report PDFs with charts.** PDF exports now use your logo, brand name, and accent colour from Administration → Theme, instead of a fixed blue.
   - The first page shows summary tiles (clients, rows, needs review, notices).

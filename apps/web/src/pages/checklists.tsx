@@ -20,6 +20,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -158,7 +159,7 @@ function ChecklistDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open={open}
       onClose={onClose}
       size="lg"
@@ -212,7 +213,7 @@ function ChecklistDialog({
         </fieldset>
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 

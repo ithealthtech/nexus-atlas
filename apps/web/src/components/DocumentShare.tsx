@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, Link2 } from 'lucide-react';
 import type { DocumentShareView } from '@atlas/shared';
-import { Badge, Button, Dialog, Field, Select, Skeleton, useToast } from '@/components/ui';
+import { Badge, Button, Field, Select, Skeleton, useToast, Drawer } from '@/components/ui';
 import { api } from '@/lib/api';
 import { DEMO } from '@/lib/demo';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -43,7 +43,7 @@ export function DocumentShareDialog({
   const active = (shares.data ?? []).filter((s) => s.status === 'active');
   const ended = (shares.data ?? []).filter((s) => s.status !== 'active');
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -129,6 +129,6 @@ export function DocumentShareDialog({
           </ul>
         )}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

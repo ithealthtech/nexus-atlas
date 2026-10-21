@@ -43,6 +43,7 @@ import {
   Input,
   Skeleton,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { api, type ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -316,7 +317,7 @@ function SectionsDialog({ prefs, onClose }: { prefs: WorkspacePrefs; onClose: ()
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="sm"
@@ -345,7 +346,7 @@ function SectionsDialog({ prefs, onClose }: { prefs: WorkspacePrefs; onClose: ()
           />
         ))}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 

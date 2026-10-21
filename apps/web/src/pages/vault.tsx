@@ -75,6 +75,7 @@ import {
   Textarea,
   useToast,
   type Tone,
+  Drawer,
 } from '@/components/ui';
 import { AppLink, useGo } from '@/components/AppLink';
 import { BackLink, DetailHeader } from '@/components/DetailHeader';
@@ -551,7 +552,7 @@ export function PasswordDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -837,7 +838,7 @@ export function PasswordDialog({
         />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -1621,7 +1622,7 @@ function FoldersDialog({
       setName('');
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Folders"
@@ -1707,7 +1708,7 @@ function FoldersDialog({
         <p className="text-sm text-muted">No folders yet.</p>
       )}
       <FormError message={error} />
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -2142,7 +2143,7 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Share with a one-time link"
@@ -2216,7 +2217,7 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
           <FormError message={error} />
         </div>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

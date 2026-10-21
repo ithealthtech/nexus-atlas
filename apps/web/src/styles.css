@@ -223,6 +223,25 @@ html[data-nav='subtle'] .nav-link[data-status='active'] {
 @utility animate-dialog {
   animation: dialog-in 160ms ease-out;
 }
+/* Drawers slide in from their edge. */
+@keyframes drawer-in {
+  from {
+    opacity: 0.4;
+    transform: translateX(var(--drawer-from));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@utility animate-drawer-right {
+  --drawer-from: 2.5rem;
+  animation: drawer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@utility animate-drawer-left {
+  --drawer-from: -2.5rem;
+  animation: drawer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
 
 /* Rich-text content (editor and read-only view). TipTap's own CSS injection is off to keep the CSP strict. */
 .prose-atlas .ProseMirror {

@@ -31,12 +31,12 @@ import {
   Card,
   CardHeader,
   Checkbox,
-  Dialog,
   EmptyState,
   PageHeader,
   Skeleton,
   Stat,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
 import { FavoritesCard } from '@/components/Favorites';
@@ -484,7 +484,7 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
   };
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Customize your dashboard"
@@ -553,6 +553,6 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
         })}
         <p className="text-xs text-muted">To hide sections of client workspaces, use Customize on any client.</p>
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

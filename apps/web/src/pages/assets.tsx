@@ -25,6 +25,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { FieldInput, FieldValue } from '@/components/fields';
 import { ItemIcon } from '@/components/ItemIcon';
@@ -123,7 +124,7 @@ export function AssetDialog({
     );
   const fieldError = (key: string) => error?.fields?.[`fields.${key}`];
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -193,7 +194,7 @@ export function AssetDialog({
           message={error && !error.fields ? error.message : error?.fields ? 'Check the highlighted fields.' : null}
         />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 

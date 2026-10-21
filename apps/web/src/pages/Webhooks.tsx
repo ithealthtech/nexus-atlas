@@ -15,7 +15,6 @@ import {
   Card,
   CardHeader,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -23,6 +22,7 @@ import {
   PageHeader,
   Skeleton,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
@@ -57,7 +57,7 @@ function WebhookDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={webhook ? `Edit ${webhook.name}` : 'New webhook'}
@@ -114,7 +114,7 @@ function WebhookDialog({
         <Checkbox name="enabled" defaultChecked={webhook?.enabled ?? true} label="Turned on" />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -124,7 +124,7 @@ function Deliveries({ webhook, onClose }: { webhook: WebhookView; onClose: () =>
     queryFn: () => api<WebhookDeliveryView[]>(`/webhooks/${webhook.id}/deliveries`),
   });
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -156,7 +156,7 @@ function Deliveries({ webhook, onClose }: { webhook: WebhookView; onClose: () =>
           ))}
         </ul>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

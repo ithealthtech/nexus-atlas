@@ -14,7 +14,7 @@ import { api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
 import { StatusChart, Tile, type Slice } from './StatusChart';
-import { Card, CardHeader, Dialog, EmptyState, Skeleton } from './ui';
+import { Card, CardHeader, EmptyState, Skeleton, Drawer } from './ui';
 
 export const useAssetStats = (clientId?: string) =>
   useQuery({
@@ -56,7 +56,7 @@ function AssetList({
   });
   const list = assets.data ?? [];
   return (
-    <Dialog
+    <Drawer
       open={!!filter}
       onClose={onClose}
       size="lg"
@@ -111,7 +111,7 @@ function AssetList({
           </tbody>
         </table>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

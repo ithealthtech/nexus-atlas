@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 import { formatDate, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
-import { Button, Card, CardHeader, Dialog, EmptyState, FormError, Skeleton, Textarea } from './ui';
+import { Button, Card, CardHeader, EmptyState, FormError, Skeleton, Textarea, Drawer } from './ui';
 
 const query = (params: Record<string, string | undefined>) => {
   const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => e[1] !== undefined));
@@ -357,7 +357,7 @@ function StatusList({
   const list = useTicketList(clientId, status ?? undefined, days, status !== null);
   const n = list.data?.length ?? 0;
   return (
-    <Dialog
+    <Drawer
       open={status !== null}
       onClose={onClose}
       size="lg"
@@ -369,7 +369,7 @@ function StatusList({
       ) : (
         <TicketTable tickets={list.data ?? []} showClient={!clientId} />
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

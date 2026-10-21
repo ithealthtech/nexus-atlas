@@ -17,6 +17,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useClient } from '@/lib/queries';
@@ -85,7 +86,7 @@ function LicenseDialog({
     </Field>
   );
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={item ? 'Edit subscription' : 'Add subscription'}
@@ -158,7 +159,7 @@ function LicenseDialog({
         </Field>
         <FormError message={error?.message} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 

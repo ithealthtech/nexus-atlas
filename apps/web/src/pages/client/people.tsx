@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -16,6 +15,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ActivityFeed } from '@/components/panels';
 import { ApiError, api } from '@/lib/api';
@@ -74,7 +74,7 @@ function EntityDialog<T extends ContactView | LocationView>({
     </Field>
   );
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={item ? `Edit ${item.name}` : kind === 'contacts' ? 'Add a contact' : 'Add a location'}
@@ -131,7 +131,7 @@ function EntityDialog<T extends ContactView | LocationView>({
         />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
