@@ -174,6 +174,24 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await expect(page.getByRole('heading', { name: 'Client workspaces', exact: true })).toBeVisible();
     await page.goto(`${base}/clients/${client.id}/reports`);
     await expect(page.getByRole('checkbox', { name: 'Harbor Dental Group', exact: true })).toBeChecked();
+    // Administration's pages are tabs like every other area's: the section you're in, and the rest under More.
+    const prefs = (await owner.call('GET', '/api/account/workspace')).data;
+    await owner.call('PUT', '/api/account/workspace', { ...prefs, menu: 'top' });
+    await page.setViewportSize({ width: 1600, height: 1100 });
+    await page.goto(`${base}/admin/users`);
+    const adminTabs = page.getByRole('navigation', { name: 'Workspace', exact: true });
+    await expect(adminTabs.getByRole('link', { name: 'People & access', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(adminTabs.getByRole('link', { name: 'Groups', exact: true })).toBeVisible();
+    await expect(adminTabs.getByRole('link', { name: 'Webhooks', exact: true })).toHaveCount(0);
+    await adminTabs.getByRole('button', { name: 'More administration pages', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Webhooks', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/webhooks$/);
+    await expect(adminTabs.getByRole('link', { name: 'Updates', exact: true })).toBeVisible();
+    await expect(adminTabs.getByRole('link', { name: 'Groups', exact: true })).toHaveCount(0);
+    await page.screenshot({ path: resolve(screenshots, 'atlas-admin-tabs.png') });
     expect(errors).toEqual([]);
   } finally {
     await context.close();

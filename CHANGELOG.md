@@ -49,6 +49,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Changed
 
+- **Administration has tabs like every other area.** Instead of a list beside the page (or a scrolling strip of buttons on smaller screens), its pages are underlined tabs, as in Overview. The tabs show the section you're in, such as People and security, and **More** lists the other pages under their headings: Data, System and Settings.
 - **Branded report PDFs with charts.** PDF exports now use your logo, brand name, and accent colour from Administration → Theme, instead of a fixed blue.
   - The first page shows summary tiles (clients, rows, needs review, notices).
   - Up to three charts follow, drawn from the report itself: what needs review in each section, the spread of status columns such as online, protection or encryption, and due or expiry dates by month with overdue items first.

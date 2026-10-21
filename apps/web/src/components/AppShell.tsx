@@ -12,6 +12,7 @@ import {
   CalendarClock,
   ChartColumn,
   ChevronRight,
+  ChevronDown,
   ChevronsUpDown,
   ClipboardCheck,
   Cog,
@@ -56,7 +57,7 @@ import { Avatar, Dialog } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { SECTION_TAB } from '@/lib/tabs';
+import { SECTION_TAB, TAB_MENU_ITEM } from '@/lib/tabs';
 import { useClients, useFavorites, useWorkspacePrefs } from '@/lib/queries';
 import { useActor, useApplySession } from '@/lib/session';
 import { useVaultPolicy } from '@/lib/vault';
@@ -541,37 +542,62 @@ function TopAreas({ list, area }: MenuData) {
   );
 }
 
-/** An area's pages as one row of tabs, or a grouped list beside the page when there are many (Administration). */
-function WorkspaceNav({ area, beside, className }: { area: Area; beside?: boolean; className?: string }) {
-  return beside ? (
-    <nav
-      aria-label="Workspace"
-      className={cn(
-        'mb-6 flex gap-x-6 overflow-x-auto border-b border-border pb-2 lg:mb-0 lg:block lg:space-y-5 lg:overflow-visible lg:border-0 lg:pb-0 print:hidden',
-        className,
-      )}
-    >
-      {area.groups.map((group, i) => (
-        <div key={group.title ?? i} className="flex shrink-0 items-center gap-1 lg:block">
-          {group.title && (
-            <p className="mr-1 px-2.5 text-[10px] font-bold tracking-[0.12em] whitespace-nowrap text-muted uppercase lg:mr-0 lg:mb-1.5">
-              {group.title}
-            </p>
-          )}
-          {group.items.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              activeOptions={{ exact: item.exact ?? false }}
-              className="block rounded-md px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap text-muted hover:bg-surface-3 hover:text-text data-[status=active]:bg-primary-soft data-[status=active]:font-semibold data-[status=active]:text-primary"
+/**
+ * An area's pages as one row of tabs. An area with many pages (Administration) shows the section you're in as tabs and
+ * the other sections' pages under More, the way a client's page does, so the row stays short.
+ */
+function WorkspaceNav({ area, current, className }: { area: Area; current?: NavItem; className?: string }) {
+  const many = area.groups.reduce((n, g) => n + g.items.length, 0) > 8;
+  if (many) {
+    const here = area.groups.find((g) => current && g.items.includes(current)) ?? area.groups[0]!;
+    const others = area.groups.filter((g) => g !== here);
+    return (
+      <nav
+        aria-label="Workspace"
+        className={cn(
+          'flex items-end gap-x-[22px] border-b border-border max-sm:overflow-x-auto print:hidden',
+          className,
+        )}
+      >
+        {here.items.map((item) => (
+          <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact ?? false }} className={SECTION_TAB}>
+            {item.label}
+          </Link>
+        ))}
+        <Menu.Root modal={false}>
+          <Menu.Trigger
+            className={cn(SECTION_TAB, 'outline-none')}
+            aria-label={`More ${area.title.toLowerCase()} pages`}
+          >
+            More
+            <ChevronDown className="size-3.5 text-muted" aria-hidden />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content
+              align="start"
+              sideOffset={4}
+              className="z-50 max-h-[70vh] min-w-56 overflow-y-auto rounded-md border border-border bg-surface p-1.5 text-text"
             >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      ))}
-    </nav>
-  ) : (
+              {others.map((group, i) => (
+                <Menu.Group key={group.title ?? i}>
+                  {i > 0 && <Menu.Separator className="my-1 h-px bg-border" />}
+                  {group.title && (
+                    <Menu.Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted">{group.title}</Menu.Label>
+                  )}
+                  {group.items.map((item) => (
+                    <Menu.Item key={item.to} asChild className={TAB_MENU_ITEM}>
+                      <Link to={item.to}>{item.label}</Link>
+                    </Menu.Item>
+                  ))}
+                </Menu.Group>
+              ))}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
+      </nav>
+    );
+  }
+  return (
     <nav
       aria-label="Workspace"
       className={cn('flex flex-wrap items-center gap-x-[22px] border-b border-border print:hidden', className)}
@@ -627,8 +653,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     .flatMap((a) => a.groups.flatMap((g) => g.items))
     .filter((p) => pathname === p.to || (p.to !== '/' && pathname.startsWith(`${p.to}/`)))
     .sort((a, b) => b.to.length - a.to.length)[0];
-  // Areas with many pages list them beside the page instead of in rows of tabs.
-  const beside = area.groups.reduce((n, g) => n + g.items.length, 0) > 8;
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -649,7 +673,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   const side = style !== 'top';
   // Whether the menu on a computer already lists the area's pages; if so the page doesn't repeat them.
-  const menuHasPages = (style === 'rail' && !collapsed) || style === 'sidebar' || (style === 'top' && !beside);
+  const menuHasPages = (style === 'rail' && !collapsed) || style === 'sidebar' || style === 'top';
   const navigation = () => (
     <nav aria-label="Main" className="space-y-1">
       {list.map((item) => (
@@ -715,7 +739,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SearchBox onSearch={() => setSearching(true)} />
             {account}
           </div>
-          {!beside && <WorkspaceNav area={area} className="border-t border-b-0 px-6" />}
+          <WorkspaceNav area={area} current={page} className="border-t border-b-0 px-6" />
         </div>
       )}
       <header
@@ -773,14 +797,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             chosen menu style leaves them out. A client's own sections are tabs on the client page instead. */}
         {area.id === 'clients' ? (
           children
-        ) : beside ? (
-          <div className={cn('lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-10', menuHasPages && 'lg:block')}>
-            <WorkspaceNav area={area} beside className={cn(menuHasPages && 'lg:hidden')} />
-            <div className="min-w-0">{children}</div>
-          </div>
         ) : (
           <>
-            <WorkspaceNav area={area} className={cn('mb-[22px]', menuHasPages && 'lg:hidden')} />
+            <WorkspaceNav area={area} current={page} className={cn('mb-[22px]', menuHasPages && 'lg:hidden')} />
             {children}
           </>
         )}

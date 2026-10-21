@@ -22,7 +22,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { SECTION_TAB } from '@/lib/tabs';
+import { SECTION_TAB, TAB_MENU_ITEM as MENU_ITEM } from '@/lib/tabs';
 import {
   CLIENT_SECTIONS,
   LEVEL_INFO,
@@ -83,8 +83,6 @@ const SECTION_ICONS: Record<ClientSection | '', LucideIcon> = {
   map: MapIcon,
   activity: Activity,
 };
-const MENU_ITEM =
-  'flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-surface-3 data-[status=active]:font-semibold data-[status=active]:text-primary';
 
 export function ClientLayout() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
