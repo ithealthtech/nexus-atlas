@@ -6,6 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Atlas for Windows: documents look the way they do in Atlas.** Headings, bold, italic, underlined, struck and highlighted text, inline code, links, bulleted and numbered lists (nested too), checklists with what's done ticked, quotes, lines, and tables are drawn properly instead of as plain text. Code blocks have a **Copy** button. Links open in your browser, and links to Atlas pages open on your Atlas. The editor's **Preview** draws the same way.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

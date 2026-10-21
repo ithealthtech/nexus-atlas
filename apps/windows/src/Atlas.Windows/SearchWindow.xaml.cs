@@ -1210,8 +1210,7 @@ public sealed partial class SearchWindow : Window
             preview.Children.Clear();
             if (previewButton.IsChecked != true)
                 return;
-            var shown = RichTextPlain.From(JsonSerializer.SerializeToElement(DocumentText.FromText(body.Text)));
-            preview.Children.Add(Card("Preview", Text(shown.Length > 0 ? shown : "Nothing written yet.", selectable: true)));
+            preview.Children.Add(Card("Preview", DocumentBody(JsonSerializer.SerializeToElement(DocumentText.FromText(body.Text)), "Nothing written yet.")));
         };
         var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
         var save = new Button { Content = existing is null ? "Add document" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
@@ -2883,8 +2882,7 @@ public sealed partial class SearchWindow : Window
         var editable = canWrite && document.CanEdit && current is not { Archived: true } ? Visibility.Visible : Visibility.Collapsed;
         EditHereButton.Visibility = editable;
         ArchiveButton.Visibility = editable;
-        var text = RichTextPlain.From(document.Content);
-        Detail.Children.Add(Card("Document", Text(text.Length > 0 ? text : "This document is empty.", selectable: true)));
+        Detail.Children.Add(Card("Document", DocumentBody(document.Content, "This document is empty.")));
         Detail.Children.Add(Card(
             "About",
             Field("Where", Value(document.ClientName ?? "Knowledge base")),
@@ -3001,6 +2999,15 @@ public sealed partial class SearchWindow : Window
 
     private static UIElement Text(string text, bool selectable = false) =>
         new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = selectable, Padding = new Thickness(16, 12, 16, 14), LineHeight = 22 };
+
+    /// <summary>A document drawn the way it looks in Atlas, or a line saying it's empty.</summary>
+    private UIElement DocumentBody(JsonElement content, string empty)
+    {
+        var blocks = DocumentView.Parse(content);
+        return DocumentView.IsEmpty(blocks)
+            ? Text(empty)
+            : new DocumentRenderer(app.Client?.Address.Origin, code => Copy(code, "Code copied.")).Render(blocks);
+    }
 
     private static UIElement Footnote(string text) =>
         new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Secondary(), Margin = new Thickness(2, 14, 0, 0) };

@@ -186,6 +186,21 @@ try {
   Check ((Title) -eq 'Firewall reboot procedure' -and (Shows '*Checked by the screenshot run.*')) 'an edited document saves and shows the new text'
   Shot '08-document-saved'
 
+  # A document with every kind of formatting: headings, a quote, a checklist, code, a table, and lists.
+  Press (ById 'BackButton') 'Back'
+  Open 'New client onboarding checklist*'
+  Check ((Title) -eq 'New client onboarding checklist') 'a knowledge base document opens'
+  Check ((Shows 'First visit') -and (Shows '*Standard VLANs*')) 'a document shows its headings as text'
+  Check ([bool](Named $CT::Button 'Copy code')) 'a code block has a copy button'
+  Shot '06b-document-formatting'
+  $scroller = $win.FindAll($T, (Cond $AE::IsScrollPatternAvailableProperty $true)) |
+    Where-Object { $_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable } | Select-Object -Last 1
+  if ($scroller) {
+    $scroller.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 100); Start-Sleep -Milliseconds 800
+    Shot '06c-document-formatting-end'
+  }
+  else { Check $false 'found the page''s scroll area' }
+
   # A new document in the knowledge base.
   Press (ById 'BackButton') 'Back'
   Press (ById 'NewButton') 'New document'
