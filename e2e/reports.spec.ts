@@ -163,7 +163,11 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await page.getByRole('button', { name: 'Built-in', exact: true }).click();
     // One at a time: each notification also closes itself after a few seconds, so a list taken up front goes stale.
     const toasts = page.getByRole('button', { name: 'Dismiss', exact: true });
-    while ((await toasts.count()) > 0) await toasts.first().click({ timeout: 2000 }).catch(() => undefined);
+    while ((await toasts.count()) > 0)
+      await toasts
+        .first()
+        .click({ timeout: 2000 })
+        .catch(() => undefined);
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
       for (const width of [1600, 390]) {
