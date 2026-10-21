@@ -6,6 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Atlas for Windows runs natively on Arm PCs.** The setup program now carries an ARM64 build alongside the x64 one and installs whichever matches the PC. It's the same download and the same in-app update. Upgrades also start from a clean app folder, so nothing is left over from an older version.
 - **Atlas for Windows works with screen readers and contrast themes.**
   - Every page is checked with Axe.Windows (the engine behind Accessibility Insights) on each build.
   - Buttons that showed an icon and text but had no name for screen readers now have one.

@@ -13,6 +13,7 @@ A tray app for technicians, so everyday lookups don't need a browser tab. .NET 1
 
 Download **AtlasForWindowsSetup.exe** from **Desktop apps** on your account page in Atlas, or from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), and run it.
 
+- **One download for every PC.** The setup program carries an x64 and an ARM64 build (Snapdragon and other Arm PCs) and installs the one that matches, so Arm PCs run it natively rather than under emulation.
 - **It installs for the person running it**, into `%LOCALAPPDATA%\Programs\Atlas for Windows`, and needs no administrator rights. Nothing else has to be installed first.
 - **It isn't code-signed**, so Windows SmartScreen says it doesn't recognise the publisher. Choose **More info**, then **Run anyway**. The `.sha256` file published beside the download lets you check you have the file from the release.
 - **A newer setup program upgrades in place.** It asks the running copy to quit, replaces the files, and keeps your sign-in and settings. It leaves Start with Windows as you set it in the app.
@@ -66,4 +67,4 @@ CI runs all three on every pull request. `Test-Setup.ps1` starts the app with `-
 
 ## Not in this version
 
-Code signing (so Windows asks before running the setup program), MSIX packaging, updates that install without being asked, and a native ARM64 build (the x64 app installs on ARM64 Windows 11 and runs under emulation; that has not been tried). Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
+Code signing (so Windows asks before running the setup program), MSIX packaging, and updates that install without being asked. Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
