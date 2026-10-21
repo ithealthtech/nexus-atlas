@@ -60,7 +60,7 @@ Press **Ctrl+K** (or **⌘K** on a Mac) anywhere in Atlas, or click **Search** i
 
 ### Navigation and workspace tabs
 
-Atlas uses a single sidebar for **Overview**, **Clients**, **Documentation**, **Password Vault**, and **Administration**. Page links appear in the current workspace. The client directory stays in **Clients**, global search, and the client switcher in the header rather than filling a second sidebar.
+Atlas uses a single sidebar for **Overview**, **Clients**, **Documentation**, **Password Vault**, and **Administration**. Page links appear in the current workspace. Where the menu doesn't list them (on a phone, with the sidebar collapsed, or in the top menu style), they appear as tabs along the top of the page. **Administration** has many pages, so its tabs show the section you're in, such as People and security, and **More** lists the rest under their headings. The client directory stays in **Clients**, global search, and the client switcher in the header rather than filling a second sidebar.
 
 Choose **Collapse sidebar** at the bottom of the sidebar to make more space for tables. **Expand sidebar** restores labels. Atlas remembers this choice in your browser. On phones, choose **Open navigation** in the header; Escape closes the menu and returns focus to its trigger.
 

@@ -35,6 +35,7 @@ import {
   type ServiceRun,
   type SystemServicesView,
   type SystemStatus,
+  type UpdateInfo,
   type Branding,
   type CsvImportResult,
   type ImportJobView,
@@ -2980,6 +2981,20 @@ on('POST', '/system/access', (_m, b) => {
   if (!parsed.success) throw new MockError(400, parsed.error.issues[0]?.message ?? 'Check the settings.');
   return notInDemo('Changing how Atlas is reached');
 });
+// Up to date, checked recently. Installing needs a real server.
+const updateInfo = (): UpdateInfo => ({
+  current: '1.0.1',
+  repo: 'ithealthtech/nexus-atlas',
+  checkedAt: ago(40),
+  checkError: null,
+  available: [],
+  canApply: true,
+  run: { state: 'idle', tag: null, requestedBy: null, requestedAt: null, finishedAt: null, message: null },
+});
+on('GET', '/updates', updateInfo);
+on('POST', '/updates/check', updateInfo);
+on('POST', '/updates/apply', () => notInDemo('Installing an update'));
+
 on('GET', '/status', (): SystemStatus => ({
   version: '1.0.1',
   node: 'v22.12.0',

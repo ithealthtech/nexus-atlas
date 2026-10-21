@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -18,6 +17,7 @@ import {
   Textarea,
   useToast,
   type Tone,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
@@ -59,7 +59,7 @@ export function ClientForm({ client, open, onClose }: { client?: ClientSummary; 
     }
   };
   return (
-    <Dialog
+    <Drawer
       open={open}
       onClose={onClose}
       title={client ? 'Edit client' : 'Add a client'}
@@ -143,7 +143,7 @@ export function ClientForm({ client, open, onClose }: { client?: ClientSummary; 
         />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 

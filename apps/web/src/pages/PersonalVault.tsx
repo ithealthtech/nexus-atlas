@@ -41,6 +41,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { useGo } from '@/components/AppLink';
 import { api, download, type ApiError } from '@/lib/api';
@@ -118,7 +119,7 @@ function EntryDialog({ item, onClose }: { item?: PersonalPasswordView; onClose: 
   };
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -283,7 +284,7 @@ function EntryDialog({ item, onClose }: { item?: PersonalPasswordView; onClose: 
         )}
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -324,7 +325,7 @@ function ViewDialog({
   const row = 'flex items-center gap-3 px-1 py-3';
   const label = 'text-xs font-medium text-muted';
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -463,7 +464,7 @@ function ViewDialog({
           </div>
         )}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 

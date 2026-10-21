@@ -386,7 +386,7 @@ export function M365Sync() {
                 <ul className="divide-y divide-border rounded-lg border border-border">
                   {data.tenants.map((t) => (
                     <li key={t.clientId} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 text-sm">
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 basis-48">
                         <p className="font-medium">{t.clientName}</p>
                         <p className="truncate text-xs text-muted">
                           {t.tenantName ? `${t.tenantName} · ` : ''}

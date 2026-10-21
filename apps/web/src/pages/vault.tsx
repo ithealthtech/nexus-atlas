@@ -75,6 +75,7 @@ import {
   Textarea,
   useToast,
   type Tone,
+  Drawer,
 } from '@/components/ui';
 import { AppLink, useGo } from '@/components/AppLink';
 import { BackLink, DetailHeader } from '@/components/DetailHeader';
@@ -551,7 +552,7 @@ export function PasswordDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -837,7 +838,7 @@ export function PasswordDialog({
         />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -921,7 +922,6 @@ function QuickAction({
 // Keeps each action in the same column on every row, even when a row doesn't have it.
 const Slot = () => <span className="inline-block size-9" aria-hidden />;
 
-/** Copy username / password / one-time code, and open the sign-in address, without opening the entry. */
 /**
  * Quick share: one click makes a one-time link (one view, 24 hours) and copies it, for sending to someone who
  * doesn't sign in to Atlas. The full Share dialog on the password page offers other limits.
@@ -967,6 +967,10 @@ function useQuickShare() {
   return { share, dialog };
 }
 
+/**
+ * Copy username / password / one-time code, share, and open the sign-in address, without opening the entry. On a
+ * phone only the two copies show, so the name keeps its room; the rest are on the password's page.
+ */
 function QuickActions({ item }: { item: PasswordView }) {
   const reveal = useReveal();
   const actor = useActor();
@@ -1004,43 +1008,45 @@ function QuickActions({ item }: { item: PasswordView }) {
       ) : (
         <Slot />
       )}
-      {item.hasTotp && item.canReveal ? (
-        <QuickAction
-          label={`Copy one-time code for ${item.name}`}
-          icon={Timer}
-          action={async () => {
-            const result = await reveal(item, { field: 'totp', copy: true }, 'Why do you need this one-time code?');
-            if (!result) return null;
-            await copySecret(result.value);
-            return `One-time code copied. It's valid for ${result.expiresIn ?? 30} more seconds.`;
-          }}
-        />
-      ) : (
-        <Slot />
-      )}
-      {actor.isStaff ? (
-        <QuickAction
-          label={`Quick share ${item.name}: copy a one-time link`}
-          icon={Share2}
-          action={() => quickShare(item)}
-        />
-      ) : (
-        <Slot />
-      )}
-      {openable ? (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Open ${hostOf(item.url)} in a new tab`}
-          title={`Open ${hostOf(item.url)}`}
-          className="inline-grid size-9 place-items-center rounded-lg text-text-2 hover:bg-surface-3 hover:text-text [&_svg]:size-4"
-        >
-          <ExternalLink />
-        </a>
-      ) : (
-        <Slot />
-      )}
+      <span className="hidden sm:contents">
+        {item.hasTotp && item.canReveal ? (
+          <QuickAction
+            label={`Copy one-time code for ${item.name}`}
+            icon={Timer}
+            action={async () => {
+              const result = await reveal(item, { field: 'totp', copy: true }, 'Why do you need this one-time code?');
+              if (!result) return null;
+              await copySecret(result.value);
+              return `One-time code copied. It's valid for ${result.expiresIn ?? 30} more seconds.`;
+            }}
+          />
+        ) : (
+          <Slot />
+        )}
+        {actor.isStaff ? (
+          <QuickAction
+            label={`Quick share ${item.name}: copy a one-time link`}
+            icon={Share2}
+            action={() => quickShare(item)}
+          />
+        ) : (
+          <Slot />
+        )}
+        {openable ? (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${hostOf(item.url)} in a new tab`}
+            title={`Open ${hostOf(item.url)}`}
+            className="inline-grid size-9 place-items-center rounded-lg text-text-2 hover:bg-surface-3 hover:text-text [&_svg]:size-4"
+          >
+            <ExternalLink />
+          </a>
+        ) : (
+          <Slot />
+        )}
+      </span>
     </div>
   );
 }
@@ -1621,7 +1627,7 @@ function FoldersDialog({
       setName('');
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Folders"
@@ -1707,7 +1713,7 @@ function FoldersDialog({
         <p className="text-sm text-muted">No folders yet.</p>
       )}
       <FormError message={error} />
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -2142,7 +2148,7 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Share with a one-time link"
@@ -2216,7 +2222,7 @@ function ShareDialog({ item, onClose }: { item: PasswordView; onClose: () => voi
           <FormError message={error} />
         </div>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

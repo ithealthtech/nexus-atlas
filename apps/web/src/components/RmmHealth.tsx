@@ -13,7 +13,7 @@ import { relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
 import { Sparkline, StatusChart, Tile, pct, type Slice as StatusSlice } from './StatusChart';
-import { Card, CardHeader, Dialog, EmptyState, Skeleton } from './ui';
+import { Card, CardHeader, EmptyState, Skeleton, Drawer } from './ui';
 
 type Slice = StatusSlice<RmmHealthFilter>;
 
@@ -61,7 +61,7 @@ function DeviceList({
   });
   const list = devices.data ?? [];
   return (
-    <Dialog
+    <Drawer
       open={!!filter}
       onClose={onClose}
       size="lg"
@@ -124,7 +124,7 @@ function DeviceList({
           </tbody>
         </table>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 
