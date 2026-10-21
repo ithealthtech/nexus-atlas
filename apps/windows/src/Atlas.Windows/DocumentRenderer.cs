@@ -366,5 +366,5 @@ internal sealed class DocumentRenderer(Uri? atlas, Action<string> copyCode)
         };
     }
 
-    private static Brush Resource(string key) => (Brush)Application.Current.Resources[key];
+    private static Brush Resource(string key) => Themed.Brush(key);
 }

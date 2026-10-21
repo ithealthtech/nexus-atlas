@@ -1461,7 +1461,7 @@ public sealed partial class SearchWindow : Window
                 Text = detail.Notes.Length > 0 ? detail.Notes : "No quick note yet. Use it for what everyone should know before touching anything here.",
                 TextWrapping = TextWrapping.Wrap,
                 IsTextSelectionEnabled = true,
-                Foreground = detail.Notes.Length > 0 ? (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"] : Secondary(),
+                Foreground = detail.Notes.Length > 0 ? Themed.Brush("TextFillColorPrimaryBrush") : Secondary(),
             });
             if (detail.NotesUpdatedAt is { } at)
                 text.Children.Add(new TextBlock { Text = Join($"Edited {When(at)}", detail.NotesUpdatedByName is { } by ? $"by {by}" : null), FontSize = 12, Foreground = Secondary() });
@@ -2878,7 +2878,7 @@ public sealed partial class SearchWindow : Window
             for (var i = 0; i < rows.Count; i++)
             {
                 if (i > 0)
-                    all.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
+                    all.Children.Add(new Border { Height = 1, Background = Themed.Brush("DividerStrokeColorDefaultBrush") });
                 all.Children.Add(rows[i]);
             }
             Detail.Children.Add(new Expander
@@ -3029,8 +3029,8 @@ public sealed partial class SearchWindow : Window
             Width = 40,
             Height = 40,
             CornerRadius = new CornerRadius(8),
-            Background = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"],
-            Child = new FontIcon { Glyph = row.Glyph, FontSize = 18, Foreground = (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"] },
+            Background = Themed.Brush("AccentFillColorDefaultBrush"),
+            Child = new FontIcon { Glyph = row.Glyph, FontSize = 18, Foreground = Themed.Brush("TextOnAccentFillColorPrimaryBrush") },
         };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 3 };
         text.Children.Add(new TextBlock { Text = row.Title, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
@@ -3043,8 +3043,8 @@ public sealed partial class SearchWindow : Window
         grid.Children.Add(text);
         return new Border
         {
-            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Background = Themed.Brush("CardBackgroundFillColorDefaultBrush"),
+            BorderBrush = Themed.Brush("CardStrokeColorDefaultBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Child = grid,
@@ -3066,13 +3066,13 @@ public sealed partial class SearchWindow : Window
         for (var i = 0; i < rows.Length; i++)
         {
             if (i > 0)
-                list.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
+                list.Children.Add(new Border { Height = 1, Background = Themed.Brush("DividerStrokeColorDefaultBrush") });
             list.Children.Add(rows[i]);
         }
         panel.Children.Add(new Border
         {
-            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Background = Themed.Brush("CardBackgroundFillColorDefaultBrush"),
+            BorderBrush = Themed.Brush("CardStrokeColorDefaultBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Child = list,
@@ -3086,7 +3086,7 @@ public sealed partial class SearchWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = (Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"] });
+        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = Themed.Brush("AccentTextFillColorPrimaryBrush") });
         text.Children.Add(value);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         foreach (var action in actions)
@@ -3141,7 +3141,7 @@ public sealed partial class SearchWindow : Window
         return button;
     }
 
-    private static Brush Secondary() => (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+    private static Brush Secondary() => Themed.Brush("TextFillColorSecondaryBrush");
 
     // ---------- the bar under the item ----------
     private void Edit_Click(object sender, RoutedEventArgs e)

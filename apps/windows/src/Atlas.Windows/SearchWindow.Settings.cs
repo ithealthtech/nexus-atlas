@@ -31,6 +31,7 @@ public sealed partial class SearchWindow
             "dark" => ElementTheme.Dark,
             _ => ElementTheme.Default,
         };
+        Themed.Current = Root.RequestedTheme;
         ColorCaptionButtons();
     }
 
@@ -85,6 +86,8 @@ public sealed partial class SearchWindow
         {
             app.UpdateSettings(s => s with { Theme = ThemeChoices[Math.Max(0, theme.SelectedIndex)].Value });
             ApplyTheme();
+            // Cards drawn in code took their colours from the old theme: draw this page again.
+            ShowPlace();
         };
         Detail.Children.Add(Card("Appearance", SettingRow("Theme", "Light or dark, or the same as Windows.", theme)));
 
