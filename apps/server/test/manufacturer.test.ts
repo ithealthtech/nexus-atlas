@@ -25,6 +25,14 @@ describe('manufacturer detection', () => {
       ['DS920+', 'Synology'],
       ['TASKalfa 3253ci', 'Kyocera'],
       ['MFC-L8900CDW', 'Brother'],
+      // Models that only name the maker.
+      ['HP All-in-One Desktop 27-cb0xxx', 'HP'],
+      ['HP Laptop 15-dy2xxx', 'HP'],
+      ['HP 250 G8 Notebook PC', 'HP'],
+      ['Dell 24 AIO', 'Dell'],
+      ['Lenovo 11JQS0Q900', 'Lenovo'],
+      ['ASUS Vivo AiO V241', 'ASUS'],
+      ['HPE ProLiant DL360 Gen11', 'HPE'],
     ])
       expect(detectManufacturer({ model }), model).toBe(maker);
     expect(detectManufacturer({ os: 'VMware ESXi 8.0' })).toBe('VMware');
@@ -42,6 +50,8 @@ describe('manufacturer detection', () => {
     expect(detectManufacturer({ name: 'YOGA-STUDIO-PC' })).toBe('');
     expect(detectManufacturer({ name: 'MS365 admin workstation' })).toBe('');
     expect(detectManufacturer({ model: 'Nexus 9300' })).toBe('Cisco');
+    // A brand at the start of a PC's name is often just where it sits.
+    expect(detectManufacturer({ name: 'HP-FRONTDESK', hostname: 'dell-lab' })).toBe('');
     // An Intel network card says nothing about who made the PC.
     expect(detectManufacturer({ model: '', mac: '3C:A9:F4:00:11:22' })).toBe('');
   });
@@ -117,11 +127,22 @@ describe('manufacturer detection on assets', () => {
     await t.handle.pool.query(`update assets set fields = '{"model":"PowerEdge T350"}'::jsonb where id = $1`, [
       created.data.id,
     ]);
+    // A model that names only the maker, as ConnectWise RMM reports HP's all-in-ones.
+    const aio = await owner.call('POST', `/api/clients/${harbor}/assets`, {
+      layoutId: configuration,
+      name: 'AHMGHACKDT015',
+      fields: {},
+    });
+    await t.handle.pool.query(
+      `update assets set fields = '{"model":"HP All-in-One Desktop 27-cb0xxx"}'::jsonb where id = $1`,
+      [aio.data.id],
+    );
     const result = await owner.call('POST', '/api/assets/detect-manufacturers', {});
-    expect(result.data).toEqual({ checked: 1, filled: 1 });
+    expect(result.data).toEqual({ checked: 2, filled: 2 });
     const after = (await owner.call('GET', `/api/assets/${created.data.id}`)).data;
     expect(after.fields.manufacturer).toBe('Dell');
     expect(after.version).toBe(2);
+    expect((await owner.call('GET', `/api/assets/${aio.data.id}`)).data.fields.manufacturer).toBe('HP');
     // Nothing left to do the second time.
     expect((await owner.call('POST', '/api/assets/detect-manufacturers', {})).data).toEqual({ checked: 0, filled: 0 });
   });
