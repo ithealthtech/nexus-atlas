@@ -458,6 +458,8 @@
           <li>Documentation health</li>
           <li>Endpoint health</li>
           <li>Software &amp; sign-ins</li>
+          <li>Microsoft 365 accounts</li>
+          <li>Microsoft 365 usage</li>
         </ul>
         <p>
           Choose a report and up to 25 clients, set the report title and any lookahead, and choose
@@ -469,12 +471,11 @@
           linked GDAP connection. Microsoft reseller costs and renewal dates are not supplied by that inventory.
         </p>
         <p>
-          Choose <strong>Needs review</strong> to focus on flagged records. Use <strong>Search report results</strong>,
-          <strong>Search field</strong>, and <strong>Visible columns</strong> to refine the table.
-          <strong>CSV</strong> and <strong>PDF</strong> export the selected section's matching rows and columns, with
-          capture details and data coverage. The browser displays the first 500 matching rows; CSV includes all matches,
-          up to the 10,000-row generation limit. PDF supports up to 2,000 matching rows; filter larger reports or export
-          CSV.
+          A report opens with its figures across the top, then every section of it, one after another. Press
+          <strong>Needs review</strong> (or tick <strong>Needs review only</strong>) to show just the flagged rows, and
+          use the search box to search the whole report. Each section's <strong>CSV</strong> exports its matching rows,
+          up to the 10,000-row generation limit; <strong>PDF</strong> exports the whole report, with capture details and
+          data coverage. The page shows the first 500 rows of a section; the CSV has them all.
         </p>
         <p>
           <strong>Save template</strong> stores reusable settings privately in your account.
@@ -515,6 +516,20 @@
           Otherwise it's estimated at Microsoft's published list price in US dollars, marked &quot;(list)&quot;, and
           products Atlas has no price for show as &quot;Not priced&quot;. A product Microsoft reports is counted from
           Microsoft's live assignments, never twice.
+        </p>
+        <p>
+          <strong>Microsoft 365 accounts</strong> lists every account in each client's linked tenant: enabled or
+          blocked, member or guest, how many licenses it holds, and its usage location. Blocked accounts that still hold
+          licenses, and licensed accounts with no usage location, are flagged.
+        </p>
+        <p>
+          <strong>Microsoft 365 usage</strong> shows who uses Microsoft 365 and how, over the last 30 to 180 days
+          (Microsoft keeps 180): each licensed account's last activity in email, Teams, OneDrive and SharePoint,
+          flagging accounts with none, then a section each for Exchange email, Teams, OneDrive, SharePoint and the
+          Microsoft 365 apps. It reads Microsoft's usage reports, which need the
+          <strong>Reports.Read.All</strong> permission and a GDAP role that can read reports (see
+          <em>Microsoft 365 with GDAP</em> in the administrator's guide). If a tenant hides names in its reports, the
+          report says how to show them.
         </p>
         <p>
           <strong>Cyber insurance readiness</strong> answers the questions cyber insurers ask, for each client, from

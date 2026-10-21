@@ -19,6 +19,7 @@ import { review } from './reports/review.js';
 import { security } from './reports/security.js';
 import { service } from './reports/service.js';
 import { software } from './reports/software.js';
+import { accounts, usage } from './reports/microsoft.js';
 
 export { MAX_REPORT_ROWS, type SecuritySources };
 
@@ -40,6 +41,8 @@ const COLLECTORS: Record<ReportKind, Collector> = {
   documentation,
   endpoints,
   software,
+  accounts,
+  usage,
 };
 
 /** Export explicit metadata only: never include vault secrets, document content, or arbitrary custom fields. */

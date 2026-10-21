@@ -129,7 +129,7 @@ function Report({ token }: { token: string }) {
                                   className={cn(
                                     reportBodyCell,
                                     'max-w-80 min-w-28 border-b border-border break-words group-last:border-b-0',
-                                    j === 0 && 'font-semibold',
+                                    j === 0 && 'min-w-44 font-semibold',
                                     // A row that may need attention carries an amber edge.
                                     j === 0 &&
                                       reportNeedsAttention(current, row) &&

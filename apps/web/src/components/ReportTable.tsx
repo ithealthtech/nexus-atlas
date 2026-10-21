@@ -20,6 +20,7 @@ const STATE_COLUMNS = new Set([
   'Auto-renew',
   'Last check',
   'Account status',
+  'Active',
 ]);
 const GOOD = /^(active|enabled|yes|online|running|protected|healthy|ok|current|encrypted|on|ready|valid|licensed)\b/i;
 const BAD =
@@ -66,10 +67,13 @@ export function ReportCell({ columns, row, index }: { columns: string[]; row: st
     if (seatsAt >= 0 && Number.isFinite(seats) && Number.isFinite(assigned))
       return <SeatUse assigned={assigned} seats={seats} />;
   }
-  if (STATE_COLUMNS.has(column)) {
+  // A count under a state's name ("Active" in a summary) is a figure, not a state.
+  if (STATE_COLUMNS.has(column) && !NUMBER.test(value)) {
     // "Failed 2026-10-21" and the like: the word decides the colour.
     return <StatusPill tone={stateTone(value)}>{value}</StatusPill>;
   }
+  // Dates stay on one line.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return <span className="whitespace-nowrap">{value}</span>;
   return <>{value}</>;
 }
 

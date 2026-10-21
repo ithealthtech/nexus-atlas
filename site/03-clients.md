@@ -144,12 +144,14 @@ Open **Overview → Reports** for reporting across clients, or a client's **Repo
 - Documentation health
 - Endpoint health
 - Software & sign-ins
+- Microsoft 365 accounts
+- Microsoft 365 usage
 
 Choose a report and up to 25 clients, set the report title and any lookahead, and choose **Run report**.
 
 The report captures current records; it does not infer historical activity or missing health data. Source timestamps and coverage notices explain what was available. Microsoft seat inventory is read only through the linked GDAP connection. Microsoft reseller costs and renewal dates are not supplied by that inventory.
 
-Choose **Needs review** to focus on flagged records. Use **Search report results**, **Search field**, and **Visible columns** to refine the table. **CSV** and **PDF** export the selected section's matching rows and columns, with capture details and data coverage. The browser displays the first 500 matching rows; CSV includes all matches, up to the 10,000-row generation limit. PDF supports up to 2,000 matching rows; filter larger reports or export CSV.
+A report opens with its figures across the top, then every section of it, one after another. Press **Needs review** (or tick **Needs review only**) to show just the flagged rows, and use the search box to search the whole report. Each section's **CSV** exports its matching rows, up to the 10,000-row generation limit; **PDF** exports the whole report, with capture details and data coverage. The page shows the first 500 rows of a section; the CSV has them all.
 
 **Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
 
@@ -161,6 +163,10 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 - **Renewals:** tracked subscriptions renewing within the window you choose, with what each renewal costs, how many seats go unused, and what cutting them saves before it renews.
 
 The summary totals each client's monthly and yearly waste, in each currency separately. Microsoft 365 seats come live through GDAP (choose **Include Microsoft 365 inventory through GDAP**). GDAP doesn't give prices, so a Microsoft seat is priced from a tracked subscription of the same name when you have one. Otherwise it's estimated at Microsoft's published list price in US dollars, marked "(list)", and products Atlas has no price for show as "Not priced". A product Microsoft reports is counted from Microsoft's live assignments, never twice.
+
+**Microsoft 365 accounts** lists every account in each client's linked tenant: enabled or blocked, member or guest, how many licenses it holds, and its usage location. Blocked accounts that still hold licenses, and licensed accounts with no usage location, are flagged.
+
+**Microsoft 365 usage** shows who uses Microsoft 365 and how, over the last 30 to 180 days (Microsoft keeps 180): each licensed account's last activity in email, Teams, OneDrive and SharePoint, flagging accounts with none, then a section each for Exchange email, Teams, OneDrive, SharePoint and the Microsoft 365 apps. It reads Microsoft's usage reports, which need the **Reports.Read.All** permission and a GDAP role that can read reports (see *Microsoft 365 with GDAP* in the administrator's guide). If a tenant hides names in its reports, the report says how to show them.
 
 **Cyber insurance readiness** answers the questions cyber insurers ask, for each client, from what Atlas holds. Each answer is **Yes**, **Partly**, **No** or **Not evidenced**, with the evidence and where it came from:
 

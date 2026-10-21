@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarDays,
   CalendarClock,
+  ChartColumn,
   ChartNoAxesCombined,
   Download,
   AppWindow,
@@ -28,6 +29,7 @@ import {
   Trash2,
   TriangleAlert,
   Umbrella,
+  Users,
 } from 'lucide-react';
 import {
   type ReportScheduleView,
@@ -84,6 +86,8 @@ const ICONS = {
   documentation: FileCheck2,
   endpoints: Activity,
   software: AppWindow,
+  accounts: Users,
+  usage: ChartColumn,
 };
 /** Reports with a time window (`withinDays`), and what the setting is called for each. */
 const WINDOW_LABEL: Partial<Record<ReportKind, string>> = {
@@ -92,6 +96,7 @@ const WINDOW_LABEL: Partial<Record<ReportKind, string>> = {
   savings: 'Renewals within',
   domains: 'Expiring within',
   service: 'Period',
+  usage: 'Period',
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
   review: 'A business review in one PDF',
@@ -107,11 +112,14 @@ const REPORT_SUBTITLE: Record<ReportKind, string> = {
   documentation: 'Coverage, ownership and review dates',
   endpoints: 'Device status and protection',
   software: 'Applications and who signs in',
+  accounts: 'Accounts, sign-in status and licenses',
+  usage: 'Email, Teams, OneDrive, SharePoint and apps',
 };
 /** The library, grouped by what each report answers, as the portal groups its reports. */
 const LIBRARY: { id: string; title: string; kinds: ReportKind[] }[] = [
   { id: 'reviews', title: 'Client reviews', kinds: ['review', 'executive', 'service'] },
   { id: 'licensing', title: 'Licensing & spend', kinds: ['licenses', 'savings', 'renewals'] },
+  { id: 'microsoft', title: 'Microsoft 365', kinds: ['accounts', 'usage'] },
   { id: 'security', title: 'Security & compliance', kinds: ['security', 'insurance', 'endpoints', 'software'] },
   { id: 'records', title: 'Infrastructure & documentation', kinds: ['assets', 'domains', 'documentation'] },
 ];
@@ -605,7 +613,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       >
                         {[30, 60, 90, 180, 365].map((day) => (
                           <option key={day} value={day}>
-                            {definition.kind === 'service'
+                            {definition.kind === 'service' || definition.kind === 'usage'
                               ? `Last ${day} days`
                               : definition.kind === 'savings'
                                 ? `${day} days`
@@ -888,7 +896,7 @@ function SectionTable({
                           className={cn(
                             reportBodyCell,
                             'max-w-80 min-w-28 border-b border-border break-words group-last:border-b-0',
-                            j === 0 && 'font-semibold',
+                            j === 0 && 'min-w-44 font-semibold',
                             // A row that needs review carries an amber edge.
                             j === 0 && flagged && 'shadow-[inset_3px_0_0_var(--warning)]',
                             figures.has(j) && 'text-right whitespace-nowrap tabular-nums',

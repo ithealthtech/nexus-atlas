@@ -17,6 +17,7 @@ import { contacts } from '../people.js';
 import { Scope } from '../scope.js';
 import type { StoredM365 } from '../settings.js';
 import { graphErrorDetail } from './m365-graph-error.js';
+import { USAGE_REPORTS, parseCsv, type UsagePeriod, type UsageReport } from './m365-usage.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const SOURCE_NOTE = 'Synced from Microsoft 365.';
@@ -95,6 +96,16 @@ export interface M365Snapshot {
 }
 
 /** Microsoft Graph, as the MSP's multi-tenant app, signed in to one client tenant at a time. */
+/** A Microsoft 365 account as the accounts report lists it. */
+export interface M365Account {
+  name: string;
+  upn: string;
+  enabled: boolean;
+  guest: boolean;
+  licenses: number;
+  usageLocation: string;
+}
+
 export class M365Client {
   private tokens = new Map<string, { token: string; expires: number }>();
 
@@ -228,6 +239,58 @@ export class M365Client {
       };
     });
     return { tenantId: tenant, checkedAt: new Date().toISOString(), skus, users };
+  }
+
+  /** Every account in the tenant, for the Microsoft 365 accounts report: state, type, licenses, usage location. */
+  async accounts(tenant: string): Promise<M365Account[]> {
+    return (
+      await this.all(
+        tenant,
+        '/users?$select=id,displayName,userPrincipalName,accountEnabled,userType,assignedLicenses,usageLocation&$top=999',
+      )
+    ).map((u) => ({
+      name: String(u.displayName ?? u.userPrincipalName ?? ''),
+      upn: String(u.userPrincipalName ?? ''),
+      // Only an explicit false: an account Microsoft didn't describe isn't called blocked.
+      enabled: u.accountEnabled !== false,
+      guest: u.userType === 'Guest',
+      licenses: Array.isArray(u.assignedLicenses) ? u.assignedLicenses.length : 0,
+      usageLocation: typeof u.usageLocation === 'string' ? u.usageLocation : '',
+    }));
+  }
+
+  /**
+   * One of Microsoft 365's usage reports for a period, as rows of named values. Microsoft answers with a short-lived
+   * download link, which is followed without the access token. Needs the Reports.Read.All permission and, through
+   * GDAP, a role that can read usage (Reports Reader or Global Reader).
+   */
+  async usage(tenant: string, report: UsageReport, period: UsagePeriod): Promise<Record<string, string>[]> {
+    const token = await this.token(tenant);
+    const path = `/reports/${USAGE_REPORTS[report]}(period='${period}')`;
+    let res: Response;
+    try {
+      res = await this.fetcher(`${GRAPH}${path}`, {
+        headers: { authorization: `Bearer ${token}` },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(30_000),
+      });
+      const link = res.headers.get('location');
+      if (res.status >= 300 && res.status < 400 && link) {
+        // The file itself, from Microsoft's report storage: https only, and never with the token.
+        if (!link.startsWith('https://')) throw new HttpError(502, 'Microsoft returned an unexpected report link.');
+        res = await this.fetcher(link, { signal: AbortSignal.timeout(60_000) });
+      }
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      throw new HttpError(502, 'Microsoft Graph could not be reached from this server.');
+    }
+    if (res.status === 401 || res.status === 403)
+      throw new HttpError(
+        400,
+        `Microsoft refused the usage reports.${await graphErrorDetail(res)} Reconnect the partner account so Atlas has the Reports.Read.All permission, grant it in the customer's consent, and give your GDAP group the Reports Reader role.`,
+      );
+    if (!res.ok) throw new HttpError(502, `Microsoft Graph answered ${res.status} for ${USAGE_REPORTS[report]}.`);
+    return parseCsv(await res.text());
   }
 
   /** License writes always require delegated access; application credentials are never used. */

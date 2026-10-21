@@ -15,6 +15,8 @@ export const REPORT_KINDS = [
   'documentation',
   'endpoints',
   'software',
+  'accounts',
+  'usage',
 ] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const REPORT_INFO: Record<ReportKind, { name: string; description: string }> = {
@@ -69,6 +71,16 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
   endpoints: {
     name: 'Endpoint health',
     description: 'RMM online status, last check-in, and endpoint protection coverage.',
+  },
+  accounts: {
+    name: 'Microsoft 365 accounts',
+    description:
+      'Every account in each linked Microsoft 365 tenant: enabled or blocked, member or guest, its licenses, and blocked accounts still holding them.',
+  },
+  usage: {
+    name: 'Microsoft 365 usage',
+    description:
+      "Who uses Microsoft 365 and how: overall activity, Exchange email, Teams, OneDrive, SharePoint, and the Microsoft 365 apps, from Microsoft's usage reports.",
   },
   software: {
     name: 'Software & sign-ins',
@@ -383,6 +395,31 @@ export function reportHighlights(
       common[0]!,
     ];
   }
+  if (snapshot.definition.kind === 'accounts') {
+    const summary = sections.find((s) => s.title === 'Account summary');
+    const sum = (name: string) => String(total([name], (s) => s === summary));
+    return [
+      { label: 'Accounts', value: sum('Accounts') },
+      { label: 'Enabled', value: sum('Enabled') },
+      { label: 'Blocked', value: sum('Blocked') },
+      { label: 'Licensed', value: sum('Licensed') },
+      { label: 'Guests', value: sum('Guests') },
+      common[0]!,
+    ];
+  }
+  if (snapshot.definition.kind === 'usage') {
+    const summary = sections.find((s) => s.title === 'Usage summary');
+    const sum = (name: string) => total([name], (s) => s === summary);
+    const inactive = sum('Inactive');
+    return [
+      { label: 'Licensed accounts', value: String(sum('Licensed accounts')) },
+      { label: 'Active', value: String(sum('Active')) },
+      { label: 'Inactive', value: String(inactive), tone: inactive ? 'warning' : 'success' },
+      { label: 'Email', value: String(sum('Email')) },
+      { label: 'Teams', value: String(sum('Teams')) },
+      { label: 'OneDrive', value: String(sum('OneDrive')) },
+    ];
+  }
   if (snapshot.definition.kind === 'savings') {
     const summary = sections.find((s) => s.title === 'Savings summary');
     const money = (name: string) =>
@@ -411,6 +448,13 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     // A device's state; a health trend's "Online" holds counts ("35 → 38"), which aren't a problem in themselves.
     if (column === 'Online') return value === 'Offline' || value === 'Unknown';
     if (column === 'Protection') return !['running', 'protected', 'healthy'].includes(value.toLowerCase());
+    // A blocked Microsoft 365 account matters while it still holds licenses; a licensed one needs a usage location.
+    if (column === 'Status' && section.columns.includes('Licenses'))
+      return value === 'Blocked' && count(row[section.columns.indexOf('Licenses')]) > 0;
+    if (column === 'Usage location') return !value && count(row[section.columns.indexOf('Licenses')]) > 0;
+    // A licensed account with no activity in the period.
+    if (column === 'Active') return value === 'No';
+    if (['Blocked & licensed', 'No usage location', 'Inactive'].includes(column)) return Number(value) > 0;
     if (column === 'Status')
       return ['overdue', 'outdated', 'inactive', 'suspended', 'warning', 'expired', 'expiring soon'].includes(
         value.toLowerCase(),
