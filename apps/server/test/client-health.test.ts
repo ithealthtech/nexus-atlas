@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import type { ClientHealthDetail, ClientHealthSummary, RmmHealthCounts } from '@atlas/shared';
 import { scoreClient, type HealthInputs } from '../src/services/client-health.js';
-import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+import { enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const none = { expired: 0, soon: 0, active: 0, unknown: 0 };
 const blank = (): HealthInputs => ({
@@ -173,16 +173,18 @@ describe('client health for staff', () => {
         password: temporary,
         grants: [{ clientId, level: 'read' }],
       });
-    const as = async (email: string) => {
+    // Staff must set up two-step verification before they reach client data.
+    const as = async (email: string, staff = false) => {
       const { b } = await signIn(t.app, email, temporary);
       await b.call('POST', '/api/account/password', { current: temporary, next: 'replaced health pass 4321' });
+      if (staff) await enroll(b);
       return b;
     };
     const viewer = await as('health-viewer@atlas.test');
     expect((await viewer.call('GET', `/api/clients/${clientId}/health`)).status).toBe(404);
     expect((await viewer.call('GET', '/api/client-health')).data).toEqual([]);
 
-    const tech = await as('health-tech@atlas.test');
+    const tech = await as('health-tech@atlas.test', true);
     expect((await tech.call('GET', `/api/clients/${clientId}/health`)).status).toBe(200);
     expect((await tech.call('GET', `/api/clients/${otherId}/health`)).status).toBe(404);
     expect(
