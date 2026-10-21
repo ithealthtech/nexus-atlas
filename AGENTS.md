@@ -119,3 +119,43 @@ Only when the owner asks. Every version reference moves together; a release that
   - Anything sensitive writes a security-log event.
 - **User-facing text and the manual**: plain, direct English. Name buttons and pages exactly as they appear.
 - **`CHANGELOG.md`**: describe what changed for the people using Atlas, under `## [Unreleased]`.
+
+## Code quality: no "AI slop"
+
+These rules come from an audit of this codebase (2.0 plan, #229) and from published research on AI-generated code. That
+research finds such code has more defects and security issues, more copy-paste, and less refactoring than code written
+with care. A PR that breaks one of these rules isn't finished.
+
+- **Never swallow an error that matters.**
+  - `.catch(() => undefined)` is only for best-effort clean-up, such as releasing a lock or deleting a temp file.
+  - Scheduled work runs through `Repeating` (`apps/server/src/services/repeating.ts`), which logs every failure.
+    Never write a bare `setInterval`.
+- **Don't silence the type checker.** No `any`, `as unknown as`, `@ts-ignore`, or `eslint-disable` to make an error go
+  away. Fix the type. The rare exception needs a comment saying why.
+- **No timing band-aids.** Don't use `setTimeout` or retries to hide a race. Find the cause.
+- **Reuse before you write.** Search for an existing helper first:
+  - `securityEvent()` for the security log;
+  - `useAction()` for a page's busy and error state;
+  - `saveBlob()` / `saveText()` for downloads;
+  - `api()` for requests;
+  - the report `ReportContext` and its collectors;
+  - `Repeating` for scheduled jobs.
+
+  Copying a block into a second place means it should be a helper.
+- **Tables, not growing chains.** When behaviour differs per kind (report type, item type, status), use a
+  `Record<Kind, …>` table typed over every kind, so a new kind can't compile half-handled. Don't add another
+  `x === 'a' ? … : x === 'b' ? …` branch.
+- **Small units.** A function does one job. When one passes about 150 lines, or a file about 500, split it by
+  responsibility (as `apps/server/src/services/reports/` is).
+- **Comments explain why, not what.** No narration of each step, no restating the code, and no emoji.
+- **Tests prove behaviour.**
+  - Never weaken, skip, or delete a test to make it pass.
+  - Never mock away the thing under test. Access checks in particular run for real.
+  - A bug fix comes with a test that fails without it.
+- **Security by default.**
+  - Validate input with the zod schemas in `packages/shared`.
+  - Check access through `Scope` on every read and write.
+  - Never log secrets.
+  - Never add an early return that skips an access check.
+- **Nothing unrequested.** No new dependencies, services, or abstractions the task didn't call for. Keep PRs focused
+  on one change.
