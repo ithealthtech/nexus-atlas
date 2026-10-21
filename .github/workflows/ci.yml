@@ -177,6 +177,13 @@ jobs:
             apps/windows/dist/AtlasForWindowsSetup.exe
             apps/windows/dist/AtlasForWindowsSetup.exe.sha256
           retention-days: 30
+      # The app itself, unpacked, to try a pull request without installing it: AtlasForWindows.exe --preview opens it
+      # beside an installed copy, with made-up data, saving nothing.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atlas-for-windows-app
+          path: apps/windows/dist/app
+          retention-days: 7
 
   # The root helper's service actions (deploy/linux/atlas-updater.sh), run against real systemd with stand-ins for
   # Atlas and its web proxy: restarts, a repair, refusals, and reading service states from inside Atlas's sandbox.
