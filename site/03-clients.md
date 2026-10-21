@@ -39,7 +39,7 @@ You need edit access to every client to add one. Administrators always have it.
 
 Opening a client shows:
 
-- **The header:** the client's name and type, your access, and the star to add it to your favourites. **Monthly report**, **Export**, **Edit client**, and for administrators **Delete**, are on the right.
+- **The header:** the client's name and type, your access, and the star to add it to your favourites. **Monthly report**, **Review pack**, **Export**, **Edit client**, and for administrators **Delete**, are on the right. **Review pack** downloads this client's quarterly business review as one PDF (see [Client review pack](#client-review-pack)).
 - **The quick note:** a short note at the top of every page for this client, for the thing everyone should know before they touch anything.
 - **The tabs:** **Overview**, **Assets**, **Documents**, **Passwords**, **Contacts**, **Locations**, **Checklists**, **Licenses**, **Map** and **Activity**. Counts appear for the sections that provide them. The **Trackers** row underneath has **Domain Tracker** and **SSL Tracker**. A tracker count turns amber when something needs attention.
 
@@ -104,6 +104,7 @@ Microsoft seat counts and assignments remain authoritative in Microsoft. Purchas
 
 Open **Overview → Reports** for reporting across clients, or a client's **Reports** tab for that workspace. The built-in reports are:
 
+- Client review pack
 - Executive summary
 - Security posture
 - Service review
@@ -130,6 +131,15 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 For **Asset inventory**, **Asset fields** adds up to 12 fields from your asset layouts as extra columns, such as serial number, model, warranty date, or IP address. Long text fields are never included, because they often hold notes and configuration. A field removed from its layout since a template was saved is left out, with a notice.
 PDF exports carry your organization's look from **Administration → Theme**: the logo (PNG or JPEG; an SVG logo shows your brand name instead), the brand name, and the accent colour. The first page summarizes the report: how many clients and rows it covers, how many rows need review, and any notices. It also charts what needs review in each section, the spread of status columns (online, protection, encryption, status), and due or expiry dates by month.
 When you have run the same report for the same clients before, **Compare with** shows what changed since the most recent earlier run. New rows are marked **New**, changed values are highlighted with the previous value beneath, and rows that have gone are listed under **removed since**. **Changes only** hides everything else. Values that move on every run, such as check-in times or days left, don't count as changes.
+### Client review pack
+
+The **Client review pack** is a business review for one client in a single PDF, ready to send before a quarterly meeting. It is made of four reports, run together: **Executive summary**, **Security posture**, **Service review** and **Upcoming renewals**. Its period looks back for the service review and ahead for renewals: a quarter by default, or anything from 30 days to a year.
+
+The fastest way to make one is **Review pack** in the client's header: it captures the last quarter and downloads the PDF in one click. You can also choose **Client review pack** under Reports, pick the client and period, and choose **Run report**, then **Review pack PDF**.
+
+The PDF opens with a cover page in your organization's look. It shows the client, the period, how much of each report needs review, and the contents with page numbers. Each report follows on its own pages, with its charts, and one-client summaries shown as figures rather than a one-row table. On screen, **Report section** groups the sections under the report each belongs to.
+
+The pack leaves out Atlas's internal change log; the service review still counts the changes made. Like any single-client report, a review pack can be compared with the last one, shared with the client by link (the client can download all of it as one PDF), or scheduled, for example every quarter on the 1st.
 ### Scheduled reports
 
 To have a report emailed regularly, set it up (report type, clients, and any options), then choose **Schedule**. Choose:
@@ -144,7 +154,7 @@ The **Scheduled** tab lists your schedules, when each runs next, and how the las
 
 ### Sharing a report with the client
 
-A report run for a single client can be shared with that client by link. Choose **Share**, pick how long the link works (7, 30, or 90 days; report links always expire), and choose **Create link**; the link is copied for you. Whoever has the link sees that snapshot, every section as it was captured, and can download each section as a PDF, without an account. The page names your organization and the client, never the person who ran the report. The dialog shows how often each link was opened, and **Revoke** stops a link at once. Deleting the report or the client stops its links too. Only the person who ran the report can share it, and only with edit access to the client. Making and revoking links appear in the security log.
+A report run for a single client can be shared with that client by link. Choose **Share**, pick how long the link works (7, 30, or 90 days; report links always expire), and choose **Create link**; the link is copied for you. Whoever has the link sees that snapshot, every section as it was captured, and can download the whole report or one section as a PDF, without an account. The page names your organization and the client, never the person who ran the report. The dialog shows how often each link was opened, and **Revoke** stops a link at once. Deleting the report or the client stops its links too. Only the person who ran the report can share it, and only with edit access to the client. Making and revoking links appear in the security log.
 
 **Send** decides which runs are emailed, so a schedule can work as an alert:
 

@@ -21,6 +21,7 @@ import {
   ListFilter,
   LockKeyhole,
   Play,
+  Presentation,
   Save,
   Search,
   ShieldCheck,
@@ -35,6 +36,7 @@ import {
   compareReportSections,
   previousReportRun,
   reportNeedsAttention,
+  reportSectionGroups,
   selectReportSection,
   type ReportDefinition,
   type ReportKind,
@@ -65,6 +67,7 @@ import { DEMO } from '@/lib/demo';
 import { cn } from '@/lib/cn';
 
 const ICONS = {
+  review: Presentation,
   executive: ChartNoAxesCombined,
   security: LockKeyhole,
   service: Handshake,
@@ -88,11 +91,13 @@ const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
 };
 /** Reports with a time window (`withinDays`), and what the setting is called for each. */
 const WINDOW_LABEL: Partial<Record<ReportKind, string>> = {
+  review: 'Period',
   renewals: 'Renewal lookahead',
   domains: 'Expiring within',
   service: 'Period',
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
+  review: 'A business review in one PDF',
   executive: 'Your client environment at a glance',
   security: 'Passwords, protection and encryption',
   service: 'Work done over a period',
@@ -217,7 +222,13 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const when = (iso: string) => new Date(iso).toLocaleString();
   const attention = currentSection?.rows.filter((row) => reportNeedsAttention(currentSection, row)).length ?? 0;
   const selectKind = (kind: ReportKind) => {
-    setDefinition((d) => ({ ...d, kind, title: REPORT_INFO[kind].name }));
+    // A review pack is for one client.
+    setDefinition((d) => ({
+      ...d,
+      kind,
+      title: REPORT_INFO[kind].name,
+      clientIds: kind === 'review' ? d.clientIds.slice(0, 1) : d.clientIds,
+    }));
     setRun(null);
     setTemplate(null);
     setSelection(initialSelection());
@@ -280,13 +291,15 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
       setError((e as Error).message);
     }
   };
+  // A review pack's PDF is the whole pack, with its cover; other reports export the section as shown.
+  const wholePdf = run?.kind === 'review';
   const exportReport = async (format: 'csv' | 'pdf') => {
     if (!run) return;
     setExporting(true);
     setError(null);
     try {
       await download(
-        `/reports/runs/${run.id}/export?format=${format}&selection=${encodeURIComponent(JSON.stringify(selection))}`,
+        `/reports/runs/${run.id}/export?format=${format}&selection=${encodeURIComponent(JSON.stringify(selection))}${format === 'pdf' && wholePdf ? '&whole=1' : ''}`,
         `atlas-report.${format}`,
       );
     } catch (e) {
@@ -489,7 +502,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   onClick={() => void exportReport('pdf')}
                 >
                   <FileText />
-                  PDF
+                  {wholePdf ? 'Review pack PDF' : 'PDF'}
                 </Button>
                 {/* Only a single-client snapshot can go outside Atlas. */}
                 {run?.snapshot.clients.length === 1 && !DEMO && (
@@ -529,7 +542,9 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   )}
                 </Field>
                 <fieldset>
-                  <legend className="mb-2 text-[13px] font-semibold">Clients {clientId ? '' : '(up to 25)'}</legend>
+                  <legend className="mb-2 text-[13px] font-semibold">
+                    {definition.kind === 'review' ? 'Client' : `Clients ${clientId ? '' : '(up to 25)'}`}
+                  </legend>
                   {clients.isLoading && <Skeleton className="h-12" />}
                   <FormError message={clients.error?.message} />
                   <div className="grid max-h-44 gap-3 overflow-y-auto sm:grid-cols-2">
@@ -546,8 +561,11 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                           onChange={(e) =>
                             setDefinition({
                               ...definition,
+                              // A review pack is for one client: choosing another replaces it.
                               clientIds: e.currentTarget.checked
-                                ? [...definition.clientIds, c.id]
+                                ? definition.kind === 'review'
+                                  ? [c.id]
+                                  : [...definition.clientIds, c.id]
                                 : definition.clientIds.filter((id) => id !== c.id),
                             })
                           }
@@ -570,7 +588,11 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       >
                         {[30, 60, 90, 180, 365].map((day) => (
                           <option key={day} value={day}>
-                            {definition.kind === 'service' ? `Last ${day} days` : `${day} days, including overdue`}
+                            {definition.kind === 'service'
+                              ? `Last ${day} days`
+                              : definition.kind === 'review'
+                                ? `Last ${day} days, and renewals in the next ${day}`
+                                : `${day} days, including overdue`}
                           </option>
                         ))}
                       </Select>
@@ -692,11 +714,20 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                           value={selection.section}
                           onChange={(e) => setSelection({ ...initialSelection(), section: Number(e.target.value) })}
                         >
-                          {run.snapshot.sections.map((s, i) => (
-                            <option key={i} value={i}>
-                              {s.title}
-                            </option>
-                          ))}
+                          {reportSectionGroups(run.snapshot.sections).map(({ part, items }) => {
+                            const options = items.map(({ section, index }) => (
+                              <option key={index} value={index}>
+                                {section.title}
+                              </option>
+                            ));
+                            return part ? (
+                              <optgroup key={part} label={part}>
+                                {options}
+                              </optgroup>
+                            ) : (
+                              options
+                            );
+                          })}
                         </Select>
                       )}
                     </Field>

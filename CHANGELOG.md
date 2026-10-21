@@ -6,6 +6,12 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Client review pack.** A quarterly business review for one client in a single branded PDF, from one click on **Review pack** in the client's header.
+  - It brings together the executive summary, security posture, service review and upcoming renewals for the last quarter, or any period from 30 days to a year.
+  - It opens with a cover page: the client, the period, how much of each report needs review, and contents with page numbers. Each report follows on its own pages with its charts, and one-client summaries show as figures.
+  - It's also under Reports as **Client review pack**, so it can be compared with the last one, shared with the client by link, or scheduled every quarter.
+- **Report PDFs are named after the report**, such as `Harbor Dental quarterly review 2026-10-21.pdf`, and a shared report's page offers the whole report as one PDF.
+
 - **Scheduled reports, emailed.** Set up any report, choose **Schedule**, and Atlas emails it every week, month, or quarter, on the day and at the hour you choose, to up to 20 people.
   - Each run captures a fresh snapshot with the owner's access at that moment, kept in their history so **Compare with** works on it.
   - The email carries a summary and the whole report as a branded PDF. For a report about one client it can include a 30-day client link.
@@ -66,6 +72,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Up to three charts follow, drawn from the report itself: what needs review in each section, the spread of status columns such as online, protection or encryption, and due or expiry dates by month with overdue items first.
   - Timestamps in tables read as "2026-10-20 12:41 UTC", and alternate rows are shaded.
   - A PNG or JPEG logo is used; an SVG logo, which PDF can't embed, falls back to the brand name.
+
+### Fixed
+
+- **Service review device trend.** Its online count (for example "35 → 38") was counted as needing review, and its arrow printed as an empty box in PDFs. It now isn't flagged, and PDFs read "35 to 38".
+- Report PDFs no longer draw a one-bar "Needs review, by section" chart for a report with one section, say "1 row" rather than "1 rows", and show source times as "2026-10-21 13:05 UTC".
 
 ## [1.8.3] - 2026-10-20
 

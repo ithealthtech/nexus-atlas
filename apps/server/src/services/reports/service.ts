@@ -189,6 +189,8 @@ export const service: Collector = async (report) => {
     ['Client', 'Checklist', 'Completed'],
     runs.map((r) => [report.client(r.clientId), r.title, iso(r.completedAt)]),
   );
+  // A review pack goes to the client: it keeps the count of changes, not the internal change log.
+  if (definition.kind === 'review') return;
   const listed = changes.filter((a) => a.entityType !== 'password');
   if (listed.length > MAX_ACTIVITY_ROWS)
     report.warn(

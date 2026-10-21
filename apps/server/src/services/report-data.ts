@@ -13,6 +13,7 @@ import { endpoints } from './reports/endpoints.js';
 import { executive } from './reports/executive.js';
 import { licenses } from './reports/licenses.js';
 import { renewals } from './reports/renewals.js';
+import { review } from './reports/review.js';
 import { security } from './reports/security.js';
 import { service } from './reports/service.js';
 import { software } from './reports/software.js';
@@ -24,6 +25,7 @@ export { MAX_REPORT_ROWS, type SecuritySources };
  * type doesn't compile until it has a collector.
  */
 const COLLECTORS: Record<ReportKind, Collector> = {
+  review,
   executive,
   security,
   service,

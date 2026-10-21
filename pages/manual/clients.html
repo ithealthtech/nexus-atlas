@@ -198,8 +198,10 @@
         <ul>
           <li>
             <strong>The header:</strong> the client's name and type, your access, and the star to add it to your
-            favourites. <strong>Monthly report</strong>, <strong>Export</strong>, <strong>Edit client</strong>, and for
-            administrators <strong>Delete</strong>, are on the right.
+            favourites. <strong>Monthly report</strong>, <strong>Review pack</strong>, <strong>Export</strong>,
+            <strong>Edit client</strong>, and for administrators <strong>Delete</strong>, are on the right.
+            <strong>Review pack</strong> downloads this client's quarterly business review as one PDF (see
+            <a href="#client-review-pack">Client review pack</a>).
           </li>
           <li>
             <strong>The quick note:</strong> a short note at the top of every page for this client, for the thing
@@ -372,6 +374,7 @@
           <strong>Reports</strong> tab for that workspace. The built-in reports are:
         </p>
         <ul>
+          <li>Client review pack</li>
           <li>Executive summary</li>
           <li>Security posture</li>
           <li>Service review</li>
@@ -440,6 +443,31 @@
           <strong>Changes only</strong> hides everything else. Values that move on every run, such as check-in times or
           days left, don't count as changes.
         </p>
+        <h3 id="client-review-pack"><a class="anchor" href="#client-review-pack">Client review pack</a></h3>
+        <p>
+          The <strong>Client review pack</strong> is a business review for one client in a single PDF, ready to send
+          before a quarterly meeting. It is made of four reports, run together: <strong>Executive summary</strong>,
+          <strong>Security posture</strong>, <strong>Service review</strong> and <strong>Upcoming renewals</strong>. Its
+          period looks back for the service review and ahead for renewals: a quarter by default, or anything from 30
+          days to a year.
+        </p>
+        <p>
+          The fastest way to make one is <strong>Review pack</strong> in the client's header: it captures the last
+          quarter and downloads the PDF in one click. You can also choose <strong>Client review pack</strong> under
+          Reports, pick the client and period, and choose <strong>Run report</strong>, then
+          <strong>Review pack PDF</strong>.
+        </p>
+        <p>
+          The PDF opens with a cover page in your organization's look. It shows the client, the period, how much of each
+          report needs review, and the contents with page numbers. Each report follows on its own pages, with its
+          charts, and one-client summaries shown as figures rather than a one-row table. On screen,
+          <strong>Report section</strong> groups the sections under the report each belongs to.
+        </p>
+        <p>
+          The pack leaves out Atlas's internal change log; the service review still counts the changes made. Like any
+          single-client report, a review pack can be compared with the last one, shared with the client by link (the
+          client can download all of it as one PDF), or scheduled, for example every quarter on the 1st.
+        </p>
         <h3 id="scheduled-reports"><a class="anchor" href="#scheduled-reports">Scheduled reports</a></h3>
         <p>
           To have a report emailed regularly, set it up (report type, clients, and any options), then choose
@@ -475,11 +503,11 @@
           A report run for a single client can be shared with that client by link. Choose <strong>Share</strong>, pick
           how long the link works (7, 30, or 90 days; report links always expire), and choose
           <strong>Create link</strong>; the link is copied for you. Whoever has the link sees that snapshot, every
-          section as it was captured, and can download each section as a PDF, without an account. The page names your
-          organization and the client, never the person who ran the report. The dialog shows how often each link was
-          opened, and <strong>Revoke</strong> stops a link at once. Deleting the report or the client stops its links
-          too. Only the person who ran the report can share it, and only with edit access to the client. Making and
-          revoking links appear in the security log.
+          section as it was captured, and can download the whole report or one section as a PDF, without an account. The
+          page names your organization and the client, never the person who ran the report. The dialog shows how often
+          each link was opened, and <strong>Revoke</strong> stops a link at once. Deleting the report or the client
+          stops its links too. Only the person who ran the report can share it, and only with edit access to the client.
+          Making and revoking links appear in the security log.
         </p>
         <p><strong>Send</strong> decides which runs are emailed, so a schedule can work as an alert:</p>
         <ul>

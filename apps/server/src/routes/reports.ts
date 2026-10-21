@@ -51,7 +51,7 @@ export function registerReportRoutes(
     await audit(req, 'Deleted report', req.params.id);
     return { ok: true };
   });
-  app.get<{ Params: { id: string }; Querystring: { format?: string; selection?: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { format?: string; selection?: string; whole?: string } }>(
     base + '/runs/:id/export',
     authed,
     async (req, reply) => {
@@ -72,7 +72,8 @@ export function registerReportRoutes(
         if (format === 'pdf') {
           // Exports carry the organization's own name, logo and accent colour (Administration → Theme).
           const brand = await deps.settings.branding(req.session!.actor.orgId);
-          content = await reportPdf(run.snapshot, selection, {
+          // The whole report (every section, and a review pack's cover), or the section as filtered on screen.
+          content = await reportPdf(run.snapshot, req.query.whole === '1' ? 'all' : selection, {
             name: brand.brandName,
             logo: brand.logo,
             accent: brand.accent,
@@ -83,9 +84,14 @@ export function registerReportRoutes(
         throw new HttpError(422, 'The report could not be exported. Check the selected section and columns.');
       }
       await audit(req, `Exported report as ${format.toUpperCase()}`, run.id);
+      // Named after the report and the day it was captured ("Harbor Dental quarterly review 2026-10-21.pdf").
+      const named = `${run.title.replace(/[\\/:*?"<>|\p{Cc}]+/gu, ' ').trim()} ${run.createdAt.slice(0, 10)}.${format}`;
       return reply
         .header('cache-control', 'no-store')
-        .header('content-disposition', `attachment; filename="atlas-report-${run.id}.${format}"`)
+        .header(
+          'content-disposition',
+          `attachment; filename="atlas-report-${run.id}.${format}"; filename*=UTF-8''${encodeURIComponent(named)}`,
+        )
         .type(format === 'pdf' ? 'application/pdf' : 'text/csv; charset=utf-8')
         .send(content);
     },
@@ -123,7 +129,9 @@ export function registerReportRoutes(
     '/api/shared-reports/:token/pdf',
     async (req, reply) => {
       const share = await opened(req, req.params.token);
-      const section = Number(req.query.section ?? 0);
+      // One section, or "all" for the whole report.
+      const whole = req.query.section === 'all';
+      const section = whole ? 0 : Number(req.query.section ?? 0);
       if (!Number.isInteger(section) || section < 0 || section >= share.snapshot.sections.length)
         throw new HttpError(400, 'Choose a report section.');
       const brand = await deps.settings.branding(share.orgId);
@@ -131,7 +139,7 @@ export function registerReportRoutes(
       try {
         // Shared outside Atlas, the PDF names the organization rather than the person who ran it.
         const snapshot = { ...share.snapshot, generatedBy: brand.brandName || share.organization };
-        content = await reportPdf(snapshot, reportSelectionSchema.parse({ section }), {
+        content = await reportPdf(snapshot, whole ? 'all' : reportSelectionSchema.parse({ section }), {
           name: brand.brandName,
           logo: brand.logo,
           accent: brand.accent,

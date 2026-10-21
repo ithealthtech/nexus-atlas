@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { FIELD_TYPES, type FieldType } from './docs.js';
 
 export const REPORT_KINDS = [
+  'review',
   'executive',
   'security',
   'service',
@@ -15,6 +16,11 @@ export const REPORT_KINDS = [
 ] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const REPORT_INFO: Record<ReportKind, { name: string; description: string }> = {
+  review: {
+    name: 'Client review pack',
+    description:
+      'A quarterly business review for one client in a single branded PDF: executive summary, security posture, service review and renewals.',
+  },
   executive: {
     name: 'Executive summary',
     description: 'Assets, documentation, subscriptions, and endpoint coverage at a glance.',
@@ -57,26 +63,38 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
     description: 'Installed software with end-of-life and license flags, and who signs in to each device.',
   },
 };
+/** The reports a review pack is made of, in order. Each one's sections are marked with its name (`part`). */
+export const REVIEW_PACK_PARTS = [
+  'executive',
+  'security',
+  'service',
+  'renewals',
+] as const satisfies readonly ReportKind[];
 /** Asset layout fields an asset inventory can show: everything but long text, which can hold notes and configuration. */
 export const REPORTABLE_FIELD_TYPES: readonly FieldType[] = FIELD_TYPES.filter((t) => t !== 'textarea');
 export const MAX_REPORT_ASSET_FIELDS = 12;
-export const reportDefinitionSchema = z.object({
-  kind: z.enum(REPORT_KINDS),
-  title: z.string().trim().min(1).max(120),
-  clientIds: z
-    .array(z.uuid().transform((id) => id.toLowerCase()))
-    .min(1, 'Choose at least one client.')
-    .max(25, 'Choose up to 25 clients per report.')
-    .refine((ids) => new Set(ids).size === ids.length, 'Choose each client once.'),
-  withinDays: z.union([z.literal(30), z.literal(60), z.literal(90), z.literal(180), z.literal(365)]).default(90),
-  includeMicrosoft: z.boolean().default(true),
-  /** Extra Asset inventory columns, each "layout key:field key". */
-  assetFields: z
-    .array(z.string().regex(/^[a-z0-9_-]{1,60}:[a-z][a-z0-9_]{0,39}$/))
-    .max(MAX_REPORT_ASSET_FIELDS, `Choose up to ${MAX_REPORT_ASSET_FIELDS} asset fields.`)
-    .refine((v) => new Set(v).size === v.length, 'Choose each asset field once.')
-    .optional(),
-});
+export const reportDefinitionSchema = z
+  .object({
+    kind: z.enum(REPORT_KINDS),
+    title: z.string().trim().min(1).max(120),
+    clientIds: z
+      .array(z.uuid().transform((id) => id.toLowerCase()))
+      .min(1, 'Choose at least one client.')
+      .max(25, 'Choose up to 25 clients per report.')
+      .refine((ids) => new Set(ids).size === ids.length, 'Choose each client once.'),
+    withinDays: z.union([z.literal(30), z.literal(60), z.literal(90), z.literal(180), z.literal(365)]).default(90),
+    includeMicrosoft: z.boolean().default(true),
+    /** Extra Asset inventory columns, each "layout key:field key". */
+    assetFields: z
+      .array(z.string().regex(/^[a-z0-9_-]{1,60}:[a-z][a-z0-9_]{0,39}$/))
+      .max(MAX_REPORT_ASSET_FIELDS, `Choose up to ${MAX_REPORT_ASSET_FIELDS} asset fields.`)
+      .refine((v) => new Set(v).size === v.length, 'Choose each asset field once.')
+      .optional(),
+  })
+  .refine((d) => d.kind !== 'review' || d.clientIds.length === 1, {
+    message: 'A review pack is for one client.',
+    path: ['clientIds'],
+  });
 export type ReportDefinition = z.infer<typeof reportDefinitionSchema>;
 export const reportTemplateSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -196,6 +214,8 @@ export function nextReportRun(schedule: Pick<ReportScheduleInput, 'cadence' | 'd
 }
 export interface ReportSection {
   title: string;
+  /** In a review pack, the report this section belongs to (its name, such as "Security posture"). */
+  part?: string;
   columns: string[];
   rows: string[][];
 }
@@ -264,12 +284,24 @@ export const reportSelectionSchema = z.object({
 });
 export type ReportSelection = z.infer<typeof reportSelectionSchema>;
 
+/** Sections in order, grouped by the report each belongs to in a review pack (`part`, '' otherwise). */
+export function reportSectionGroups(sections: ReportSection[]) {
+  const groups: { part: string; items: { section: ReportSection; index: number }[] }[] = [];
+  sections.forEach((section, index) => {
+    const part = section.part ?? '';
+    if (groups.at(-1)?.part !== part) groups.push({ part, items: [] });
+    groups.at(-1)!.items.push({ section, index });
+  });
+  return groups;
+}
+
 /** Shared by the workspace and exports so they show exactly the same rows and columns. */
 export function reportNeedsAttention(section: ReportSection, row: string[]): boolean {
   return section.columns.some((column, i) => {
     const value = row[i] ?? '';
     if (column === 'Attention') return value !== 'No date-based issue detected';
-    if (column === 'Online') return value !== 'Online';
+    // A device's state; a health trend's "Online" holds counts ("35 → 38"), which aren't a problem in themselves.
+    if (column === 'Online') return value === 'Offline' || value === 'Unknown';
     if (column === 'Protection') return !['running', 'protected', 'healthy'].includes(value.toLowerCase());
     if (column === 'Status')
       return ['overdue', 'outdated', 'inactive', 'suspended', 'warning', 'expired', 'expiring soon'].includes(

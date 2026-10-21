@@ -1,6 +1,14 @@
 import PDFDocument from 'pdfkit';
 import { fileURLToPath } from 'node:url';
-import { reportNeedsAttention, selectReportSection, type ReportSelection, type ReportSnapshot } from '@atlas/shared';
+import {
+  REPORT_INFO,
+  REVIEW_PACK_PARTS,
+  reportNeedsAttention,
+  selectReportSection,
+  type ReportSection,
+  type ReportSelection,
+  type ReportSnapshot,
+} from '@atlas/shared';
 import { HttpError } from '../errors.js';
 
 const cell = (text: string) => {
@@ -50,11 +58,14 @@ function fit(doc: PDFKit.PDFDocument, text: string, width: number) {
   while (cut.length > 1 && doc.widthOfString(`${cut}…`) > width) cut = cut.slice(0, -1);
   return `${cut.trimEnd()}…`;
 }
-/** ISO timestamps read as "2026-10-20 12:41 UTC" in a table, instead of wrapping. */
+/**
+ * ISO timestamps read as "2026-10-20 12:41 UTC" in a table, instead of wrapping. A trend's arrow ("38 → 41") reads
+ * as "38 to 41": the embedded font has no arrow.
+ */
 const readable = (value: string) =>
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/.test(value)
     ? `${value.slice(0, 10)} ${value.slice(11, 16)} UTC`
-    : value;
+    : value.replaceAll(' → ', ' to ');
 
 /** Mixes a colour towards white: 0 is the colour, 1 is white. */
 function tint(hex: string, amount: number) {
@@ -78,6 +89,7 @@ function toneOf(value: string, accent: string) {
       'healthy',
       'yes',
       'published',
+      'closed',
     ].includes(v)
   )
     return GOOD;
@@ -113,10 +125,11 @@ type Chart =
   | { kind: 'months'; title: string; months: { label: string; value: number; color: string }[] };
 
 /** Charts drawn from the snapshot itself, so every report type gets them without its own code. */
-function chartsFor(snapshot: ReportSnapshot, accent: string): Chart[] {
+function chartsFor(sections: ReportSection[], today: string, accent: string): Chart[] {
   const charts: Chart[] = [];
-  const reviewable = snapshot.sections.filter((s) => s.rows.length);
-  if (reviewable.length)
+  const reviewable = sections.filter((s) => s.rows.length);
+  // One bar says nothing the summary doesn't.
+  if (reviewable.length > 1)
     charts.push({
       kind: 'bars',
       title: 'Needs review, by section',
@@ -126,8 +139,7 @@ function chartsFor(snapshot: ReportSnapshot, accent: string): Chart[] {
         flagged: s.rows.filter((row) => reportNeedsAttention(s, row)).length,
       })),
     });
-  const today = snapshot.generatedAt.slice(0, 10);
-  for (const s of snapshot.sections) {
+  for (const s of sections) {
     if (charts.length >= 3) break;
     const dateColumn = s.columns.findIndex((c) => DATE_COLUMNS.includes(c));
     if (dateColumn >= 0 && s.rows.length && !charts.some((c) => c.kind === 'months')) {
@@ -176,7 +188,7 @@ function chartsFor(snapshot: ReportSnapshot, accent: string): Chart[] {
       const rest = sorted.slice(5).reduce((n, [, v]) => n + v, 0);
       charts.push({
         kind: 'shares',
-        title: snapshot.sections.length > 1 ? `${column}: ${s.title}` : column,
+        title: sections.length > 1 ? `${column}: ${s.title}` : column,
         parts: [
           ...top.map(([label, value]) => ({
             label,
@@ -191,6 +203,18 @@ function chartsFor(snapshot: ReportSnapshot, accent: string): Chart[] {
   return charts;
 }
 
+/** What a review pack's cover calls its period. */
+const reviewName = (days: number) =>
+  days === 90
+    ? 'Quarterly business review'
+    : days === 365
+      ? 'Annual business review'
+      : days === 30
+        ? 'Monthly business review'
+        : 'Business review';
+const longDate = (value: number | string) =>
+  new Date(value).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
 /** Embedded licensed fonts keep exports consistent across Docker and Windows installations. */
 export async function reportPdf(
   snapshot: ReportSnapshot,
@@ -199,6 +223,8 @@ export async function reportPdf(
   brand?: ReportBrand,
 ): Promise<Buffer> {
   const all = selection === 'all';
+  // A whole review pack is laid out as a document: a cover with contents, then each report it's made of.
+  const pack = all && snapshot.definition.kind === 'review';
   // The tables to print, and (for "needs review") the same rows with every column.
   const tables = all ? snapshot.sections : [selectReportSection(snapshot, selection)];
   const wholes = all ? snapshot.sections : [selectReportSection(snapshot, { ...selection, columns: undefined })];
@@ -227,94 +253,94 @@ export async function reportPdf(
     const left = 36;
     const width = doc.page.width - 72;
     const bottom = () => doc.page.height - 48;
+    const gap = 12;
+    let y = 36;
+    const newPage = () => {
+      doc.addPage();
+      y = 36;
+    };
     const paragraph = (text: string, size = 9, color = MUTED) => {
       doc.font('Regular').fontSize(size).fillColor(color);
       const height = doc.heightOfString(text, { width });
       if (doc.y + height > bottom()) doc.addPage();
       doc.text(text, left, doc.y, { width }).moveDown(0.5);
     };
-
-    // ---------- header: the logo (or name) in the brand's colour, then the title ----------
-    let logoDrawn = false;
-    const logo = brand?.logo?.match(/^data:image\/(png|jpeg);base64,(.+)$/);
-    if (logo) {
+    /** The logo fitted to a box; false when there's none PDFKit can read, so the caller writes the name instead. */
+    const drawLogo = (x: number, top: number, box: [number, number]) => {
+      const logo = brand?.logo?.match(/^data:image\/(png|jpeg);base64,(.+)$/);
+      if (!logo) return false;
       try {
-        doc.image(Buffer.from(logo[2]!, 'base64'), left, 30, { fit: [150, 34], valign: 'center' });
-        logoDrawn = true;
+        doc.image(Buffer.from(logo[2]!, 'base64'), x, top, { fit: box, valign: 'center' });
+        return true;
       } catch {
-        // An image PDFKit can't read falls back to the name.
+        return false;
       }
-    }
-    if (!logoDrawn)
-      doc
-        .font('Bold')
-        .fontSize(13)
-        .fillColor(accent)
-        .text(brandName, left, 38, { width: width / 2 });
-    doc
-      .font('Regular')
-      .fontSize(8.5)
-      .fillColor(MUTED)
-      .text(`Captured ${snapshot.generatedAt.slice(0, 16).replace('T', ' ')} UTC`, left, 36, { width, align: 'right' })
-      .text(`Prepared by ${snapshot.generatedBy}`, left, 48, { width, align: 'right' });
-    doc.rect(left, 72, width, 2).fill(accent);
-    doc.font('Bold').fontSize(22).fillColor(INK).text(snapshot.definition.title, left, 84, { width });
-    const clientNames = snapshot.clients.map((c) => c.name);
-    doc
-      .font('Regular')
-      .fontSize(9.5)
-      .fillColor(MUTED)
-      .text(
-        clientNames.length > 6
-          ? `${clientNames.slice(0, 6).join(', ')} and ${clientNames.length - 6} more`
-          : clientNames.join(', '),
-        left,
-        doc.y + 2,
-        { width },
+    };
+    const flaggedIn = (sections: ReportSection[]) =>
+      sections.reduce((n, s) => n + s.rows.filter((row) => reportNeedsAttention(s, row)).length, 0);
+    /** Tiles across the page, wrapping after `perRow`. */
+    const drawTiles = (tiles: { label: string; value: string; color: string; bar?: string }[], perRow = 4) => {
+      const across = Math.min(perRow, tiles.length);
+      const tileWidth = (width - gap * (across - 1)) / across;
+      tiles.forEach((tile, i) => {
+        if (i && i % across === 0) y += 54 + gap;
+        if (y + 54 > bottom()) newPage();
+        const x = left + (i % across) * (tileWidth + gap);
+        doc.roundedRect(x, y, tileWidth, 54, 6).lineWidth(0.75).fillAndStroke('#ffffff', LINE);
+        doc.rect(x, y + 10, 3, 34).fill(tile.bar ?? accent);
+        doc.font('Regular').fontSize(8).fillColor(MUTED);
+        doc.text(fit(doc, tile.label, tileWidth - 24), x + 14, y + 10, { lineBreak: false });
+        doc.font('Bold').fontSize(17).fillColor(tile.color);
+        doc.text(fit(doc, tile.value, tileWidth - 24), x + 14, y + 23, { lineBreak: false });
+      });
+      y += 54 + 16;
+    };
+    /**
+     * In a review pack, a one-client summary (a single row) reads better as figures than as a one-row table: one tile
+     * per value, amber where that value needs review. A trend's From and To dates go under the title instead.
+     */
+    const drawFigures = (section: ReportSection) => {
+      const row = section.rows[0]!;
+      const cell = (column: string) => row[section.columns.indexOf(column)] ?? '';
+      const span = section.columns.includes('From') && cell('From') ? `${cell('From')} to ${cell('To')}` : '';
+      const figures = section.columns.flatMap((column, i) =>
+        i === 0 || column === 'From' || column === 'To' ? [] : [{ column, value: row[i] ?? '' }],
       );
-
-    // ---------- summary tiles ----------
-    // Counted on whole rows: the export may hide a column that decides whether a row needs review.
-    const flagged = wholes.reduce((n, w) => n + w.rows.filter((row) => reportNeedsAttention(w, row)).length, 0);
-    const tiles: { label: string; value: string; color: string }[] = [
-      {
-        label: snapshot.clients.length === 1 ? 'Client' : 'Clients',
-        value: String(snapshot.clients.length),
-        color: INK,
-      },
-      { label: all ? 'Whole report' : tables[0]!.title, value: `${rowCount} rows`, color: INK },
-      { label: 'Needs review', value: String(flagged), color: flagged ? WARN : GOOD },
-      { label: 'Notices', value: String(snapshot.warnings.length), color: snapshot.warnings.length ? WARN : INK },
-    ];
-    let y = doc.y + 14;
-    const gap = 12;
-    const tileWidth = (width - gap * (tiles.length - 1)) / tiles.length;
-    tiles.forEach((tile, i) => {
-      const x = left + i * (tileWidth + gap);
-      doc.roundedRect(x, y, tileWidth, 54, 6).lineWidth(0.75).fillAndStroke('#ffffff', LINE);
-      doc.rect(x, y + 10, 3, 34).fill(i === 2 && flagged ? WARN : accent);
-      doc.font('Regular').fontSize(8).fillColor(MUTED);
-      doc.text(fit(doc, tile.label, tileWidth - 24), x + 14, y + 10, { lineBreak: false });
-      doc.font('Bold').fontSize(17).fillColor(tile.color);
-      doc.text(fit(doc, tile.value, tileWidth - 24), x + 14, y + 23, { lineBreak: false });
-    });
-    y += 54 + 16;
-
-    // ---------- charts ----------
-    const charts = chartsFor(snapshot, accent);
-    if (charts.length) {
+      // Kept together: the title and every row of tiles on one page.
+      const lines = Math.ceil(figures.length / 5);
+      if (y + 24 + (span ? 14 : 0) + lines * 54 + (lines - 1) * gap > bottom()) newPage();
+      doc.font('Bold').fontSize(12).fillColor(INK).text(section.title, left, y, { width });
+      if (span)
+        doc
+          .font('Regular')
+          .fontSize(8.5)
+          .fillColor(MUTED)
+          .text(span, left, doc.y + 1, { width });
+      y = doc.y + 8;
+      drawTiles(
+        figures.map(({ column, value }) => {
+          const flagged = reportNeedsAttention({ title: section.title, columns: [column], rows: [] }, [value]);
+          return {
+            label: column,
+            value: readable(value) || '–',
+            color: flagged ? WARN : INK,
+            bar: flagged ? WARN : accent,
+          };
+        }),
+        5,
+      );
+    };
+    const drawCharts = (sections: ReportSection[]) => {
+      const charts = chartsFor(sections, snapshot.generatedAt.slice(0, 10), accent);
+      if (!charts.length) return;
       const chartHeight = Math.max(...charts.map(chartHeightOf));
+      if (y + chartHeight > bottom()) newPage();
       const chartWidth = (width - gap * (charts.length - 1)) / charts.length;
       charts.forEach((chart, i) => drawChart(doc, chart, left + i * (chartWidth + gap), y, chartWidth, chartHeight));
       y += chartHeight + 18;
-    }
-
-    // ---------- the tables: the selected section, or every section ----------
-    for (const section of tables) {
-      if (y > bottom() - 120) {
-        doc.addPage();
-        y = 36;
-      }
+    };
+    const drawTable = (section: ReportSection) => {
+      if (y > bottom() - 120) newPage();
       doc.font('Bold').fontSize(12).fillColor(INK).text(section.title, left, y, { width });
       doc
         .font('Regular')
@@ -322,7 +348,7 @@ export async function reportPdf(
         .fillColor(MUTED)
         .text(
           all
-            ? `${section.rows.length} rows`
+            ? `${section.rows.length} ${section.rows.length === 1 ? 'row' : 'rows'}`
             : `${section.rows.length} matching rows | ${section.columns.length} selected columns`,
           left,
           doc.y + 1,
@@ -341,8 +367,7 @@ export async function reportPdf(
         if (height > bottom() - 72)
           throw new HttpError(422, 'A row is too tall for PDF. Choose fewer columns or export CSV.');
         if (y + height > bottom()) {
-          doc.addPage();
-          y = 36;
+          newPage();
           if (!heading) drawRow(section.columns, true);
         }
         doc.font(heading ? 'Bold' : 'Regular').fontSize(8);
@@ -369,6 +394,174 @@ export async function reportPdf(
       section.rows.forEach((row, i) => drawRow(row, false, i % 2 === 1));
       doc.y = Math.max(doc.y, y) + 16;
       y = doc.y + 8;
+    };
+
+    if (pack) {
+      // ---------- cover: whose review, for which period, at a glance, and what's inside ----------
+      const client = snapshot.clients[0]?.name ?? '';
+      const days = snapshot.definition.withinDays;
+      const parts = [...new Set(snapshot.sections.map((s) => s.part ?? ''))].map((name) => ({
+        name,
+        sections: snapshot.sections.filter((s) => (s.part ?? '') === name),
+        page: 0,
+      }));
+      doc.rect(0, 0, 14, doc.page.height).fill(accent);
+      if (!drawLogo(left + 10, 40, [220, 56]))
+        doc
+          .font('Bold')
+          .fontSize(18)
+          .fillColor(accent)
+          .text(brandName, left + 10, 54, { width: width / 2 });
+      doc
+        .font('Regular')
+        .fontSize(9)
+        .fillColor(MUTED)
+        .text(`Prepared ${longDate(snapshot.generatedAt)}`, left, 46, { width, align: 'right' })
+        .text(`by ${snapshot.generatedBy}`, left, 59, { width, align: 'right' });
+      doc
+        .font('Bold')
+        .fontSize(10)
+        .fillColor(accent)
+        .text(reviewName(days).toUpperCase(), left + 10, 150, { width, characterSpacing: 1.2 });
+      // On one line, smaller for a long name, so the cover never runs onto a second page.
+      doc.font('Bold').fontSize(36);
+      if (doc.widthOfString(client) > width - 10) doc.fontSize(26);
+      doc.fillColor(INK).text(fit(doc, client, width - 10), left + 10, doc.y + 4, { width: width - 10 });
+      doc
+        .font('Regular')
+        .fontSize(12)
+        .fillColor(TEXT)
+        .text(
+          `${longDate(Date.parse(snapshot.generatedAt) - days * 86_400_000)} to ${longDate(snapshot.generatedAt)}, with renewals for the ${days} days ahead`,
+          left + 10,
+          doc.y + 6,
+          { width: width - 10 },
+        );
+      doc
+        .font('Regular')
+        .fontSize(10)
+        .fillColor(MUTED)
+        .text(`Prepared for ${client} by ${brandName}`, left + 10, doc.y + 4, { width: width - 10 });
+      y = Math.max(doc.y + 34, 300);
+      // One tile per part: how much of it needs review.
+      drawTiles(
+        parts.map((p) => {
+          const flagged = flaggedIn(p.sections);
+          return {
+            label: p.name,
+            value: flagged ? `${flagged} to review` : 'All clear',
+            color: flagged ? WARN : GOOD,
+            bar: flagged ? WARN : GOOD,
+          };
+        }),
+      );
+      const contentsTop = y + 4;
+
+      parts.forEach((part, i) => {
+        // ---------- each part: a heading, its charts, then its tables ----------
+        newPage();
+        part.page = doc.bufferedPageRange().count;
+        doc
+          .font('Bold')
+          .fontSize(9)
+          .fillColor(accent)
+          .text(`PART ${i + 1} OF ${parts.length}`, left, y, { width, characterSpacing: 1.2 });
+        doc
+          .font('Bold')
+          .fontSize(22)
+          .fillColor(INK)
+          .text(part.name, left, doc.y + 2, { width });
+        const kind = REVIEW_PACK_PARTS.find((k) => REPORT_INFO[k].name === part.name);
+        if (kind)
+          doc
+            .font('Regular')
+            .fontSize(9.5)
+            .fillColor(MUTED)
+            .text(REPORT_INFO[kind].description, left, doc.y + 2, { width });
+        doc.rect(left, doc.y + 8, width, 2).fill(accent);
+        y = doc.y + 24;
+        drawCharts(part.sections);
+        for (const section of part.sections)
+          if (section.rows.length === 1 && section.columns[0] === 'Client') drawFigures(section);
+          else drawTable(section);
+      });
+
+      // The contents, now that each part's first page is known.
+      doc.switchToPage(0);
+      doc.font('Bold').fontSize(11).fillColor(INK).text('Contents', left, contentsTop, { width });
+      let line = doc.y + 6;
+      for (const [i, part] of [
+        ...parts,
+        // They start on the page after the last part's.
+        { name: 'Notices and sources', sections: [], page: doc.bufferedPageRange().count + 1 },
+      ].entries()) {
+        doc
+          .font('Regular')
+          .fontSize(10)
+          .fillColor(TEXT)
+          .text(`${i + 1}.  ${part.name}`, left, line, { width });
+        doc.fillColor(MUTED).text(`Page ${part.page}`, left, line, { width, align: 'right' });
+        doc
+          .moveTo(left, line + 17)
+          .lineTo(left + width, line + 17)
+          .lineWidth(0.5)
+          .strokeColor(LINE)
+          .stroke();
+        line += 23;
+      }
+      doc.switchToPage(doc.bufferedPageRange().count - 1);
+      newPage();
+    } else {
+      // ---------- header: the logo (or name) in the brand's colour, then the title ----------
+      if (!drawLogo(left, 30, [150, 34]))
+        doc
+          .font('Bold')
+          .fontSize(13)
+          .fillColor(accent)
+          .text(brandName, left, 38, { width: width / 2 });
+      doc
+        .font('Regular')
+        .fontSize(8.5)
+        .fillColor(MUTED)
+        .text(`Captured ${snapshot.generatedAt.slice(0, 16).replace('T', ' ')} UTC`, left, 36, {
+          width,
+          align: 'right',
+        })
+        .text(`Prepared by ${snapshot.generatedBy}`, left, 48, { width, align: 'right' });
+      doc.rect(left, 72, width, 2).fill(accent);
+      doc.font('Bold').fontSize(22).fillColor(INK).text(snapshot.definition.title, left, 84, { width });
+      const clientNames = snapshot.clients.map((c) => c.name);
+      doc
+        .font('Regular')
+        .fontSize(9.5)
+        .fillColor(MUTED)
+        .text(
+          clientNames.length > 6
+            ? `${clientNames.slice(0, 6).join(', ')} and ${clientNames.length - 6} more`
+            : clientNames.join(', '),
+          left,
+          doc.y + 2,
+          { width },
+        );
+
+      // ---------- summary tiles ----------
+      // Counted on whole rows: the export may hide a column that decides whether a row needs review.
+      const flagged = flaggedIn(wholes);
+      y = doc.y + 14;
+      drawTiles([
+        {
+          label: snapshot.clients.length === 1 ? 'Client' : 'Clients',
+          value: String(snapshot.clients.length),
+          color: INK,
+        },
+        { label: all ? 'Whole report' : tables[0]!.title, value: `${rowCount} rows`, color: INK },
+        { label: 'Needs review', value: String(flagged), color: flagged ? WARN : GOOD, bar: flagged ? WARN : accent },
+        { label: 'Notices', value: String(snapshot.warnings.length), color: snapshot.warnings.length ? WARN : INK },
+      ]);
+
+      // ---------- charts, then the tables: the selected section, or every section ----------
+      drawCharts(snapshot.sections);
+      tables.forEach(drawTable);
     }
 
     // ---------- notices and sources ----------
@@ -378,12 +571,13 @@ export async function reportPdf(
     }
     paragraph('Sources & data coverage', 11, INK);
     for (const source of snapshot.sources)
-      paragraph(`${source.name} | Updated ${source.updatedAt ?? 'Not available'} | ${source.detail}`);
+      paragraph(`${source.name} | Updated ${readable(source.updatedAt ?? 'Not available')} | ${source.detail}`);
     paragraph(
       'This is a stored snapshot of available records. Missing data and unknown health states are not evidence of a healthy environment.',
     );
     const range = doc.bufferedPageRange();
-    for (let page = range.start; page < range.start + range.count; page++) {
+    // The cover of a review pack has no footer.
+    for (let page = range.start + (pack ? 1 : 0); page < range.start + range.count; page++) {
       doc.switchToPage(page);
       const bottomMargin = doc.page.margins.bottom;
       doc.page.margins.bottom = 0;

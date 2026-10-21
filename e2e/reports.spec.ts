@@ -191,6 +191,23 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await expect(page.getByRole('heading', { name: 'Client workspaces', exact: true })).toBeVisible();
     await page.goto(`${base}/clients/${client.id}/reports`);
     await expect(page.getByRole('checkbox', { name: 'Harbor Dental Group', exact: true })).toBeChecked();
+    // One click on the client's page: the quarterly review pack, as one PDF named after the client.
+    await page.setViewportSize({ width: 1600, height: 1100 });
+    const packEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Review pack', exact: true }).click();
+    const pack = await packEvent;
+    expect(pack.suggestedFilename()).toMatch(/^Harbor Dental Group quarterly review \d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(
+      readFileSync((await pack.path())!)
+        .subarray(0, 5)
+        .toString(),
+    ).toBe('%PDF-');
+    await pack.saveAs(resolve(screenshots, 'atlas-review-pack.pdf'));
+    // It's kept in the client's report history, grouped by the reports it's made of.
+    await page.getByRole('button', { name: 'history', exact: true }).click();
+    await page.getByRole('button', { name: /^Harbor Dental Group quarterly review/ }).click();
+    await expect(page.getByRole('button', { name: 'Review pack PDF', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Report section').locator('optgroup')).toHaveCount(4);
     expect(errors).toEqual([]);
   } finally {
     await context.close();
