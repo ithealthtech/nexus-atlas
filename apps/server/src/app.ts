@@ -86,6 +86,9 @@ import { openApiSpec } from './openapi.js';
 import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl } from './services/request-log.js';
 import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
+import { ReportService } from './services/reports.js';
+import { ReportShareService } from './services/report-shares.js';
+import { ReportScheduleService } from './services/report-schedules.js';
 import { registerLicenseRoutes } from './routes/licenses.js';
 
 declare module 'fastify' {
@@ -778,9 +781,18 @@ export async function buildApp({
     siem,
     requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA,
   });
+  // Reports, shared by their routes and the background pass that sends scheduled ones.
+  const reports = new ReportService(settings, m365Fetch, {
+    passwordHealth: (scope) => health.report(scope),
+    // Rotation is built just below; this runs only when a report does.
+    rotationTargets: (scope) => rotation.targets(scope.actor),
+  });
+  const reportShares = new ReportShareService(db, config.publicOrigin);
+  const reportSchedules = new ReportScheduleService(db, { reports, shares: reportShares, mail, settings });
   const notifier = registerAdminRoutes(app, {
     emergency,
     health,
+    reports: reportSchedules,
     db,
     authed,
     recent,
@@ -969,12 +981,9 @@ export async function buildApp({
     db,
     authed,
     settings,
-    fetcher: m365Fetch,
-    security: {
-      passwordHealth: (scope) => health.report(scope),
-      rotationTargets: (scope) => rotation.targets(scope.actor),
-    },
-    publicOrigin: config.publicOrigin,
+    service: reports,
+    shares: reportShares,
+    schedules: reportSchedules,
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerLicenseRoutes(app, { db, authed, recent, settings, fetcher: m365Fetch });

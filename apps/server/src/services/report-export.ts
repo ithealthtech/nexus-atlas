@@ -194,11 +194,16 @@ function chartsFor(snapshot: ReportSnapshot, accent: string): Chart[] {
 /** Embedded licensed fonts keep exports consistent across Docker and Windows installations. */
 export async function reportPdf(
   snapshot: ReportSnapshot,
-  selection: ReportSelection,
+  /** One section as filtered on screen, or 'all' for the whole report (as emailed). */
+  selection: ReportSelection | 'all',
   brand?: ReportBrand,
 ): Promise<Buffer> {
-  const section = selectReportSection(snapshot, selection);
-  if (section.rows.length > 2000)
+  const all = selection === 'all';
+  // The tables to print, and (for "needs review") the same rows with every column.
+  const tables = all ? snapshot.sections : [selectReportSection(snapshot, selection)];
+  const wholes = all ? snapshot.sections : [selectReportSection(snapshot, { ...selection, columns: undefined })];
+  const rowCount = tables.reduce((n, t) => n + t.rows.length, 0);
+  if (rowCount > 2000)
     throw new HttpError(422, 'PDF exports support up to 2,000 matching rows. Filter this report or export CSV.');
   const accent = brand?.accent && /^#[0-9a-f]{6}$/i.test(brand.accent) ? brand.accent : ATLAS_BLUE;
   const brandName = brand?.name.trim() || snapshot.organization;
@@ -270,15 +275,14 @@ export async function reportPdf(
 
     // ---------- summary tiles ----------
     // Counted on whole rows: the export may hide a column that decides whether a row needs review.
-    const whole = selectReportSection(snapshot, { ...selection, columns: undefined });
-    const flagged = whole.rows.filter((row) => reportNeedsAttention(whole, row)).length;
+    const flagged = wholes.reduce((n, w) => n + w.rows.filter((row) => reportNeedsAttention(w, row)).length, 0);
     const tiles: { label: string; value: string; color: string }[] = [
       {
         label: snapshot.clients.length === 1 ? 'Client' : 'Clients',
         value: String(snapshot.clients.length),
         color: INK,
       },
-      { label: section.title, value: `${section.rows.length} rows`, color: INK },
+      { label: all ? 'Whole report' : tables[0]!.title, value: `${rowCount} rows`, color: INK },
       { label: 'Needs review', value: String(flagged), color: flagged ? WARN : GOOD },
       { label: 'Notices', value: String(snapshot.warnings.length), color: snapshot.warnings.length ? WARN : INK },
     ];
@@ -305,57 +309,67 @@ export async function reportPdf(
       y += chartHeight + 18;
     }
 
-    // ---------- the selected section's table ----------
-    if (y > bottom() - 120) {
-      doc.addPage();
-      y = 36;
-    }
-    doc.font('Bold').fontSize(12).fillColor(INK).text(section.title, left, y, { width });
-    doc
-      .font('Regular')
-      .fontSize(8.5)
-      .fillColor(MUTED)
-      .text(`${section.rows.length} matching rows | ${section.columns.length} selected columns`, left, doc.y + 1, {
-        width,
-      });
-    y = doc.y + 8;
-    const columnWidth = width / section.columns.length;
-    const drawRow = (row: string[], heading: boolean, shaded = false) => {
-      doc.font(heading ? 'Bold' : 'Regular').fontSize(8);
-      const height = Math.max(
-        24,
-        ...row.map((value) => doc.heightOfString(heading ? value : readable(value), { width: columnWidth - 12 }) + 13),
-      );
-      if (height > bottom() - 72)
-        throw new HttpError(422, 'A row is too tall for PDF. Choose fewer columns or export CSV.');
-      if (y + height > bottom()) {
+    // ---------- the tables: the selected section, or every section ----------
+    for (const section of tables) {
+      if (y > bottom() - 120) {
         doc.addPage();
         y = 36;
-        if (!heading) drawRow(section.columns, true);
       }
-      doc.font(heading ? 'Bold' : 'Regular').fontSize(8);
-      doc.rect(left, y, width, height).fill(heading ? tint(accent, 0.88) : shaded ? '#f8fafc' : '#ffffff');
-      row.forEach((value, i) => {
-        doc
-          .fillColor(heading ? INK : TEXT)
-          .text(heading ? value : readable(value), left + 6 + i * columnWidth, y + 6, { width: columnWidth - 12 });
-      });
+      doc.font('Bold').fontSize(12).fillColor(INK).text(section.title, left, y, { width });
       doc
-        .moveTo(left, y + height)
-        .lineTo(left + width, y + height)
-        .lineWidth(0.5)
-        .strokeColor(LINE)
-        .stroke();
-      y += height;
-      doc.y = y;
-    };
-    drawRow(section.columns, true);
-    if (!section.rows.length) {
-      doc.y = y + 12;
-      paragraph('No rows match this selection.');
+        .font('Regular')
+        .fontSize(8.5)
+        .fillColor(MUTED)
+        .text(
+          all
+            ? `${section.rows.length} rows`
+            : `${section.rows.length} matching rows | ${section.columns.length} selected columns`,
+          left,
+          doc.y + 1,
+          { width },
+        );
+      y = doc.y + 8;
+      const columnWidth = width / section.columns.length;
+      const drawRow = (row: string[], heading: boolean, shaded = false) => {
+        doc.font(heading ? 'Bold' : 'Regular').fontSize(8);
+        const height = Math.max(
+          24,
+          ...row.map(
+            (value) => doc.heightOfString(heading ? value : readable(value), { width: columnWidth - 12 }) + 13,
+          ),
+        );
+        if (height > bottom() - 72)
+          throw new HttpError(422, 'A row is too tall for PDF. Choose fewer columns or export CSV.');
+        if (y + height > bottom()) {
+          doc.addPage();
+          y = 36;
+          if (!heading) drawRow(section.columns, true);
+        }
+        doc.font(heading ? 'Bold' : 'Regular').fontSize(8);
+        doc.rect(left, y, width, height).fill(heading ? tint(accent, 0.88) : shaded ? '#f8fafc' : '#ffffff');
+        row.forEach((value, i) => {
+          doc
+            .fillColor(heading ? INK : TEXT)
+            .text(heading ? value : readable(value), left + 6 + i * columnWidth, y + 6, { width: columnWidth - 12 });
+        });
+        doc
+          .moveTo(left, y + height)
+          .lineTo(left + width, y + height)
+          .lineWidth(0.5)
+          .strokeColor(LINE)
+          .stroke();
+        y += height;
+        doc.y = y;
+      };
+      drawRow(section.columns, true);
+      if (!section.rows.length) {
+        doc.y = y + 12;
+        paragraph(all ? 'Nothing in this section.' : 'No rows match this selection.');
+      }
+      section.rows.forEach((row, i) => drawRow(row, false, i % 2 === 1));
+      doc.y = Math.max(doc.y, y) + 16;
+      y = doc.y + 8;
     }
-    section.rows.forEach((row, i) => drawRow(row, false, i % 2 === 1));
-    doc.y = Math.max(doc.y, y) + 16;
 
     // ---------- notices and sources ----------
     if (snapshot.warnings.length) {

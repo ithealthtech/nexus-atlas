@@ -6,6 +6,13 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Scheduled reports, emailed.** Set up any report, choose **Schedule**, and Atlas emails it every week, month, or quarter, on the day and at the hour you choose, to up to 20 people.
+  - Each run captures a fresh snapshot with the owner's access at that moment, kept in their history so **Compare with** works on it.
+  - The email carries a summary and the whole report as a branded PDF. For a report about one client it can include a 30-day client link.
+  - The **Scheduled** tab shows when each schedule runs next and how the last delivery went, down to any address that refused it. You can send one now, pause it, change it, or delete it.
+  - Two servers never send the same report twice. A schedule whose owner can no longer sign in stops rather than sending, and deleting a client removes its schedules.
+- **Emails in your brand.** Atlas's emails now use your brand name and accent colour from Administration → Theme, instead of a fixed green.
+- **Report PDFs can cover the whole report.** Every section is printed, with the summary and charts, for emailed reports.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

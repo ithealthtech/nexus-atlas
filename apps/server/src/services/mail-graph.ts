@@ -103,6 +103,16 @@ export class GraphMailer {
             body: { contentType: 'HTML', content: message.html },
             from: { emailAddress: { address: config.fromAddress, name: config.fromName || undefined } },
             toRecipients: [{ emailAddress: { address: message.to } }],
+            ...(message.attachments?.length
+              ? {
+                  attachments: message.attachments.map((a) => ({
+                    '@odata.type': '#microsoft.graph.fileAttachment',
+                    name: a.filename,
+                    contentType: a.contentType,
+                    contentBytes: a.content.toString('base64'),
+                  })),
+                }
+              : {}),
           },
           saveToSentItems: false,
         }),

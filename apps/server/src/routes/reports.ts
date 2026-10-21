@@ -2,13 +2,13 @@ import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fast
 import { schema, type Database } from '@atlas/db';
 import { reportSelectionSchema } from '@atlas/shared';
 import { z } from 'zod';
-import { ReportService } from '../services/reports.js';
+import type { ReportService } from '../services/reports.js';
+import type { ReportScheduleService } from '../services/report-schedules.js';
 import { Scope } from '../services/scope.js';
 import { reportCsv, reportPdf } from '../services/report-export.js';
 import { HttpError } from '../errors.js';
 import type { SettingsService } from '../services/settings.js';
-import type { SecuritySources } from '../services/report-data.js';
-import { ReportShareService } from '../services/report-shares.js';
+import type { ReportShareService } from '../services/report-shares.js';
 
 export function registerReportRoutes(
   app: FastifyInstance,
@@ -16,18 +16,16 @@ export function registerReportRoutes(
     db: Database;
     authed: { onRequest: onRequestHookHandler };
     settings: SettingsService;
-    fetcher?: typeof fetch;
-    security?: SecuritySources;
-    /** Atlas's own address, for report links. */
-    publicOrigin: string;
+    /** The report services, shared with the background pass that sends scheduled reports. */
+    service: ReportService;
+    shares: ReportShareService;
+    schedules: ReportScheduleService;
     /** Wrong report-link attempts per address. */
     shareLimiter: { check(key: string): void; fail(key: string): void };
   },
 ) {
-  const { db, authed } = deps;
-  const service = new ReportService(deps.settings, deps.fetcher, deps.security);
+  const { db, authed, service, shares, schedules } = deps;
   const scopeOf = (req: FastifyRequest) => new Scope(db, req.session!.actor);
-  const shares = new ReportShareService(db, deps.publicOrigin);
   const audit = async (req: FastifyRequest, action: string, id: string) => {
     const actor = req.session!.actor;
     await db
@@ -148,6 +146,25 @@ export function registerReportRoutes(
         .type('application/pdf')
         .send(content);
     },
+  );
+  // ---- scheduled reports: each person's own ----
+  app.get(base + '/schedules', authed, async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return schedules.list(scopeOf(req));
+  });
+  app.post(base + '/schedules', authed, async (req, reply) =>
+    reply.status(201).send(await schedules.save(scopeOf(req), req.body, req.ip)),
+  );
+  app.put<{ Params: { id: string } }>(base + '/schedules/:id', authed, async (req) =>
+    schedules.save(scopeOf(req), req.body, req.ip, req.params.id),
+  );
+  app.delete<{ Params: { id: string } }>(base + '/schedules/:id', authed, async (req) => {
+    const { version } = z.object({ version: z.number().int().positive() }).parse(req.body);
+    await schedules.remove(scopeOf(req), req.params.id, version, req.ip);
+    return { ok: true };
+  });
+  app.post<{ Params: { id: string } }>(base + '/schedules/:id/send', authed, async (req) =>
+    schedules.sendNow(scopeOf(req), req.params.id),
   );
   app.get(base + '/templates', authed, async (req, reply) => {
     reply.header('cache-control', 'no-store');

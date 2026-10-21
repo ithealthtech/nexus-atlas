@@ -853,6 +853,7 @@ const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_pass
 
 on('GET', '/reports/templates', () => []);
 on('GET', '/reports/runs', () => []);
+on('GET', '/reports/schedules', () => []);
 
 on('GET', '/reports/templates', () => []);
 on('GET', '/reports/runs', () => []);

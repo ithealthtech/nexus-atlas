@@ -1614,3 +1614,40 @@ export const reportShares = pgTable(
   },
   (t) => [uniqueIndex('report_shares_token').on(t.token), index('report_shares_run').on(t.runId)],
 );
+
+// A report run on a schedule and emailed: the definition it runs, when, and to whom. It runs as its owner, with
+// the owner's access at the time, so a schedule never shows anyone more than its owner could see.
+export const reportSchedules = pgTable(
+  'report_schedules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    definition: jsonb('definition').notNull(),
+    cadence: text('cadence').notNull(),
+    day: integer('day').notNull(),
+    hour: integer('hour').notNull(),
+    recipients: jsonb('recipients').$type<string[]>().notNull(),
+    attachPdf: boolean('attach_pdf').notNull().default(true),
+    clientLink: boolean('client_link').notNull().default(false),
+    enabled: boolean('enabled').notNull().default(true),
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }).notNull(),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    lastStatus: text('last_status'),
+    lastError: text('last_error').notNull().default(''),
+    lastRunId: uuid('last_run_id').references(() => reportRuns.id, { onDelete: 'set null' }),
+    version: integer('version').notNull().default(1),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    index('report_schedules_owner').on(t.orgId, t.ownerId),
+    index('report_schedules_due').on(t.enabled, t.nextRunAt),
+    check('report_schedules_cadence_check', sql`${t.cadence} in ('weekly','monthly','quarterly')`),
+  ],
+);

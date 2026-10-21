@@ -6,6 +6,7 @@ import {
   Archive,
   Building2,
   CalendarDays,
+  CalendarClock,
   ChartNoAxesCombined,
   Download,
   AppWindow,
@@ -26,6 +27,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
+  type ReportScheduleView,
   MAX_REPORT_ASSET_FIELDS,
   REPORTABLE_FIELD_TYPES,
   REPORT_INFO,
@@ -43,6 +45,7 @@ import {
 } from '@atlas/shared';
 import { AppLink } from '@/components/AppLink';
 import { ReportShareDialog } from '@/components/ReportShare';
+import { ScheduleDialog, ScheduleList } from '@/components/ReportSchedules';
 import {
   Badge,
   Button,
@@ -172,7 +175,9 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const [sharing, setSharing] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [template, setTemplate] = useState<ReportTemplateView | null>(null);
-  const [libraryTab, setLibraryTab] = useState<'library' | 'templates' | 'history'>('library');
+  const [libraryTab, setLibraryTab] = useState<'library' | 'templates' | 'history' | 'scheduled'>('library');
+  // A schedule being made ('new') or changed.
+  const [scheduling, setScheduling] = useState<ReportScheduleView | 'new' | null>(null);
   const templates = useQuery({
     queryKey: ['report-templates'],
     queryFn: () => api<ReportTemplateView[]>('/reports/templates'),
@@ -308,7 +313,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
             <p className="mt-1 text-xs text-muted">{REPORT_KINDS.length} built-in reports</p>
           </div>
           <div className="flex border-b border-border p-1" aria-label="Report collections">
-            {(['library', 'templates', 'history'] as const).map((tab) => (
+            {(['library', 'templates', 'history', 'scheduled'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setLibraryTab(tab)}
@@ -397,6 +402,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
               )}
             </div>
           )}
+          {libraryTab === 'scheduled' && <ScheduleList scoped={scoped} onEdit={(s) => setScheduling(s)} />}
           {libraryTab === 'history' && (
             <div className="space-y-2 p-3">
               <p className="text-xs text-muted">Your latest 100 snapshots. Access is checked each time.</p>
@@ -460,6 +466,14 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 >
                   <Save />
                   Save template
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy || !definition.clientIds.length || DEMO}
+                  onClick={() => setScheduling('new')}
+                >
+                  <CalendarClock />
+                  Schedule
                 </Button>
                 <Button
                   variant="secondary"
@@ -919,6 +933,13 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
           </div>
         </aside>
       </div>
+      {scheduling && (
+        <ScheduleDialog
+          definition={definition}
+          schedule={scheduling === 'new' ? undefined : scheduling}
+          onClose={() => setScheduling(null)}
+        />
+      )}
       <Dialog
         open={saving}
         onClose={() => setSaving(false)}

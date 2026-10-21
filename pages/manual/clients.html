@@ -440,6 +440,31 @@
           <strong>Changes only</strong> hides everything else. Values that move on every run, such as check-in times or
           days left, don't count as changes.
         </p>
+        <h3 id="scheduled-reports"><a class="anchor" href="#scheduled-reports">Scheduled reports</a></h3>
+        <p>
+          To have a report emailed regularly, set it up (report type, clients, and any options), then choose
+          <strong>Schedule</strong>. Choose:
+        </p>
+        <ul>
+          <li>
+            how often it goes out: every week, month, or quarter (quarters start in January, April, July, and October);
+          </li>
+          <li>the day and the hour, in the server's time zone;</li>
+          <li>who receives it: up to 20 addresses, staff or client contacts.</li>
+        </ul>
+        <p>
+          Each time it runs, Atlas captures a fresh snapshot with your access at that moment and keeps it in your
+          <strong>History</strong>, so <strong>Compare with</strong> works on it. Then it emails each recipient a
+          summary, with the whole report attached as a PDF in your organization's look. For a report about one client,
+          it can also include a 30-day link the client can open without an account.
+        </p>
+        <p>
+          The <strong>Scheduled</strong> tab lists your schedules, when each runs next, and how the last delivery went,
+          including any addresses that refused it. <strong>Send now</strong> sends one straight away without moving its
+          regular time. <strong>Pause</strong> stops it until you resume it. Schedules are private to the person who
+          made them. A schedule stops if its owner can no longer sign in, and deleting a client removes the schedules
+          that report on it. Email must be set up under <strong>Administration → Email &amp; alerts</strong>.
+        </p>
         <h3 id="sharing-a-report-with-the-client">
           <a class="anchor" href="#sharing-a-report-with-the-client">Sharing a report with the client</a>
         </h3>
@@ -453,9 +478,7 @@
           too. Only the person who ran the report can share it, and only with edit access to the client. Making and
           revoking links appear in the security log.
         </p>
-        <p>
-          Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
-        </p>
+        <p>Automatic triggers (a report sent when something happens) and a delivery log are planned next.</p>
         <h2 id="the-monthly-report"><a class="anchor" href="#the-monthly-report">The monthly report</a></h2>
         <p>
           <strong>Monthly report</strong> in the client header opens a printable page with the client's assets and

@@ -130,11 +130,23 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 For **Asset inventory**, **Asset fields** adds up to 12 fields from your asset layouts as extra columns, such as serial number, model, warranty date, or IP address. Long text fields are never included, because they often hold notes and configuration. A field removed from its layout since a template was saved is left out, with a notice.
 PDF exports carry your organization's look from **Administration → Theme**: the logo (PNG or JPEG; an SVG logo shows your brand name instead), the brand name, and the accent colour. The first page summarizes the report: how many clients and rows it covers, how many rows need review, and any notices. It also charts what needs review in each section, the spread of status columns (online, protection, encryption, status), and due or expiry dates by month.
 When you have run the same report for the same clients before, **Compare with** shows what changed since the most recent earlier run. New rows are marked **New**, changed values are highlighted with the previous value beneath, and rows that have gone are listed under **removed since**. **Changes only** hides everything else. Values that move on every run, such as check-in times or days left, don't count as changes.
+### Scheduled reports
+
+To have a report emailed regularly, set it up (report type, clients, and any options), then choose **Schedule**. Choose:
+
+- how often it goes out: every week, month, or quarter (quarters start in January, April, July, and October);
+- the day and the hour, in the server's time zone;
+- who receives it: up to 20 addresses, staff or client contacts.
+
+Each time it runs, Atlas captures a fresh snapshot with your access at that moment and keeps it in your **History**, so **Compare with** works on it. Then it emails each recipient a summary, with the whole report attached as a PDF in your organization's look. For a report about one client, it can also include a 30-day link the client can open without an account.
+
+The **Scheduled** tab lists your schedules, when each runs next, and how the last delivery went, including any addresses that refused it. **Send now** sends one straight away without moving its regular time. **Pause** stops it until you resume it. Schedules are private to the person who made them. A schedule stops if its owner can no longer sign in, and deleting a client removes the schedules that report on it. Email must be set up under **Administration → Email & alerts**.
+
 ### Sharing a report with the client
 
 A report run for a single client can be shared with that client by link. Choose **Share**, pick how long the link works (7, 30, or 90 days; report links always expire), and choose **Create link**; the link is copied for you. Whoever has the link sees that snapshot, every section as it was captured, and can download each section as a PDF, without an account. The page names your organization and the client, never the person who ran the report. The dialog shows how often each link was opened, and **Revoke** stops a link at once. Deleting the report or the client stops its links too. Only the person who ran the report can share it, and only with edit access to the client. Making and revoking links appear in the security log.
 
-Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
+Automatic triggers (a report sent when something happens) and a delivery log are planned next.
 
 ## The monthly report
 

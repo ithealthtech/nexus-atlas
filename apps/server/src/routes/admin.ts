@@ -44,6 +44,8 @@ export function registerAdminRoutes(
     sendHour: number;
     /** Replaces the Microsoft 365 permission check (tests use a fake Microsoft). */
     health?: { nightly(orgId: string): Promise<void> };
+    /** Scheduled reports, sent on the notifier's pass. */
+    reports?: { runDue(orgId: string, now?: Date): Promise<void> };
     graphPermissions?: (config: SmtpConfig) => Promise<{ roles: string[]; canSend: boolean }>;
   },
 ): Notifier {
@@ -311,6 +313,7 @@ export function registerAdminRoutes(
     audit,
     emergency: deps.emergency,
     health: deps.health,
+    reports: deps.reports,
     publicOrigin: deps.publicOrigin,
     sendHour: deps.sendHour,
   });

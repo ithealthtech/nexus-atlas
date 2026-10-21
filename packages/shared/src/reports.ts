@@ -87,6 +87,81 @@ export interface ReportTemplateView extends z.infer<typeof reportTemplateSchema>
   version: number;
   updatedAt: string;
 }
+
+// ---------- scheduled reports ----------
+export const REPORT_CADENCES = ['weekly', 'monthly', 'quarterly'] as const;
+export type ReportCadence = (typeof REPORT_CADENCES)[number];
+export const REPORT_CADENCE_LABELS: Record<ReportCadence, string> = {
+  weekly: 'Every week',
+  monthly: 'Every month',
+  quarterly: 'Every quarter',
+};
+export const MAX_SCHEDULE_RECIPIENTS = 20;
+export const reportScheduleSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Name the schedule.').max(120),
+    definition: reportDefinitionSchema,
+    cadence: z.enum(REPORT_CADENCES),
+    /** Weekly: the day of the week, 0 (Sunday) to 6. Monthly and quarterly: the day of the month, 1 to 28. */
+    day: z.number().int().min(0).max(28),
+    /** The hour it goes out, 0 to 23, in the server's time zone. */
+    hour: z.number().int().min(0).max(23).default(7),
+    recipients: z
+      .array(z.string().trim().toLowerCase().max(254).email('Enter valid email addresses.'))
+      .min(1, 'Add at least one recipient.')
+      .max(MAX_SCHEDULE_RECIPIENTS, `Send to up to ${MAX_SCHEDULE_RECIPIENTS} people.`)
+      .refine((list) => new Set(list).size === list.length, 'List each recipient once.'),
+    /** Attach the whole report as a branded PDF. */
+    attachPdf: z.boolean().default(true),
+    /** Include a 30-day link to the report that needs no account (single-client reports only). */
+    clientLink: z.boolean().default(false),
+    enabled: z.boolean().default(true),
+  })
+  .refine((s) => (s.cadence === 'weekly' ? s.day <= 6 : s.day >= 1), {
+    message: 'Choose a day of the week, or a day of the month from 1 to 28.',
+    path: ['day'],
+  })
+  .refine((s) => !s.clientLink || s.definition.clientIds.length === 1, {
+    message: 'A client link can only be included for a report about one client.',
+    path: ['clientLink'],
+  });
+export type ReportScheduleInput = z.infer<typeof reportScheduleSchema>;
+export interface ReportScheduleView extends ReportScheduleInput {
+  id: string;
+  version: number;
+  nextRunAt: string;
+  lastRunAt: string | null;
+  lastStatus: 'sent' | 'failed' | null;
+  /** What went wrong last time, or which recipients a partly failed delivery missed. */
+  lastError: string;
+  /** The snapshot the last delivery sent, in the owner's history. */
+  lastRunId: string | null;
+}
+
+/**
+ * When a schedule next runs, strictly after `after`: in the server's local time, at the schedule's hour on its day.
+ * Quarterly schedules run in January, April, July and October. Days stop at 28 so every month has one.
+ */
+export function nextReportRun(schedule: Pick<ReportScheduleInput, 'cadence' | 'day' | 'hour'>, after: Date): Date {
+  const at = (year: number, month: number, date: number) => new Date(year, month, date, schedule.hour, 0, 0, 0);
+  const y = after.getFullYear();
+  const m = after.getMonth();
+  if (schedule.cadence === 'weekly') {
+    const today = at(y, m, after.getDate());
+    let ahead = (schedule.day - today.getDay() + 7) % 7;
+    if (ahead === 0 && today <= after) ahead = 7;
+    return at(y, m, after.getDate() + ahead);
+  }
+  const step = schedule.cadence === 'quarterly' ? 3 : 1;
+  // The first month of this period, then onward until the date is after `after`.
+  let month = schedule.cadence === 'quarterly' ? m - (m % 3) : m;
+  let next = at(y, month, schedule.day);
+  while (next <= after) {
+    month += step;
+    next = at(y, month, schedule.day);
+  }
+  return next;
+}
 export interface ReportSection {
   title: string;
   columns: string[];

@@ -42,6 +42,8 @@ export class Notifier {
       emergency?: { announceStarts(orgId: string, now?: Date): Promise<number> };
       /** Daily breach checks for stored passwords. */
       health?: { nightly(orgId: string): Promise<void> };
+      /** Scheduled reports that have come due. Records each outcome on its schedule rather than throwing. */
+      reports?: { runDue(orgId: string, now?: Date): Promise<void> };
       publicOrigin: string;
       /** Local hour (0–23) after which the day's emails go out. */
       sendHour: number;
@@ -70,6 +72,7 @@ export class Notifier {
           await this.deps.audit.applyRetention(org.id);
           await this.deps.emergency?.announceStarts(org.id, now).catch(() => undefined);
           await this.deps.health?.nightly(org.id).catch(() => undefined);
+          await this.deps.reports?.runDue(org.id, now);
           await this.deps.audit.checkpoint(org.id);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
         }

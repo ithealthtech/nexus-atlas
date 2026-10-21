@@ -129,6 +129,17 @@ test('premium shell and report snapshots, filters, templates and exports work on
     expect(sharedViolations.map((v) => v.id)).toEqual([]);
     await shared.screenshot({ path: resolve(screenshots, 'atlas-shared-report.png'), fullPage: true });
     await visitor.close();
+    // Scheduling it: saved to the Scheduled tab. With email not set up, Send now records why it wasn't sent.
+    await page.getByRole('button', { name: 'Schedule', exact: true }).click();
+    const scheduleDialog = page.getByRole('dialog', { name: 'Schedule this report' });
+    await scheduleDialog.getByLabel('Send to').fill('office.manager@harbor.example');
+    await scheduleDialog.getByRole('button', { name: 'Schedule report', exact: true }).click();
+    await expect(scheduleDialog).toHaveCount(0);
+    await page.getByRole('button', { name: 'scheduled', exact: true }).click();
+    await expect(page.getByText('Every month on day 1 at 07:00')).toBeVisible();
+    await page.getByRole('button', { name: 'Send now', exact: true }).click();
+    await expect(page.getByText(/Not delivered to office\.manager@harbor\.example: Email is not set up/)).toBeVisible();
+    await page.getByRole('button', { name: 'Built-in', exact: true }).click();
     await page.getByRole('button', { name: 'Save template', exact: true }).click();
     await page.getByLabel('Template name', { exact: true }).fill('Monthly client licenses');
     await page.getByRole('dialog').getByRole('button', { name: 'Save template', exact: true }).click();
