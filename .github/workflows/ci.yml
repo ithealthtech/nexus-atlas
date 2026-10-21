@@ -160,8 +160,11 @@ jobs:
       - name: Install, upgrade, and uninstall
         shell: pwsh
         run: apps/windows/installer/Test-Setup.ps1
-      # How the window looks, with made-up data, so a change can be checked without installing it.
-      - name: Screenshots
+      # How the window looks, with made-up data, so a change can be checked without installing it. Each page is also
+      # checked with Axe.Windows (Accessibility Insights' engine); a problem fails the job.
+      - name: Accessibility scanner
+        run: dotnet build apps/windows/tools/AccessibilityScan -c Release -o apps/windows/dist/scanner
+      - name: Screenshots and accessibility
         shell: pwsh
         run: apps/windows/Take-Screenshots.ps1
       - uses: actions/upload-artifact@v4

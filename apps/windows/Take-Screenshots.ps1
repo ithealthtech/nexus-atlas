@@ -8,7 +8,9 @@
 #>
 param(
   [string]$App = (Join-Path $PSScriptRoot 'dist\app\AtlasForWindows.exe'),
-  [string]$Output = (Join-Path $PSScriptRoot 'dist\screenshots')
+  [string]$Output = (Join-Path $PSScriptRoot 'dist\screenshots'),
+  # tools/AccessibilityScan, built: each page is checked with Axe.Windows, and any problem fails the run.
+  [string]$Scanner = (Join-Path $PSScriptRoot 'dist\scanner\AccessibilityScan.exe')
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing, UIAutomationClient, UIAutomationTypes
@@ -93,7 +95,17 @@ try {
 
   Check (Shows 'Coming due') 'Home shows what is coming due'
   Check (Shows 'Good *') 'Home greets you and says how much is due'
+  # Accessibility: what Axe.Windows (Accessibility Insights) finds on a page, collected for the end.
+  $script:a11y = @()
+  function Scan([string]$name) {
+    if (-not (Test-Path $Scanner)) { return }
+    $lines = @(& $Scanner $p.Id $name 2>&1 | ForEach-Object { "$_" })
+    $lines | ForEach-Object { Write-Host "  a11y  $_" }
+    if ($LASTEXITCODE -ne 0) { $script:a11y += $lines | Where-Object { $_ -notmatch 'accessibility problem\(s\)\.$' } }
+  }
+
   Shot '01-home'
+  Scan 'home'
 
   # Real mouse clicks, quickly, across the sections and into a row: the right list shows and the app keeps up.
   function MouseClick($element, $what) {
@@ -126,14 +138,17 @@ try {
   Check (Shows 'Next 30 days') 'the Clients page shows its table'
   Check (Shows '*expiring*') 'a client shows what is coming due'
   Shot '02-clients'
+  Scan 'clients'
   Open 'Harbor Dental Group*'
   Check ((Title) -eq 'Harbor Dental Group') 'a client opens on its overview'
   Shot '02-client-overview'
+  Scan 'client overview'
 
   # A contact: add one, then see it on the overview.
   Press (Named $CT::Button 'Add contact') 'Add contact'
   Fill 'Name' 'Sam Ortiz'; Fill 'Title' 'Front desk'; Fill 'Email' 'sam@harbordental.demo'
   Shot '03-contact-form'
+  Scan 'contact form'
   Press (ById 'SaveButton') 'the contact form''s save button'
   Check ((Title) -eq 'Harbor Dental Group' -and (Shows 'Sam Ortiz*')) 'a new contact shows on the overview'
   Check (Shows '*sam@harbordental.demo*') 'the contact''s email shows'
@@ -143,6 +158,7 @@ try {
   Check (Shows 'Strength') 'the Passwords list shows its columns'
   Check (Shows 'In 2 breaches') 'a breached password is flagged'
   Shot '03b-passwords'
+  Scan 'passwords'
   Open 'Documents'
   Check (Shows 'Needs review') 'a document shows its status'
   Shot '03c-documents'
@@ -155,6 +171,7 @@ try {
   Choose 'Client' 'Harbor Dental Group'; Choose 'Asset layout' 'Configurations'
   Fill 'Name' 'HDG-SW-01'; Choose 'Type *' 'Switch'
   Shot '04-asset-form'
+  Scan 'asset form'
   Press (ById 'SaveButton') 'the asset form''s save button'
   Check ((Title) -eq 'HDG-SW-01') 'a new asset saves and opens'
   Shot '05-asset'
@@ -165,9 +182,11 @@ try {
   Open 'Assets'; Open 'HDG-FW-01*'
   Check ((Shows 'Related') -and (Shows 'Firewall reboot procedure*')) 'an asset shows what it is linked to'
   Shot '05b-related'
+  Scan 'asset'
   Open 'Passwords'; Open 'HDG-FW-01 admin*'
   Check ((Shows 'Earlier passwords') -and (Shows 'Files') -and (Shows 'HDG-FW-01 backup.conf')) 'a password shows its earlier versions and files'
   Shot '05c-history'
+  Scan 'password'
   Open 'Passwords'; Open 'Microsoft 365 global admin*'
   Press (Named $CT::Button 'Show the current code') 'Show the current code'
   Check (Shows '*changes in*s') 'a one-time code counts down while shown'
@@ -203,6 +222,7 @@ try {
   Check ((Shows 'First visit') -and (Shows '*Standard VLANs*')) 'a document shows its headings as text'
   Check ([bool](Named $CT::Button 'Copy code')) 'a code block has a copy button'
   Shot '06b-document-formatting'
+  Scan 'document'
   $scroller = $win.FindAll($T, (Cond $AE::IsScrollPatternAvailableProperty $true)) |
     Where-Object { $_.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern).Current.VerticallyScrollable } | Select-Object -Last 1
   if ($scroller) {
@@ -226,12 +246,15 @@ try {
   Check ((Title) -eq 'Settings') 'Settings opens from the account menu'
   Check ([bool](Named $CT::ComboBox 'Search shortcut')) 'Settings offers a choice of search shortcut'
   Shot '10-settings'
+  Scan 'settings'
   Choose 'Theme' 'Dark'
   Shot '10b-settings-dark'
+  Scan 'settings, dark'
   Open 'Home'
   Shot '11-home-dark'
   Open 'Passwords'
   Shot '11b-passwords-dark'
+  Scan 'passwords, dark'
   Open 'Documents'; Open 'New client onboarding checklist*'
   Shot '11c-document-dark'
 
@@ -242,3 +265,8 @@ finally {
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
 }
 if ($failed.Count -gt 0) { Write-Warning ("$($failed.Count) check(s) failed: " + ($failed -join '; ')) } else { Write-Host 'All checks passed.' }
+if ($a11y.Count -gt 0) {
+  $a11y | ForEach-Object { Write-Host "::error::$_" }
+  throw "Axe.Windows found $($a11y.Count) accessibility problem(s); they're listed above."
+}
+if (Test-Path $Scanner) { Write-Host 'No accessibility problems found.' }
