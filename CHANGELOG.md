@@ -6,6 +6,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Atlas for Windows works with screen readers and contrast themes.**
+  - Every page is checked with Axe.Windows (the engine behind Accessibility Insights) on each build.
+  - Buttons that showed an icon and text but had no name for screen readers now have one.
+  - Each earlier password's buttons say which password they're for.
+  - The sidebar, account badge, and highlighted document text use Windows' own colours in a high contrast theme.
 - **Atlas for Windows uses your favicon as its icon.**
   - The favicon set under **Administration → Theme** becomes the app's icon: its window and title bar, taskbar button, tray icon, and its Start menu, desktop, and pinned taskbar shortcuts.
   - Windows can't draw SVG, so when the theme is saved the browser also makes a 256-pixel PNG of the favicon for the app. PNG and ICO favicons are used as they are.
