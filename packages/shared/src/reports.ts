@@ -5,6 +5,7 @@ export const REPORT_KINDS = [
   'review',
   'executive',
   'security',
+  'insurance',
   'service',
   'assets',
   'licenses',
@@ -28,6 +29,11 @@ export const REPORT_INFO: Record<ReportKind, { name: string; description: string
   security: {
     name: 'Security posture',
     description: 'Password health, endpoint protection, disk encryption, and automatic password rotation.',
+  },
+  insurance: {
+    name: 'Cyber insurance readiness',
+    description:
+      'The questions cyber insurers ask, answered from your records with the evidence for each, and the gaps to close before renewal.',
   },
   service: {
     name: 'Service review',
@@ -314,6 +320,9 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (column === 'Issues') return value !== '';
     if (column === 'Encryption') return value === 'Not encrypted' || value === 'Unknown';
     if (column === 'Last result') return value === 'Failed';
+    // An insurer's question answered anything but Yes, and the counts of those answers.
+    if (column === 'Answer') return value !== 'Yes';
+    if (['Partly', 'No', 'Not evidenced'].includes(column)) return Number(value) > 0;
     // Below "Good" (see healthGrade): needs attention or at risk.
     if (column === 'Health score') return /^\d+$/.test(value) && Number(value) < 75;
     if (

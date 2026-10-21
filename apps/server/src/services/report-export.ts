@@ -105,12 +105,25 @@ function toneOf(value: string, accent: string) {
       'overdue',
       'inactive',
       'suspended',
+      'no',
     ].includes(v) ||
     v.startsWith('failed')
   )
     return BAD;
-  if (['expiring soon', 'upcoming', 'needs_review', 'outdated', 'warning', 'in progress'].includes(v)) return WARN;
-  if (['unknown', 'not reported', 'not available', 'no expiry date', 'not in rmm', 'not checked yet', ''].includes(v))
+  if (['expiring soon', 'upcoming', 'needs_review', 'outdated', 'warning', 'in progress', 'partly'].includes(v))
+    return WARN;
+  if (
+    [
+      'unknown',
+      'not reported',
+      'not available',
+      'no expiry date',
+      'not in rmm',
+      'not checked yet',
+      'not evidenced',
+      '',
+    ].includes(v)
+  )
     return UNKNOWN;
   return accent;
 }
@@ -356,13 +369,26 @@ export async function reportPdf(
           { width },
         );
       y = doc.y + 8;
-      const columnWidth = width / section.columns.length;
+      // Columns as wide as what they hold (a client's name, or a sentence of evidence), so short values don't
+      // waste room that long ones need. A column is never narrower than the longest word in it (up to 20
+      // letters), so words aren't broken across lines.
+      const weights = section.columns.map((column, i) => {
+        const sample = section.rows.slice(0, 100).map((r) => readable(r[i] ?? ''));
+        const average = sample.length ? sample.reduce((n, v) => n + v.length, 0) / sample.length : column.length;
+        const word = Math.max(...[column, ...sample].flatMap((v) => v.split(/\s+/)).map((w) => Math.min(w.length, 20)));
+        return Math.max(word * 1.25 + 2, 7, Math.min(average, 48));
+      });
+      const total = weights.reduce((n, w) => n + w, 0);
+      const widths = weights.map((w) => (w / total) * width);
+      const xs = widths.map((_, i) => left + widths.slice(0, i).reduce((n, w) => n + w, 0));
+      // States and answers are coloured, so a "No" or "Offline" stands out in a long table.
+      const coloured = section.columns.map((c) => STATE_COLUMNS.includes(c) || c === 'Answer');
       const drawRow = (row: string[], heading: boolean, shaded = false) => {
         doc.font(heading ? 'Bold' : 'Regular').fontSize(8);
         const height = Math.max(
           24,
           ...row.map(
-            (value) => doc.heightOfString(heading ? value : readable(value), { width: columnWidth - 12 }) + 13,
+            (value, i) => doc.heightOfString(heading ? value : readable(value), { width: widths[i]! - 12 }) + 13,
           ),
         );
         if (height > bottom() - 72)
@@ -374,9 +400,10 @@ export async function reportPdf(
         doc.font(heading ? 'Bold' : 'Regular').fontSize(8);
         doc.rect(left, y, width, height).fill(heading ? tint(accent, 0.88) : shaded ? '#f8fafc' : '#ffffff');
         row.forEach((value, i) => {
+          const tone = !heading && coloured[i] ? toneOf(value, TEXT) : TEXT;
           doc
-            .fillColor(heading ? INK : TEXT)
-            .text(heading ? value : readable(value), left + 6 + i * columnWidth, y + 6, { width: columnWidth - 12 });
+            .fillColor(heading ? INK : tone === UNKNOWN ? MUTED : tone)
+            .text(heading ? value : readable(value), xs[i]! + 6, y + 6, { width: widths[i]! - 12 });
         });
         doc
           .moveTo(left, y + height)
@@ -578,7 +605,10 @@ export async function reportPdf(
 
       // ---------- charts, then the tables: the selected section, or every section ----------
       drawCharts(snapshot.sections);
-      tables.forEach(drawTable);
+      // In a whole report, a one-client summary reads as figures, as in a review pack.
+      for (const section of tables)
+        if (all && section.rows.length === 1 && section.columns[0] === 'Client') drawFigures(section);
+        else drawTable(section);
     }
 
     // ---------- notices and sources ----------

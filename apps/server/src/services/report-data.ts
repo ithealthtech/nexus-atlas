@@ -11,6 +11,7 @@ import { documentation } from './reports/documentation.js';
 import { domains } from './reports/domains.js';
 import { endpoints } from './reports/endpoints.js';
 import { executive } from './reports/executive.js';
+import { insurance } from './reports/insurance.js';
 import { licenses } from './reports/licenses.js';
 import { renewals } from './reports/renewals.js';
 import { review } from './reports/review.js';
@@ -28,6 +29,7 @@ const COLLECTORS: Record<ReportKind, Collector> = {
   review,
   executive,
   security,
+  insurance,
   service,
   assets,
   licenses,

@@ -29,6 +29,7 @@ import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
 import { DomainLookup } from './services/domain-lookup.js';
 import { certProbe as realCertProbe, type CertProbe } from './services/cert-probe.js';
+import { dmarcRecord } from './services/dmarc.js';
 import { TrackerScheduler, TrackerService } from './services/trackers.js';
 import { registerTrackerRoutes } from './routes/trackers.js';
 import { registerScreenConnectRoutes } from './routes/screenconnect.js';
@@ -125,6 +126,8 @@ export interface AppOptions {
   domainLookup?: DomainLookup;
   /** Replaces reading served certificates for the SSL tracker. Tests leave it out, so nothing is connected to. */
   certProbe?: CertProbe;
+  /** Replaces looking up DMARC records for the insurance readiness report. Tests leave it out, so nothing is looked up. */
+  dmarcLookup?: (domain: string) => Promise<string | null>;
   /** Replaces asking systemd about the services Atlas runs on (tests use a fake). */
   serviceShow?: ShowUnit;
   /** Replaces connecting to the portal's own address to read its certificate. */
@@ -194,6 +197,7 @@ export async function buildApp({
   entraFetch,
   domainLookup,
   certProbe,
+  dmarcLookup,
   updateFetch,
   serviceShow,
   portalProbe,
@@ -788,6 +792,7 @@ export async function buildApp({
     passwordHealth: (scope) => health.report(scope),
     // Rotation is built just below; this runs only when a report does.
     rotationTargets: (scope) => rotation.targets(scope.actor),
+    dmarc: dmarcLookup ?? (config.NODE_ENV === 'test' ? undefined : (domain) => dmarcRecord(domain)),
   });
   const reportShares = new ReportShareService(db, config.publicOrigin);
   const reportSchedules = new ReportScheduleService(db, { reports, shares: reportShares, mail, settings });

@@ -6,6 +6,17 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Cyber insurance readiness report.** The questions cyber insurers ask, answered for each client from what Atlas holds, with the evidence and its source for every answer. It covers 13 questions:
+  - MFA, endpoint protection, encryption, supported operating systems, and devices managed and up to date.
+  - Backups with a restore test in the last 12 months, Global Administrators, local admin rotation, and password breaches and reuse.
+  - Email spoofing protection: each domain's DMARC record is looked up live when the report runs.
+  - A written incident response plan, a continuity plan, and security awareness training.
+
+  Answers are Yes, Partly, No or **Not evidenced**. What Atlas can't see is never counted as Yes.
+
+  **Gaps to close before renewal** lists what to fix, refusals first, and the readiness summary gives each client a percentage.
+- **Clearer report PDFs.** Columns are as wide as what they hold, so evidence and names wrap less and reports run to fewer pages. States and answers are coloured: Offline, Not encrypted and No in red, Partly in amber, Yes and Online in green. In a whole-report PDF, a one-client summary shows as figures.
+
 - **Client health score.** Every client has a score from 0 to 100, beside its name: Healthy, Good, Needs attention or At risk, with how far it moved in 30 days.
   - It is made of four weighted parts: security (passwords, endpoint protection, encryption), endpoints (online and checking in), documentation (the essentials on record and reviews on time), and renewals (domains, certificates, warranties and subscriptions in date).
   - A part with nothing to measure is left out, never assumed healthy.

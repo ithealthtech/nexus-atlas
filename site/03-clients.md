@@ -134,6 +134,7 @@ Open **Overview → Reports** for reporting across clients, or a client's **Repo
 - Client review pack
 - Executive summary
 - Security posture
+- Cyber insurance readiness
 - Service review
 - Asset inventory
 - License utilization
@@ -152,6 +153,26 @@ Choose **Needs review** to focus on flagged records. Use **Search report results
 **Save template** stores reusable settings privately in your account. **Templates** lets you load, update, copy, or delete those settings. **History** lists your recent snapshots; opening a snapshot preserves its original contents, while **Refresh report** creates a new capture. Every view and download checks current access to all included clients. Deleting a client removes any report or template containing that client. Report generation, template changes, exports, and deletions appear in the security log.
 
 **Security posture** shows, for each client, passwords with problems (breached, weak, reused, overdue, expired, or unchanged for a year), devices that are offline or unprotected, BitLocker encryption reported by the collector, and the last result of automatic password rotation. Password names appear only for clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and recovery keys are never included.
+
+**Cyber insurance readiness** answers the questions cyber insurers ask, for each client, from what Atlas holds. Each answer is **Yes**, **Partly**, **No** or **Not evidenced**, with the evidence and where it came from:
+
+| Question | Answered from |
+| --- | --- |
+| MFA for email and remote access | Not tracked in Atlas: confirm it in Microsoft Entra |
+| Endpoint protection on every device | ConnectWise RMM |
+| Laptops and workstations encrypted | The BitLocker collector |
+| Operating systems still supported | Device operating systems on assets |
+| Devices managed and up to date | RMM check-ins (patch levels are in the RMM) |
+| Backups in place and restore-tested in 12 months | **Backups** assets and their **Last restore test** |
+| Administrator accounts limited | Global Administrators of the synced Microsoft 365 tenant (fewer than five) |
+| Local administrator passwords rotated | Automatic password rotation (administrators only) |
+| Stored passwords free of breaches and reuse | Password health |
+| Email protected against spoofing | Each **Domains** asset's DMARC record, looked up when the report runs, and the filtering service on **Email** assets |
+| Incident response plan | A document titled as one |
+| Business continuity or disaster recovery plan | A document titled as one |
+| Security awareness training | Not tracked in Atlas |
+
+**Readiness summary** gives each client's readiness: Yes counts fully and Partly half, out of the questions Atlas could answer. **Gaps to close before renewal** lists every answer that isn't Yes, refusals first, each with what to do. **Not evidenced** means Atlas holds no proof either way, so answer it from your own records rather than as a Yes. A DMARC lookup that fails is a notice, never "no record".
 **Domains & SSL** lists each client's domains and SSL certificates with their registrar or issuer, expiry date, days left, and the result of the latest automatic check, soonest first. A summary counts what has expired, what expires within the chosen window, and failed checks. Records the trackers haven't checked yet show the dates as entered.
 **Software & sign-ins** reads the inventory the ConnectWise RMM sync saves. It lists every application installed on each client's devices, with versions, how many devices have it, and the same flags as the client's Software tab: end of life, no license recorded, or more installs than licensed seats. It also lists the accounts that sign in to each device, with the matching contact. Devices that haven't reported an inventory are counted in the report's notices rather than treated as having nothing installed.
 **Service review** looks back over a period you choose (the last 30 days to a year): tickets opened and closed, tickets still open, checklists completed, documentation updated, assets added, and every change recorded in Atlas, with each client's device health at the start of the period against now. It suits a monthly or quarterly review with the client. Password changes are counted only for clients whose passwords you can open, and are never listed.

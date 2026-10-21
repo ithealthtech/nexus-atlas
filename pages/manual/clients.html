@@ -448,6 +448,7 @@
           <li>Client review pack</li>
           <li>Executive summary</li>
           <li>Security posture</li>
+          <li>Cyber insurance readiness</li>
           <li>Service review</li>
           <li>Asset inventory</li>
           <li>License utilization</li>
@@ -487,30 +488,109 @@
           overdue, expired, or unchanged for a year), devices that are offline or unprotected, BitLocker encryption
           reported by the collector, and the last result of automatic password rotation. Password names appear only for
           clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and
-          recovery keys are never included. <strong>Domains &amp; SSL</strong> lists each client's domains and SSL
-          certificates with their registrar or issuer, expiry date, days left, and the result of the latest automatic
-          check, soonest first. A summary counts what has expired, what expires within the chosen window, and failed
-          checks. Records the trackers haven't checked yet show the dates as entered.
-          <strong>Software &amp; sign-ins</strong> reads the inventory the ConnectWise RMM sync saves. It lists every
-          application installed on each client's devices, with versions, how many devices have it, and the same flags as
-          the client's Software tab: end of life, no license recorded, or more installs than licensed seats. It also
-          lists the accounts that sign in to each device, with the matching contact. Devices that haven't reported an
-          inventory are counted in the report's notices rather than treated as having nothing installed.
-          <strong>Service review</strong> looks back over a period you choose (the last 30 days to a year): tickets
-          opened and closed, tickets still open, checklists completed, documentation updated, assets added, and every
-          change recorded in Atlas, with each client's device health at the start of the period against now. It suits a
-          monthly or quarterly review with the client. Password changes are counted only for clients whose passwords you
-          can open, and are never listed. For <strong>Asset inventory</strong>, <strong>Asset fields</strong> adds up to
-          12 fields from your asset layouts as extra columns, such as serial number, model, warranty date, or IP
-          address. Long text fields are never included, because they often hold notes and configuration. A field removed
-          from its layout since a template was saved is left out, with a notice. PDF exports carry your organization's
-          look from <strong>Administration → Theme</strong>: the logo (PNG or JPEG; an SVG logo shows your brand name
-          instead), the brand name, and the accent colour. The first page summarizes the report: how many clients and
-          rows it covers, how many rows need review, and any notices. It also charts what needs review in each section,
-          the spread of status columns (online, protection, encryption, status), and due or expiry dates by month. When
-          you have run the same report for the same clients before, <strong>Compare with</strong> shows what changed
-          since the most recent earlier run. New rows are marked <strong>New</strong>, changed values are highlighted
-          with the previous value beneath, and rows that have gone are listed under <strong>removed since</strong>.
+          recovery keys are never included.
+        </p>
+        <p>
+          <strong>Cyber insurance readiness</strong> answers the questions cyber insurers ask, for each client, from
+          what Atlas holds. Each answer is <strong>Yes</strong>, <strong>Partly</strong>, <strong>No</strong> or
+          <strong>Not evidenced</strong>, with the evidence and where it came from:
+        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Question</th>
+                <th>Answered from</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>MFA for email and remote access</td>
+                <td>Not tracked in Atlas: confirm it in Microsoft Entra</td>
+              </tr>
+              <tr>
+                <td>Endpoint protection on every device</td>
+                <td>ConnectWise RMM</td>
+              </tr>
+              <tr>
+                <td>Laptops and workstations encrypted</td>
+                <td>The BitLocker collector</td>
+              </tr>
+              <tr>
+                <td>Operating systems still supported</td>
+                <td>Device operating systems on assets</td>
+              </tr>
+              <tr>
+                <td>Devices managed and up to date</td>
+                <td>RMM check-ins (patch levels are in the RMM)</td>
+              </tr>
+              <tr>
+                <td>Backups in place and restore-tested in 12 months</td>
+                <td><strong>Backups</strong> assets and their <strong>Last restore test</strong></td>
+              </tr>
+              <tr>
+                <td>Administrator accounts limited</td>
+                <td>Global Administrators of the synced Microsoft 365 tenant (fewer than five)</td>
+              </tr>
+              <tr>
+                <td>Local administrator passwords rotated</td>
+                <td>Automatic password rotation (administrators only)</td>
+              </tr>
+              <tr>
+                <td>Stored passwords free of breaches and reuse</td>
+                <td>Password health</td>
+              </tr>
+              <tr>
+                <td>Email protected against spoofing</td>
+                <td>
+                  Each <strong>Domains</strong> asset's DMARC record, looked up when the report runs, and the filtering
+                  service on <strong>Email</strong> assets
+                </td>
+              </tr>
+              <tr>
+                <td>Incident response plan</td>
+                <td>A document titled as one</td>
+              </tr>
+              <tr>
+                <td>Business continuity or disaster recovery plan</td>
+                <td>A document titled as one</td>
+              </tr>
+              <tr>
+                <td>Security awareness training</td>
+                <td>Not tracked in Atlas</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Readiness summary</strong> gives each client's readiness: Yes counts fully and Partly half, out of the
+          questions Atlas could answer. <strong>Gaps to close before renewal</strong> lists every answer that isn't Yes,
+          refusals first, each with what to do. <strong>Not evidenced</strong> means Atlas holds no proof either way, so
+          answer it from your own records rather than as a Yes. A DMARC lookup that fails is a notice, never &quot;no
+          record&quot;. <strong>Domains &amp; SSL</strong> lists each client's domains and SSL certificates with their
+          registrar or issuer, expiry date, days left, and the result of the latest automatic check, soonest first. A
+          summary counts what has expired, what expires within the chosen window, and failed checks. Records the
+          trackers haven't checked yet show the dates as entered. <strong>Software &amp; sign-ins</strong> reads the
+          inventory the ConnectWise RMM sync saves. It lists every application installed on each client's devices, with
+          versions, how many devices have it, and the same flags as the client's Software tab: end of life, no license
+          recorded, or more installs than licensed seats. It also lists the accounts that sign in to each device, with
+          the matching contact. Devices that haven't reported an inventory are counted in the report's notices rather
+          than treated as having nothing installed. <strong>Service review</strong> looks back over a period you choose
+          (the last 30 days to a year): tickets opened and closed, tickets still open, checklists completed,
+          documentation updated, assets added, and every change recorded in Atlas, with each client's device health at
+          the start of the period against now. It suits a monthly or quarterly review with the client. Password changes
+          are counted only for clients whose passwords you can open, and are never listed. For
+          <strong>Asset inventory</strong>, <strong>Asset fields</strong> adds up to 12 fields from your asset layouts
+          as extra columns, such as serial number, model, warranty date, or IP address. Long text fields are never
+          included, because they often hold notes and configuration. A field removed from its layout since a template
+          was saved is left out, with a notice. PDF exports carry your organization's look from
+          <strong>Administration → Theme</strong>: the logo (PNG or JPEG; an SVG logo shows your brand name instead),
+          the brand name, and the accent colour. The first page summarizes the report: how many clients and rows it
+          covers, how many rows need review, and any notices. It also charts what needs review in each section, the
+          spread of status columns (online, protection, encryption, status), and due or expiry dates by month. When you
+          have run the same report for the same clients before, <strong>Compare with</strong> shows what changed since
+          the most recent earlier run. New rows are marked <strong>New</strong>, changed values are highlighted with the
+          previous value beneath, and rows that have gone are listed under <strong>removed since</strong>.
           <strong>Changes only</strong> hides everything else. Values that move on every run, such as check-in times or
           days left, don't count as changes.
         </p>

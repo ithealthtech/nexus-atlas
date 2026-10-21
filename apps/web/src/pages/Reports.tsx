@@ -26,6 +26,7 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  Umbrella,
 } from 'lucide-react';
 import {
   type ReportScheduleView,
@@ -70,6 +71,7 @@ const ICONS = {
   review: Presentation,
   executive: ChartNoAxesCombined,
   security: LockKeyhole,
+  insurance: Umbrella,
   service: Handshake,
   assets: Archive,
   licenses: ShieldCheck,
@@ -100,6 +102,7 @@ const REPORT_SUBTITLE: Record<ReportKind, string> = {
   review: 'A business review in one PDF',
   executive: 'Your client environment at a glance',
   security: 'Passwords, protection and encryption',
+  insurance: 'What insurers ask, with evidence',
   service: 'Work done over a period',
   assets: 'Hardware, systems and infrastructure',
   licenses: 'Subscriptions, seats and assignments',
