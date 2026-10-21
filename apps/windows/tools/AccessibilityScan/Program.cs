@@ -1,5 +1,6 @@
 using System.Globalization;
 using Axe.Windows.Automation;
+using Axe.Windows.Automation.Data;
 
 // AccessibilityScan <process id> <page name>
 // Scans the process's windows as they are now and prints one line per problem: the rule, then the element's type and
@@ -13,7 +14,7 @@ if (args.Length < 2 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.
 var page = args[1];
 var config = Config.Builder.ForProcessId(processId).WithOutputFileFormat(OutputFileFormat.None).Build();
 var scanner = ScannerFactory.CreateScanner(config);
-var output = scanner.Scan(new ScanOptions(scanId: page));
+var output = scanner.Scan(new ScanOptions(page, null));
 
 var problems = 0;
 foreach (var window in output.WindowScanOutputs)
