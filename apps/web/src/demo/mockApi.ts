@@ -4,6 +4,7 @@ import {
   licenseSchema,
   licenseUpdateSchema,
   type LicenseView,
+  type MicrosoftLicenseView,
   remoteAccessRequestSchema,
   type RemoteAccessView,
   CHECKLIST_TEMPLATES,
@@ -863,10 +864,115 @@ on('GET', '/reports/templates', () => []);
 on('GET', '/reports/runs', () => []);
 
 // Client license tracking in the clickable demo. Microsoft writes are never simulated as live changes.
-const licenseRecords: LicenseView[] = [];
+// Harbor Dental Group has a Microsoft 365 tenant linked through GDAP, and two subscriptions tracked in Atlas.
+const harbor = db.clients.find((c) => c.name === 'Harbor Dental Group');
+const licenseRecords: LicenseView[] = harbor
+  ? [
+      {
+        ...licenseSchema.parse({
+          name: 'Dentrix Ascend',
+          vendor: 'Henry Schein One',
+          seats: 12,
+          assignments: [
+            'Front desk 1',
+            'Front desk 2',
+            'Dr. Patel',
+            'Dr. Okafor',
+            'Hygiene 1',
+            'Hygiene 2',
+            'Billing',
+            'Office manager',
+            'Assistant 1',
+          ],
+          unitCostCents: 8900,
+          renewalDate: daysFromNow(18),
+        }),
+        id: uuid(),
+        clientId: harbor.id,
+        version: 1,
+        updatedAt: ago(60 * 24 * 12),
+      },
+      {
+        ...licenseSchema.parse({
+          name: 'Datto SaaS Protection',
+          vendor: 'Datto',
+          seats: 25,
+          unitCostCents: 30000,
+          billingCycle: 'annual',
+          renewalDate: daysFromNow(140),
+          autoRenew: true,
+        }),
+        id: uuid(),
+        clientId: harbor.id,
+        version: 1,
+        updatedAt: ago(60 * 24 * 40),
+      },
+    ]
+  : [];
+const HARBOR_SKUS = [
+  {
+    id: 'cbdc14ab-d96c-4c30-b9f4-6ada7cdc1d46',
+    name: 'Microsoft 365 Business Premium',
+    part: 'SPB',
+    enabled: 25,
+    assigned: 21,
+    status: 'Enabled',
+  },
+  {
+    id: '4b9405b0-7788-4568-add1-99614e613b69',
+    name: 'Exchange Online (Plan 1)',
+    part: 'EXCHANGESTANDARD',
+    enabled: 5,
+    assigned: 5,
+    status: 'Enabled',
+  },
+  {
+    id: 'ee02fd1b-340e-4a4b-b355-4a514e4c8943',
+    name: 'Exchange Online Archiving',
+    part: 'EXCHANGEARCHIVE_ADDON',
+    enabled: 3,
+    assigned: 1,
+    status: 'Enabled',
+  },
+  {
+    id: 'f30db892-07e9-47e9-837c-80727f46fd3d',
+    name: 'Microsoft Power Automate Free',
+    part: 'FLOW_FREE',
+    enabled: 10000,
+    assigned: 2,
+    status: 'Enabled',
+  },
+];
+// Made once, so each person keeps their ID between reads.
+const HARBOR_USERS = (() => {
+  const [premium, exchange, archive] = HARBOR_SKUS.map((s) => s.id);
+  const person = (name: string, upn: string, skuIds: string[], enabled = true, groupSkuIds: string[] = []) => ({
+    id: uuid(),
+    name,
+    upn: `${upn}@harbordental.example`,
+    enabled,
+    skuIds,
+    groupSkuIds,
+  });
+  return [
+    person('Anika Patel', 'apatel', [premium!, archive!]),
+    person('Ben Okafor', 'bokafor', [premium!]),
+    person('Front Desk', 'frontdesk', [exchange!]),
+    person('Grace Liu', 'gliu', [premium!], true, [premium!]),
+    person('Jordan Smith', 'jsmith', [premium!, archive!], false),
+    person('Marcus Reed', 'mreed', [premium!]),
+    person('Billing', 'billing', [exchange!]),
+    person('Scanner', 'scanner', []),
+    person('Old Reception', 'reception-old', [exchange!], false),
+  ];
+})();
 on('GET', '/clients/:id/licenses', (m) => {
   find(db.clients, m[1]!, 'Client');
-  return { licenses: licenseRecords.filter((l) => l.clientId === m[1]), microsoft: null };
+  return {
+    licenses: licenseRecords.filter((l) => l.clientId === m[1]),
+    microsoft:
+      m[1] === harbor?.id ? { tenantId: 'harbordental.example', name: 'Harbor Dental Group', mode: 'gdap' } : null,
+  };
 });
 on('POST', '/clients/:id/licenses', (m, b) => {
   find(db.clients, m[1]!, 'Client');
@@ -895,7 +1001,10 @@ on('DELETE', '/clients/:client/licenses/:id', (m, b) => {
   licenseRecords.splice(licenseRecords.indexOf(item), 1);
   return { ok: true };
 });
-on('GET', '/clients/:client/licenses/microsoft', () => notInDemo('GDAP license management'));
+on('GET', '/clients/:client/licenses/microsoft', (m): MicrosoftLicenseView => {
+  if (m[1] !== harbor?.id) notInDemo('GDAP license management');
+  return { tenantId: 'harbordental.example', checkedAt: ago(4), skus: HARBOR_SKUS, users: HARBOR_USERS };
+});
 on('POST', '/clients/:client/licenses/microsoft/assignments', () => notInDemo('GDAP license management'));
 
 // session and account

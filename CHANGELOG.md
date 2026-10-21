@@ -93,6 +93,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Changed
 
+- **A client's Licenses, redesigned.** It now has two list panels in the IT Health Tech portal style, with counts across the top that filter the list, a search bar, column labels, and rows with a status pill and quiet row actions.
+  - **Subscriptions & seats** lists Microsoft 365 subscriptions, read live through GDAP, alongside the ones tracked in Atlas. Each shows seats used against bought, with a bar, its cost and renewal, and filters for seats available, fully used, and renewing within 30 days. Free products with thousands of placeholder seats show as having no seat limit.
+  - **People & licenses** lists everyone in the tenant with their account state and licenses, filtered by licensed, unlicensed, and blocked but still licensed.
+  - Who holds a subscription, and one person's licenses, open in drawers, where administrators assign and remove licenses as before.
 - **Drawers for longer work.** Forms for a record, and lists opened from a card, now slide in from the right as a full-height drawer, with the page still visible behind them.
   - The forms are passwords, assets, clients, contacts and locations, subscriptions, people, groups, asset layouts, checklists, webhooks and Sends.
   - The lists are devices, tickets, warranties, trackers and applications from the overview cards, plus note and version history, webhook deliveries, sharing, and customizing the dashboard.
