@@ -89,12 +89,25 @@ export interface ReportTemplateView extends z.infer<typeof reportTemplateSchema>
 }
 
 // ---------- scheduled reports ----------
-export const REPORT_CADENCES = ['weekly', 'monthly', 'quarterly'] as const;
+export const REPORT_CADENCES = ['daily', 'weekly', 'monthly', 'quarterly'] as const;
 export type ReportCadence = (typeof REPORT_CADENCES)[number];
 export const REPORT_CADENCE_LABELS: Record<ReportCadence, string> = {
+  daily: 'Every day',
   weekly: 'Every week',
   monthly: 'Every month',
   quarterly: 'Every quarter',
+};
+/**
+ * When a run is emailed. With "attention" or "new", a schedule works as an alert: a daily security posture report
+ * that sends only when something new needs review tells you about a breached password or a device that lost its
+ * protection, and stays quiet otherwise.
+ */
+export const REPORT_SEND_WHEN = ['always', 'attention', 'new'] as const;
+export type ReportSendWhen = (typeof REPORT_SEND_WHEN)[number];
+export const REPORT_SEND_WHEN_LABELS: Record<ReportSendWhen, string> = {
+  always: 'Every time',
+  attention: 'Only when something needs review',
+  new: 'Only when something new needs review',
 };
 export const MAX_SCHEDULE_RECIPIENTS = 20;
 export const reportScheduleSchema = z
@@ -115,9 +128,10 @@ export const reportScheduleSchema = z
     attachPdf: z.boolean().default(true),
     /** Include a 30-day link to the report that needs no account (single-client reports only). */
     clientLink: z.boolean().default(false),
+    sendWhen: z.enum(REPORT_SEND_WHEN).default('always'),
     enabled: z.boolean().default(true),
   })
-  .refine((s) => (s.cadence === 'weekly' ? s.day <= 6 : s.day >= 1), {
+  .refine((s) => s.cadence === 'daily' || (s.cadence === 'weekly' ? s.day <= 6 : s.day >= 1), {
     message: 'Choose a day of the week, or a day of the month from 1 to 28.',
     path: ['day'],
   })
@@ -131,7 +145,8 @@ export interface ReportScheduleView extends ReportScheduleInput {
   version: number;
   nextRunAt: string;
   lastRunAt: string | null;
-  lastStatus: 'sent' | 'failed' | null;
+  /** "quiet": it ran, and nothing (or nothing new) needed review, so nothing was sent. */
+  lastStatus: 'sent' | 'failed' | 'quiet' | null;
   /** What went wrong last time, or which recipients a partly failed delivery missed. */
   lastError: string;
   /** The snapshot the last delivery sent, in the owner's history. */
@@ -159,6 +174,10 @@ export function nextReportRun(schedule: Pick<ReportScheduleInput, 'cadence' | 'd
   const at = (year: number, month: number, date: number) => new Date(year, month, date, schedule.hour, 0, 0, 0);
   const y = after.getFullYear();
   const m = after.getMonth();
+  if (schedule.cadence === 'daily') {
+    const today = at(y, m, after.getDate());
+    return today > after ? today : at(y, m, after.getDate() + 1);
+  }
   if (schedule.cadence === 'weekly') {
     const today = at(y, m, after.getDate());
     let ahead = (schedule.day - today.getDay() + 7) % 7;
@@ -371,6 +390,30 @@ export function compareReportSections(previous: ReportSection, current: ReportSe
   const present = new Set(now);
   for (const [key, row] of before) if (!present.has(key)) diff.removed.push(row);
   return diff;
+}
+
+/**
+ * The rows of a snapshot that need review now but didn't in an earlier one: new rows that need review, and rows
+ * that newly need it. Sections are matched by position, as reports always list them in the same order.
+ */
+export function newAttention(previous: ReportSnapshot | null, current: ReportSnapshot) {
+  const found: { section: string; row: string[] }[] = [];
+  current.sections.forEach((section, i) => {
+    const flagged = (row: string[]) => reportNeedsAttention(section, row);
+    const before = previous?.sections[i];
+    if (!before) {
+      for (const row of section.rows) if (flagged(row)) found.push({ section: section.title, row });
+      return;
+    }
+    const diff = compareReportSections(before, section);
+    for (const index of diff.added)
+      if (flagged(section.rows[index]!)) found.push({ section: section.title, row: section.rows[index]! });
+    for (const change of diff.changed) {
+      const row = section.rows[change.index]!;
+      if (flagged(row) && !reportNeedsAttention(section, change.previous)) found.push({ section: section.title, row });
+    }
+  });
+  return found;
 }
 
 /** The run to compare with: the same report for the same clients, captured most recently before this one. */

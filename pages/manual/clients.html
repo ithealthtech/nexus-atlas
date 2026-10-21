@@ -447,7 +447,7 @@
         </p>
         <ul>
           <li>
-            how often it goes out: every week, month, or quarter (quarters start in January, April, July, and October);
+            how often it runs: every day, week, month, or quarter (quarters start in January, April, July, and October);
           </li>
           <li>the day and the hour, in the server's time zone;</li>
           <li>who receives it: up to 20 addresses, staff or client contacts.</li>
@@ -481,7 +481,22 @@
           too. Only the person who ran the report can share it, and only with edit access to the client. Making and
           revoking links appear in the security log.
         </p>
-        <p>Automatic triggers (a report sent when something happens) are planned next.</p>
+        <p><strong>Send</strong> decides which runs are emailed, so a schedule can work as an alert:</p>
+        <ul>
+          <li><strong>Every time</strong> sends every run.</li>
+          <li><strong>Only when something needs review</strong> sends only runs with flagged rows.</li>
+          <li>
+            <strong>Only when something new needs review</strong> sends only when something needs review that didn't in
+            the last report sent. That email lists just the new items.
+          </li>
+        </ul>
+        <p>
+          For example, <strong>Security posture</strong>, every day,
+          <strong>only when something new needs review</strong>, tells you the morning after a password turns up in a
+          breach or a device loses its protection, and stays quiet otherwise. <strong>Domains &amp; SSL</strong> set up
+          the same way warns as each certificate or domain starts to expire. Runs that send nothing aren't kept in your
+          history, and the schedule shows <strong>Nothing to send</strong>. <strong>Send now</strong> always sends.
+        </p>
         <h2 id="the-monthly-report"><a class="anchor" href="#the-monthly-report">The monthly report</a></h2>
         <p>
           <strong>Monthly report</strong> in the client header opens a printable page with the client's assets and

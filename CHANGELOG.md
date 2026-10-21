@@ -11,6 +11,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - The email carries a summary and the whole report as a branded PDF. For a report about one client it can include a 30-day client link.
   - The **Scheduled** tab shows when each schedule runs next and how the last delivery went, down to any address that refused it. You can send one now, pause it, change it, or delete it.
   - Two servers never send the same report twice. A schedule whose owner can no longer sign in stops rather than sending, and deleting a client removes its schedules.
+- **Report alerts.** A schedule can run every day, and send only when something needs review, or only when something new needs review since the last report sent. An alert lists just the new items.
+  - For example, a daily **Security posture** alert tells you the morning after a password turns up in a breach or a device loses its protection.
+  - A daily **Domains & SSL** alert warns as each certificate starts to expire.
+  - Quiet days send nothing and add nothing to your history.
 - **Delivery log for scheduled reports.** Each schedule's **Deliveries** list shows every email it sent or tried to send, recipient by recipient, and why any was refused. Any one can be sent again, as the same snapshot, without running the report again.
 - **Emails in your brand.** Atlas's emails now use your brand name and accent colour from Administration → Theme, instead of a fixed green.
 - **Report PDFs can cover the whole report.** Every section is printed, with the summary and charts, for emailed reports.

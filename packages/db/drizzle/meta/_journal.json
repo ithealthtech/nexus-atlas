@@ -288,6 +288,13 @@
       "when": 1792566190985,
       "tag": "0040_report_deliveries",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792566471780,
+      "tag": "0041_report_triggers",
+      "breakpoints": true
     }
   ]
 }

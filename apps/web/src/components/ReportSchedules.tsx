@@ -5,10 +5,13 @@ import {
   MAX_SCHEDULE_RECIPIENTS,
   REPORT_CADENCES,
   REPORT_CADENCE_LABELS,
+  REPORT_SEND_WHEN,
+  REPORT_SEND_WHEN_LABELS,
   type ReportCadence,
   type ReportDefinition,
   type ReportDeliveryView,
   type ReportScheduleView,
+  type ReportSendWhen,
 } from '@atlas/shared';
 import {
   Badge,
@@ -31,8 +34,8 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`;
 /** "Every month on the 1st at 07:00", the way the list and dialog describe a schedule. */
 export function describeSchedule(s: Pick<ReportScheduleView, 'cadence' | 'day' | 'hour'>) {
-  const when = s.cadence === 'weekly' ? `on ${WEEKDAYS[s.day]}` : `on day ${s.day}`;
-  return `${REPORT_CADENCE_LABELS[s.cadence]} ${when} at ${hourLabel(s.hour)}`;
+  const when = s.cadence === 'daily' ? '' : s.cadence === 'weekly' ? ` on ${WEEKDAYS[s.day]}` : ` on day ${s.day}`;
+  return `${REPORT_CADENCE_LABELS[s.cadence]}${when} at ${hourLabel(s.hour)}`;
 }
 /** Addresses typed one per line or separated by commas or semicolons. */
 const parseRecipients = (text: string) => [
@@ -66,6 +69,7 @@ export function ScheduleDialog({
   const [recipients, setRecipients] = useState((schedule?.recipients ?? []).join('\n'));
   const [attachPdf, setAttachPdf] = useState(schedule?.attachPdf ?? true);
   const [clientLink, setClientLink] = useState(schedule?.clientLink ?? false);
+  const [sendWhen, setSendWhen] = useState<ReportSendWhen>(schedule?.sendWhen ?? 'always');
   const oneClient = (schedule?.definition ?? definition).clientIds.length === 1;
   const list = parseRecipients(recipients);
   const changeCadence = (next: ReportCadence) => {
@@ -85,6 +89,7 @@ export function ScheduleDialog({
         recipients: list,
         attachPdf,
         clientLink: oneClient && clientLink,
+        sendWhen,
         enabled: schedule?.enabled ?? true,
         ...(schedule ? { version: schedule.version } : {}),
       };
@@ -125,7 +130,10 @@ export function ScheduleDialog({
               </Select>
             )}
           </Field>
-          <Field label={cadence === 'weekly' ? 'Day of the week' : 'Day of the month'}>
+          <Field
+            label={cadence === 'weekly' ? 'Day of the week' : 'Day of the month'}
+            className={cadence === 'daily' ? 'invisible' : undefined}
+          >
             {(p) => (
               <Select {...p} value={day} onChange={(e) => setDay(Number(e.target.value))}>
                 {cadence === 'weekly'
@@ -154,6 +162,26 @@ export function ScheduleDialog({
             )}
           </Field>
         </div>
+        <Field
+          label="Send"
+          help={
+            sendWhen === 'new'
+              ? 'Works as an alert: the email lists only what newly needs review since the last one sent.'
+              : sendWhen === 'attention'
+                ? 'Quiet runs send nothing and are not kept in your history.'
+                : undefined
+          }
+        >
+          {(p) => (
+            <Select {...p} value={sendWhen} onChange={(e) => setSendWhen(e.target.value as ReportSendWhen)}>
+              {REPORT_SEND_WHEN.map((w) => (
+                <option key={w} value={w}>
+                  {REPORT_SEND_WHEN_LABELS[w]}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
         {cadence === 'quarterly' && (
           <p className="text-xs text-muted">Quarterly reports go out in January, April, July and October.</p>
         )}
@@ -272,7 +300,10 @@ export function ScheduleList({
           <div className="flex items-start gap-1">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{s.name}</p>
-              <p className="text-xs text-muted">{describeSchedule(s)}</p>
+              <p className="text-xs text-muted">
+                {describeSchedule(s)}
+                {s.sendWhen !== 'always' && ` · ${REPORT_SEND_WHEN_LABELS[s.sendWhen].toLowerCase()}`}
+              </p>
             </div>
             {!s.enabled ? (
               <Badge>Paused</Badge>
@@ -280,6 +311,8 @@ export function ScheduleList({
               <Badge tone="danger">Last failed</Badge>
             ) : s.lastStatus === 'sent' ? (
               <Badge tone="success">Sent</Badge>
+            ) : s.lastStatus === 'quiet' ? (
+              <Badge>Nothing to send</Badge>
             ) : null}
           </div>
           <p className="text-xs text-muted">
@@ -287,7 +320,9 @@ export function ScheduleList({
             {s.recipients.length === 1 ? '' : 's'}
             {s.lastRunAt && ` · last ${formatDateTime(s.lastRunAt)}`}
           </p>
-          {s.lastError && <p className="text-xs text-danger">{s.lastError}</p>}
+          {s.lastError && (
+            <p className={s.lastStatus === 'failed' ? 'text-xs text-danger' : 'text-xs text-muted'}>{s.lastError}</p>
+          )}
           <div className="flex flex-wrap gap-1">
             <Button
               size="sm"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextReportRun, reportScheduleSchema } from '@atlas/shared';
+import { newAttention, nextReportRun, reportScheduleSchema, type ReportSnapshot } from '@atlas/shared';
 
 // Local times, as the server sees them.
 const local = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m - 1, d, h, min);
@@ -62,5 +62,48 @@ describe('when a scheduled report next runs', () => {
         },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('daily schedules and "only when something new needs review"', () => {
+  it('runs daily at the hour: today if still ahead, otherwise tomorrow', () => {
+    expect(nextReportRun({ cadence: 'daily', day: 1, hour: 7 }, local(2026, 10, 20, 6, 59))).toEqual(
+      local(2026, 10, 20, 7),
+    );
+    expect(nextReportRun({ cadence: 'daily', day: 1, hour: 7 }, local(2026, 10, 20, 7))).toEqual(
+      local(2026, 10, 21, 7),
+    );
+    expect(nextReportRun({ cadence: 'daily', day: 1, hour: 7 }, local(2026, 12, 31, 8))).toEqual(local(2027, 1, 1, 7));
+  });
+
+  it('finds only what newly needs review since the last snapshot sent', () => {
+    const snap = (rows: string[][]) =>
+      ({
+        sections: [{ title: 'Endpoint health', columns: ['Client', 'Device', 'Online', 'Last check-in'], rows }],
+      }) as unknown as ReportSnapshot;
+    const before = snap([
+      ['Harbor', 'HDG-01', 'Online', '2026-10-19T08:00:00.000Z'],
+      ['Harbor', 'HDG-02', 'Offline', '2026-10-19T08:00:00.000Z'],
+    ]);
+    // HDG-02 was already offline; HDG-01 has newly gone offline; HDG-03 is new and offline; HDG-04 is new and fine.
+    const now = snap([
+      ['Harbor', 'HDG-01', 'Offline', '2026-10-20T08:00:00.000Z'],
+      ['Harbor', 'HDG-02', 'Offline', '2026-10-20T08:00:00.000Z'],
+      ['Harbor', 'HDG-03', 'Offline', '2026-10-20T08:00:00.000Z'],
+      ['Harbor', 'HDG-04', 'Online', '2026-10-20T08:00:00.000Z'],
+    ]);
+    expect(
+      newAttention(before, now)
+        .map((f) => f.row[1])
+        .sort(),
+    ).toEqual(['HDG-01', 'HDG-03']);
+    // Nothing sent before: everything that needs review is new.
+    expect(
+      newAttention(null, now)
+        .map((f) => f.row[1])
+        .sort(),
+    ).toEqual(['HDG-01', 'HDG-02', 'HDG-03']);
+    // The same again: nothing new.
+    expect(newAttention(now, now)).toEqual([]);
   });
 });

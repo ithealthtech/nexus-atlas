@@ -1635,6 +1635,8 @@ export const reportSchedules = pgTable(
     recipients: jsonb('recipients').$type<string[]>().notNull(),
     attachPdf: boolean('attach_pdf').notNull().default(true),
     clientLink: boolean('client_link').notNull().default(false),
+    /** always, attention (only when something needs review), or new (only when something new does). */
+    sendWhen: text('send_when').notNull().default('always'),
     enabled: boolean('enabled').notNull().default(true),
     nextRunAt: timestamp('next_run_at', { withTimezone: true }).notNull(),
     lastRunAt: timestamp('last_run_at', { withTimezone: true }),
@@ -1648,7 +1650,8 @@ export const reportSchedules = pgTable(
   (t) => [
     index('report_schedules_owner').on(t.orgId, t.ownerId),
     index('report_schedules_due').on(t.enabled, t.nextRunAt),
-    check('report_schedules_cadence_check', sql`${t.cadence} in ('weekly','monthly','quarterly')`),
+    check('report_schedules_cadence_check', sql`${t.cadence} in ('daily','weekly','monthly','quarterly')`),
+    check('report_schedules_send_when_check', sql`${t.sendWhen} in ('always','attention','new')`),
   ],
 );
 

@@ -103,6 +103,49 @@ describe('scheduled reports', () => {
     expect(sent).toHaveLength(2);
   });
 
+  it('as an alert, sends only when something new needs review, and lists just what is new', async () => {
+    const runs = async () => (await t.handle.db.select().from(schema.reportRuns)).length;
+    const made = (
+      await owner.call(
+        'POST',
+        '/api/reports/schedules',
+        schedule({ cadence: 'daily', sendWhen: 'new', clientLink: false }),
+      )
+    ).data;
+    expect(made).toMatchObject({ cadence: 'daily', sendWhen: 'new' });
+    // Design Suite has seats to spare: nothing needs review, nothing is sent, and the quiet run isn't kept.
+    await makeDue(made.id);
+    await service.runDue(orgId);
+    expect(sent).toHaveLength(0);
+    expect((await row(made.id)).lastStatus).toBe('quiet');
+    expect(await runs()).toBe(0);
+
+    // A subscription with no seats left needs review: that, and only that, is sent.
+    await owner.call('POST', `/api/clients/${clientId}/licenses`, {
+      name: 'Backup Service',
+      seats: 2,
+      assignments: ['Office', 'Server'],
+      unitCostCents: 500,
+    });
+    await makeDue(made.id);
+    await service.runDue(orgId);
+    expect(sent.map((m) => m.subject)).toEqual([
+      'Monthly licenses: 1 new item to review',
+      'Monthly licenses: 1 new item to review',
+    ]);
+    expect(sent[0]!.html).toContain('Backup Service');
+    expect(sent[0]!.html).not.toContain('Design Suite');
+    expect(await runs()).toBe(1);
+
+    // The same again the next day: nothing new, so nothing sent.
+    await makeDue(made.id);
+    await service.runDue(orgId);
+    expect(sent).toHaveLength(2);
+    expect((await row(made.id)).lastStatus).toBe('quiet');
+    // Send now always sends.
+    expect((await owner.call('POST', `/api/reports/schedules/${made.id}/send`)).data.lastStatus).toBe('sent');
+  });
+
   it('logs every delivery, and resends one snapshot to its recipient without running the report again', async () => {
     const made = (
       await owner.call(

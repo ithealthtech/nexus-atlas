@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, lte } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
+  newAttention,
   nextReportRun,
   reportDefinitionSchema,
   reportNeedsAttention,
@@ -8,6 +9,7 @@ import {
   type ReportDeliveryView,
   type ReportRunDetail,
   type ReportScheduleView,
+  type ReportSnapshot,
 } from '@atlas/shared';
 import { z } from 'zod';
 import { HttpError } from '../errors.js';
@@ -37,6 +39,7 @@ const view = (row: Row): ReportScheduleView => ({
   recipients: row.recipients,
   attachPdf: row.attachPdf,
   clientLink: row.clientLink,
+  sendWhen: row.sendWhen as ReportScheduleView['sendWhen'],
   enabled: row.enabled,
   version: row.version,
   nextRunAt: row.nextRunAt.toISOString(),
@@ -109,6 +112,7 @@ export class ReportScheduleService {
       recipients: body.recipients,
       attachPdf: body.attachPdf,
       clientLink: body.clientLink,
+      sendWhen: body.sendWhen,
       enabled: body.enabled,
       nextRunAt: nextReportRun(body, new Date()),
     };
@@ -245,7 +249,7 @@ export class ReportScheduleService {
 
   /** Runs the report as its owner and emails it. Never throws: the outcome is recorded on the schedule. */
   private async deliver(row: Row, now: Date, trigger: 'schedule' | 'manual'): Promise<Row> {
-    const record = async (status: 'sent' | 'failed', error: string, runId?: string) => {
+    const record = async (status: 'sent' | 'failed' | 'quiet', error: string, runId?: string) => {
       const [saved] = await this.db
         .update(schema.reportSchedules)
         .set({ lastRunAt: now, lastStatus: status, lastError: error.slice(0, 500), lastRunId: runId ?? row.lastRunId })
@@ -257,13 +261,33 @@ export class ReportScheduleService {
     if (!owner || owner.disabled)
       return record('failed', 'The person who made this schedule can no longer sign in, so it was not sent.');
     const scope = new Scope(this.db, actorFor(owner));
-    let run;
+    let collected;
     try {
-      run = await this.deps.reports.generate(scope, row.definition);
+      collected = await this.deps.reports.collect(scope, row.definition);
     } catch (error) {
       return record('failed', `The report could not be run: ${(error as Error).message}`);
     }
-    const composed = await this.compose(row, scope, run);
+    // As an alert: send only when something (new) needs review, judged against the last report actually sent.
+    // A quiet run isn't kept, so history holds what was sent.
+    let news: ReturnType<typeof newAttention> | undefined;
+    if (row.sendWhen !== 'always' && trigger === 'schedule') {
+      const flagged = newAttention(null, collected.snapshot);
+      if (row.sendWhen === 'new') news = newAttention(await this.lastSent(row), collected.snapshot);
+      if (!(news ?? flagged).length)
+        return record(
+          'quiet',
+          row.sendWhen === 'new'
+            ? 'Nothing new needed review, so nothing was sent.'
+            : 'Nothing needed review, so nothing was sent.',
+        );
+    }
+    let run;
+    try {
+      run = await this.deps.reports.store(scope, collected.definition, collected.snapshot);
+    } catch (error) {
+      return record('failed', `The report could not be kept: ${(error as Error).message}`);
+    }
+    const composed = await this.compose(row, scope, run, news);
     const failed = await this.sendTo(row, run.id, composed, row.recipients, trigger);
     await securityEvent(this.db, {
       orgId: row.orgId,
@@ -282,8 +306,21 @@ export class ReportScheduleService {
     return record('sent', notes, run.id);
   }
 
-  /** The email for one run of a schedule: a summary, the PDF, and the client link, as the schedule asks. */
-  private async compose(row: Row, scope: Scope, run: ReportRunDetail) {
+  /** The snapshot this schedule last sent, while it is still in its owner's history. */
+  private async lastSent(row: Row): Promise<ReportSnapshot | null> {
+    if (!row.lastRunId) return null;
+    const [run] = await this.db
+      .select({ snapshot: schema.reportRuns.snapshot })
+      .from(schema.reportRuns)
+      .where(eq(schema.reportRuns.id, row.lastRunId));
+    return (run?.snapshot as ReportSnapshot | undefined) ?? null;
+  }
+
+  /**
+   * The email for one run of a schedule: a summary, the PDF, and the client link, as the schedule asks. An alert
+   * (`news`) leads with what newly needs review instead of the section totals.
+   */
+  private async compose(row: Row, scope: Scope, run: ReportRunDetail, news?: ReturnType<typeof newAttention>) {
     const { snapshot } = run;
     const [org] = await this.db
       .select({ name: schema.orgs.name })
@@ -322,8 +359,9 @@ export class ReportScheduleService {
     const flagged = snapshot.sections.reduce((n, s) => n + s.rows.filter((r) => reportNeedsAttention(s, r)).length, 0);
     const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
     const message = {
-      subject: `${row.name}: ${who}`,
+      subject: news ? `${row.name}: ${count(news.length, 'new item')} to review` : `${row.name}: ${who}`,
       paragraphs: [
+        ...(news ? [`${count(news.length, 'item')} newly need review since the last report sent.`] : []),
         `Here is ${snapshot.definition.title} for ${who}, captured ${captured}.`,
         flagged
           ? `${count(flagged, 'item')} may need attention; they are listed in the report.`
@@ -333,7 +371,9 @@ export class ReportScheduleService {
           : []),
         ...(attachments.length ? ['The full report is attached as a PDF.'] : []),
       ],
-      rows: snapshot.sections.map((s) => ({ cells: [s.title, `${s.rows.length} rows`] })),
+      rows: news
+        ? news.slice(0, 15).map((n) => ({ cells: [n.section, n.row.slice(0, 3).filter(Boolean).join(' · ')] }))
+        : snapshot.sections.map((s) => ({ cells: [s.title, `${s.rows.length} rows`] })),
       ...(link ? { action: { label: 'View the report', url: link } } : {}),
       ...(attachments.length ? { attachments } : {}),
     };

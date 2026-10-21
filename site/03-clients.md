@@ -134,7 +134,7 @@ When you have run the same report for the same clients before, **Compare with** 
 
 To have a report emailed regularly, set it up (report type, clients, and any options), then choose **Schedule**. Choose:
 
-- how often it goes out: every week, month, or quarter (quarters start in January, April, July, and October);
+- how often it runs: every day, week, month, or quarter (quarters start in January, April, July, and October);
 - the day and the hour, in the server's time zone;
 - who receives it: up to 20 addresses, staff or client contacts.
 
@@ -146,7 +146,13 @@ The **Scheduled** tab lists your schedules, when each runs next, and how the las
 
 A report run for a single client can be shared with that client by link. Choose **Share**, pick how long the link works (7, 30, or 90 days; report links always expire), and choose **Create link**; the link is copied for you. Whoever has the link sees that snapshot, every section as it was captured, and can download each section as a PDF, without an account. The page names your organization and the client, never the person who ran the report. The dialog shows how often each link was opened, and **Revoke** stops a link at once. Deleting the report or the client stops its links too. Only the person who ran the report can share it, and only with edit access to the client. Making and revoking links appear in the security log.
 
-Automatic triggers (a report sent when something happens) are planned next.
+**Send** decides which runs are emailed, so a schedule can work as an alert:
+
+- **Every time** sends every run.
+- **Only when something needs review** sends only runs with flagged rows.
+- **Only when something new needs review** sends only when something needs review that didn't in the last report sent. That email lists just the new items.
+
+For example, **Security posture**, every day, **only when something new needs review**, tells you the morning after a password turns up in a breach or a device loses its protection, and stays quiet otherwise. **Domains & SSL** set up the same way warns as each certificate or domain starts to expire. Runs that send nothing aren't kept in your history, and the schedule shows **Nothing to send**. **Send now** always sends.
 
 ## The monthly report
 
