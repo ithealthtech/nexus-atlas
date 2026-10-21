@@ -119,12 +119,17 @@ test('client subscriptions and GDAP assignments work on desktop and mobile', asy
     await page.getByLabel('Purchased seats', { exact: true }).fill('12');
     await page.getByRole('button', { name: 'Save subscription', exact: true }).click();
     await expect(page.getByText('2 / 12 assigned', { exact: false })).toBeVisible();
-    await page.getByLabel('Microsoft subscription', { exact: true }).selectOption(sku);
-    await page.getByLabel('Assign to a user', { exact: true }).selectOption(user);
+    // Microsoft subscriptions list beside the tracked ones; who holds one opens in a drawer.
+    await page.getByRole('button', { name: 'Who holds Microsoft 365 Business Premium', exact: true }).click();
+    await page.getByLabel('Assign to', { exact: true }).selectOption(user);
     await page.getByRole('button', { name: 'Assign license', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm assignment', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Remove from Avery Example', exact: true })).toBeVisible();
     expect(assigned).toBe(true);
+    await page.keyboard.press('Escape');
+    // People & licenses: the licensed count, and the person's licenses in their own drawer.
+    await page.getByRole('button', { name: /^Licensed/ }).click();
+    await expect(page.getByText('Microsoft 365 Business Premium', { exact: true }).last()).toBeVisible();
     for (const dismiss of await page.getByRole('button', { name: 'Dismiss', exact: true }).all()) await dismiss.click();
     // Desktop/mobile, light/dark: check labels, contrast, and horizontal overflow on the completed page.
     for (const dark of [false, true]) {
@@ -156,13 +161,17 @@ test('client subscriptions and GDAP assignments work on desktop and mobile', asy
       if (previous) document.documentElement.dataset.font = previous;
       else delete document.documentElement.dataset.font;
     }, fontScale);
-    await page.getByRole('button', { name: 'Remove from Avery Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Licenses for Avery Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove Microsoft 365 Business Premium', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm removal', exact: true }).click();
-    await expect(page.getByText('0 assigned', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Assign Microsoft 365 Business Premium', exact: true }),
+    ).toBeVisible();
     expect(assigned).toBe(false);
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Delete Design Suite', exact: true }).click();
     await page.getByRole('button', { name: 'Delete subscription', exact: true }).click();
-    await expect(page.getByText('No subscriptions tracked yet', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit Design Suite', exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
     await context.close();
