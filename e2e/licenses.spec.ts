@@ -127,7 +127,11 @@ test('client subscriptions and GDAP assignments work on desktop and mobile', asy
     expect(assigned).toBe(true);
     // One at a time: each notification also closes itself after a few seconds, so a list taken up front goes stale.
     const toasts = page.getByRole('button', { name: 'Dismiss', exact: true });
-    while ((await toasts.count()) > 0) await toasts.first().click({ timeout: 2000 }).catch(() => undefined);
+    while ((await toasts.count()) > 0)
+      await toasts
+        .first()
+        .click({ timeout: 2000 })
+        .catch(() => undefined);
     // Desktop/mobile, light/dark: check labels, contrast, and horizontal overflow on the completed page.
     for (const dark of [false, true]) {
       await page.evaluate((dark) => {
