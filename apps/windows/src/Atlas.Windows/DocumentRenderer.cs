@@ -20,8 +20,16 @@ internal sealed class DocumentRenderer(Uri? atlas, Action<string> copyCode)
 {
     private static readonly FontFamily Mono = new("Cascadia Mono, Consolas");
     private static readonly string[] Bullets = ["•", "◦", "▪"];
-    // Highlighted text: a soft amber that reads in light and dark themes.
-    private readonly Brush marker = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0x70, 0xFF, 0xC4, 0x2E));
+    private static readonly global::Windows.UI.ViewManagement.UISettings WindowsColors = new();
+    private static readonly global::Windows.UI.ViewManagement.AccessibilitySettings Accessibility = new();
+
+    // Highlighted text: a soft amber that reads in light and dark themes, or Windows' highlight in high contrast.
+    private readonly Brush marker = new SolidColorBrush(Accessibility.HighContrast
+        ? WindowsColors.UIElementColor(global::Windows.UI.ViewManagement.UIElementType.Highlight)
+        : Microsoft.UI.ColorHelper.FromArgb(0x70, 0xFF, 0xC4, 0x2E));
+    private readonly Brush markerText = Accessibility.HighContrast
+        ? new SolidColorBrush(WindowsColors.UIElementColor(global::Windows.UI.ViewManagement.UIElementType.HighlightText))
+        : Themed.Brush("TextFillColorPrimaryBrush");
 
     /// <summary>What blocks inherit from what they're in: muted text in a quote, bold in a table heading, list depth.</summary>
     private readonly record struct Ink(Brush? Foreground = null, bool Strong = false, int Depth = 0);
@@ -100,7 +108,7 @@ internal sealed class DocumentRenderer(Uri? atlas, Action<string> copyCode)
             block.FontWeight = FontWeights.SemiBold;
 
         var paragraph = new Paragraph();
-        var marked = new TextHighlighter { Background = marker, Foreground = Resource("TextFillColorPrimaryBrush") };
+        var marked = new TextHighlighter { Background = marker, Foreground = markerText };
         var code = new TextHighlighter { Background = Resource("SubtleFillColorSecondaryBrush"), Foreground = Resource("TextFillColorPrimaryBrush") };
         // Highlights are drawn over ranges of characters, so count them as the runs go in. A line break is one.
         var at = 0;
