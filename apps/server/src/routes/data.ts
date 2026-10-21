@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { huduImportOptionsSchema } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import type { KeyProvider } from '../crypto/keys.js';
@@ -12,6 +12,7 @@ import { HuduClient, previewHudu, runHuduImport } from '../services/importers/hu
 import type { SettingsService } from '../services/settings.js';
 import type { FileStorage } from '../services/storage.js';
 import type { VaultService } from '../services/vault.js';
+import { securityEvent } from '../services/security-log.js';
 
 /** Imports (Hudu, CSV) and per-client exports. */
 export function registerDataRoutes(
@@ -34,12 +35,12 @@ export function registerDataRoutes(
     return actorOf(req);
   };
   const event = (req: FastifyRequest, action: string, detail: string) =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: actorOf(req).orgId,
       userId: actorOf(req).id,
       actor: actorOf(req).name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip: req.ip,
     });
   const huduClient = async (orgId: string) => {

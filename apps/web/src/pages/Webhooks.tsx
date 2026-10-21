@@ -26,6 +26,7 @@ import {
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import { useAction } from '@/lib/actions';
 
 function WebhookDialog({
   webhook,
@@ -167,18 +168,7 @@ export function Webhooks() {
   const [editing, setEditing] = useState<WebhookView | 'new' | null>(null);
   const [viewing, setViewing] = useState<WebhookView | null>(null);
   const [secret, setSecret] = useState<WebhookWithSecret | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<unknown>) => {
-    setBusy(name);
-    try {
-      await work();
-      await list.refetch();
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busy, act } = useAction({ toast: true, after: () => list.refetch() });
   return (
     <>
       <PageHeader

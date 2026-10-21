@@ -26,6 +26,7 @@ import { CwRmmSync } from './CwRmm';
 import { M365Sync } from './M365';
 import { ScreenConnectSettingsCard } from './ScreenConnect';
 import { HuduImportChoices } from './ImportChoices';
+import { useAction } from '@/lib/actions';
 
 const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
   hudu: 'Hudu',
@@ -126,8 +127,7 @@ function HuduImport() {
   // Starts from the choices saved with the last run; sent with the next one, which saves them again.
   const [choices, setChoices] = useState<HuduImportOptions | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, act } = useAction();
   const job = useQuery({
     queryKey: ['import-job', jobId],
     queryFn: () => api<ImportJobView>(`/import/jobs/${jobId}`),
@@ -138,17 +138,6 @@ function HuduImport() {
     if (job.data && job.data.status !== 'running') void client.invalidateQueries({ queryKey: ['import-jobs'] });
   }, [job.data, client]);
 
-  const act = async (name: string, work: () => Promise<void>) => {
-    setBusy(name);
-    setError(null);
-    try {
-      await work();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
   const save = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);

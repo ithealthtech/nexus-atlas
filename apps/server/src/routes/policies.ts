@@ -8,6 +8,7 @@ import { actorFor, hasMfa } from '../identity/service.js';
 import type { EmergencyAccessService } from '../services/emergency.js';
 import type { SettingsService } from '../services/settings.js';
 import type { SiemForwarder } from '../services/siem.js';
+import { securityEvent } from '../services/security-log.js';
 
 type Params = { id: string };
 const onOff = (on: boolean) => (on ? 'on' : 'off');
@@ -36,12 +37,12 @@ export function registerPolicyRoutes(
   const { db, authed, recent, settings, emergency, siem } = deps;
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const event = (req: FastifyRequest, action: string, detail = '') =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: actorOf(req).orgId,
       userId: actorOf(req).id,
       actor: actorOf(req).name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip: req.ip,
     });
   const owner = (req: FastifyRequest) => {

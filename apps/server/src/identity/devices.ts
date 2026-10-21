@@ -14,6 +14,7 @@ import {
 } from '@atlas/shared';
 import { HttpError, fail } from '../errors.js';
 import { actorFor, isUuid, tokenHash, type IdentityService, type SessionContext } from './service.js';
+import { securityEvent } from '../services/security-log.js';
 
 export const DEVICE_LIMITS = {
   // How long a sign-in request waits for approval.
@@ -246,7 +247,7 @@ export class DeviceService {
           expiresAt: new Date(now + DEVICE_LIMITS.absoluteMs),
         })
         .returning();
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: row.user.orgId,
         userId: row.user.id,
         actor: row.user.name,

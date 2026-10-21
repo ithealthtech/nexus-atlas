@@ -27,6 +27,8 @@ import {
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime, relativeTime } from '@/lib/format';
 import { useClients } from '@/lib/queries';
+import { useAction } from '@/lib/actions';
+import { saveText } from '@/lib/download';
 
 type Overview = { enrollments: BitlockerEnrollmentView[]; devices: BitlockerDeviceView[] };
 
@@ -52,12 +54,7 @@ export function BitlockerStatusBadge({ status }: { status: BitlockerDeviceView['
 }
 
 function saveScript(made: BitlockerEnrollmentCreated) {
-  const url = URL.createObjectURL(new Blob([made.script], { type: 'text/plain' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = made.filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  saveText(made.script, made.filename);
 }
 
 function EnrollDialog({
@@ -154,18 +151,7 @@ export function BitlockerCollector() {
   });
   const [enrolling, setEnrolling] = useState(false);
   const [made, setMade] = useState<BitlockerEnrollmentCreated | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<unknown>) => {
-    setBusy(name);
-    try {
-      await work();
-      await overview.refetch();
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busy, act } = useAction({ toast: true, after: () => overview.refetch() });
   const data = overview.data;
   const unprotected = data?.devices.filter((d) => d.status === 'unprotected').length ?? 0;
   return (

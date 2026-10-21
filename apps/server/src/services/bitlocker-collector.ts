@@ -21,6 +21,7 @@ import { ClientService } from './clients.js';
 import { linkItems } from './integrations/cw-rmm.js';
 import { isUuid, Scope } from './scope.js';
 import type { VaultService } from './vault.js';
+import { securityEvent } from './security-log.js';
 
 const generate = promisify(generateKeyPair);
 const SOURCE = 'bitlocker-collector';
@@ -156,7 +157,7 @@ export class BitlockerCollectorService {
         .update(schema.bitlockerEnrollments)
         .set({ privateKey: sealed })
         .where(eq(schema.bitlockerEnrollments.id, made!.id));
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: actor.orgId,
         userId: actor.id,
         actor: actor.name,
@@ -203,12 +204,12 @@ export class BitlockerCollectorService {
       .update(schema.bitlockerEnrollments)
       .set({ revokedAt: new Date() })
       .where(eq(schema.bitlockerEnrollments.id, id));
-    await this.db.insert(schema.securityEvents).values({
+    await securityEvent(this.db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,
       action: 'BitLocker collector enrollment revoked',
-      detail: row.name.slice(0, 300),
+      detail: row.name,
       ip,
     });
   }
@@ -224,12 +225,12 @@ export class BitlockerCollectorService {
           .returning()
       : [];
     if (!row) throw new HttpError(404, 'Device not found.');
-    await this.db.insert(schema.securityEvents).values({
+    await securityEvent(this.db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,
       action: blocked ? 'BitLocker collector device blocked' : 'BitLocker collector device unblocked',
-      detail: row.hostname.slice(0, 300),
+      detail: row.hostname,
       ip,
     });
   }

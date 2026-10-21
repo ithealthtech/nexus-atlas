@@ -34,6 +34,7 @@ import {
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { useClients } from '@/lib/queries';
+import { useAction } from '@/lib/actions';
 
 const STATUS: Record<RotationRunStatus, { label: string; tone: Tone }> = {
   dispatched: { label: 'Waiting for device', tone: 'info' },
@@ -43,27 +44,9 @@ const STATUS: Record<RotationRunStatus, { label: string; tone: Tone }> = {
   cancelled: { label: 'Cancelled', tone: 'neutral' },
 };
 
-/** Runs one action at a time for a card, with its error. */
-function useAct() {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<void>) => {
-    setBusy(name);
-    setError(null);
-    try {
-      await work();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-  return { busy, error, act };
-}
-
 function RotationSettingsCard() {
   const toast = useToast();
-  const { busy, error, act } = useAct();
+  const { busy, error, act } = useAction();
   const settings = useQuery({
     queryKey: ['rotation-settings'],
     queryFn: () => api<RotationSettings>('/rotation/settings'),
@@ -161,7 +144,7 @@ function RotationSettingsCard() {
 function PolicyForm({ onSaved }: { onSaved: () => Promise<unknown> }) {
   const toast = useToast();
   const clients = useClients();
-  const { busy, error, act } = useAct();
+  const { busy, error, act } = useAction();
   const save = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -237,7 +220,7 @@ function PolicyForm({ onSaved }: { onSaved: () => Promise<unknown> }) {
 
 function Policies() {
   const toast = useToast();
-  const { busy, error, act } = useAct();
+  const { busy, error, act } = useAction();
   const policies = useQuery({
     queryKey: ['rotation-policies'],
     queryFn: () => api<RotationPolicyView[]>('/rotation/policies'),
@@ -321,7 +304,7 @@ function Policies() {
 function AddAccount({ onAdded }: { onAdded: () => Promise<unknown> }) {
   const toast = useToast();
   const clients = useClients();
-  const { busy, error, act } = useAct();
+  const { busy, error, act } = useAction();
   const [clientId, setClientId] = useState('');
   const passwords = useQuery({
     queryKey: ['passwords', { client: clientId }],
@@ -419,7 +402,7 @@ function AddAccount({ onAdded }: { onAdded: () => Promise<unknown> }) {
 
 function Accounts({ onChange }: { onChange: () => Promise<unknown> }) {
   const toast = useToast();
-  const { busy, error, act } = useAct();
+  const { busy, error, act } = useAction();
   const targets = useQuery({
     queryKey: ['rotation-targets'],
     queryFn: () => api<RotationTargetView[]>('/rotation/targets'),
@@ -543,7 +526,7 @@ function Accounts({ onChange }: { onChange: () => Promise<unknown> }) {
 }
 
 function Attempts() {
-  const { busy, error, act } = useAct();
+  const { busy, error, act } = useAction();
   const runs = useQuery({
     queryKey: ['rotation-runs'],
     queryFn: () => api<RotationRunView[]>('/rotation/runs'),

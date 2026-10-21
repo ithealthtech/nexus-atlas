@@ -27,6 +27,7 @@ import type { MailService } from './mail.js';
 import { isUuid, Scope } from './scope.js';
 import type { SettingsService } from './settings.js';
 import { ROTATION_ACTOR, type VaultService } from './vault.js';
+import { securityEvent } from './security-log.js';
 
 const DAY = 86_400_000;
 /** How long a device has to report back before the run fails and its token stops working. */
@@ -61,13 +62,13 @@ export class RotationService {
   ) {}
 
   private event(actor: { orgId: string; id: string | null; name: string }, action: string, detail = '', ip = '') {
-    return this.db.insert(schema.securityEvents).values({
+    return securityEvent(this.db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,
       action,
-      detail: detail.slice(0, 300),
-      ip: ip.slice(0, 64),
+      detail,
+      ip,
     });
   }
 

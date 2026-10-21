@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { reportSelectionSchema } from '@atlas/shared';
 import { z } from 'zod';
 import { ReportService } from '../services/reports.js';
@@ -9,6 +9,7 @@ import { HttpError } from '../errors.js';
 import type { SettingsService } from '../services/settings.js';
 import type { SecuritySources } from '../services/report-data.js';
 import { ReportShareService } from '../services/report-shares.js';
+import { securityEvent } from '../services/security-log.js';
 
 export function registerReportRoutes(
   app: FastifyInstance,
@@ -30,9 +31,14 @@ export function registerReportRoutes(
   const shares = new ReportShareService(db, deps.publicOrigin);
   const audit = async (req: FastifyRequest, action: string, id: string) => {
     const actor = req.session!.actor;
-    await db
-      .insert(schema.securityEvents)
-      .values({ orgId: actor.orgId, userId: actor.id, actor: actor.name, action, detail: `Report ${id}`, ip: req.ip });
+    await securityEvent(db, {
+      orgId: actor.orgId,
+      userId: actor.id,
+      actor: actor.name,
+      action,
+      detail: `Report ${id}`,
+      ip: req.ip,
+    });
   };
   const base = '/api/reports';
   app.get(base + '/runs', authed, async (req, reply) => {

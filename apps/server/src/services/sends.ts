@@ -14,6 +14,7 @@ import {
 import { HttpError } from '../errors.js';
 import { isUuid, type Scope } from './scope.js';
 import { TooLargeError, readLimited, type FileStorage } from './storage.js';
+import { securityEvent } from './security-log.js';
 
 type Row = typeof schema.sends.$inferSelect;
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -57,13 +58,13 @@ export class SendService {
   }
 
   private async event(orgId: string, action: string, detail: string, ip: string, actor?: Scope['actor']) {
-    await this.db.insert(schema.securityEvents).values({
+    await securityEvent(this.db, {
       orgId,
       userId: actor?.id ?? null,
       actor: actor?.name ?? 'Send recipient',
       action,
       detail,
-      ip: ip.slice(0, 64),
+      ip,
     });
   }
 

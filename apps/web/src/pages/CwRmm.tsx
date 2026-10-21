@@ -26,6 +26,7 @@ import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { useClients, useLayouts } from '@/lib/queries';
 import { JobSummary } from './DataTools';
+import { useAction } from '@/lib/actions';
 
 /** What the admin picked for one company in the mapping table. '' leaves it undecided. */
 type Choice = '' | 'skip' | 'create' | `client:${string}`;
@@ -164,8 +165,7 @@ export function CwRmmSync() {
   const refetchConnection = connection.refetch;
   const layouts = useLayouts();
   const [jobId, setJobId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, act } = useAction();
   const job = useQuery({
     queryKey: ['import-job', jobId],
     queryFn: () => api<ImportJobView>(`/import/jobs/${jobId}`),
@@ -179,17 +179,6 @@ export function CwRmmSync() {
     }
   }, [job.data, queryClient, refetchConnection]);
 
-  const act = async (name: string, work: () => Promise<void>) => {
-    setBusy(name);
-    setError(null);
-    try {
-      await work();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
   const save = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);

@@ -17,6 +17,7 @@ import { LayoutService, validateFields } from '../layouts.js';
 import { contacts, locations } from '../people.js';
 import { Scope } from '../scope.js';
 import type { VaultService } from '../vault.js';
+import { securityEvent } from '../security-log.js';
 
 const messageOf = (error: unknown) =>
   error instanceof HttpError
@@ -138,7 +139,7 @@ export async function importCsv(
     }
   }
   if (!body.dryRun && (result.created || result.updated))
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,
