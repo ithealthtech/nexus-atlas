@@ -16,6 +16,7 @@ import type { VaultKeys } from '../crypto/vault-keys.js';
 import { HttpError } from '../errors.js';
 import { isUuid } from './scope.js';
 import { Repeating, type ErrorLog } from './repeating.js';
+import { securityEvent } from './security-log.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 type WebhookRow = typeof schema.webhooks.$inferSelect;
@@ -164,12 +165,12 @@ export class WebhookService {
   }
 
   private event(actor: Actor, action: string, detail: string, ip: string) {
-    return this.db.insert(schema.securityEvents).values({
+    return securityEvent(this.db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip,
     });
   }

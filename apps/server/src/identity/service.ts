@@ -20,6 +20,7 @@ import { fail } from '../errors.js';
 import { open, seal, type KeyProvider } from '../crypto/keys.js';
 import { checkPassword, hashPassword, verifyPassword } from './passwords.js';
 import { matchTotp, newTotpSecret, otpauthUri } from './totp.js';
+import { securityEvent } from '../services/security-log.js';
 
 export const LIMITS = {
   attempts: 5,
@@ -83,13 +84,13 @@ export class IdentityService {
     detail = '',
     ip = '',
   ) {
-    await this.db.insert(schema.securityEvents).values({
+    await securityEvent(this.db, {
       orgId: who?.orgId ?? null,
       userId: who?.id ?? null,
       actor: who?.name ?? 'Unknown account',
       action,
-      detail: detail.slice(0, 300),
-      ip: ip.slice(0, 64),
+      detail,
+      ip,
     });
   }
 
@@ -120,7 +121,7 @@ export class IdentityService {
           passwordHash,
         })
         .returning();
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: org!.id,
         userId: user!.id,
         actor: user!.name,
@@ -216,7 +217,7 @@ export class IdentityService {
       });
       if (mfaVerified || !hasMfa(user)) {
         await tx.update(schema.users).set({ lastLoginAt: new Date() }).where(eq(schema.users.id, user.id));
-        await tx.insert(schema.securityEvents).values({
+        await securityEvent(tx, {
           orgId: user.orgId,
           userId: user.id,
           actor: user.name,
@@ -316,7 +317,7 @@ export class IdentityService {
         .set({ failedAttempts: 0, lastLoginAt: new Date() })
         .where(eq(schema.users.id, user.id));
       await tx.update(schema.sessions).set({ mfaVerified: true }).where(eq(schema.sessions.tokenHash, context.hash));
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,
@@ -367,7 +368,7 @@ export class IdentityService {
         .returning({ id: schema.users.id });
       if (!updated.length) fail(400, 'That code was already used. Wait for the next one.', 'mfa_invalid');
       await tx.update(schema.sessions).set({ mfaVerified: true }).where(eq(schema.sessions.tokenHash, context.hash));
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,
@@ -414,7 +415,7 @@ export class IdentityService {
       await tx
         .delete(schema.sessions)
         .where(and(eq(schema.sessions.userId, user!.id), ne(schema.sessions.tokenHash, context.hash)));
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user!.orgId,
         userId: user!.id,
         actor: user!.name,
@@ -445,7 +446,7 @@ export class IdentityService {
         .delete(schema.sessions)
         .where(and(eq(schema.sessions.userId, user.id), ne(schema.sessions.tokenHash, context.hash)));
       await endDeviceSessions(tx, user.id);
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,
@@ -574,7 +575,7 @@ export class IdentityService {
         .returning();
       if (access.grants.length)
         await tx.insert(schema.clientAccess).values(access.grants.map((g) => ({ ...g, userId: created!.id })));
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: actor.orgId,
         userId: actor.id,
         actor: actor.name,
@@ -638,7 +639,7 @@ export class IdentityService {
           await tx.delete(schema.sessions).where(eq(schema.sessions.userId, id));
           await endDeviceSessions(tx, id);
         }
-        await tx.insert(schema.securityEvents).values({
+        await securityEvent(tx, {
           orgId: actor.orgId,
           userId: actor.id,
           actor: actor.name,
@@ -680,7 +681,7 @@ export class IdentityService {
         await tx.delete(schema.passkeys).where(eq(schema.passkeys.userId, id));
         await tx.delete(schema.trustedDevices).where(eq(schema.trustedDevices.userId, id));
       }
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: actor.orgId,
         userId: actor.id,
         actor: actor.name,

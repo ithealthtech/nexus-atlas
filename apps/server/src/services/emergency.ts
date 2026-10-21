@@ -12,6 +12,7 @@ import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import type { MailService } from './mail.js';
 import { isUuid } from './scope.js';
+import { securityEvent } from './security-log.js';
 
 type RequestRow = typeof schema.emergencyRequests.$inferSelect;
 const HOUR = 3_600_000;
@@ -45,13 +46,13 @@ export class EmergencyAccessService {
   ) {}
 
   private event(actor: Actor | null, orgId: string, action: string, detail: string, ip = '') {
-    return this.db.insert(schema.securityEvents).values({
+    return securityEvent(this.db, {
       orgId,
       userId: actor?.id ?? null,
       actor: actor?.name ?? 'Atlas',
       action,
-      detail: detail.slice(0, 300),
-      ip: ip.slice(0, 64),
+      detail,
+      ip,
     });
   }
 

@@ -9,6 +9,7 @@ import type { IdentityService } from '../identity/service.js';
 import { EntraService } from '../services/entra.js';
 import { isUuid } from '../services/scope.js';
 import type { SettingsService } from '../services/settings.js';
+import { securityEvent } from '../services/security-log.js';
 
 const STATE_COOKIE = 'atlas_sso';
 
@@ -47,12 +48,12 @@ export function registerEntraRoutes(
   };
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const event = (req: FastifyRequest, action: string, detail = '') =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: actorOf(req).orgId,
       userId: actorOf(req).id,
       actor: actorOf(req).name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip: req.ip,
     });
   const back = (reply: FastifyReply, outcome?: Outcome) => {

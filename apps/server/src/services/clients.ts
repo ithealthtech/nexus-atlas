@@ -13,6 +13,7 @@ import { HttpError } from '../errors.js';
 import { recordActivity } from './activity.js';
 import { getRevision, listRevisions, snapshot } from './revisions.js';
 import type { FileStorage } from './storage.js';
+import { securityEvent } from './security-log.js';
 
 type ClientRow = typeof schema.clients.$inferSelect;
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -188,12 +189,12 @@ export class ClientService {
           .set({ settings: sql`jsonb_set(${schema.orgs.settings}, '{cwRmm,map}', ${JSON.stringify(map)}::jsonb)` })
           .where(eq(schema.orgs.id, actor.orgId));
       }
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: actor.orgId,
         userId: actor.id,
         actor: actor.name,
         action: 'Deleted a client',
-        detail: client.name.slice(0, 300),
+        detail: client.name,
         ip,
       });
     });
