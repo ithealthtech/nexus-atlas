@@ -138,6 +138,19 @@ export interface ReportScheduleView extends ReportScheduleInput {
   lastRunId: string | null;
 }
 
+/** One email a schedule sent or tried to send. */
+export interface ReportDeliveryView {
+  id: string;
+  recipient: string;
+  status: 'sent' | 'failed';
+  /** Why it wasn't delivered. */
+  error: string;
+  trigger: 'schedule' | 'manual' | 'resend';
+  createdAt: string;
+  /** False once the snapshot it sent has left the owner's history: there is nothing left to resend. */
+  canResend: boolean;
+}
+
 /**
  * When a schedule next runs, strictly after `after`: in the server's local time, at the schedule's hour on its day.
  * Quarterly schedules run in January, April, July and October. Days stop at 28 so every month has one.

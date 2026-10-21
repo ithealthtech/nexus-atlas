@@ -8,6 +8,7 @@ import { ReportScheduleService } from '../src/services/report-schedules.js';
 import { ReportShareService } from '../src/services/report-shares.js';
 import { ReportService } from '../src/services/reports.js';
 import { SettingsService } from '../src/services/settings.js';
+import type { ReportDeliveryView } from '@atlas/shared';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 describe('scheduled reports', () => {
@@ -100,6 +101,48 @@ describe('scheduled reports', () => {
     // Claimed and moved on: a second pass (or a second server) sends nothing more.
     await service.runDue(orgId, now);
     expect(sent).toHaveLength(2);
+  });
+
+  it('logs every delivery, and resends one snapshot to its recipient without running the report again', async () => {
+    const made = (
+      await owner.call(
+        'POST',
+        '/api/reports/schedules',
+        schedule({ recipients: ['office@harbor.example', 'bounce@harbor.example'] }),
+      )
+    ).data;
+    await makeDue(made.id);
+    await service.runDue(orgId);
+    const log = (await owner.call('GET', `/api/reports/schedules/${made.id}/deliveries`)).data as ReportDeliveryView[];
+    expect(log.map((d) => [d.recipient, d.status, d.trigger]).sort()).toEqual([
+      ['bounce@harbor.example', 'failed', 'schedule'],
+      ['office@harbor.example', 'sent', 'schedule'],
+    ]);
+    const refused = log.find((d) => d.status === 'failed')!;
+    expect(refused.error).toContain('550');
+    expect(refused.canResend).toBe(true);
+
+    // Resent through Atlas's own mail, which accepts it: the same snapshot, not a new run.
+    const runs = async () => (await t.handle.db.select().from(schema.reportRuns)).length;
+    const before = await runs();
+    const resent = await owner.call('POST', `/api/reports/deliveries/${refused.id}/resend`);
+    expect(resent.status, JSON.stringify(resent.data)).toBe(200);
+    expect(resent.data[0]).toMatchObject({ recipient: 'bounce@harbor.example', status: 'sent', trigger: 'resend' });
+    expect(t.outbox.some((m) => m.to === 'bounce@harbor.example' && m.attachments?.length === 1)).toBe(true);
+    expect(await runs()).toBe(before);
+
+    // Once the snapshot leaves the owner's history there is nothing to resend.
+    const { lastRunId } = await row(made.id);
+    expect((await owner.call('DELETE', `/api/reports/runs/${lastRunId}`)).status).toBe(200);
+    const after = (await owner.call('GET', `/api/reports/schedules/${made.id}/deliveries`))
+      .data as ReportDeliveryView[];
+    expect(after.every((d) => !d.canResend)).toBe(true);
+    expect((await owner.call('POST', `/api/reports/deliveries/${refused.id}/resend`)).status).toBe(409);
+    // Deleting the schedule deletes its log.
+    expect((await owner.call('DELETE', `/api/reports/schedules/${made.id}`, { version: made.version })).status).toBe(
+      200,
+    );
+    expect(await t.handle.db.select().from(schema.reportDeliveries)).toEqual([]);
   });
 
   it('records a refused recipient and a disabled owner instead of failing the pass', async () => {

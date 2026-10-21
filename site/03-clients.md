@@ -140,13 +140,13 @@ To have a report emailed regularly, set it up (report type, clients, and any opt
 
 Each time it runs, Atlas captures a fresh snapshot with your access at that moment and keeps it in your **History**, so **Compare with** works on it. Then it emails each recipient a summary, with the whole report attached as a PDF in your organization's look. For a report about one client, it can also include a 30-day link the client can open without an account.
 
-The **Scheduled** tab lists your schedules, when each runs next, and how the last delivery went, including any addresses that refused it. **Send now** sends one straight away without moving its regular time. **Pause** stops it until you resume it. Schedules are private to the person who made them. A schedule stops if its owner can no longer sign in, and deleting a client removes the schedules that report on it. Email must be set up under **Administration → Email & alerts**.
+The **Scheduled** tab lists your schedules, when each runs next, and how the last delivery went, including any addresses that refused it. **Deliveries** lists every email a schedule sent or tried to send, recipient by recipient, with the reason any was refused. Send one again to its recipient with the resend button: it sends the same snapshot, without running the report again, while that snapshot is still in your history. **Send now** sends one straight away without moving its regular time. **Pause** stops it until you resume it. Schedules are private to the person who made them. A schedule stops if its owner can no longer sign in, and deleting a client removes the schedules that report on it. Email must be set up under **Administration → Email & alerts**.
 
 ### Sharing a report with the client
 
 A report run for a single client can be shared with that client by link. Choose **Share**, pick how long the link works (7, 30, or 90 days; report links always expire), and choose **Create link**; the link is copied for you. Whoever has the link sees that snapshot, every section as it was captured, and can download each section as a PDF, without an account. The page names your organization and the client, never the person who ran the report. The dialog shows how often each link was opened, and **Revoke** stops a link at once. Deleting the report or the client stops its links too. Only the person who ran the report can share it, and only with edit access to the client. Making and revoking links appear in the security log.
 
-Automatic triggers (a report sent when something happens) and a delivery log are planned next.
+Automatic triggers (a report sent when something happens) are planned next.
 
 ## The monthly report
 

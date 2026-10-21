@@ -166,6 +166,13 @@ export function registerReportRoutes(
   app.post<{ Params: { id: string } }>(base + '/schedules/:id/send', authed, async (req) =>
     schedules.sendNow(scopeOf(req), req.params.id),
   );
+  app.get<{ Params: { id: string } }>(base + '/schedules/:id/deliveries', authed, async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return schedules.deliveries(scopeOf(req), req.params.id);
+  });
+  app.post<{ Params: { id: string } }>(base + '/deliveries/:id/resend', authed, async (req) =>
+    schedules.resend(scopeOf(req), req.params.id, req.ip),
+  );
   app.get(base + '/templates', authed, async (req, reply) => {
     reply.header('cache-control', 'no-store');
     return service.listTemplates(scopeOf(req));

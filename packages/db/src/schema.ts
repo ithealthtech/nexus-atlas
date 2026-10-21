@@ -1651,3 +1651,30 @@ export const reportSchedules = pgTable(
     check('report_schedules_cadence_check', sql`${t.cadence} in ('weekly','monthly','quarterly')`),
   ],
 );
+
+// Each email a schedule sent or tried to send: one row per recipient, kept with the schedule (deleting it, or its
+// client, deletes these too). The snapshot it sent stays linked while it is in the owner's history, for resending.
+export const reportDeliveries = pgTable(
+  'report_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    scheduleId: uuid('schedule_id')
+      .notNull()
+      .references(() => reportSchedules.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').references(() => reportRuns.id, { onDelete: 'set null' }),
+    recipient: text('recipient').notNull(),
+    status: text('status').notNull(),
+    error: text('error').notNull().default(''),
+    /** Sent by the schedule, by Send now, or as a resend of an earlier delivery. */
+    trigger: text('trigger').notNull(),
+    createdAt: created(),
+  },
+  (t) => [
+    index('report_deliveries_schedule').on(t.scheduleId, t.createdAt),
+    check('report_deliveries_status_check', sql`${t.status} in ('sent','failed')`),
+    check('report_deliveries_trigger_check', sql`${t.trigger} in ('schedule','manual','resend')`),
+  ],
+);

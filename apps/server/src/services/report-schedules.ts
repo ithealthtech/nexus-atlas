@@ -1,10 +1,12 @@
-import { and, asc, eq, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, lte } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
   nextReportRun,
   reportDefinitionSchema,
   reportNeedsAttention,
   reportScheduleSchema,
+  type ReportDeliveryView,
+  type ReportRunDetail,
   type ReportScheduleView,
 } from '@atlas/shared';
 import { z } from 'zod';
@@ -157,7 +159,7 @@ export class ReportScheduleService {
   /** Sends a schedule now, for a check before its first run. Its regular time doesn't move. */
   async sendNow(scope: Scope, id: string): Promise<ReportScheduleView> {
     const row = await this.own(scope, id);
-    return view(await this.deliver(row, new Date()));
+    return view(await this.deliver(row, new Date(), 'manual'));
   }
 
   /**
@@ -184,12 +186,65 @@ export class ReportScheduleService {
         .set({ nextRunAt: nextReportRun(view(row), now) })
         .where(and(eq(schema.reportSchedules.id, row.id), eq(schema.reportSchedules.nextRunAt, row.nextRunAt)))
         .returning();
-      if (claimed) await this.deliver(claimed, now);
+      if (claimed) await this.deliver(claimed, now, 'schedule');
     }
   }
 
+  /** The schedule's recent deliveries, newest first. */
+  async deliveries(scope: Scope, scheduleId: string): Promise<ReportDeliveryView[]> {
+    const row = await this.own(scope, scheduleId);
+    const rows = await scope.db
+      .select()
+      .from(schema.reportDeliveries)
+      .where(eq(schema.reportDeliveries.scheduleId, row.id))
+      .orderBy(desc(schema.reportDeliveries.createdAt))
+      .limit(50);
+    return rows.map((d) => ({
+      id: d.id,
+      recipient: d.recipient,
+      status: d.status as ReportDeliveryView['status'],
+      error: d.error,
+      trigger: d.trigger as ReportDeliveryView['trigger'],
+      createdAt: d.createdAt.toISOString(),
+      canResend: !!d.runId,
+    }));
+  }
+
+  /** Sends one delivery's snapshot again to its recipient, as it was: the report isn't run again. */
+  async resend(scope: Scope, deliveryId: string, ip: string): Promise<ReportDeliveryView[]> {
+    const [found] = isUuid(deliveryId)
+      ? await scope.db
+          .select({ delivery: schema.reportDeliveries, schedule: schema.reportSchedules })
+          .from(schema.reportDeliveries)
+          .innerJoin(schema.reportSchedules, eq(schema.reportSchedules.id, schema.reportDeliveries.scheduleId))
+          .where(
+            and(
+              eq(schema.reportDeliveries.id, deliveryId.toLowerCase()),
+              eq(schema.reportSchedules.orgId, scope.actor.orgId),
+              eq(schema.reportSchedules.ownerId, scope.actor.id),
+            ),
+          )
+      : [];
+    if (!found) throw new HttpError(404, 'Delivery not found.');
+    if (!found.delivery.runId)
+      throw new HttpError(409, 'The report sent then is no longer in your history, so it can’t be sent again.');
+    // Checks the owner still has access to every client in it.
+    const run = await this.deps.reports.load(scope, found.delivery.runId);
+    const composed = await this.compose(found.schedule, scope, run);
+    await this.sendTo(found.schedule, run.id, composed, [found.delivery.recipient], 'resend');
+    await securityEvent(scope.db, {
+      orgId: scope.actor.orgId,
+      userId: scope.actor.id,
+      actor: scope.actor.name,
+      action: 'Resent a scheduled report',
+      detail: `${found.schedule.name} to ${found.delivery.recipient}`,
+      ip,
+    });
+    return this.deliveries(scope, found.schedule.id);
+  }
+
   /** Runs the report as its owner and emails it. Never throws: the outcome is recorded on the schedule. */
-  private async deliver(row: Row, now: Date): Promise<Row> {
+  private async deliver(row: Row, now: Date, trigger: 'schedule' | 'manual'): Promise<Row> {
     const record = async (status: 'sent' | 'failed', error: string, runId?: string) => {
       const [saved] = await this.db
         .update(schema.reportSchedules)
@@ -208,6 +263,27 @@ export class ReportScheduleService {
     } catch (error) {
       return record('failed', `The report could not be run: ${(error as Error).message}`);
     }
+    const composed = await this.compose(row, scope, run);
+    const failed = await this.sendTo(row, run.id, composed, row.recipients, trigger);
+    await securityEvent(this.db, {
+      orgId: row.orgId,
+      userId: owner.id,
+      actor: owner.name,
+      action: 'Sent a scheduled report',
+      detail: `${row.name} to ${row.recipients.length - failed.length} of ${row.recipients.length} recipients`,
+    });
+    const notes = composed.notes.join(' ');
+    if (failed.length)
+      return record(
+        'failed',
+        `Not delivered to ${failed.map((f) => f.to).join(', ')}: ${failed[0]!.reason}${notes ? ` ${notes}` : ''}`,
+        run.id,
+      );
+    return record('sent', notes, run.id);
+  }
+
+  /** The email for one run of a schedule: a summary, the PDF, and the client link, as the schedule asks. */
+  private async compose(row: Row, scope: Scope, run: ReportRunDetail) {
     const { snapshot } = run;
     const [org] = await this.db
       .select({ name: schema.orgs.name })
@@ -216,7 +292,7 @@ export class ReportScheduleService {
     const brand = await this.deps.settings.branding(row.orgId);
     const organization = brand.brandName || org?.name || snapshot.organization;
     const notes: string[] = [];
-
+    const captured = snapshot.generatedAt.slice(0, 10);
     const attachments: MailAttachment[] = [];
     if (row.attachPdf) {
       try {
@@ -224,7 +300,7 @@ export class ReportScheduleService {
         if (pdf.length > MAX_ATTACHMENT) notes.push('The PDF was too large to attach.');
         else
           attachments.push({
-            filename: `${row.name.replace(/[^\w -]+/g, '').trim() || 'Report'} ${now.toISOString().slice(0, 10)}.pdf`,
+            filename: `${row.name.replace(/[^\w -]+/g, '').trim() || 'Report'} ${captured}.pdf`,
             content: pdf,
             contentType: 'application/pdf',
           });
@@ -240,22 +316,20 @@ export class ReportScheduleService {
         notes.push(`No client link was made: ${(error as Error).message}`);
       }
     }
-
     const clients = snapshot.clients.map((c) => c.name);
     const who =
       clients.length > 3 ? `${clients.slice(0, 3).join(', ')} and ${clients.length - 3} more` : clients.join(', ');
     const flagged = snapshot.sections.reduce((n, s) => n + s.rows.filter((r) => reportNeedsAttention(s, r)).length, 0);
+    const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
     const message = {
       subject: `${row.name}: ${who}`,
       paragraphs: [
-        `Here is ${snapshot.definition.title} for ${who}, captured ${now.toISOString().slice(0, 10)}.`,
+        `Here is ${snapshot.definition.title} for ${who}, captured ${captured}.`,
         flagged
-          ? `${flagged} item${flagged === 1 ? '' : 's'} may need attention; they are listed in the report.`
+          ? `${count(flagged, 'item')} may need attention; they are listed in the report.`
           : 'Nothing in this report is flagged as needing attention.',
         ...(snapshot.warnings.length
-          ? [
-              `${snapshot.warnings.length} note${snapshot.warnings.length === 1 ? '' : 's'} about the data are in the report.`,
-            ]
+          ? [`${count(snapshot.warnings.length, 'note')} about the data are in the report.`]
           : []),
         ...(attachments.length ? ['The full report is attached as a PDF.'] : []),
       ],
@@ -263,28 +337,38 @@ export class ReportScheduleService {
       ...(link ? { action: { label: 'View the report', url: link } } : {}),
       ...(attachments.length ? { attachments } : {}),
     };
-    // One message per recipient, so one refused address doesn't stop the rest.
+    return { message, notes, organization };
+  }
+
+  /** Emails each recipient on their own, so one refused address doesn't stop the rest, and logs every attempt. */
+  private async sendTo(
+    row: Row,
+    runId: string,
+    composed: Awaited<ReturnType<ReportScheduleService['compose']>>,
+    recipients: string[],
+    trigger: ReportDeliveryView['trigger'],
+  ) {
     const failed: { to: string; reason: string }[] = [];
-    for (const to of row.recipients) {
+    const log: (typeof schema.reportDeliveries.$inferInsert)[] = [];
+    for (const to of recipients) {
       try {
-        await this.deps.mail.send(row.orgId, organization, { ...message, to });
+        await this.deps.mail.send(row.orgId, composed.organization, { ...composed.message, to });
+        log.push({ orgId: row.orgId, scheduleId: row.id, runId, recipient: to, status: 'sent', trigger });
       } catch (error) {
-        failed.push({ to, reason: (error as Error).message });
+        const reason = (error as Error).message;
+        failed.push({ to, reason });
+        log.push({
+          orgId: row.orgId,
+          scheduleId: row.id,
+          runId,
+          recipient: to,
+          status: 'failed',
+          error: reason.slice(0, 500),
+          trigger,
+        });
       }
     }
-    await securityEvent(this.db, {
-      orgId: row.orgId,
-      userId: owner.id,
-      actor: owner.name,
-      action: 'Sent a scheduled report',
-      detail: `${row.name} to ${row.recipients.length - failed.length} of ${row.recipients.length} recipients`,
-    });
-    if (failed.length)
-      return record(
-        'failed',
-        `Not delivered to ${failed.map((f) => f.to).join(', ')}: ${failed[0]!.reason}${notes.length ? ` ${notes.join(' ')}` : ''}`,
-        run.id,
-      );
-    return record('sent', notes.join(' '), run.id);
+    if (log.length) await this.db.insert(schema.reportDeliveries).values(log);
+    return failed;
   }
 }

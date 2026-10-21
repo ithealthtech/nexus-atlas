@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Pause, Pencil, Play, Send, Trash2 } from 'lucide-react';
+import { CalendarClock, History, Pause, Pencil, Play, RotateCw, Send, Trash2 } from 'lucide-react';
 import {
   MAX_SCHEDULE_RECIPIENTS,
   REPORT_CADENCES,
   REPORT_CADENCE_LABELS,
   type ReportCadence,
   type ReportDefinition,
+  type ReportDeliveryView,
   type ReportScheduleView,
 } from '@atlas/shared';
 import {
@@ -194,6 +195,56 @@ export function ScheduleDialog({
   );
 }
 
+const TRIGGER_LABEL: Record<ReportDeliveryView['trigger'], string> = {
+  schedule: 'On schedule',
+  manual: 'Sent now',
+  resend: 'Resent',
+};
+
+/** Each email a schedule sent or tried to send, with a way to send one again. */
+function DeliveryLog({ scheduleId }: { scheduleId: string }) {
+  const deliveries = useQuery({
+    queryKey: ['report-deliveries', scheduleId],
+    queryFn: () => api<ReportDeliveryView[]>(`/reports/schedules/${scheduleId}/deliveries`),
+  });
+  const qc = useQueryClient();
+  const { busy, act } = useAction({ toast: true, after: () => deliveries.refetch() });
+  if (deliveries.isLoading) return <Skeleton className="h-12" />;
+  if (!deliveries.data?.length) return <p className="text-xs text-muted">Nothing has been sent yet.</p>;
+  return (
+    <ul className="space-y-1.5 rounded-md bg-surface-2 p-2 text-xs">
+      {deliveries.data.map((d) => (
+        <li key={d.id} className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{d.recipient}</p>
+            <p className="text-muted">
+              {formatDateTime(d.createdAt)} · {TRIGGER_LABEL[d.trigger]}
+            </p>
+            {d.error && <p className="text-danger">{d.error}</p>}
+          </div>
+          <Badge tone={d.status === 'sent' ? 'success' : 'danger'}>{d.status === 'sent' ? 'Sent' : 'Failed'}</Badge>
+          {d.canResend && (
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`Send again to ${d.recipient}`}
+              loading={busy === d.id}
+              onClick={() =>
+                void act(d.id, async () => {
+                  await api(`/reports/deliveries/${d.id}/resend`, { method: 'POST' });
+                  await qc.invalidateQueries({ queryKey: ['report-schedules'] });
+                })
+              }
+            >
+              <RotateCw />
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The Scheduled tab of the report library: each schedule, when it next runs, and how the last one went. */
 export function ScheduleList({
   scoped,
@@ -207,6 +258,8 @@ export function ScheduleList({
   const toast = useToast();
   const { busy, act } = useAction({ toast: true, after: () => schedules.refetch() });
   const shown = (schedules.data ?? []).filter((s) => scoped(s.definition.clientIds));
+  // The schedule whose deliveries are open.
+  const [open, setOpen] = useState<string | null>(null);
   const save = (s: ReportScheduleView, changes: Partial<ReportScheduleView>) =>
     api(`/reports/schedules/${s.id}`, { method: 'PUT', body: { ...s, ...changes } });
   return (
@@ -260,6 +313,15 @@ export function ScheduleList({
             >
               {s.enabled ? <Pause /> : <Play />} {s.enabled ? 'Pause' : 'Resume'}
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-expanded={open === s.id}
+              aria-label={`Deliveries of ${s.name}`}
+              onClick={() => setOpen(open === s.id ? null : s.id)}
+            >
+              <History /> Deliveries
+            </Button>
             <Button size="sm" variant="ghost" aria-label={`Change ${s.name}`} onClick={() => onEdit(s)}>
               <Pencil /> Change
             </Button>
@@ -277,6 +339,7 @@ export function ScheduleList({
               <Trash2 />
             </Button>
           </div>
+          {open === s.id && <DeliveryLog scheduleId={s.id} />}
         </div>
       ))}
       {!schedules.isLoading && !shown.length && (
