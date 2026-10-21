@@ -91,6 +91,8 @@ try {
     Write-Host "Saved $name.png ($w x $h)"
   }
 
+  Check (Shows 'Coming due') 'Home shows what is coming due'
+  Check (Shows 'Good *') 'Home greets you and says how much is due'
   Shot '01-home'
 
   # Real mouse clicks, quickly, across the sections and into a row: the right list shows and the app keeps up.

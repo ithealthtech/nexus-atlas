@@ -43,6 +43,10 @@ public sealed partial class SearchWindow : Window
     private readonly Native.SubclassProc subclass;
     private readonly ClipboardGuard clipboard;
     private readonly List<Row> recent = [];
+    // The signed-in person's first name, for the greeting on Home.
+    private string firstName = "";
+    // On Home, how many items are coming due, for the line under the title.
+    private int dueSoon;
     private readonly Dictionary<string, LayoutInfo> layouts = [];
     private readonly List<Place> trail = [];
     // What the person starred, as "kind:id", so the star on a page shows whether it is.
@@ -230,6 +234,9 @@ public sealed partial class SearchWindow : Window
         {
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
+            firstName = session.User.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            if (trail.LastOrDefault()?.Kind == "home")
+                Render();
             canWrite = session.CanWrite;
             screenConnect = session.ScreenConnect;
             ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
@@ -2105,9 +2112,16 @@ public sealed partial class SearchWindow : Window
                     {
                         // An Atlas older than this app doesn't share favorites with it yet.
                     }
+                    // What's overdue or due in the next two weeks, soonest first.
+                    var soon = (await LoadDueAsync(client, cancel.Token)).Values
+                        .Where(e => e.DaysLeft <= 14 && e.Kind is "password" or "asset" or "document")
+                        .OrderBy(e => e.DaysLeft)
+                        .ToList();
+                    dueSoon = soon.Count;
+                    rows.AddRange(soon.Take(8).Select(e => new Row(e.Kind, e.Id, e.Title, Join(DueText(e.DaysLeft), e.Label, e.ClientName), e.ClientId, "Coming due")));
                     rows.AddRange(recent.Select(r => r with { ClientName = "Recently opened", Subtitle = Join(Kind(r.Kind), r.ClientName) }));
                     groupBy = r => r.ClientName!;
-                    empty = "Nothing here yet. Open a client or an item and choose Add to favorites at the top to keep it here. What you open also shows up here.";
+                    empty = "Nothing here yet. Open a client or an item and choose Add to favorites at the top to keep it here. What you open, and anything coming due, also shows up here.";
                     break;
                 case "clients":
                     clientCache = await LoadClientRowsAsync(client, cancel.Token);
@@ -2197,7 +2211,7 @@ public sealed partial class SearchWindow : Window
             shown = [.. shown.OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
         if (grouping is not null)
         {
-            var first = new[] { "Favorites", "Recently opened", "Clients", "Passwords", "Assets", "Documents" };
+            var first = new[] { "Favorites", "Coming due", "Recently opened", "Clients", "Passwords", "Assets", "Documents" };
             var groups = shown
                 .GroupBy(grouping)
                 .OrderBy(g => Array.IndexOf(first, g.Key) is var i and >= 0 ? i.ToString() : "9" + g.Key, StringComparer.CurrentCultureIgnoreCase)
@@ -2221,6 +2235,8 @@ public sealed partial class SearchWindow : Window
             : $"{shown.Count:N0} of {loaded.Count:N0} {noun}s";
         if (place.Kind == "clients" && clientTotals.Length > 0 && shown.Count == clientCache.Count)
             PageInfo.Text = clientTotals;
+        if (place.Kind == "home" && filter.Length == 0)
+            PageInfo.Text = Greeting(DateTime.Now, firstName, dueSoon);
         if (place.Kind == "client")
         {
             var tabs = new[] { (PasswordsTab, "Passwords", "passwords"), (AssetsTab, "Assets", "assets"), (DocumentsTab, "Documents", "documents") };
@@ -2300,16 +2316,32 @@ public sealed partial class SearchWindow : Window
     {
         if (!dueById.TryGetValue($"{kind}:{id}", out var due))
             return ("", "quiet", "");
-        var when = due.DaysLeft switch
-        {
-            < -1 => $"{-due.DaysLeft} days overdue",
-            -1 => "1 day overdue",
-            0 => "Due today",
-            1 => "Tomorrow",
-            _ => $"In {due.DaysLeft} days",
-        };
+        var when = DueText(due.DaysLeft);
         var tone = due.DaysLeft < 0 ? "critical" : due.DaysLeft <= 14 ? "caution" : "neutral";
         return (when, tone, due.Label);
+    }
+
+    private static string DueText(int daysLeft) => daysLeft switch
+    {
+        < -1 => $"{-daysLeft} days overdue",
+        -1 => "1 day overdue",
+        0 => "Due today",
+        1 => "Tomorrow",
+        _ => $"In {daysLeft} days",
+    };
+
+    /// <summary>The line under Home: good morning, afternoon, or evening, and how much is coming due.</summary>
+    private static string Greeting(DateTime now, string name, int due)
+    {
+        var hello = now.Hour switch { < 12 => "Good morning", < 18 => "Good afternoon", _ => "Good evening" };
+        if (name.Length > 0)
+            hello += $", {name}";
+        return due switch
+        {
+            0 => $"{hello}. Nothing is coming due in the next two weeks.",
+            1 => $"{hello}. 1 item is overdue or due in the next two weeks.",
+            _ => $"{hello}. {due} items are overdue or due in the next two weeks.",
+        };
     }
 
     private static (string When, string Who) Changed(string updatedAt, string? by) =>

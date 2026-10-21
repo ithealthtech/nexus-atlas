@@ -6,6 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Atlas for Windows: a Home page worth opening.** Under your favorites, **Coming due** lists what's overdue or due in the next two weeks, soonest first: password rotations, expiring domains, warranties, and document reviews. The line under the title greets you and says how many items are due.
 - **Atlas for Windows: pages use the window.**
   - Item pages and the client overview fill the page up to a readable width instead of shrinking to their content.
   - When the window is wide, About, Related, Files and Earlier passwords sit in a column beside the page.
