@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import { HttpError } from '../errors.js';
 import type { RotationService } from '../services/rotation.js';
+import { Repeating, type ErrorLog } from '../services/repeating.js';
 
 interface Limiter {
   check(key: string): void;
@@ -83,22 +84,21 @@ export function registerRotationRoutes(
 
 /** Starts due rotations, and fails attempts whose device never reported back, every few minutes. */
 export class RotationScheduler {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly schedule = new Repeating(() => this.tick());
   private running = false;
 
   constructor(
     private readonly db: Database,
     private readonly rotation: RotationService,
-    private readonly log: (error: unknown) => void,
+    private readonly log: ErrorLog,
   ) {}
 
   start(intervalMs = 5 * 60_000) {
-    this.timer = setInterval(() => void this.tick().catch(this.log), intervalMs);
-    this.timer.unref();
+    this.schedule.start(intervalMs, this.log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   async tick(now = new Date()) {

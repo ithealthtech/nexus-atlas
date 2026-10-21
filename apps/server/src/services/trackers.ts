@@ -18,6 +18,7 @@ import type { DomainLookup } from './domain-lookup.js';
 import { LayoutService } from './layouts.js';
 import { Scope } from './scope.js';
 import type { SettingsService } from './settings.js';
+import { Repeating, type ErrorLog } from './repeating.js';
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -438,23 +439,22 @@ function summary(cert: ServedCertificate) {
 
 /** Runs each organization's scheduled checks every few minutes, a batch at a time. */
 export class TrackerScheduler {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly schedule = new Repeating(() => this.tick());
   private running = false;
 
   constructor(
     private readonly handle: DatabaseHandle,
     private readonly settings: SettingsService,
     private readonly trackers: TrackerService,
-    private readonly log: (error: unknown) => void,
+    private readonly log: ErrorLog,
   ) {}
 
   start(intervalMs = 15 * 60_000) {
-    this.timer = setInterval(() => void this.tick().catch(this.log), intervalMs);
-    this.timer.unref();
+    this.schedule.start(intervalMs, this.log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   async tick() {

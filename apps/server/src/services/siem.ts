@@ -7,6 +7,7 @@ import { schema, type Database, type DatabaseHandle } from '@atlas/db';
 import type { SiemEvent, SiemSettingsView } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import type { SettingsService, SiemConfig } from './settings.js';
+import { Repeating, type ErrorLog } from './repeating.js';
 
 const BATCH = 500;
 /** Batches per log per pass, so one busy organization can't hold up the loop; the rest goes on the next pass. */
@@ -103,7 +104,8 @@ export const defaultSender =
  * on the next pass, so nothing is skipped, and a row may be sent twice only if the SIEM took it but the answer was lost.
  */
 export class SiemForwarder {
-  private timer?: NodeJS.Timeout;
+  private readonly schedule = new Repeating(() => this.tick());
+  private log: ErrorLog = () => undefined;
   private running = false;
 
   constructor(
@@ -115,13 +117,13 @@ export class SiemForwarder {
     private readonly sender: SiemSender = defaultSender(),
   ) {}
 
-  start(intervalMs = 30_000) {
-    this.timer = setInterval(() => void this.tick().catch(() => undefined), intervalMs);
-    this.timer.unref();
+  start(log: ErrorLog, intervalMs = 30_000) {
+    this.log = log;
+    this.schedule.start(intervalMs, log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   async tick() {
@@ -136,7 +138,8 @@ export class SiemForwarder {
         if (!rows[0]?.ok) return;
         try {
           for (const org of await this.db.select({ id: schema.orgs.id }).from(schema.orgs))
-            await this.forward(org.id).catch(() => undefined);
+            // One organization's failure is logged; the others are still forwarded.
+            await this.forward(org.id).catch(this.log);
         } finally {
           await lock.query('select pg_advisory_unlock(727279)').catch(() => undefined);
         }

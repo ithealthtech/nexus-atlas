@@ -11,6 +11,7 @@ import type { KeyProvider } from '../crypto/keys.js';
 import { HttpError } from '../errors.js';
 import type { FileStorage } from '../services/storage.js';
 import { encryptStream, frames } from './format.js';
+import { Repeating, type ErrorLog } from '../services/repeating.js';
 
 /** Rows that only matter to live sign-ins, or to this backup run itself, are left out. */
 export const SKIPPED_TABLES = new Set([
@@ -63,7 +64,8 @@ const view = (r: typeof schema.backupRuns.$inferSelect): BackupRunView => ({
  */
 export class BackupService {
   readonly dir: string;
-  private timer?: NodeJS.Timeout;
+  private readonly schedule = new Repeating(() => this.tick());
+  private log: ErrorLog = () => undefined;
   private running = false;
 
   constructor(
@@ -96,14 +98,14 @@ export class BackupService {
     return { path, name: row.fileName, size: info.size };
   }
 
-  start(intervalMs = 10 * 60_000) {
+  start(log: ErrorLog, intervalMs = 10 * 60_000) {
     if (!this.options.enabled) return;
-    this.timer = setInterval(() => void this.tick().catch(() => undefined), intervalMs);
-    this.timer.unref();
+    this.log = log;
+    this.schedule.start(intervalMs, log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   /** Runs the day's scheduled backup once the backup hour has passed, if it hasn't run yet today. */
@@ -119,7 +121,10 @@ export class BackupService {
       .limit(1);
     // One attempt a day: a failed run is reported on the status page rather than retried every few minutes.
     if (last && last.createdAt >= startOfDay) return null;
-    return this.run('schedule', 'Scheduled backup').catch(() => null);
+    return this.run('schedule', 'Scheduled backup').catch((error: unknown) => {
+      this.log(error);
+      return null;
+    });
   }
 
   /** Marks runs left "running" by a restart or crash as failed. Call only while holding the backup lock. */
