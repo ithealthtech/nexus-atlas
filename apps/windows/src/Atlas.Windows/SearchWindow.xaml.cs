@@ -1696,9 +1696,11 @@ public sealed partial class SearchWindow : Window
     {
         const string masked = "••••••••••••";
         var value = Value(masked, mono: true);
+        // Each earlier password's buttons say which one they're for, so a screen reader can tell the rows apart.
+        var when = When(version.CreatedAt);
         var actions = new List<Button>
         {
-            IconButton("", "Show for 30 seconds", async (_, _) =>
+            IconButton("", $"Show the password replaced {when} for 30 seconds", async (_, _) =>
             {
                 if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
                     return;
@@ -1709,7 +1711,7 @@ public sealed partial class SearchWindow : Window
                 hideTimer.Tick += (_, _) => HideSecrets();
                 hideTimer.Start();
             }),
-            IconButton("", "Copy", async (_, _) =>
+            IconButton("", $"Copy the password replaced {when}", async (_, _) =>
             {
                 if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
                     return;
@@ -1718,7 +1720,7 @@ public sealed partial class SearchWindow : Window
             }),
         };
         if (canWrite)
-            actions.Add(IconButton("", "Make this the current password again", (_, _) => _ = RestoreVersionAsync(item, version)));
+            actions.Add(IconButton("", $"Make the password replaced {when} current again", (_, _) => _ = RestoreVersionAsync(item, version)));
         return Field($"Replaced {When(version.CreatedAt)} by {version.ChangedByName}", value, [.. actions]);
     }
 

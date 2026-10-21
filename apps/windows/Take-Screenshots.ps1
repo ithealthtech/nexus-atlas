@@ -97,9 +97,11 @@ try {
   Check (Shows 'Good *') 'Home greets you and says how much is due'
   # Accessibility: what Axe.Windows (Accessibility Insights) finds on a page, collected for the end.
   $script:a11y = @()
+  # A made-up client whose name ends in "Group": its heading in a list is a group, and the checker reads the word.
+  $madeUpNames = @('NameExcludesControlType:Harbor Dental Group', 'NameExcludesLocalizedControlType:Harbor Dental Group')
   function Scan([string]$name) {
     if (-not (Test-Path $Scanner)) { return }
-    $lines = @(& $Scanner $p.Id $name 2>&1 | ForEach-Object { "$_" })
+    $lines = @(& $Scanner $p.Id $name @madeUpNames 2>&1 | ForEach-Object { "$_" })
     $lines | ForEach-Object { Write-Host "  a11y  $_" }
     if ($LASTEXITCODE -ne 0) { $script:a11y += $lines | Where-Object { $_ -notmatch 'accessibility problem\(s\)\.$' } }
   }

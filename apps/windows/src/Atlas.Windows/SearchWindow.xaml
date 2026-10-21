@@ -199,13 +199,14 @@
                                 <TextBlock Text="Archived" />
                             </StackPanel>
                         </ToggleButton>
-                        <Button x:Name="NewButton" Click="New_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
+                        <Button x:Name="NewButton" Click="New_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}"
+                                AutomationProperties.Name="{x:Bind NewText.Text, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE710;" FontSize="14" />
                                 <TextBlock x:Name="NewText" Text="New password" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="StarButton" Click="Star_Click" Visibility="Collapsed">
+                        <Button x:Name="StarButton" Click="Star_Click" Visibility="Collapsed" AutomationProperties.Name="{x:Bind StarText.Text, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon x:Name="StarIcon" Glyph="&#xE734;" FontSize="14" />
                                 <TextBlock x:Name="StarText" Text="Add to favorites" />
@@ -446,13 +447,14 @@
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
                         Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="EditHereButton" Click="EditHere_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed">
+                        <Button x:Name="EditHereButton" Click="EditHere_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Edit">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE70F;" FontSize="14" />
                                 <TextBlock Text="Edit" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="ConnectButton" Click="Connect_Click" Visibility="Collapsed" AutomationProperties.AutomationId="ConnectButton">
+                        <Button x:Name="ConnectButton" Click="Connect_Click" Visibility="Collapsed" AutomationProperties.AutomationId="ConnectButton"
+                                AutomationProperties.Name="{x:Bind ConnectText.Text, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE7F4;" FontSize="14" />
                                 <TextBlock x:Name="ConnectText" Text="Connect" />
@@ -470,13 +472,13 @@
                                 <TextBlock Text="Copy link" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="RestoreButton" Click="Restore_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
+                        <Button x:Name="RestoreButton" Click="Restore_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Restore">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE777;" FontSize="14" />
                                 <TextBlock Text="Restore" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="ArchiveButton" Click="Archive_Click" Visibility="Collapsed">
+                        <Button x:Name="ArchiveButton" Click="Archive_Click" Visibility="Collapsed" AutomationProperties.Name="Archive">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE7B8;" FontSize="14" />
                                 <TextBlock Text="Archive" />
