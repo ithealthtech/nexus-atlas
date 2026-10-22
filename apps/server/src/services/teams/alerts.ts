@@ -281,7 +281,9 @@ export class TeamsAlerts {
             orgId,
             first.channelId,
             batch.map((r) => r.text).join('\n\n'),
-            root?.conversationId ?? undefined,
+            root?.conversationId && root.activityId
+              ? { conversationId: root.conversationId, activityId: root.activityId }
+              : undefined,
           );
           await this.db.transaction(async (tx) => {
             await tx

@@ -34,7 +34,7 @@ describe('Teams integration', () => {
       if (mode === 'rate') return Response.json({}, { status: 429, headers: { 'retry-after': '30' } });
       if (mode === 'lost') throw new Error('private transport details');
       return Response.json(
-        url.endsWith('/activities') ? { id: 'reply-activity' } : { id: 'conversation-1', activityId: 'activity-1' },
+        url.includes('/activities/') ? { id: 'reply-activity' } : { id: 'conversation-1', activityId: 'activity-1' },
       );
     }
     if (url.startsWith('https://graph.microsoft.com/')) {
@@ -215,7 +215,12 @@ describe('Teams integration', () => {
     await owner.call('POST', feed, { ...event, status: 'resolved' });
     await worker.tick(later);
     expect(
-      calls.some((c) => c.url.endsWith('/conversation-1/activities') && c.body.includes('Infection resolved')),
+      calls.some(
+        (c) =>
+          c.url.endsWith('/conversation-1/activities/activity-1') &&
+          JSON.parse(c.body).replyToId === 'activity-1' &&
+          c.body.includes('Infection resolved'),
+      ),
     ).toBe(true);
   });
   it('holds ambiguous delivery without retrying and requires explicit acknowledgment for a manual retry', async () => {

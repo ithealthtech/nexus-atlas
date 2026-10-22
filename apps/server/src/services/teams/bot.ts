@@ -26,7 +26,7 @@ export class TeamsBot {
     orgId: string,
     channelId: string,
     text: string,
-    conversationId?: string,
+    thread?: { conversationId: string; activityId: string },
   ): Promise<{ conversationId: string; activityId: string }> {
     const saved = await this.settings.load(orgId);
     if (!saved?.enabled || !saved.appId || !saved.tenantId) throw new TeamsSendError('failed');
@@ -52,17 +52,25 @@ export class TeamsBot {
       throw error instanceof TeamsSendError ? error : new TeamsSendError('retry');
     }
     const bot = { id: `28:${saved.appId}`, name: 'Atlas' };
-    const activity = { type: 'message', textFormat: 'plain', text, from: bot };
+    const activity = {
+      type: 'message',
+      textFormat: 'plain',
+      text,
+      from: bot,
+      ...(thread ? { replyToId: thread.activityId } : {}),
+    };
     let response: Response;
     try {
       response = await this.fetcher(
-        conversationId ? `${CONNECTOR}/${encodeURIComponent(conversationId)}/activities` : CONNECTOR,
+        thread
+          ? `${CONNECTOR}/${encodeURIComponent(thread.conversationId)}/activities/${encodeURIComponent(thread.activityId)}`
+          : CONNECTOR,
         {
           method: 'POST',
           redirect: 'error',
           headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
           body: JSON.stringify(
-            conversationId
+            thread
               ? activity
               : {
                   isGroup: true,
@@ -90,8 +98,8 @@ export class TeamsBot {
       const result = (await response.json()) as { id?: string; activityId?: string };
       if (!result.id) throw new Error('Missing delivery ID');
       return {
-        conversationId: conversationId ?? result.id,
-        activityId: conversationId ? result.id : (result.activityId ?? ''),
+        conversationId: thread?.conversationId ?? result.id,
+        activityId: thread ? result.id : (result.activityId ?? ''),
       };
     } catch {
       throw new TeamsSendError('uncertain');

@@ -5,8 +5,43 @@ import { teamsReminder, teamsLocalHour } from '../src/services/teams/alerts.js';
 import { API_ROUTES } from '../src/services/api-keys.js';
 import { isPrivatePath, isPrivateTeamsUrl } from '../src/services/request-log.js';
 import { teamsAppPackage } from '../src/services/teams/manifest.js';
-import { unzipSync } from 'fflate';
+import { unzipSync, unzlibSync } from 'fflate';
 import { TeamsBot } from '../src/services/teams/bot.js';
+
+/** Decode RGBA PNG pixels so the package check also catches a blank or invisible icon. */
+function pngPixels(bytes: Uint8Array) {
+  const png = Buffer.from(bytes);
+  const width = png.readUInt32BE(16);
+  const height = png.readUInt32BE(20);
+  expect(png[24]).toBe(8);
+  expect(png[25]).toBe(6);
+  const chunks: Buffer[] = [];
+  for (let offset = 8; offset < png.length;) {
+    const length = png.readUInt32BE(offset);
+    if (png.toString('ascii', offset + 4, offset + 8) === 'IDAT')
+      chunks.push(png.subarray(offset + 8, offset + 8 + length));
+    offset += length + 12;
+  }
+  const rows = unzlibSync(Buffer.concat(chunks));
+  const stride = width * 4;
+  const pixels = new Uint8Array(height * stride);
+  for (let y = 0; y < height; y++) {
+    const filter = rows[y * (stride + 1)]!;
+    expect(filter).toBeLessThanOrEqual(4);
+    for (let x = 0; x < stride; x++) {
+      const index = y * stride + x;
+      const left = x >= 4 ? pixels[index - 4]! : 0;
+      const above = y > 0 ? pixels[index - stride]! : 0;
+      const corner = y > 0 && x >= 4 ? pixels[index - stride - 4]! : 0;
+      const prediction = left + above - corner;
+      const distances = [left, above, corner].map((value) => Math.abs(prediction - value));
+      const paeth = [left, above, corner][distances.indexOf(Math.min(...distances))]!;
+      pixels[index] =
+        rows[y * (stride + 1) + x + 1]! + [0, left, above, Math.floor((left + above) / 2), paeth][filter]!;
+    }
+  }
+  return pixels;
+}
 
 describe('Teams input and rendering', () => {
   it('defaults to a disabled connection, security alerts, daily digests and expiry milestones', () => {
@@ -96,6 +131,17 @@ describe('Teams input and rendering', () => {
     expect(manifest.bots[0].isNotificationOnly).toBe(true);
     expect(Buffer.from(files['color.png']!).readUInt32BE(16)).toBe(192);
     expect(Buffer.from(files['outline.png']!).readUInt32BE(16)).toBe(32);
+    const pixels = pngPixels(files['outline.png']!);
+    const visible = [];
+    for (let i = 0; i < pixels.length; i += 4)
+      if (pixels[i + 3]! > 0) {
+        expect([...pixels.subarray(i, i + 3)]).toEqual([255, 255, 255]);
+        visible.push(i / 4);
+      }
+    expect(visible.length).toBeGreaterThan(200);
+    expect(visible.length).toBeLessThan(850);
+    expect(visible.some((pixel) => pixel < 32)).toBe(true);
+    expect(visible.some((pixel) => pixel >= 32 * 31)).toBe(true);
     expect(() => teamsAppPackage(teamsSettingsSchema.parse({}), 'https://atlas.example')).toThrow('privacy');
   });
 });
@@ -129,8 +175,14 @@ describe('Teams bot delivery', () => {
     expect(calls[0]!.body).toContain('api.botframework.com');
     expect(JSON.parse(calls[1]!.body).channelData.channel.id).toBe('19:channel@thread.tacv2');
     expect(JSON.parse(calls[1]!.body).activity.textFormat).toBe('plain');
-    await bot.send('org', '19:channel@thread.tacv2', 'Resolved', 'conversation');
-    expect(calls.at(-1)!.url).toBe('https://smba.trafficmanager.net/teams/v3/conversations/conversation/activities');
+    await bot.send('org', '19:channel@thread.tacv2', 'Resolved', {
+      conversationId: 'conversation',
+      activityId: 'activity',
+    });
+    expect(calls.at(-1)!.url).toBe(
+      'https://smba.trafficmanager.net/teams/v3/conversations/conversation/activities/activity',
+    );
+    expect(JSON.parse(calls.at(-1)!.body).replyToId).toBe('activity');
   });
   it('honors Retry-After without classifying a known throttle as an ambiguous send', async () => {
     const bot = new TeamsBot(settings, (async (input: string | URL | Request) =>
