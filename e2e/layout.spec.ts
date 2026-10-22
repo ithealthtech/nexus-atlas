@@ -58,9 +58,9 @@ test('main pages fit a phone without scrolling sideways', async ({ browser }) =>
     await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
     const menu = page.getByRole('dialog', { name: 'Navigation' });
     await expect(menu).toBeVisible();
-    const box = (await menu.boundingBox())!;
-    expect(box.x).toBe(0);
-    expect(box.width).toBeLessThan(390);
+    // Once it has finished sliding in.
+    await expect.poll(async () => (await menu.boundingBox())?.x).toBe(0);
+    expect((await menu.boundingBox())!.width).toBeLessThan(390);
     await page.mouse.click(380, 400);
     await expect(menu).toBeHidden();
     expect(errors).toEqual([]);
