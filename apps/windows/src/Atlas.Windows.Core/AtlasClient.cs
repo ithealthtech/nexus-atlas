@@ -378,6 +378,29 @@ public sealed class AtlasClient : IDisposable
             new { field = field == SecretField.OneTimeCode ? "totp" : "secret", copy = false, reason },
             cancellationToken);
 
+    /// <summary>
+    /// The Atlas's own icon (its favicon, as a PNG or ICO), unless it's still the one with <paramref name="etag"/>.
+    /// Public, like the favicon: it needs no sign-in. An Atlas without one, or older than this app, has none.
+    /// </summary>
+    public async Task<AppIcon> GetAppIconAsync(string? etag, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "branding/app-icon");
+        if (etag is not null)
+            request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotModified)
+            return AppIcon.Unchanged;
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return AppIcon.None;
+        if (!response.IsSuccessStatusCode)
+            throw new AtlasApiException(response.StatusCode, $"Atlas answered {(int)response.StatusCode}.", null);
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        // The theme allows far less; anything bigger isn't an icon.
+        if (bytes.Length is 0 or > 1024 * 1024)
+            return AppIcon.None;
+        return new AppIcon(bytes, response.Headers.ETag?.ToString());
+    }
+
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
     {
         if (token is null)

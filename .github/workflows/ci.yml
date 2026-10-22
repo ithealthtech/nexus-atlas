@@ -153,16 +153,23 @@ jobs:
       - name: Inno Setup
         shell: pwsh
         run: if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+      # In the same steps a release takes, where it signs in between (docs/CODE-SIGNING.md).
+      - name: Build the app
+        shell: pwsh
+        run: apps/windows/build-installer.ps1 -Step publish
       - name: Build the setup program
         shell: pwsh
-        run: apps/windows/build-installer.ps1
+        run: apps/windows/build-installer.ps1 -Step setup
       # Compiling says nothing about whether the window loads or setup can replace a running copy, so do it: the
       # app's self-test, a first install, an upgrade over a running copy, and an uninstall.
       - name: Install, upgrade, and uninstall
         shell: pwsh
         run: apps/windows/installer/Test-Setup.ps1
-      # How the window looks, with made-up data, so a change can be checked without installing it.
-      - name: Screenshots
+      # How the window looks, with made-up data, so a change can be checked without installing it. Each page is also
+      # checked with Axe.Windows (Accessibility Insights' engine); a problem fails the job.
+      - name: Accessibility scanner
+        run: dotnet build apps/windows/tools/AccessibilityScan -c Release -o apps/windows/dist/scanner
+      - name: Screenshots and accessibility
         shell: pwsh
         run: apps/windows/Take-Screenshots.ps1
       - uses: actions/upload-artifact@v4
@@ -178,6 +185,13 @@ jobs:
             apps/windows/dist/AtlasForWindowsSetup.exe
             apps/windows/dist/AtlasForWindowsSetup.exe.sha256
           retention-days: 30
+      # The app itself, unpacked, to try a pull request without installing it: AtlasForWindows.exe --preview opens it
+      # beside an installed copy, with made-up data, saving nothing.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atlas-for-windows-app
+          path: apps/windows/dist/app
+          retention-days: 7
 
   # The root helper's service actions (deploy/linux/atlas-updater.sh), run against real systemd with stand-ins for
   # Atlas and its web proxy: restarts, a repair, refusals, and reading service states from inside Atlas's sandbox.

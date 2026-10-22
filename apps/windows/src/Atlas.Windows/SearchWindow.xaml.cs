@@ -43,6 +43,11 @@ public sealed partial class SearchWindow : Window
     private readonly Native.SubclassProc subclass;
     private readonly ClipboardGuard clipboard;
     private readonly List<Row> recent = [];
+    // The signed-in person's first name, for the greeting on Home.
+    private string firstName = "";
+    private string accountEmail = "";
+    // On Home, how many items are coming due, for the line under the title.
+    private int dueSoon;
     private readonly Dictionary<string, LayoutInfo> layouts = [];
     private readonly List<Place> trail = [];
     // What the person starred, as "kind:id", so the star on a page shows whether it is.
@@ -75,6 +80,8 @@ public sealed partial class SearchWindow : Window
         clipboard = new ClipboardGuard(new Native.Clipboard(hwnd), TimeProvider.System);
         clipboard.Cleared += (_, _) => DispatcherQueue.TryEnqueue(() => Show("Clipboard cleared.", InfoBarSeverity.Informational));
         _ = SetUpHelloAsync();
+        ApplyTheme();
+        Root.ActualThemeChanged += (_, _) => ColorCaptionButtons();
 
         // An update found before this window opened shows at once; one found later shows when it's found. A closed
         // window stops listening.
@@ -117,6 +124,8 @@ public sealed partial class SearchWindow : Window
         Accelerator(VirtualKey.T, VirtualKeyModifiers.Control, () => _ = CopySecretAsync(SecretField.OneTimeCode));
         Accelerator(VirtualKey.U, VirtualKeyModifiers.Control, CopyUsername);
         Accelerator(VirtualKey.Left, VirtualKeyModifiers.Menu, Back);
+        // Ctrl+comma, as in most Windows apps.
+        Accelerator((VirtualKey)188, VirtualKeyModifiers.Control, OpenSettings);
         Accelerator(VirtualKey.Escape, VirtualKeyModifiers.None, () =>
         {
             if (QueryBox.Text.Length > 0)
@@ -143,7 +152,7 @@ public sealed partial class SearchWindow : Window
         Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
     }
 
-    public bool RegisterHotkey() => Native.RegisterSearchHotkey(hwnd, HotkeyId);
+    public bool RegisterHotkey() => Native.RegisterSearchHotkey(hwnd, HotkeyId, SearchShortcut.For(app.Settings.Shortcut));
 
     public void ClearClipboard() => clipboard.ClearNow();
 
@@ -230,6 +239,10 @@ public sealed partial class SearchWindow : Window
         {
             var session = await client.GetSessionAsync();
             AccountName.Text = session.User.Name;
+            accountEmail = session.User.Email;
+            firstName = session.User.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            if (trail.LastOrDefault()?.Kind == "home")
+                Render();
             canWrite = session.CanWrite;
             screenConnect = session.ScreenConnect;
             ToolTipService.SetToolTip(AccountButton, $"{session.User.Name} · {session.User.Email}");
@@ -381,7 +394,7 @@ public sealed partial class SearchWindow : Window
 
         var isItem = place.Kind == "item";
         var isOverview = place.Kind == "client" && place.Tab == "overview";
-        var isEditor = place.Kind == "edit";
+        var isEditor = place.Kind is "edit" or "settings";
         var showsPasswords = place.Kind == "passwords" || (place.Kind == "client" && place.Tab == "passwords");
         var showsAssets = place.Kind == "assets" || (place.Kind == "client" && place.Tab == "assets");
         var showsDocuments = place.Kind == "documents" || (place.Kind == "client" && place.Tab == "documents");
@@ -407,6 +420,12 @@ public sealed partial class SearchWindow : Window
         PageTitle.Text = place.Title;
         PageInfo.Text = "";
         ShowStar();
+        if (place.Kind == "settings")
+        {
+            PageInfo.Text = "These apply to Atlas for Windows on this PC, for your Windows account.";
+            ShowSettings();
+            return;
+        }
         if (isEditor)
         {
             PageInfo.Text = place.Item is null ? "Saved encrypted in the client's vault, and recorded under your name." : "Only what you change is saved. The old password is kept in the entry's history.";
@@ -525,7 +544,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -551,7 +570,7 @@ public sealed partial class SearchWindow : Window
         if (cancel.IsCancellationRequested)
             return;
 
-        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var form = new StackPanel { Spacing = 14, Margin = new Thickness(0, 8, 0, 24) };
         ComboBox? clientBox = null;
         if (existing is null && place.ClientId is null)
         {
@@ -621,6 +640,7 @@ public sealed partial class SearchWindow : Window
         buttons.Children.Add(cancelButton);
         foreach (var control in new UIElement[] { name, username, secretRow, url, totp, removeTotp, folder, rotation, notes, error, buttons })
             form.Children.Add(control);
+        PairShortFields(form);
         Detail.Children.Add(form);
         name.Focus(FocusState.Programmatic);
 
@@ -702,7 +722,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -729,7 +749,7 @@ public sealed partial class SearchWindow : Window
         if (existing is not null && existing.Notes.Contains("Synced from", StringComparison.OrdinalIgnoreCase))
             PageInfo.Text = "This asset is kept up to date by a sync: fields it fills are replaced at the next sync. Fields you add yourself are kept.";
 
-        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var form = new StackPanel { Spacing = 14, Margin = new Thickness(0, 8, 0, 24) };
         ComboBox? clientBox = null;
         if (existing is null && place.ClientId is null)
         {
@@ -745,7 +765,7 @@ public sealed partial class SearchWindow : Window
 
         // The layout can only be chosen for a new asset; its fields are drawn below and redrawn when it changes.
         var layoutList = layouts.Values.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        var layoutBox = new ComboBox { Header = "Type", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = layoutList.Select(l => l.Name).ToList() };
+        var layoutBox = new ComboBox { Header = "Asset layout", HorizontalAlignment = HorizontalAlignment.Stretch, ItemsSource = layoutList.Select(l => l.Name).ToList() };
         if (existing is not null)
         {
             layoutBox.SelectedIndex = layoutList.FindIndex(l => l.Id == existing.LayoutId);
@@ -769,6 +789,7 @@ public sealed partial class SearchWindow : Window
                 fieldsPanel.Children.Add(control);
                 readers.Add((field, read));
             }
+            PairShortFields(fieldsPanel);
         }
         layoutBox.SelectionChanged += (_, _) => DrawFields();
         var notes = new TextBox { Header = "Notes", Text = existing?.Notes ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxLength = 20000 };
@@ -782,6 +803,7 @@ public sealed partial class SearchWindow : Window
         buttons.Children.Add(cancelButton);
         foreach (var control in new UIElement[] { layoutBox, name, status, fieldsPanel, notes, error, buttons })
             form.Children.Add(control);
+        PairShortFields(form);
         Detail.Children.Add(form);
         DrawFields();
         (existing is null ? (Control)layoutBox : name).Focus(FocusState.Programmatic);
@@ -792,7 +814,7 @@ public sealed partial class SearchWindow : Window
             var clientId = existing?.ClientId ?? place.ClientId ?? (clientBox?.SelectedIndex is >= 0 and var i ? clients[i].Id : null);
             var missing = readers.FirstOrDefault(r => r.Field.Required && IsEmpty(r.Read()));
             string? problem = clientId is null ? "Choose the client it belongs to."
-                : layoutBox.SelectedIndex < 0 ? "Choose what type of asset it is."
+                : layoutBox.SelectedIndex < 0 ? "Choose the asset layout."
                 : name.Text.Trim().Length == 0 ? "Give it a name."
                 : missing.Field is not null ? $"{missing.Field.Label} is required."
                 : null;
@@ -895,7 +917,12 @@ public sealed partial class SearchWindow : Window
             {
                 var box = new TextBox { Header = label, Text = text, MaxLength = field.Type == "phone" ? 40 : 500, PlaceholderText = field.Help ?? "" };
                 if (field.Type is "ip" or "url")
+                {
+                    // The code font is for what's typed; the label keeps the normal one.
                     box.FontFamily = new FontFamily("Cascadia Mono, Consolas");
+                    box.Header = new TextBlock { Text = label, FontFamily = FontFamily.XamlAutoFontFamily };
+                    AutomationProperties.SetName(box, label);
+                }
                 return (box, () => box.Text.Trim().Length > 0 ? box.Text.Trim() : null);
             }
         }
@@ -952,14 +979,14 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         var isContact = place.Editing == "contact";
         var contact = place.Subject as ContactInfo;
         var location = place.Subject as LocationInfo;
         var adding = place.Subject is null;
 
-        var form = new StackPanel { Spacing = 14, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 24) };
+        var form = new StackPanel { Spacing = 14, Margin = new Thickness(0, 8, 0, 24) };
         var owner = clients.FirstOrDefault(c => c.Id == place.ClientId)?.Name ?? "";
         form.Children.Add(new TextBlock { Text = $"Client: {owner}", Foreground = Secondary() });
         TextBox Box(string header, string text, int max, string hint = "")
@@ -1021,6 +1048,7 @@ public sealed partial class SearchWindow : Window
         buttons.Children.Add(cancelButton);
         foreach (var control in new UIElement[] { notes, primary, error, buttons })
             form.Children.Add(control);
+        PairShortFields(form);
         Detail.Children.Add(form);
         name.Focus(FocusState.Programmatic);
 
@@ -1089,7 +1117,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -1210,8 +1238,7 @@ public sealed partial class SearchWindow : Window
             preview.Children.Clear();
             if (previewButton.IsChecked != true)
                 return;
-            var shown = RichTextPlain.From(JsonSerializer.SerializeToElement(DocumentText.FromText(body.Text)));
-            preview.Children.Add(Card("Preview", Text(shown.Length > 0 ? shown : "Nothing written yet.", selectable: true)));
+            preview.Children.Add(Card("Preview", DocumentBody(JsonSerializer.SerializeToElement(DocumentText.FromText(body.Text)), "Nothing written yet.")));
         };
         var error = new InfoBar { Severity = InfoBarSeverity.Error, IsClosable = false };
         var save = new Button { Content = existing is null ? "Add document" : "Save changes", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
@@ -1326,7 +1353,7 @@ public sealed partial class SearchWindow : Window
         HideSecrets();
         password = null;
         current = null;
-        Detail.Children.Clear();
+        ClearDetail();
         DetailScroll.ChangeView(null, 0, null, true);
         if (app.Client is not { } client)
             return;
@@ -1434,7 +1461,7 @@ public sealed partial class SearchWindow : Window
                 Text = detail.Notes.Length > 0 ? detail.Notes : "No quick note yet. Use it for what everyone should know before touching anything here.",
                 TextWrapping = TextWrapping.Wrap,
                 IsTextSelectionEnabled = true,
-                Foreground = detail.Notes.Length > 0 ? (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"] : Secondary(),
+                Foreground = detail.Notes.Length > 0 ? Themed.Brush("TextFillColorPrimaryBrush") : Secondary(),
             });
             if (detail.NotesUpdatedAt is { } at)
                 text.Children.Add(new TextBlock { Text = Join($"Edited {When(at)}", detail.NotesUpdatedByName is { } by ? $"by {by}" : null), FontSize = 12, Foreground = Secondary() });
@@ -1595,11 +1622,11 @@ public sealed partial class SearchWindow : Window
         if (cancel.IsCancellationRequested || current != row)
             return;
         if (relatedTask.Result is { Count: > 0 } related)
-            Detail.Children.Add(Card("Related", [.. related.Select(RelatedRow)]));
+            AddSide(Card("Related", [.. related.Select(RelatedRow)]));
         if (filesTask.Result is { Count: > 0 } files)
-            Detail.Children.Add(Card("Files", [.. files.Select(f => FileRow(row, f))]));
+            AddSide(Card("Files", [.. files.Select(f => FileRow(row, f))]));
         if (historyTask.Result is { Count: > 0 } history)
-            Detail.Children.Add(Card("Earlier passwords", [.. history.Select(v => VersionRow(row, v))]));
+            AddSide(Card("Earlier passwords", [.. history.Select(v => VersionRow(row, v))]));
     }
 
     private UIElement RelatedRow(RelatedItem item) => Field(
@@ -1669,9 +1696,11 @@ public sealed partial class SearchWindow : Window
     {
         const string masked = "••••••••••••";
         var value = Value(masked, mono: true);
+        // Each earlier password's buttons say which one they're for, so a screen reader can tell the rows apart.
+        var when = When(version.CreatedAt);
         var actions = new List<Button>
         {
-            IconButton("", "Show for 30 seconds", async (_, _) =>
+            IconButton("", $"Show the password replaced {when} for 30 seconds", async (_, _) =>
             {
                 if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
                     return;
@@ -1682,7 +1711,7 @@ public sealed partial class SearchWindow : Window
                 hideTimer.Tick += (_, _) => HideSecrets();
                 hideTimer.Start();
             }),
-            IconButton("", "Copy", async (_, _) =>
+            IconButton("", $"Copy the password replaced {when}", async (_, _) =>
             {
                 if (await RevealOldAsync(item.Id, version.Id) is not { } secret)
                     return;
@@ -1691,7 +1720,7 @@ public sealed partial class SearchWindow : Window
             }),
         };
         if (canWrite)
-            actions.Add(IconButton("", "Make this the current password again", (_, _) => _ = RestoreVersionAsync(item, version)));
+            actions.Add(IconButton("", $"Make the password replaced {when} current again", (_, _) => _ = RestoreVersionAsync(item, version)));
         return Field($"Replaced {When(version.CreatedAt)} by {version.ChangedByName}", value, [.. actions]);
     }
 
@@ -2058,6 +2087,8 @@ public sealed partial class SearchWindow : Window
 
     private void SignOut_Click(object sender, RoutedEventArgs e) => _ = app.SignOutAsync();
 
+    private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
+
     // ---------- list pages ----------
     private async Task LoadPageAsync()
     {
@@ -2097,9 +2128,16 @@ public sealed partial class SearchWindow : Window
                     {
                         // An Atlas older than this app doesn't share favorites with it yet.
                     }
+                    // What's overdue or due in the next two weeks, soonest first.
+                    var soon = (await LoadDueAsync(client, cancel.Token)).Values
+                        .Where(e => e.DaysLeft <= 14 && e.Kind is "password" or "asset" or "document")
+                        .OrderBy(e => e.DaysLeft)
+                        .ToList();
+                    dueSoon = soon.Count;
+                    rows.AddRange(soon.Take(8).Select(e => new Row(e.Kind, e.Id, e.Title, Join(DueText(e.DaysLeft), e.Label, e.ClientName), e.ClientId, "Coming due")));
                     rows.AddRange(recent.Select(r => r with { ClientName = "Recently opened", Subtitle = Join(Kind(r.Kind), r.ClientName) }));
                     groupBy = r => r.ClientName!;
-                    empty = "Nothing here yet. Open a client or an item and choose Add to favorites at the top to keep it here. What you open also shows up here.";
+                    empty = "Nothing here yet. Open a client or an item and choose Add to favorites at the top to keep it here. What you open, and anything coming due, also shows up here.";
                     break;
                 case "clients":
                     clientCache = await LoadClientRowsAsync(client, cancel.Token);
@@ -2189,7 +2227,7 @@ public sealed partial class SearchWindow : Window
             shown = [.. shown.OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
         if (grouping is not null)
         {
-            var first = new[] { "Favorites", "Recently opened", "Clients", "Passwords", "Assets", "Documents" };
+            var first = new[] { "Favorites", "Coming due", "Recently opened", "Clients", "Passwords", "Assets", "Documents" };
             var groups = shown
                 .GroupBy(grouping)
                 .OrderBy(g => Array.IndexOf(first, g.Key) is var i and >= 0 ? i.ToString() : "9" + g.Key, StringComparer.CurrentCultureIgnoreCase)
@@ -2213,6 +2251,8 @@ public sealed partial class SearchWindow : Window
             : $"{shown.Count:N0} of {loaded.Count:N0} {noun}s";
         if (place.Kind == "clients" && clientTotals.Length > 0 && shown.Count == clientCache.Count)
             PageInfo.Text = clientTotals;
+        if (place.Kind == "home" && filter.Length == 0)
+            PageInfo.Text = Greeting(DateTime.Now, firstName, dueSoon);
         if (place.Kind == "client")
         {
             var tabs = new[] { (PasswordsTab, "Passwords", "passwords"), (AssetsTab, "Assets", "assets"), (DocumentsTab, "Documents", "documents") };
@@ -2292,16 +2332,32 @@ public sealed partial class SearchWindow : Window
     {
         if (!dueById.TryGetValue($"{kind}:{id}", out var due))
             return ("", "quiet", "");
-        var when = due.DaysLeft switch
-        {
-            < -1 => $"{-due.DaysLeft} days overdue",
-            -1 => "1 day overdue",
-            0 => "Due today",
-            1 => "Tomorrow",
-            _ => $"In {due.DaysLeft} days",
-        };
+        var when = DueText(due.DaysLeft);
         var tone = due.DaysLeft < 0 ? "critical" : due.DaysLeft <= 14 ? "caution" : "neutral";
         return (when, tone, due.Label);
+    }
+
+    private static string DueText(int daysLeft) => daysLeft switch
+    {
+        < -1 => $"{-daysLeft} days overdue",
+        -1 => "1 day overdue",
+        0 => "Due today",
+        1 => "Tomorrow",
+        _ => $"In {daysLeft} days",
+    };
+
+    /// <summary>The line under Home: good morning, afternoon, or evening, and how much is coming due.</summary>
+    private static string Greeting(DateTime now, string name, int due)
+    {
+        var hello = now.Hour switch { < 12 => "Good morning", < 18 => "Good afternoon", _ => "Good evening" };
+        if (name.Length > 0)
+            hello += $", {name}";
+        return due switch
+        {
+            0 => $"{hello}. Nothing is coming due in the next two weeks.",
+            1 => $"{hello}. 1 item is overdue or due in the next two weeks.",
+            _ => $"{hello}. {due} items are overdue or due in the next two weeks.",
+        };
     }
 
     private static (string When, string Who) Changed(string updatedAt, string? by) =>
@@ -2690,7 +2746,7 @@ public sealed partial class SearchWindow : Window
         var cancel = detailCancel = new CancellationTokenSource();
         HideSecrets();
         password = null;
-        Detail.Children.Clear();
+        ClearDetail();
         current = null;
         if (row is null || app.Client is not { } client)
             return;
@@ -2790,7 +2846,7 @@ public sealed partial class SearchWindow : Window
         if (entry.RequireReason)
             about.Add(Field("Reason", Value("This client asks for a reason before a password is shown or copied.")));
         about.Add(Field("Updated", Value(When(entry.UpdatedAt))));
-        Detail.Children.Add(Card("About", [.. about]));
+        AddSide(Card("About", [.. about]));
         Detail.Children.Add(Footnote("Every time a password is shown or copied, Atlas records it in the password's access history."));
     }
 
@@ -2824,7 +2880,7 @@ public sealed partial class SearchWindow : Window
             for (var i = 0; i < rows.Count; i++)
             {
                 if (i > 0)
-                    all.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
+                    all.Children.Add(new Border { Height = 1, Background = Themed.Brush("DividerStrokeColorDefaultBrush") });
                 all.Children.Add(rows[i]);
             }
             Detail.Children.Add(new Expander
@@ -2839,7 +2895,7 @@ public sealed partial class SearchWindow : Window
         }
         if (asset.Notes.Trim().Length > 0)
             Detail.Children.Add(Card("Notes", Text(asset.Notes.Trim(), selectable: true)));
-        Detail.Children.Add(Card(
+        AddSide(Card(
             "About",
             Field("Client", Value(asset.ClientName)),
             Field("Type", Value(asset.LayoutName)),
@@ -2883,9 +2939,8 @@ public sealed partial class SearchWindow : Window
         var editable = canWrite && document.CanEdit && current is not { Archived: true } ? Visibility.Visible : Visibility.Collapsed;
         EditHereButton.Visibility = editable;
         ArchiveButton.Visibility = editable;
-        var text = RichTextPlain.From(document.Content);
-        Detail.Children.Add(Card("Document", Text(text.Length > 0 ? text : "This document is empty.", selectable: true)));
-        Detail.Children.Add(Card(
+        Detail.Children.Add(Card("Document", DocumentBody(document.Content, "This document is empty.")));
+        AddSide(Card(
             "About",
             Field("Where", Value(document.ClientName ?? "Knowledge base")),
             Field("Updated", Value(Join(When(document.UpdatedAt), document.UpdatedByName)))));
@@ -2907,6 +2962,63 @@ public sealed partial class SearchWindow : Window
     private static bool IsWebAddress(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
+    // ---------- the page's layout ----------
+    private void ClearDetail()
+    {
+        Detail.Children.Clear();
+        DetailSide.Children.Clear();
+        LayOutDetail();
+    }
+
+    /// <summary>A card for beside the page's own (About, Related, and the like), or under them in a narrow window.</summary>
+    private void AddSide(UIElement card)
+    {
+        DetailSide.Children.Add(card);
+        LayOutDetail();
+    }
+
+    private void DetailScroll_SizeChanged(object sender, SizeChangedEventArgs e) => LayOutDetail();
+
+    private void LayOutDetail()
+    {
+        // Room for a readable page (560) and the side column (300) with a gap between: the side cards move up beside it.
+        var wide = DetailSide.Children.Count > 0 && DetailScroll.ActualWidth - 48 >= 884;
+        DetailSideColumn.Width = new GridLength(wide ? 324 : 0);
+        Grid.SetRow(DetailSide, wide ? 0 : 1);
+        Grid.SetColumn(DetailSide, wide ? 1 : 0);
+        DetailSide.Margin = new Thickness(wide ? 24 : 0, 0, 0, 0);
+    }
+
+    /// <summary>Short fields side by side, two to a row, so a form fills the page rather than running down a narrow column.</summary>
+    private static void PairShortFields(Panel form)
+    {
+        var children = form.Children.ToList();
+        form.Children.Clear();
+        for (var i = 0; i < children.Count; i++)
+        {
+            if (!IsShortField(children[i]) || i + 1 >= children.Count || !IsShortField(children[i + 1]))
+            {
+                form.Children.Add(children[i]);
+                continue;
+            }
+            var row = new Grid { ColumnSpacing = 16 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn((FrameworkElement)children[i + 1], 1);
+            row.Children.Add(children[i]);
+            row.Children.Add(children[i + 1]);
+            form.Children.Add(row);
+            i++;
+        }
+    }
+
+    private static bool IsShortField(UIElement element) => element switch
+    {
+        TextBox box => !box.AcceptsReturn,
+        ComboBox or NumberBox or CalendarDatePicker => true,
+        _ => false,
+    };
+
     // ---------- building the cards ----------
     /// <summary>The first card: what it is, its name, and the client it belongs to.</summary>
     private static UIElement HeaderCard(Row row)
@@ -2919,8 +3031,8 @@ public sealed partial class SearchWindow : Window
             Width = 40,
             Height = 40,
             CornerRadius = new CornerRadius(8),
-            Background = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"],
-            Child = new FontIcon { Glyph = row.Glyph, FontSize = 18, Foreground = (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"] },
+            Background = Themed.Brush("AccentFillColorDefaultBrush"),
+            Child = new FontIcon { Glyph = row.Glyph, FontSize = 18, Foreground = Themed.Brush("TextOnAccentFillColorPrimaryBrush") },
         };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 3 };
         text.Children.Add(new TextBlock { Text = row.Title, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
@@ -2933,8 +3045,8 @@ public sealed partial class SearchWindow : Window
         grid.Children.Add(text);
         return new Border
         {
-            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Background = Themed.Brush("CardBackgroundFillColorDefaultBrush"),
+            BorderBrush = Themed.Brush("CardStrokeColorDefaultBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Child = grid,
@@ -2956,13 +3068,13 @@ public sealed partial class SearchWindow : Window
         for (var i = 0; i < rows.Length; i++)
         {
             if (i > 0)
-                list.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
+                list.Children.Add(new Border { Height = 1, Background = Themed.Brush("DividerStrokeColorDefaultBrush") });
             list.Children.Add(rows[i]);
         }
         panel.Children.Add(new Border
         {
-            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Background = Themed.Brush("CardBackgroundFillColorDefaultBrush"),
+            BorderBrush = Themed.Brush("CardStrokeColorDefaultBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Child = list,
@@ -2976,7 +3088,7 @@ public sealed partial class SearchWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = (Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"] });
+        text.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = Themed.Brush("AccentTextFillColorPrimaryBrush") });
         text.Children.Add(value);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         foreach (var action in actions)
@@ -3002,6 +3114,15 @@ public sealed partial class SearchWindow : Window
     private static UIElement Text(string text, bool selectable = false) =>
         new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = selectable, Padding = new Thickness(16, 12, 16, 14), LineHeight = 22 };
 
+    /// <summary>A document drawn the way it looks in Atlas, or a line saying it's empty.</summary>
+    private UIElement DocumentBody(JsonElement content, string empty)
+    {
+        var blocks = DocumentView.Parse(content);
+        return DocumentView.IsEmpty(blocks)
+            ? Text(empty)
+            : new DocumentRenderer(app.Client?.Address.Origin, code => Copy(code, "Code copied.")).Render(blocks);
+    }
+
     private static UIElement Footnote(string text) =>
         new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Secondary(), Margin = new Thickness(2, 14, 0, 0) };
 
@@ -3022,7 +3143,7 @@ public sealed partial class SearchWindow : Window
         return button;
     }
 
-    private static Brush Secondary() => (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+    private static Brush Secondary() => Themed.Brush("TextFillColorSecondaryBrush");
 
     // ---------- the bar under the item ----------
     private void Edit_Click(object sender, RoutedEventArgs e)

@@ -20,6 +20,7 @@ import {
 } from '@atlas/shared';
 import type { Config } from './config.js';
 import { HttpError } from './errors.js';
+import { appIcon } from './services/app-icon.js';
 import type { KeyProvider } from './crypto/keys.js';
 import { IdentityService, hasMfa, sameSecret, type SessionContext } from './identity/service.js';
 import { requireAdmin } from './authz.js';
@@ -947,6 +948,16 @@ export async function buildApp({
   app.get('/api/branding', async () => {
     const [org] = await db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs).limit(1);
     return org ? { name: org.name, ...(await settings.branding(org.id)) } : { name: 'MSP Atlas', ...DEFAULT_BRANDING };
+  });
+  // Public too: Atlas for Windows (through /api/v1) takes its window, taskbar, and tray icon from the favicon.
+  // If-None-Match with the last ETag answers 304, so its regular check is cheap.
+  app.get('/api/branding/app-icon', async (req, reply) => {
+    const [org] = await db.select({ id: schema.orgs.id }).from(schema.orgs).limit(1);
+    const icon = org ? appIcon(await settings.branding(org.id)) : null;
+    if (!icon) throw new HttpError(404, 'This Atlas has no icon of its own.', 'no_icon');
+    reply.header('etag', icon.etag).header('cache-control', 'no-cache');
+    if (req.headers['if-none-match'] === icon.etag) return reply.code(304).send();
+    return reply.type(icon.type).send(icon.body);
   });
   // The theme carries its images inline (logos, favicon, sign-in background), so it may be larger than 1 MB.
   app.put('/api/branding', { ...authed, bodyLimit: 3 * 1024 * 1024 }, async (req) => {

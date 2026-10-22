@@ -90,7 +90,7 @@ API keys let your RMM, PSA or scripts read and update Atlas through its REST API
 
 ![The Theme page](../images/manual/theme.png "Admin → Theme. Changes preview as you make them, and apply for everyone once saved.")
 
-**Admin → Theme** sets the **Brand name**, **Tagline**, **Browser tab title**, **Favicon**, a **Logo** (and one for dark mode), the **Accent** colour (and one for dark mode), and the **Welcome message** client accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes preview as you make them, and apply for everyone once you save.
+**Admin → Theme** sets the **Brand name**, **Tagline**, **Browser tab title**, **Favicon**, a **Logo** (and one for dark mode), the **Accent** colour (and one for dark mode), and the **Welcome message** client accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes preview as you make them, and apply for everyone once you save. Atlas for Windows uses the favicon as its icon too, in its window, the taskbar, the tray, and the Start menu, and picks up a new one within six hours (or when it next starts).
 
 ## Webhooks
 

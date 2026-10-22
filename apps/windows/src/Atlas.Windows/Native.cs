@@ -7,10 +7,7 @@ namespace Atlas.Windows;
 internal static partial class Native
 {
     public const int WM_HOTKEY = 0x0312;
-    private const uint MOD_CONTROL = 0x0002;
-    private const uint MOD_SHIFT = 0x0004;
     private const uint MOD_NOREPEAT = 0x4000;
-    private const uint VK_SPACE = 0x20;
     private const uint CF_UNICODETEXT = 13;
     private const uint GMEM_MOVEABLE = 0x0002;
     private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
@@ -31,6 +28,12 @@ internal static partial class Native
 
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
+
+    /// <summary>The size of a tray icon at this display's scale (16 at 100%, 24 at 150%).</summary>
+    public static int SmallIconSize() => Math.Max(16, GetSystemMetrics(49));
 
     [StructLayout(LayoutKind.Sequential)]
     private struct LastInputInfo
@@ -103,9 +106,9 @@ internal static partial class Native
         return GetCurrentPackageFullName(ref length, null) != APPMODEL_ERROR_NO_PACKAGE;
     }
 
-    /// <summary>Ctrl+Shift+Space. Returns false if another app already uses it.</summary>
-    public static bool RegisterSearchHotkey(IntPtr hWnd, int id) =>
-        RegisterHotKey(hWnd, id, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_SPACE);
+    /// <summary>The search shortcut (Ctrl+Shift+Space unless another is chosen). Returns false if another app already uses it.</summary>
+    public static bool RegisterSearchHotkey(IntPtr hWnd, int id, SearchShortcut shortcut) =>
+        RegisterHotKey(hWnd, id, shortcut.Modifiers | MOD_NOREPEAT, shortcut.Key);
 
     /// <summary>
     /// Keeps this app out of Windows Error Reporting, so a crash never uploads a memory dump that could hold a copied

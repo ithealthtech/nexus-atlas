@@ -523,7 +523,7 @@
     "p": "Settings",
     "s": "Theme",
     "h": "theme",
-    "t": "**Admin → Theme** sets the **Brand name**, **Tagline**, **Browser tab title**, **Favicon**, a **Logo** (and one for dark mode), the **Accent** colour (and one for dark mode), and the **Welcome message** client accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes preview as you make them, and apply for everyone once you save."
+    "t": "**Admin → Theme** sets the **Brand name**, **Tagline**, **Browser tab title**, **Favicon**, a **Logo** (and one for dark mode), the **Accent** colour (and one for dark mode), and the **Welcome message** client accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes preview as you make them, and apply for everyone once you save. Atlas for Windows uses the favicon as its icon too, in its window, the taskbar, the tray, and the Start menu, and picks up a new one within six hours (or when it next starts)."
   },
   {
     "u": "manual/settings.html",

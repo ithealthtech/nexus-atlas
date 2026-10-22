@@ -55,6 +55,39 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 - **Delivery log for scheduled reports.** Each schedule's **Deliveries** list shows every email it sent or tried to send, recipient by recipient, and why any was refused. Any one can be sent again, as the same snapshot, without running the report again.
 - **Emails in your brand.** Atlas's emails now use your brand name and accent colour from Administration → Theme, instead of a fixed green.
 - **Report PDFs can cover the whole report.** Every section is printed, with the summary and charts, for emailed reports.
+- **Code signing for Atlas for Windows.**
+  - Once Azure Artifact Signing is set up, releases sign the app and its setup program, so Windows names your organization as the publisher instead of warning about an unknown one.
+  - Setup takes about ten minutes plus Microsoft's organization check, costs about US$10 a month, and stores no password in GitHub. It's described in `docs/CODE-SIGNING.md`.
+  - Until it's set up, releases are built unsigned, as before.
+- **Atlas for Windows runs natively on Arm PCs.** The setup program now carries an ARM64 build alongside the x64 one and installs whichever matches the PC. It's the same download and the same in-app update. Upgrades also start from a clean app folder, so nothing is left over from an older version.
+- **Atlas for Windows works with screen readers and contrast themes.**
+  - Every page is checked with Axe.Windows (the engine behind Accessibility Insights) on each build.
+  - Buttons that showed an icon and text but had no name for screen readers now have one.
+  - Each earlier password's buttons say which password they're for.
+  - The sidebar, account badge, and highlighted document text use Windows' own colours in a high contrast theme.
+- **Atlas for Windows uses your favicon as its icon.**
+  - The favicon set under **Administration → Theme** becomes the app's icon: its window and title bar, taskbar button, tray icon, and its Start menu, desktop, and pinned taskbar shortcuts.
+  - Windows can't draw SVG, so when the theme is saved the browser also makes a 256-pixel PNG of the favicon for the app. PNG and ICO favicons are used as they are.
+  - The app picks up a new icon when it starts and with each six-hourly check. It downloads the picture only when it has changed (the server answers `304 Not Modified` otherwise), and goes back to its own icon if the favicon is removed.
+  - Turn it off under **Settings → Use your Atlas's icon**.
+  - The icon comes from a new public endpoint, `/api/v1/branding/app-icon`, which serves the same picture as the favicon.
+- **Atlas for Windows: a Settings page.** Open it from the account menu or with Ctrl+,. It brings the app's choices together:
+  - **Theme:** light, dark, or the same as Windows. The window's caption buttons follow the theme too.
+  - **Search shortcut:** Ctrl+Shift+Space, Ctrl+Alt+Space, Ctrl+Shift+K or Ctrl+Alt+K. Useful when another app already uses one; if the chosen one is taken, the app says so and keeps the old one.
+  - **Windows Hello and locking.**
+  - **The daily notice** about what's coming due.
+  - **Start with Windows.**
+  - **Updates:** your version and Check for updates.
+  - **Account:** the Atlas address, Open Atlas, and Sign out.
+  - A note on what the app keeps on the PC.
+- **Atlas for Windows: a Home page worth opening.** Under your favorites, **Coming due** lists what's overdue or due in the next two weeks, soonest first: password rotations, expiring domains, warranties, and document reviews. The line under the title greets you and says how many items are due.
+- **Atlas for Windows: pages use the window.**
+  - Item pages and the client overview fill the page up to a readable width instead of shrinking to their content.
+  - When the window is wide, About, Related, Files and Earlier passwords sit in a column beside the page.
+  - Forms put short fields two to a row.
+  - The asset form's first choice is now called **Asset layout**, as in Atlas, so it no longer has two fields called Type.
+  - IP address and web address labels are no longer drawn in the code font.
+- **Atlas for Windows: documents look the way they do in Atlas.** Headings, bold, italic, underlined, struck and highlighted text, inline code, links, bulleted and numbered lists (nested too), checklists with what's done ticked, quotes, lines, and tables are drawn properly instead of as plain text. Code blocks have a **Copy** button. Links open in your browser, and links to Atlas pages open on your Atlas. The editor's **Preview** draws the same way.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

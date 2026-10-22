@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Checks the app's window with Axe.Windows (the engine behind Accessibility Insights). Take-Screenshots.ps1 runs it
+       on each page it visits; CI fails on anything it finds. Windows only. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- A small internal tool: no public API, and console output is the point. -->
+    <NoWarn>$(NoWarn);CA1515;CA1303</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Axe.Windows" Version="2.4.2" />
+  </ItemGroup>
+</Project>

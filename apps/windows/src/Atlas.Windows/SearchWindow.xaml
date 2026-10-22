@@ -8,12 +8,36 @@
 
     <Grid x:Name="Root" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
         <Grid.Resources>
-            <!-- The same navy as the web app's menu. -->
-            <SolidColorBrush x:Key="RailBrush" Color="#1B273B" />
-            <SolidColorBrush x:Key="RailHoverBrush" Color="#263449" />
-            <SolidColorBrush x:Key="RailTextBrush" Color="#E7EBF0" />
-            <SolidColorBrush x:Key="RailMutedBrush" Color="#9AA7B8" />
-            <SolidColorBrush x:Key="AccentTileBrush" Color="#287AD2" />
+            <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <!-- The same navy as the web app's menu, in the dark and light themes. -->
+                    <ResourceDictionary x:Key="Default">
+                        <SolidColorBrush x:Key="RailBrush" Color="#1B273B" />
+                        <SolidColorBrush x:Key="RailHoverBrush" Color="#263449" />
+                        <SolidColorBrush x:Key="RailTextBrush" Color="#E7EBF0" />
+                        <SolidColorBrush x:Key="RailMutedBrush" Color="#9AA7B8" />
+                        <SolidColorBrush x:Key="AccentTileBrush" Color="#287AD2" />
+                        <SolidColorBrush x:Key="AccentTileTextBrush" Color="White" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Light">
+                        <SolidColorBrush x:Key="RailBrush" Color="#1B273B" />
+                        <SolidColorBrush x:Key="RailHoverBrush" Color="#263449" />
+                        <SolidColorBrush x:Key="RailTextBrush" Color="#E7EBF0" />
+                        <SolidColorBrush x:Key="RailMutedBrush" Color="#9AA7B8" />
+                        <SolidColorBrush x:Key="AccentTileBrush" Color="#287AD2" />
+                        <SolidColorBrush x:Key="AccentTileTextBrush" Color="White" />
+                    </ResourceDictionary>
+                    <!-- High contrast: Windows' own colours, so the theme the person chose is kept. -->
+                    <ResourceDictionary x:Key="HighContrast">
+                        <SolidColorBrush x:Key="RailBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                        <SolidColorBrush x:Key="RailHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                        <SolidColorBrush x:Key="RailTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                        <SolidColorBrush x:Key="RailMutedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                        <SolidColorBrush x:Key="AccentTileBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                        <SolidColorBrush x:Key="AccentTileTextBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -34,8 +58,8 @@
                 <Button x:Name="AccountButton" Background="Transparent" BorderThickness="0" Padding="6,4" Margin="0,0,8,0"
                         AutomationProperties.Name="Account">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource AccentTileBrush}">
-                            <TextBlock x:Name="AccountInitials" FontSize="11" FontWeight="SemiBold" Foreground="White"
+                        <Border Width="28" Height="28" CornerRadius="14" Background="{ThemeResource AccentTileBrush}">
+                            <TextBlock x:Name="AccountInitials" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource AccentTileTextBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <FontIcon Glyph="&#xE70D;" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -50,6 +74,9 @@
                             </MenuFlyoutItem>
                             <MenuFlyoutItem Text="Refresh" Click="Refresh_Click">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE72C;" /></MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem x:Name="SettingsItem" Text="Settings" Click="Settings_Click" KeyboardAcceleratorTextOverride="Ctrl+,">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE713;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             <MenuFlyoutSubItem x:Name="HelloMenu" Text="Windows Hello">
                                 <MenuFlyoutSubItem.Icon><FontIcon Glyph="&#xE928;" /></MenuFlyoutSubItem.Icon>
@@ -105,14 +132,14 @@
             </Grid.ColumnDefinitions>
 
             <!-- Sidebar: the same places as the web app. -->
-            <Grid Background="{StaticResource RailBrush}" Padding="10,12,10,10">
+            <Grid Background="{ThemeResource RailBrush}" Padding="10,12,10,10">
                 <ListView x:Name="Sections" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Sections_ItemClick"
                           AutomationProperties.Name="Go to">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:Section">
                             <StackPanel Orientation="Horizontal" Spacing="12" Padding="2,6">
-                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="16" Foreground="{StaticResource RailMutedBrush}" />
-                                <TextBlock Text="{x:Bind Label}" Foreground="{StaticResource RailTextBrush}" FontSize="15" />
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="16" Foreground="{ThemeResource RailMutedBrush}" />
+                                <TextBlock Text="{x:Bind Label}" Foreground="{ThemeResource RailTextBrush}" FontSize="15" />
                             </StackPanel>
                         </DataTemplate>
                     </ListView.ItemTemplate>
@@ -172,13 +199,14 @@
                                 <TextBlock Text="Archived" />
                             </StackPanel>
                         </ToggleButton>
-                        <Button x:Name="NewButton" Click="New_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
+                        <Button x:Name="NewButton" Click="New_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}"
+                                AutomationProperties.Name="{x:Bind NewText.Text, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE710;" FontSize="14" />
                                 <TextBlock x:Name="NewText" Text="New password" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="StarButton" Click="Star_Click" Visibility="Collapsed">
+                        <Button x:Name="StarButton" Click="Star_Click" Visibility="Collapsed" AutomationProperties.Name="{x:Bind StarText.Text, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon x:Name="StarIcon" Glyph="&#xE734;" FontSize="14" />
                                 <TextBlock x:Name="StarText" Text="Add to favorites" />
@@ -399,21 +427,34 @@
                 </Grid>
 
                 <!-- An item page. -->
-                <ScrollViewer x:Name="DetailScroll" Grid.Row="3" Padding="24,8,24,24" Visibility="Collapsed">
-                    <StackPanel x:Name="Detail" MaxWidth="760" HorizontalAlignment="Left" />
+                <!-- The page's own cards on the left; About, Related, and the like beside them when there's room, or under them. -->
+                <ScrollViewer x:Name="DetailScroll" Grid.Row="3" Padding="24,8,24,24" Visibility="Collapsed" SizeChanged="DetailScroll_SizeChanged">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MaxWidth="760" />
+                            <ColumnDefinition x:Name="DetailSideColumn" Width="0" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel x:Name="Detail" />
+                        <StackPanel x:Name="DetailSide" Grid.Row="1" />
+                    </Grid>
                 </ScrollViewer>
                 
                 <Border x:Name="DetailBar" Grid.Row="4" Visibility="Collapsed" Padding="24,10"
                         BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
                         Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="EditHereButton" Click="EditHere_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed">
+                        <Button x:Name="EditHereButton" Click="EditHere_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Edit">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE70F;" FontSize="14" />
                                 <TextBlock Text="Edit" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="ConnectButton" Click="Connect_Click" Visibility="Collapsed" AutomationProperties.AutomationId="ConnectButton">
+                        <Button x:Name="ConnectButton" Click="Connect_Click" Visibility="Collapsed" AutomationProperties.AutomationId="ConnectButton"
+                                AutomationProperties.Name="{x:Bind ConnectText.Text, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE7F4;" FontSize="14" />
                                 <TextBlock x:Name="ConnectText" Text="Connect" />
@@ -431,13 +472,13 @@
                                 <TextBlock Text="Copy link" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="RestoreButton" Click="Restore_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}">
+                        <Button x:Name="RestoreButton" Click="Restore_Click" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Restore">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE777;" FontSize="14" />
                                 <TextBlock Text="Restore" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="ArchiveButton" Click="Archive_Click" Visibility="Collapsed">
+                        <Button x:Name="ArchiveButton" Click="Archive_Click" Visibility="Collapsed" AutomationProperties.Name="Archive">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE7B8;" FontSize="14" />
                                 <TextBlock Text="Archive" />

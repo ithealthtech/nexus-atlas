@@ -73,6 +73,35 @@ describe('theme', () => {
     expect(pub).toMatchObject({ ...DEFAULT_BRANDING, accent: '#205843', portalWelcome: 'Hi' });
   });
 
+  it('serves the icon Atlas for Windows uses, and says when it has not changed', async () => {
+    const icon = (headers: Record<string, string> = {}) =>
+      t.app.inject({ method: 'GET', url: '/api/v1/branding/app-icon', headers });
+    // No favicon, or only an SVG one with no PNG made from it: nothing Windows can draw.
+    expect((await icon()).statusCode).toBe(404);
+    const save = (body: object) => owner.call('PUT', '/api/branding', { ...DEFAULT_BRANDING, ...body });
+    await save({ favicon: 'data:image/svg+xml;base64,PHN2Zy8+' });
+    expect((await icon()).statusCode).toBe(404);
+
+    // The PNG made from the favicon wins over the favicon itself.
+    await save({ favicon: 'data:image/svg+xml;base64,PHN2Zy8+', appIcon: png(500) });
+    const first = await icon();
+    expect(first.statusCode).toBe(200);
+    expect(first.headers['content-type']).toBe('image/png');
+    expect(first.rawPayload).toEqual(Buffer.alloc(500, 7));
+    const etag = String(first.headers.etag);
+    expect((await icon({ 'if-none-match': etag })).statusCode).toBe(304);
+
+    // A PNG or ICO favicon is used as it is; a new picture is a new ETag.
+    await save({ favicon: 'data:image/x-icon;base64,AAABAAEA', appIcon: null });
+    const ico = await icon({ 'if-none-match': etag });
+    expect(ico.statusCode).toBe(200);
+    expect(ico.headers['content-type']).toBe('image/x-icon');
+    expect(ico.headers.etag).not.toBe(etag);
+
+    // Only PNG for the made icon.
+    expect((await save({ appIcon: 'data:image/svg+xml;base64,PHN2Zy8+' })).status).toBe(400);
+  });
+
   it('only lets administrators change it', async () => {
     const anon = await t.app.inject({ method: 'PUT', url: '/api/branding', payload: DEFAULT_BRANDING });
     expect(anon.statusCode).toBe(401);

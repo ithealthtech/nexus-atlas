@@ -96,6 +96,16 @@ public sealed record PasswordDraft(
 
 public sealed record RevealResult(string Value, int? ExpiresIn);
 
+/// <summary>
+/// The answer about the Atlas's icon: a picture (with its ETag), <see cref="Unchanged"/> since the ETag sent, or
+/// <see cref="None"/> (no icon of its own: the app uses its own).
+/// </summary>
+public sealed record AppIcon(byte[]? Picture, string? ETag, bool IsUnchanged = false)
+{
+    public static AppIcon None { get; } = new(null, null);
+    public static AppIcon Unchanged { get; } = new(null, null, IsUnchanged: true);
+}
+
 public sealed record ExpirationItem(string Kind, string Id, string Title, string Label, string? ClientName, string Date, int DaysLeft, string? ClientId = null);
 
 /// <summary>Which secret to copy.</summary>

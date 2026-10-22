@@ -2,17 +2,20 @@
 
 A tray app for technicians, so everyday lookups don't need a browser tab. .NET 10 and WinUI 3, installed per person by a setup program.
 
-- **Quick search:** Ctrl+Shift+Space (or the tray icon) searches the clients, assets, documents, contacts, locations, and password entries you can see, as you type.
+- **Quick search:** Ctrl+Shift+Space, or another shortcut chosen in Settings (or the tray icon), searches the clients, assets, documents, contacts, locations, and password entries you can see, as you type.
 - **Credentials:** copy the username, the password, or the current one-time code, or open the sign-in address. Copies go through Atlas's reveal endpoint, so they're checked and recorded exactly like the web app's copy button (including required reasons). Secrets are kept out of clipboard history and cloud clipboard, and cleared after 30 seconds unless you've copied something else since.
-- **Documentation:** a read-only summary of the selected record, and **Open in Atlas** for the full page.
+- **Documentation:** a summary of the selected record, documents drawn with their formatting (headings, lists, checklists, quotes, code with a copy button, and tables), and **Open in Atlas** for the full page.
+- **Settings** (account menu, or Ctrl+,): light, dark, or the Windows theme; the search shortcut (Ctrl+Shift+Space, Ctrl+Alt+Space, Ctrl+Shift+K, or Ctrl+Alt+K, for when another app already uses one); Windows Hello and locking; the daily notice; Start with Windows; updates; and the account.
+- **Your icon:** the app takes your Atlas's favicon (Administration → Theme) for its window, taskbar button, tray icon, title bar, and its Start menu, desktop, and pinned shortcuts. It checks again with each update check, fetching the picture only when it has changed. Turn it off in Settings.
 - **Tray:** sign in and out, **Start with Windows**, a daily notice about items expiring in the next 14 days, and the newer version of the app when Atlas offers one.
 
 ## Installing
 
 Download **AtlasForWindowsSetup.exe** from **Desktop apps** on your account page in Atlas, or from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), and run it.
 
+- **One download for every PC.** The setup program carries an x64 and an ARM64 build (Snapdragon and other Arm PCs) and installs the one that matches, so Arm PCs run it natively rather than under emulation.
 - **It installs for the person running it**, into `%LOCALAPPDATA%\Programs\Atlas for Windows`, and needs no administrator rights. Nothing else has to be installed first.
-- **It isn't code-signed**, so Windows SmartScreen says it doesn't recognise the publisher. Choose **More info**, then **Run anyway**. The `.sha256` file published beside the download lets you check you have the file from the release.
+- **It's code-signed** once signing is set up for releases ([Code signing](../../docs/CODE-SIGNING.md)), and Windows names your organization as the publisher. Until then, Windows SmartScreen says it doesn't recognise the publisher: choose **More info**, then **Run anyway**. The `.sha256` file published beside the download lets you check you have the file from the release.
 - **A newer setup program upgrades in place.** It asks the running copy to quit, replaces the files, and keeps your sign-in and settings. It leaves Start with Windows as you set it in the app.
 - **Uninstalling** (Settings > Apps) removes the app, its Start with Windows setting, and its saved address and session token. Sign out from the tray menu first, or sign the app out on your account page, to end the session on the server as well.
 - **From an RMM:** run `AtlasForWindowsSetup.exe /VERYSILENT /SUPPRESSMSGBOXES` as the person who will use it, not as SYSTEM. A silent install doesn't start the app.
@@ -33,7 +36,7 @@ The app is a public client using the authorization code flow with PKCE and a one
 
 ## What it stores
 
-Only the Atlas address and preferences (`%LOCALAPPDATA%\Atlas for Windows\settings.json`) and the session token, encrypted with DPAPI for your Windows account (`session.bin`). No passwords, no offline copy of anything from the vault. Signing out, or signing the app out from your account page, ends the session on the server. Start with Windows is a value under your own `Run` registry key.
+Only the Atlas address and preferences (`%LOCALAPPDATA%\Atlas for Windows\settings.json`), the session token, encrypted with DPAPI for your Windows account (`session.bin`), and your Atlas's icon (`icon-*.ico` and `.png`). No passwords, no offline copy of anything from the vault. Signing out, or signing the app out from your account page, ends the session on the server. Start with Windows is a value under your own `Run` registry key.
 
 ## Security posture
 
@@ -64,4 +67,4 @@ CI runs all three on every pull request. `Test-Setup.ps1` starts the app with `-
 
 ## Not in this version
 
-Code signing (so Windows asks before running the setup program), MSIX packaging, updates that install without being asked, and a native ARM64 build (the x64 app installs on ARM64 Windows 11 and runs under emulation; that has not been tried). Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
+MSIX packaging, and updates that install without being asked. Offline access, browser autofill, editing records, the personal vault, and macOS or Linux clients are out of scope for v1.
