@@ -150,7 +150,7 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await page.getByRole('dialog').getByRole('button', { name: 'Save template', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await library('Templates');
-    await page.getByRole('button', { name: /^Monthly client licenses(?: License utilization)/ }).click();
+    await page.getByRole('button', { name: /^Monthly client licenses/ }).click();
     await expect(page.getByRole('button', { name: 'Run report', exact: true })).toBeVisible();
     // Running the same report again offers a comparison with the first run.
     await page.getByRole('button', { name: 'Run report', exact: true }).click();
