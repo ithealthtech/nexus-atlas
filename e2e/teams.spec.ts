@@ -26,6 +26,7 @@ test('Teams connection settings and client discussions work on desktop and phone
     const url = String(input);
     if (url.startsWith('https://login.microsoftonline.com/'))
       return Response.json({ access_token: 'synthetic-token', refresh_token: 'synthetic-refresh' });
+    if (!url.startsWith('https://graph.microsoft.com/v1.0/teams/')) throw new Error('Unexpected Teams service');
     const list = url.includes('/replies') ? replies : messages;
     if (init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as { body: GraphMessage['body'] };
@@ -59,6 +60,8 @@ test('Teams connection settings and client discussions work on desktop and phone
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(base + '/admin/teams');
     await expect(page.getByRole('heading', { name: 'Microsoft Teams', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download Teams app', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Teams app package', { exact: true })).toHaveCount(0);
     await page.getByLabel('Enable Microsoft Teams', { exact: true }).check();
     await page.getByLabel('Directory (tenant) ID', { exact: true }).fill('11111111-2222-4333-8444-555555555555');
     await page.getByLabel('Application (client) ID', { exact: true }).fill('22222222-2222-4333-8444-555555555555');
@@ -78,6 +81,13 @@ test('Teams connection settings and client discussions work on desktop and phone
       { oid: actor.id, name: 'Atlas Teams account', connectedAt: new Date().toISOString() },
       'synthetic-refresh',
     );
+    await page.reload();
+    await expect(
+      page.getByText('Discussions and alerts connected as Atlas Teams account.', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Send test notification', exact: true }).click();
+    await expect(page.getByText('Test notification sent.', { exact: true })).toBeVisible();
+    expect(messages.some((m) => m.body?.content?.includes('Atlas test notification'))).toBe(true);
     await page.goto(base + `/clients/${client.id}/teams`);
     await expect(page.getByText('Review agenda', { exact: true })).toBeVisible();
     await page.getByLabel('Post', { exact: true }).fill('New review discussion');

@@ -1,6 +1,6 @@
 import { TEAMS_ALERT_KINDS, TEAMS_ALERT_LABELS } from '@atlas/shared';
 import { Button, Card, CardHeader, Checkbox, Field, FormError, Input, Select } from '@/components/ui';
-import { api, download } from '@/lib/api';
+import { api } from '@/lib/api';
 import { DEMO } from '@/lib/demo';
 import type { TeamsEditor } from '@/pages/Teams';
 const BASE = '/integrations/teams';
@@ -24,7 +24,7 @@ export function TeamsConnection({
     <Card>
       <CardHeader
         title="Connection"
-        description="Connect your Microsoft account for discussions and install the Atlas app in your destination teams for notifications."
+        description="Connect a Microsoft work account for discussions and automatic alerts. Messages appear under that account."
       />
       <div className="space-y-4 p-5">
         <p className="text-sm">
@@ -80,56 +80,11 @@ export function TeamsConnection({
             />
           )}
         </Field>
-        <details>
-          <summary className="cursor-pointer text-sm font-semibold">Teams app package</summary>
-          <div className="mt-3 space-y-3">
-            <p className="text-sm text-muted">
-              Microsoft requires your organization's website, privacy notice and terms links in the app package. Save
-              them before downloading.
-            </p>
-            <Field label="Organization website URL">
-              {(p) => (
-                <Input
-                  {...p}
-                  type="url"
-                  value={form.websiteUrl ?? ''}
-                  onChange={(e) => setForm({ ...form, websiteUrl: e.target.value || undefined })}
-                />
-              )}
-            </Field>
-            <Field label="Privacy notice URL">
-              {(p) => (
-                <Input
-                  {...p}
-                  type="url"
-                  value={form.privacyUrl ?? ''}
-                  onChange={(e) => setForm({ ...form, privacyUrl: e.target.value || undefined })}
-                />
-              )}
-            </Field>
-            <Field label="Terms of use URL">
-              {(p) => (
-                <Input
-                  {...p}
-                  type="url"
-                  value={form.termsUrl ?? ''}
-                  onChange={(e) => setForm({ ...form, termsUrl: e.target.value || undefined })}
-                />
-              )}
-            </Field>
-            <Button
-              variant="secondary"
-              disabled={!!busy || DEMO || dirty}
-              onClick={() => void act('package', () => download(BASE + '/app-package', 'atlas-teams.zip'))}
-            >
-              Download Teams app
-            </Button>
-          </div>
-        </details>
+
         <p className="text-sm text-muted">
           {initial.connection
-            ? `Discussions connected as ${initial.connection.name}.`
-            : 'Connect a Microsoft account to read and manage discussions. Bot alerts use the application identity.'}
+            ? `Discussions and alerts connected as ${initial.connection.name}.`
+            : 'Connect a Microsoft account to read discussions and send alerts. Notifications wait until the account is connected.'}
         </p>
         {new URLSearchParams(window.location.search).get('connection') && (
           <p role="status" className="text-sm">
@@ -138,6 +93,11 @@ export function TeamsConnection({
               : 'The connection did not complete. Save your settings and try again.'}
           </p>
         )}
+        <p className="text-sm text-muted">
+          Atlas sends alerts in the background while this connection is valid. If Microsoft requires sign-in again,
+          notifications stay queued until you reconnect. An Azure Bot resource or Teams app installation is not
+          required.
+        </p>
         <div className="flex flex-wrap gap-2">
           <Button
             disabled={!!busy || DEMO || dirty}

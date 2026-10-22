@@ -1,0 +1,1 @@
+ALTER TABLE "teams_deliveries" ADD COLUMN "graph_message_id" text;

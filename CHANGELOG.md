@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [2.1.1] - 2026-10-22
+
+### Fixed
+
+- **Teams alerts use your connected Microsoft account.** Azure Bot registration and installation are no longer required. Channel mappings, discussions, automatic alerts, digests, delivery history and resolution threads remain available. Notifications wait for reconnection without consuming retries when Microsoft requires sign-in again. The obsolete bot app-package setup has been removed.
+
 ## [2.1.0] - 2026-10-22
 
 ### Added

@@ -161,10 +161,10 @@
         </figure>
         <h2 id="microsoft-teams"><a class="anchor" href="#microsoft-teams">Microsoft Teams</a></h2>
         <p>
-          Under <strong>Administration → Microsoft Teams</strong>, connect a Microsoft account for discussions and
-          install the Atlas bot in the teams that should receive notifications. Map each client to its own channel, with
-          an optional separate security destination. Staff open <strong>More → Teams</strong> in a client workspace to
-          read posts and replies, start a discussion, or edit messages they created through Atlas.
+          Under <strong>Administration → Microsoft Teams</strong>, connect a Microsoft work account for discussions and
+          automatic notifications. No Azure Bot resource or Teams app installation is required. Map each client to its
+          own channel, with an optional separate security destination. Staff open <strong>More → Teams</strong> in a
+          client workspace to read posts and replies, start a discussion, or edit messages they created through Atlas.
         </p>
         <p>
           Alerts cover expirations, document reviews, password breaches and confirmed infection events. Expirations and
@@ -175,7 +175,8 @@
           <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md" rel="noopener"
             >Teams setup guide</a
           >
-          for Microsoft registration, the custom Teams app package, permissions, and the infection-event feed.
+          for Microsoft registration, account permissions, reconnection, and the infection-event feed. Alerts appear
+          under the connected account and stay queued if Microsoft requires sign-in again.
         </p>
         <h2 id="import-from-hudu"><a class="anchor" href="#import-from-hudu">Import from Hudu</a></h2>
         <ol class="steps">
@@ -466,7 +467,7 @@
     <footer class="footer">
       <div class="footer-inner">
         <p>
-          MSP Atlas 2.1.0. Documentation, passwords and client operations for managed service providers, on a server you
+          MSP Atlas 2.1.1. Documentation, passwords and client operations for managed service providers, on a server you
           own.
         </p>
         <p>

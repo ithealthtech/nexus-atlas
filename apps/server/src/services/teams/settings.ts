@@ -136,6 +136,7 @@ export class TeamsSettingsStore {
         throw new HttpError(502, 'Microsoft sign-in could not be reached.');
       }
       if (res.status === 429) throw new HttpError(429, 'Microsoft is busy. Try again shortly.');
+      if (res.status >= 500) throw new HttpError(502, 'Microsoft sign-in could not be reached.');
       const body = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string };
       if (!res.ok || typeof body.access_token !== 'string' || !body.access_token)
         throw new HttpError(409, 'Microsoft refused Teams access. Reconnect the account.');

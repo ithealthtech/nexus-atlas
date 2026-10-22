@@ -95,7 +95,6 @@ import { registerReportRoutes } from './routes/reports.js';
 import { registerTeamsRoutes } from './routes/teams.js';
 import { TeamsSettingsStore } from './services/teams/settings.js';
 import { TeamsGraph } from './services/teams/graph.js';
-import { TeamsBot } from './services/teams/bot.js';
 import { TeamsAlerts } from './services/teams/alerts.js';
 import { ExpirationService } from './services/expirations.js';
 import type { ErrorLog } from './services/repeating.js';
@@ -1053,9 +1052,10 @@ export async function buildApp({
   });
 
   const teamsSettings = new TeamsSettingsStore(db, keys);
+  const teamsGraph = new TeamsGraph(teamsSettings, teamsFetch);
   const teamsAlerts = new TeamsAlerts(db, {
     settings: teamsSettings,
-    bot: new TeamsBot(teamsSettings, teamsFetch),
+    graph: teamsGraph,
     expirations: new ExpirationService(vault),
     health,
     publicOrigin: config.publicOrigin,
@@ -1064,7 +1064,7 @@ export async function buildApp({
     db,
     keys,
     settings: teamsSettings,
-    graph: new TeamsGraph(teamsSettings, teamsFetch),
+    graph: teamsGraph,
     alerts: teamsAlerts,
     identity,
     authed,

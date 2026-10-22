@@ -1785,6 +1785,8 @@ export const teamsDeliveries = pgTable(
     error: text('error').notNull().default(''),
     conversationId: text('conversation_id'),
     activityId: text('activity_id'),
+    // Kept separate from the legacy bot IDs so an upgrade never reuses a bot thread as a Graph message.
+    graphMessageId: text('graph_message_id'),
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
     claimedAt: timestamp('claimed_at', { withTimezone: true }),
     createdAt: created(),

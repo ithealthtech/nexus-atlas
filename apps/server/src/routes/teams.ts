@@ -13,7 +13,6 @@ import { securityEvent } from '../services/security-log.js';
 import { TeamsSettingsStore, type StoredTeams } from '../services/teams/settings.js';
 import { TeamsGraph } from '../services/teams/graph.js';
 import type { TeamsAlerts } from '../services/teams/alerts.js';
-import { teamsAppPackage } from '../services/teams/manifest.js';
 
 const BASE = '/api/integrations/teams';
 const SCOPES =
@@ -65,14 +64,6 @@ export function registerTeamsRoutes(
     reply.header('cache-control', 'no-store');
     return settings.view(admin(req).orgId);
   });
-  app.get(BASE + '/app-package', authed, async (req, reply) => {
-    const config = await settings.view(admin(req).orgId);
-    return reply
-      .header('cache-control', 'no-store')
-      .header('content-disposition', 'attachment; filename="atlas-teams.zip"')
-      .type('application/zip')
-      .send(teamsAppPackage(config, deps.publicOrigin));
-  });
   app.put(BASE, authed, async (req) => {
     const actor = admin(req);
     deps.recent(req);
@@ -113,7 +104,7 @@ export function registerTeamsRoutes(
     deps.recent(req);
     const clientId = (req.params as Params).clientId;
     await graph.mapping(scope(req), clientId, true);
-    const result = await alerts.test(req.session!.actor.orgId, clientId);
+    const result = await alerts.test(scope(req), clientId);
     await event(req, 'Teams test notification sent');
     return result;
   });
