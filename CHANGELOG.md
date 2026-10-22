@@ -6,6 +6,18 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Set up Atlas.** A new page under Administration lists a new installation's first steps, each with why it matters and a link to do it:
+  - two-step sign-in
+  - your branding
+  - email
+  - importing your documentation
+  - the first client
+  - ConnectWise RMM
+  - Microsoft 365
+  - your team
+  - a first backup
+
+  Steps tick themselves off from what's really there, however they were done. Until the essential ones are finished, administrators see the next few on their dashboard.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

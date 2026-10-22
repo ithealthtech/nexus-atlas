@@ -89,6 +89,8 @@ To rotate it, list the new key first and the old one after it, restart, run `npm
 6. **Invite your team** and set their client access under **Admin → People & access**. See [People and access](manual/people-and-access.html).
 7. **Check System status** and make sure every check is green.
 
+**Admin → Set up Atlas** keeps track of these steps for you. Each one ticks itself off when it's really done (an email server saved, a client added, a backup taken), however you did it, and links straight to where it's done. Until the essential steps are finished, your dashboard shows a **Set up Atlas** card with the next ones.
+
 ## Where to go next
 
 - [People and access](manual/people-and-access.html) for roles, groups and single sign-on.

@@ -39,6 +39,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
+import { useSetupSteps } from '@/pages/Setup';
 import { FavoritesCard } from '@/components/Favorites';
 import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard, useRmmHealth } from '@/components/RmmHealth';
@@ -129,6 +130,7 @@ export function Dashboard() {
     ...(actor.isAdmin ? [{ done: (users.data?.length ?? 0) > 1, label: 'Invite a teammate', to: '/admin/users' }] : []),
   ];
   const remaining = steps.filter((s) => !s.done).length;
+  const adminSetup = useSetupSteps();
   const skeleton = <Skeleton className="h-8 w-12" />;
   const domainLayouts = (layouts.data ?? []).filter((l) => DOMAIN_LAYOUTS.includes(l.key));
   const domainAssets = (assets.data ?? []).filter((a) => domainLayouts.some((l) => l.id === a.layoutId)).length;
@@ -250,29 +252,55 @@ export function Dashboard() {
         )}
       </Card>
     ),
-    setup:
-      remaining > 0 ? (
+    // Administrators see the installation's setup; everyone else, their own first steps.
+    setup: actor.isAdmin ? (
+      adminSetup.left > 0 ? (
         <Card>
-          <CardHeader title="Get set up" description={`${remaining} step${remaining === 1 ? '' : 's'} left`} />
+          <CardHeader
+            title="Set up Atlas"
+            description={`${adminSetup.left} essential step${adminSetup.left === 1 ? '' : 's'} left`}
+            actions={moreLink('/admin/setup', 'All steps')}
+          />
           <ul className="space-y-1 p-3">
-            {steps.map((s) => (
-              <li key={s.label}>
-                <AppLink
-                  to={s.to}
-                  className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-surface-2"
-                >
-                  {s.done ? (
-                    <CheckCircle2 className="size-5 text-success" aria-label="Done" />
-                  ) : (
+            {adminSetup.steps
+              .filter((s) => !s.done && !s.optional)
+              .slice(0, 4)
+              .map((s) => (
+                <li key={s.id}>
+                  <AppLink
+                    to={s.to}
+                    className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-surface-2"
+                  >
                     <Circle className="size-5 text-border-strong" aria-label="To do" />
-                  )}
-                  <span className={s.done ? 'text-muted line-through' : 'font-medium'}>{s.label}</span>
-                </AppLink>
-              </li>
-            ))}
+                    <span className="font-medium">{s.title}</span>
+                  </AppLink>
+                </li>
+              ))}
           </ul>
         </Card>
-      ) : null,
+      ) : null
+    ) : remaining > 0 ? (
+      <Card>
+        <CardHeader title="Get set up" description={`${remaining} step${remaining === 1 ? '' : 's'} left`} />
+        <ul className="space-y-1 p-3">
+          {steps.map((s) => (
+            <li key={s.label}>
+              <AppLink
+                to={s.to}
+                className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-surface-2"
+              >
+                {s.done ? (
+                  <CheckCircle2 className="size-5 text-success" aria-label="Done" />
+                ) : (
+                  <Circle className="size-5 text-border-strong" aria-label="To do" />
+                )}
+                <span className={s.done ? 'text-muted line-through' : 'font-medium'}>{s.label}</span>
+              </AppLink>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    ) : null,
     review: (
       <Card>
         <CardHeader title="Review queue" description="Keep knowledge current." />

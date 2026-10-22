@@ -80,6 +80,7 @@ import {
   type ChainProbe,
 } from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerSetupRoutes } from './routes/setup.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
@@ -748,6 +749,7 @@ export async function buildApp({
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
+  registerSetupRoutes(app, { db, authed, settings });
   const personal = new PersonalVaultService(vaultKeys, vault);
   registerPersonalVaultRoutes(app, { db, authed, recent, personal });
 
