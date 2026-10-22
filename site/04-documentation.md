@@ -88,7 +88,13 @@ Documents are runbooks, procedures, how-tos and notes. They live in a client's *
 
 **Docs → Knowledge base** is your team's own library: procedures, standards and how-tos that aren't about one client. Client accounts never see it. **New folder** keeps it organized.
 
-**Template library** offers ready-made runbooks to start from. They go into a Runbooks folder, and you edit them like any other document.
+**Template library** offers ready-made runbooks and how-to guides to start from. Runbooks go into a Runbooks folder. Guides go into an **Atlas guides** folder, titled by who they're for:
+
+- **Technician:** your first day, finding anything, documenting a device, writing documents, handling passwords, running checklists, the extension and Atlas for Windows, expirations, client reviews, and what to do when you can't see something.
+- **Client:** for a client's own staff: what their account shows, keeping it secure, viewing a shared password, finding their documentation, keeping it up to date, receiving a one-time link, and reading your reports.
+- **Admin:** setting Atlas up, people and access, client accounts, offboarding, single sign-on, the vault, a weekly health check, backups, integrations, and API keys and webhooks.
+
+You edit them like any other document, so add your own help desk details and procedures. Client accounts never see the knowledge base, so send a client guide to a client's staff with **Share**.
 
 ### Share a document with a link
 
