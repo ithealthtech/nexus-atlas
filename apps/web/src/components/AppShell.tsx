@@ -44,6 +44,7 @@ import {
   ShieldCheck,
   Star,
   Sun,
+  Sparkles,
   UserCircle,
   Users,
   UsersRound,
@@ -151,6 +152,13 @@ function UserMenu({
               <UserCircle /> Your account
             </Link>
           </Menu.Item>
+          {actor.isStaff && (
+            <Menu.Item asChild className={item}>
+              <Link to="/whats-new">
+                <Sparkles /> What&rsquo;s new
+              </Link>
+            </Menu.Item>
+          )}
           <Menu.Separator className="my-1 h-px bg-border" />
           <Menu.Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted">Theme</Menu.Label>
           <Menu.RadioGroup value={theme} onValueChange={(v) => choose(v as Theme)}>

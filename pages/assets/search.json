@@ -59,6 +59,13 @@
   {
     "u": "manual/getting-started.html",
     "p": "Getting started",
+    "s": "What's new",
+    "h": "what-s-new",
+    "t": "After an update with new features, your dashboard shows a **Welcome** card. **See what's new** opens a page describing each new part in plain words, with a link to try it. Opening the page, or choosing **Dismiss**, puts the card away for you; the page stays under **What's new** in the account menu (your initials, top right) to come back to."
+  },
+  {
+    "u": "manual/getting-started.html",
+    "p": "Getting started",
     "s": "What you can do depends on your role",
     "h": "what-you-can-do-depends-on-your-role",
     "t": "Everyone in Atlas has one role, plus an access level for each client. **Owner** The person responsible for Atlas Every client, including passwords Everything, including other owners and vault policies **Administration** Service managers, senior technicians Every client, including passwords People, settings, imports, system **Technician** Your technicians The clients they're given, up to editing passwords None **Read-only technician** Trainees, auditors The clients they're given, read-only None **Client editor** A client's own staff who keep their documentation Their own organization, can edit None **Client viewer** A client's own staff Their own organization, read-only None For each client, a person's access is one of **No access**, **Read**, **Edit**, or **Edit + passwords**. Only **Edit + passwords** shows the client's vault. Your access to a client is shown under its name. A client you have no access to looks exactly like one that doesn't exist, on purpose. Ask an administrator to give you access under **Admin → People & access** or through a group."
