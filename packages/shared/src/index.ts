@@ -20,3 +20,4 @@ export * from './webhooks.js';
 export * from './licenses.js';
 export * from './reports.js';
 export * from './health.js';
+export * from './smart-paste.js';

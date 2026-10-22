@@ -88,6 +88,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - The asset form's first choice is now called **Asset layout**, as in Atlas, so it no longer has two fields called Type.
   - IP address and web address labels are no longer drawn in the code font.
 - **Atlas for Windows: documents look the way they do in Atlas.** Headings, bold, italic, underlined, struck and highlighted text, inline code, links, bulleted and numbered lists (nested too), checklists with what's done ticked, quotes, lines, and tables are drawn properly instead of as plain text. Code blocks have a **Copy** button. Links open in your browser, and links to Atlas pages open on your Atlas. The editor's **Preview** draws the same way.
+- **Smart paste for assets.** Run `ipconfig /all`, `systeminfo` or `Get-ComputerInfo` on a Windows computer (`system_profiler` on a Mac, `hostnamectl` on Linux), and paste the output into a new asset.
+  - Atlas fills in the name, hostname, IP and MAC address, manufacturer, model, serial number, operating system, and whether it's a server, laptop or workstation.
+  - Paste it straight into the Name box and Smart paste opens on its own.
+  - Fields that already have a value are shown with what would change, and are left alone unless you tick them.
+  - The text is read in the browser and never sent.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

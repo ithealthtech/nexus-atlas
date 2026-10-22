@@ -1,7 +1,18 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Pencil, Plus, QrCode, RefreshCw, Search, Server, ShieldCheck } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  ClipboardPaste,
+  Pencil,
+  Plus,
+  QrCode,
+  RefreshCw,
+  Search,
+  Server,
+  ShieldCheck,
+} from 'lucide-react';
 import {
   ASSET_STATUSES,
   atLeast,
@@ -28,6 +39,7 @@ import {
   Drawer,
 } from '@/components/ui';
 import { FieldInput, FieldValue } from '@/components/fields';
+import { SmartPaste, canSmartPaste, looksLikeMachineInfo } from '@/components/SmartPaste';
 import { ItemIcon } from '@/components/ItemIcon';
 import { AttachmentsPanel, ItemActivity, RelatedPanel, RevisionsPanel } from '@/components/panels';
 import { DeviceInventoryCards } from '@/components/Inventory';
@@ -61,6 +73,9 @@ export function AssetDialog({
   const [chosen, setChosen] = useState<string | undefined>(asset?.layoutId ?? layoutId);
   const layout = layouts.find((l) => l.id === chosen);
   const [values, setValues] = useState<Record<string, unknown>>(asset?.fields ?? {});
+  const [name, setName] = useState(asset?.name ?? '');
+  // Smart paste: closed, open, or open with what was just pasted into the form.
+  const [pasting, setPasting] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const client = useQueryClient();
@@ -123,6 +138,7 @@ export function AssetDialog({
       </Dialog>
     );
   const fieldError = (key: string) => error?.fields?.[`fields.${key}`];
+  const canPasteDetails = canSmartPaste(layout.fields);
   return (
     <Drawer
       open
@@ -141,7 +157,24 @@ export function AssetDialog({
         </>
       }
     >
-      <form id="asset-form" onSubmit={submit} className="space-y-4" noValidate>
+      <form
+        id="asset-form"
+        onSubmit={submit}
+        className="space-y-4"
+        noValidate
+        onPaste={(e) => {
+          // A command's whole output pasted into a field (the name, say) opens smart paste with it instead.
+          const text = e.clipboardData.getData('text');
+          if (
+            canPasteDetails &&
+            !(e.target instanceof HTMLTextAreaElement) &&
+            looksLikeMachineInfo(text, layout.fields)
+          ) {
+            e.preventDefault();
+            setPasting(text);
+          }
+        }}
+      >
         <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
           <Field
             label={
@@ -151,7 +184,17 @@ export function AssetDialog({
             }
             error={error?.fields?.name}
           >
-            {(p) => <Input {...p} name="name" defaultValue={asset?.name} required maxLength={200} autoFocus />}
+            {(p) => (
+              <Input
+                {...p}
+                name="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={200}
+                autoFocus
+              />
+            )}
           </Field>
           <Field label="Status">
             {(p) => (
@@ -172,6 +215,29 @@ export function AssetDialog({
             fieldKeys={layout.fields.map((f) => f.key)}
           />
         )}
+        {canPasteDetails &&
+          (pasting === null ? (
+            <Button type="button" variant="secondary" size="sm" onClick={() => setPasting('')}>
+              <ClipboardPaste /> Smart paste
+              <span className="font-normal text-muted">from ipconfig, systeminfo&hellip;</span>
+            </Button>
+          ) : (
+            <SmartPaste
+              key={pasting}
+              fields={layout.fields}
+              values={values}
+              name={name}
+              initial={pasting}
+              onClose={() => setPasting(null)}
+              onApply={(found, foundName) => {
+                setValues((all) => ({ ...all, ...found }));
+                if (foundName) setName(foundName);
+                setPasting(null);
+                const count = Object.keys(found).length + (foundName ? 1 : 0);
+                toast(`Filled in ${count} ${count === 1 ? 'field' : 'fields'}. Check them, then save.`);
+              }}
+            />
+          ))}
         <div className="grid gap-4 sm:grid-cols-2">
           {layout.fields.map((f) => (
             <div key={f.key} className={cn((f.type === 'textarea' || f.type === 'multiselect') && 'sm:col-span-2')}>
