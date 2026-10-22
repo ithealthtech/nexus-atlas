@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # main, and release branches such as release/2.0 that collect a major release's work before it ships.
+    branches: [main, 'release/**']
   pull_request:
 
 permissions:
