@@ -23,7 +23,7 @@ export function CardHeader({
         <h2 className="text-[15px] font-semibold text-text">{title}</h2>
         {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 print:hidden">{actions}</div>}
     </div>
   );
 }
@@ -94,7 +94,7 @@ export function PageHeader({
         <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-muted">{description}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 print:hidden">{actions}</div>}
     </div>
   );
 }

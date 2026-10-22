@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import type { UpdateService } from '../services/updates.js';
+import { securityEvent } from '../services/security-log.js';
 
 /** The Updates page: newer releases, and asking the server's updater to install one (administrators only). */
 export function registerUpdateRoutes(
@@ -38,7 +39,7 @@ export function registerUpdateRoutes(
     const tag = req.body?.tag;
     if (typeof tag !== 'string' || tag.length > 40) throw new HttpError(400, 'Choose a release.');
     const run = await updates.request(tag, actor.name);
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,

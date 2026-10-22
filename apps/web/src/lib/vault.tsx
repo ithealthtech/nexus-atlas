@@ -15,6 +15,7 @@ import type {
 import { Button, Dialog, Field, Input } from '@/components/ui';
 import { ApiError, api, getCsrf } from './api';
 import { DEMO } from './demo';
+import { saveBlob } from './download';
 
 export const usePasswords = (filter: { client?: string; archived?: boolean }) =>
   useQuery({
@@ -182,13 +183,6 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(response.status, data?.error ?? 'Upload failed.', data?.code, data?.fields);
   return data as T;
-}
-
-/** Saves a blob under a file name through a temporary link. */
-export function saveBlob(blob: Blob, filename: string) {
-  const href = URL.createObjectURL(blob);
-  Object.assign(document.createElement('a'), { href, download: filename }).click();
-  setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
 export async function uploadPasswordFile(id: string, file: File) {

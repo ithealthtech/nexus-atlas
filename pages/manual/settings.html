@@ -126,6 +126,9 @@
           <li>
             <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
           </li>
+          <li>
+            <a href="../manual/upgrading-to-2.html"><span class="num">17</span>Upgrading to 2.0</a>
+          </li>
         </ul>
         <p class="sidebar-group">Reference</p>
         <ul>
@@ -322,7 +325,11 @@
             Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs.
           </li>
           <li>Every use is in the security log. <strong>Revoke</strong> keys you no longer use.</li>
-          <li>The API is described at <code>/api/openapi.json</code> on your Atlas.</li>
+          <li>
+            The API is at <code>/api/v1</code> on your Atlas, described at <code>/api/v1/openapi.json</code>. Within v1,
+            updates only add to it, so your scripts keep working. The other <code>/api</code> addresses are the web
+            app's own and can change in any release.
+          </li>
         </ul>
         <h2 id="theme"><a class="anchor" href="#theme">Theme</a></h2>
         <figure>
@@ -336,7 +343,9 @@
           <strong>Browser tab title</strong>, <strong>Favicon</strong>, a <strong>Logo</strong> (and one for dark mode),
           the <strong>Accent</strong> colour (and one for dark mode), and the <strong>Welcome message</strong> client
           accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes
-          preview as you make them, and apply for everyone once you save.
+          preview as you make them, and apply for everyone once you save. Atlas for Windows uses the favicon as its icon
+          too, in its window, the taskbar, the tray, and the Start menu, and picks up a new one within six hours (or
+          when it next starts).
         </p>
         <h2 id="webhooks"><a class="anchor" href="#webhooks">Webhooks</a></h2>
         <figure>
@@ -404,7 +413,7 @@
     <footer class="footer">
       <div class="footer-inner">
         <p>
-          MSP Atlas 1.8.4. Documentation, passwords and client operations for managed service providers, on a server you
+          MSP Atlas 2.0.0. Documentation, passwords and client operations for managed service providers, on a server you
           own.
         </p>
         <p>

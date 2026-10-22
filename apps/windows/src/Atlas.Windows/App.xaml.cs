@@ -39,11 +39,15 @@ public partial class App : Application
     private MenuFlyoutItem? signInItem;
     private MenuFlyoutItem? updateItem;
     private ToggleMenuFlyoutItem? startupItem;
+    private MenuFlyoutItem? searchItem;
+    private System.Drawing.Icon? trayIcon;
+    private static readonly string DefaultIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico");
     private DispatcherQueueTimer? checkTimer;
     private DateOnly lastExpirationNotice;
     private AppRelease? update;
     private Mutex? running;
     private bool selfTest;
+    private bool preview;
 
     public App()
     {
@@ -66,8 +70,13 @@ public partial class App : Application
     internal void UpdateSettings(Func<AppSettings, AppSettings> change)
     {
         settings = change(settings);
-        store.SaveSettings(settings);
+        // The preview's choices last only while it runs: it never touches the real settings.
+        if (!preview)
+            store.SaveSettings(settings);
     }
+
+    /// <summary>Showing made-up data (--preview): nothing is saved, and Windows settings aren't changed.</summary>
+    internal bool IsPreview => preview;
 
     /// <summary>A newer version of this app that Atlas offers, if there is one.</summary>
     internal AppRelease? AvailableUpdate => update;
@@ -85,10 +94,14 @@ public partial class App : Application
         }
         if (HasArgument(arguments, PreviewArgument))
         {
+            preview = true;
             client = new AtlasClient(PreviewServer.Address, new PreviewServer());
             client.UseToken(PreviewServer.Token);
             window = new SearchWindow(this);
             window.ShowSearch();
+            // The preview's icon goes in a scratch folder, never over the real one.
+            BrandIcons.Folder = Path.Combine(Path.GetTempPath(), "AtlasForWindows-preview");
+            _ = RefreshIconAsync();
             return;
         }
 
@@ -128,7 +141,7 @@ public partial class App : Application
         window = new SearchWindow(this);
         CreateTray();
         if (!window.RegisterHotkey())
-            Notify("Shortcut unavailable", "Another app uses Ctrl+Shift+Space. Open search from the tray icon instead.");
+            Notify("Shortcut unavailable", $"Another app uses {SearchShortcut.For(settings.Shortcut).Label}. Open search from the tray icon, or choose another shortcut in Settings.");
 
         if (settings.AtlasUrl is { } url && AtlasAddress.TryParse(url, out var address, out _))
         {
@@ -146,6 +159,8 @@ public partial class App : Application
         else
         {
             window.ShowSetup(settings.AtlasUrl);
+            // The icon needs no sign-in: the setup screen already looks like the organization's.
+            _ = RefreshIconAsync();
         }
     }
 
@@ -174,7 +189,7 @@ public partial class App : Application
         store.SaveSettings(settings);
         UpdateMenu();
         StartChecks();
-        Notify("Signed in to Atlas", $"Signed in as {token.User.Name}. Press Ctrl+Shift+Space to search.");
+        Notify("Signed in to Atlas", $"Signed in as {token.User.Name}. Press {SearchShortcut.For(settings.Shortcut).Label} to search.");
     }
 
     /// <summary>The server ended the session (signed out from the Account page, or by an administrator).</summary>
@@ -214,7 +229,9 @@ public partial class App : Application
         updateItem = new MenuFlyoutItem { Command = new RelayCommand(() => _ = InstallFromTrayAsync()), Visibility = Visibility.Collapsed };
         startupItem = new ToggleMenuFlyoutItem { Text = "Start with Windows", Command = new RelayCommand(() => _ = ToggleStartupAsync()) };
         var menu = new MenuFlyout();
-        menu.Items.Add(new MenuFlyoutItem { Text = "Search Atlas    Ctrl+Shift+Space", Command = new RelayCommand(ShowSearch) });
+        searchItem = new MenuFlyoutItem { Command = new RelayCommand(ShowSearch) };
+        ShortcutChanged();
+        menu.Items.Add(searchItem);
         menu.Items.Add(updateItem);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(startupItem);
@@ -227,7 +244,7 @@ public partial class App : Application
             ToolTipText = "Atlas for Windows",
             // Loaded straight from the file next to the exe, which works installed and from a folder alike;
             // BitmapImage can't load a file: URI, and ms-appx: needs a package.
-            Icon = new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico")),
+            Icon = new System.Drawing.Icon(DefaultIcon),
             ContextMenuMode = ContextMenuMode.SecondWindow,
             ContextFlyout = menu,
             LeftClickCommand = new RelayCommand(ShowSearch),
@@ -271,30 +288,99 @@ public partial class App : Application
         && activation.Data is ILaunchActivatedEventArgs launch
         && launch.Arguments.Contains(QuitArgument, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Shows the search shortcut chosen in Settings in the tray menu.</summary>
+    internal void ShortcutChanged()
+    {
+        if (searchItem is not null)
+            searchItem.Text = $"Search Atlas    {SearchShortcut.For(settings.Shortcut).Label}";
+    }
+
+    // ---------- the Atlas's icon ----------
+    /// <summary>
+    /// Uses the Atlas's own icon (its favicon) for the window, taskbar, tray, and shortcuts: the saved one at once, then
+    /// a new one if Atlas has changed it. With none (or the setting off), the app's own icon. Offline, nothing changes.
+    /// </summary>
+    internal async Task RefreshIconAsync()
+    {
+        if (window is null || client is null)
+            return;
+        if (!settings.UseAtlasIcon)
+        {
+            UseIcon(null);
+            return;
+        }
+        var from = client.Address.ToString();
+        var saved = settings.IconFrom == from ? BrandIcons.Saved() : null;
+        UseIcon(saved);
+        AppIcon answer;
+        try
+        {
+            answer = await client.GetAppIconAsync(saved is null ? null : settings.IconETag);
+        }
+        catch (Exception e) when (e is HttpRequestException or AtlasApiException or TaskCanceledException)
+        {
+            return;
+        }
+        if (answer.IsUnchanged || !settings.UseAtlasIcon)
+            return;
+        if (answer.Picture is { } picture)
+        {
+            if (!await BrandIcons.SaveAsync(picture))
+                return;
+            UpdateSettings(s => s with { IconFrom = from, IconETag = answer.ETag });
+            UseIcon(BrandIcons.Saved());
+            return;
+        }
+        BrandIcons.Forget();
+        UpdateSettings(s => s with { IconFrom = null, IconETag = null });
+        UseIcon(null);
+    }
+
+    private void UseIcon((string Icon, string Picture)? saved)
+    {
+        window?.UseIcon(saved?.Icon, saved?.Picture);
+        if (tray is not null)
+        {
+            var size = Native.SmallIconSize();
+            var icon = new System.Drawing.Icon(saved?.Icon ?? DefaultIcon, size, size);
+            tray.Icon = icon;
+            trayIcon?.Dispose();
+            trayIcon = icon;
+        }
+        // The preview leaves the real shortcuts alone.
+        if (!preview)
+            Shortcuts.UseIcon(saved?.Icon);
+    }
+
     // ---------- start with Windows ----------
     // Installed from the setup program (or run from a folder), the app registers itself under the person's own Run
     // key. Packaged as MSIX, Windows keeps the setting as a startup task instead.
+    /// <summary>Whether the app starts with Windows, or null when Windows won't say (and won't let it change).</summary>
+    internal async Task<bool?> StartsWithWindowsAsync()
+    {
+        if (!Native.IsPackaged())
+            return StartupRegistration.IsEnabled();
+        try
+        {
+            var task = await StartupTask.GetAsync(StartupTaskId);
+            return task.State is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return null;
+        }
+    }
+
     private async Task RefreshStartupItemAsync()
     {
         if (startupItem is null)
             return;
-        if (!Native.IsPackaged())
-        {
-            startupItem.IsChecked = StartupRegistration.IsEnabled();
-            return;
-        }
-        try
-        {
-            var task = await StartupTask.GetAsync(StartupTaskId);
-            startupItem.IsChecked = task.State is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
-        }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
-        {
-            startupItem.IsEnabled = false;
-        }
+        var on = await StartsWithWindowsAsync();
+        startupItem.IsEnabled = on is not null;
+        startupItem.IsChecked = on == true;
     }
 
-    private async Task ToggleStartupAsync()
+    internal async Task ToggleStartupAsync()
     {
         if (!Native.IsPackaged())
         {
@@ -340,6 +426,7 @@ public partial class App : Application
 
     private async Task RunChecksAsync()
     {
+        await RefreshIconAsync();
         await CheckForUpdateAsync();
         if (settings.NotifyExpiring)
             await CheckExpirationsAsync();

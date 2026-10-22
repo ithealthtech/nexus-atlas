@@ -6,6 +6,7 @@ import { Button, Card, CardHeader, Dialog, Field, FormError, Input, useToast } f
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
+import { useAction } from '@/lib/actions';
 
 const ERASED = [
   'Every client, and everything in it: contacts, locations, assets, documents, and passwords with their history',
@@ -157,23 +158,10 @@ export function DangerZone() {
   const now = useNow(!!pending);
   const [requesting, setRequesting] = useState(false);
   const [typed, setTyped] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, act } = useAction();
   const isOwner = actor.role === 'owner';
   const orgName = actor.organization.name;
   const confirmable = !!pending && Date.parse(pending.confirmableAt) <= now;
-
-  const act = async (name: string, work: () => Promise<void>) => {
-    setBusy(name);
-    setError(null);
-    try {
-      await work();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
 
   return (
     <Card className="border-danger/40">

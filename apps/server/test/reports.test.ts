@@ -6,7 +6,11 @@ import { eq, sql } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import {
   REPORT_KINDS,
+  compareReportSections,
+  previousReportRun,
   reportDefinitionSchema,
+  reportNeedsAttention,
+  reportSectionGroups,
   reportSelectionSchema,
   selectReportSection,
   type ReportSnapshot,
@@ -51,6 +55,89 @@ const sample: ReportSnapshot = {
     },
   ],
 };
+
+describe('comparing report runs', () => {
+  it('finds new, changed and removed rows, ignoring values that move on every capture', () => {
+    const columns = ['Client', 'Device', 'Online', 'Protection', 'Last check-in'];
+    const previous = {
+      title: 'Endpoint health',
+      columns,
+      rows: [
+        ['Harbor', 'HDG-01', 'Online', 'running', '2026-10-01T08:00:00.000Z'],
+        ['Harbor', 'HDG-02', 'Online', 'running', '2026-10-01T08:00:00.000Z'],
+        ['Harbor', 'HDG-03', 'Offline', 'missing', '2026-10-01T08:00:00.000Z'],
+      ],
+    };
+    const current = {
+      title: 'Endpoint health',
+      // A column added since (Type) is not a change; columns line up by name.
+      columns: ['Client', 'Device', 'Type', 'Online', 'Protection', 'Last check-in'],
+      rows: [
+        ['Harbor', 'HDG-01', 'workstation', 'Online', 'running', '2026-10-20T08:00:00.000Z'],
+        ['Harbor', 'HDG-02', 'workstation', 'Offline', 'running', '2026-10-20T08:00:00.000Z'],
+        ['Harbor', 'HDG-04', 'server', 'Online', 'running', '2026-10-20T08:00:00.000Z'],
+      ],
+    };
+    const diff = compareReportSections(previous, current);
+    expect(diff.added).toEqual([2]);
+    expect(diff.changed).toEqual([
+      { index: 1, columns: [3], previous: ['Harbor', 'HDG-02', '', 'Online', 'running', '2026-10-01T08:00:00.000Z'] },
+    ]);
+    expect(diff.removed).toEqual([['Harbor', 'HDG-03', '', 'Offline', 'missing', '2026-10-01T08:00:00.000Z']]);
+    // Per-client summaries match on the client alone; a check's date isn't a change, OK against Failed is.
+    const summary = (failed: string, checked: string) => ({
+      title: 'Summary',
+      columns: ['Client', 'Failed checks', 'Last check'],
+      rows: [
+        ['Harbor', failed, checked],
+        ['Northline', '0', 'OK 2026-10-01'],
+      ],
+    });
+    expect(compareReportSections(summary('0', 'OK 2026-10-01'), summary('0', 'OK 2026-10-20')).changed).toEqual([]);
+    expect(
+      compareReportSections(summary('0', 'OK 2026-10-01'), summary('1', 'Failed 2026-10-20: timeout')).changed,
+    ).toEqual([{ index: 0, columns: [1, 2], previous: ['Harbor', '0', 'OK 2026-10-01'] }]);
+  });
+  it('compares with the latest earlier run of the same report for the same clients', () => {
+    const run = (id: string, kind: string, createdAt: string, clients: string[]) => ({
+      id,
+      kind: kind as 'endpoints',
+      createdAt,
+      clients: clients.map((c) => ({ id: c, name: c })),
+    });
+    const current = run('now', 'endpoints', '2026-10-20T10:00:00Z', ['a', 'b']);
+    const runs = [
+      current,
+      run('older', 'endpoints', '2026-10-01T10:00:00Z', ['b', 'a']),
+      run('latest', 'endpoints', '2026-10-15T10:00:00Z', ['a', 'b']),
+      run('other-kind', 'assets', '2026-10-19T10:00:00Z', ['a', 'b']),
+      run('other-clients', 'endpoints', '2026-10-19T10:00:00Z', ['a']),
+      run('later', 'endpoints', '2026-10-21T10:00:00Z', ['a', 'b']),
+    ];
+    expect(previousReportRun(runs, current)?.id).toBe('latest');
+    expect(previousReportRun(runs, runs[1]!)).toBeNull();
+  });
+  it('says where each selected row sits in its section', () => {
+    const snapshot = {
+      ...({} as ReportSnapshot),
+      sections: [
+        {
+          title: 'S',
+          columns: ['Client', 'Status'],
+          rows: [
+            ['A', 'active'],
+            ['B', 'inactive'],
+            ['C', 'active'],
+          ],
+        },
+      ],
+    };
+    expect(selectReportSection(snapshot, reportSelectionSchema.parse({ query: 'active', field: 1 })).indexes).toEqual([
+      0, 1, 2,
+    ]);
+    expect(selectReportSection(snapshot, reportSelectionSchema.parse({ attention: true })).indexes).toEqual([1]);
+  });
+});
 
 describe('report exports', () => {
   it('matches field search, attention filters and selected columns and neutralizes CSV formulas', () => {
@@ -110,6 +197,89 @@ describe('report exports', () => {
       ),
     ).rejects.toThrow('2,000');
   });
+  it('brands PDFs with the organization logo and accent, and falls back to its name', async () => {
+    // A 1×1 PNG.
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const selection = reportSelectionSchema.parse({});
+    const branded = await reportPdf(sample, selection, {
+      name: 'Harbor IT',
+      logo: `data:image/png;base64,${png}`,
+      accent: '#0f766e',
+    });
+    expect(branded.toString('latin1')).toContain('/Subtype /Image');
+    // SVG can't be embedded and a bad colour is ignored: the name and Atlas blue are used instead.
+    const fallback = await reportPdf(sample, selection, {
+      name: 'Harbor IT',
+      logo: 'data:image/svg+xml;base64,PHN2Zy8+',
+      accent: 'not-a-colour',
+    });
+    expect(fallback.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(fallback.toString('latin1')).not.toContain('/Subtype /Image');
+    // A broken image is skipped rather than failing the export.
+    const broken = await reportPdf(sample, selection, { name: '', logo: 'data:image/png;base64,AAAA', accent: null });
+    expect(broken.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+  it('lays out a whole review pack as a document: a cover, then each report it is made of', async () => {
+    const section = (part: string, title: string, columns: string[], rows: string[][]) => ({
+      part,
+      title,
+      columns,
+      rows,
+    });
+    const trend = section(
+      'Service review',
+      'Device health trend',
+      ['Client', 'From', 'To', 'Devices', 'Online'],
+      [['Harbor Dental', '2026-07-21', '2026-10-19', '10 → 12', '9 → 11']],
+    );
+    const pack: ReportSnapshot = {
+      ...sample,
+      definition: { ...sample.definition, kind: 'review', title: 'Harbor Dental quarterly review' },
+      sections: [
+        section(
+          'Executive summary',
+          'Client overview',
+          ['Client', 'Assets', 'Offline'],
+          [['Harbor Dental', '12', '1']],
+        ),
+        section(
+          'Security posture',
+          'Device protection and encryption',
+          ['Client', 'Device', 'Online'],
+          [
+            ['Harbor Dental', 'WS-1', 'Offline'],
+            ['Harbor Dental', 'WS-2', 'Online'],
+          ],
+        ),
+        trend,
+        section(
+          'Upcoming renewals',
+          'Renewals',
+          ['Client', 'Item', 'Due date', 'Status'],
+          [['Harbor Dental', 'Firewall', '2026-11-01', 'Upcoming']],
+        ),
+      ],
+    };
+    const pages = (pdf: Buffer) => (pdf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length;
+    const whole = await reportPdf(pack, 'all');
+    if (process.env.ATLAS_PDF_SAMPLE_DIR)
+      writeFileSync(resolve(process.env.ATLAS_PDF_SAMPLE_DIR, 'atlas-review-pack-sample.pdf'), whole);
+    // The cover, a page for each of the four reports, then the notices and sources.
+    expect(pages(whole)).toBe(6);
+    // One section of it, as filtered on screen, is a plain export.
+    expect(pages(await reportPdf(pack, reportSelectionSchema.parse({ section: 1 })))).toBe(1);
+    expect(reportSectionGroups(pack.sections).map((g) => [g.part, g.items.map((i) => i.index)])).toEqual([
+      ['Executive summary', [0]],
+      ['Security posture', [1]],
+      ['Service review', [2]],
+      ['Upcoming renewals', [3]],
+    ]);
+    // A health trend's online count isn't a device that is offline.
+    expect(reportNeedsAttention(trend, trend.rows[0]!)).toBe(false);
+    expect(reportNeedsAttention(pack.sections[1]!, pack.sections[1]!.rows[0]!)).toBe(true);
+    // A review pack is for one client.
+    expect(reportDefinitionSchema.safeParse({ ...pack.definition, clientIds: [TENANT, APP] }).success).toBe(false);
+  });
 });
 
 describe('private client reports', () => {
@@ -149,7 +319,26 @@ describe('private client reports', () => {
               },
             ],
           });
-    if (url.pathname.endsWith('/users')) return Response.json({ value: [] });
+    if (url.pathname.endsWith('/users'))
+      return Response.json({
+        value: [
+          {
+            id: USER,
+            displayName: 'Avery Example',
+            userPrincipalName: 'avery@harbor.example',
+            accountEnabled: true,
+            userType: 'Member',
+            usageLocation: 'US',
+            assignedLicenses: [{ skuId: APP }],
+            // Microsoft returns these whenever they're selected; Atlas refuses licenses without them.
+            licenseAssignmentStates: [{ skuId: APP, assignedByGroup: null, state: 'Active' }],
+          },
+        ],
+      });
+    if (url.pathname.startsWith('/v1.0/reports/'))
+      return new Response(
+        'Display Name,User Principal Name,Is Deleted,Exchange Last Activity Date,Last Activity Date\nAvery Example,avery@harbor.example,False,2026-10-20,2026-10-20\n',
+      );
     throw new Error('Unexpected request');
   }) as typeof fetch;
   beforeEach(async () => {
@@ -229,12 +418,395 @@ describe('private client reports', () => {
       updatedAt: new Date('2020-01-01'),
     });
   }
-  it('collects all six report types without private contents, archived records or other clients', async () => {
+  it('reports domains and certificates by expiry, with the latest automatic check', async () => {
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
+    const domainLayout = layouts.find((l) => l.key === 'domain')!.id;
+    const sslLayout = layouts.find((l) => l.key === 'ssl_certificate')!.id;
+    const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const asset = async (client: string, layoutId: string, name: string, fields: Record<string, unknown>) => {
+      const r = await owner.call('POST', `/api/clients/${client}/assets`, { layoutId, name, fields });
+      expect(r.status, JSON.stringify(r.data)).toBe(201);
+      return r.data.id as string;
+    };
+    const expired = await asset(clientId, domainLayout, 'harbordental.example', {
+      registrar: 'Example Registrar',
+      expires: inDays(-3),
+      auto_renew: true,
+    });
+    await asset(clientId, domainLayout, 'harbor-later.example', { expires: inDays(300) });
+    await asset(clientId, sslLayout, 'Portal certificate', {
+      common_name: 'portal.harbordental.example',
+      issuer: 'Example CA',
+      expires: inDays(20),
+    });
+    await asset(otherId, domainLayout, 'other-client.example', { expires: inDays(1) });
+    await t.handle.db.insert(schema.trackerChecks).values({
+      orgId,
+      clientId,
+      assetId: expired,
+      kind: 'domain',
+      host: 'harbordental.example',
+      checkedAt: new Date(),
+      ok: false,
+      detail: 'Registry lookup failed',
+    });
+    const run = await generate('domains');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual(['Summary', 'Domains', 'SSL certificates']);
+    expect(snapshot.sections[0]!.rows).toEqual([['Harbor Dental', '2', '1', '0', '1', '0', '1', '1']]);
+    const [first, second] = snapshot.sections[1]!.rows;
+    expect(first).toEqual([
+      'Harbor Dental',
+      'harbordental.example',
+      'Example Registrar',
+      '',
+      inDays(-3),
+      '-3',
+      'Yes',
+      'Expired',
+      expect.stringMatching(/^Failed \d{4}-\d{2}-\d{2}: Registry lookup failed$/),
+    ]);
+    expect(second![7]).toBe('Active');
+    expect(snapshot.sections[2]!.rows[0]!.slice(2, 4)).toEqual(['portal.harbordental.example', 'Example CA']);
+    expect(snapshot.sections[2]!.rows[0]!.at(-2)).toBe('Expiring soon');
+    expect(snapshot.warnings).toContain(
+      '2 domain or certificate records have not been checked automatically yet. Their dates are as entered.',
+    );
+    expect(JSON.stringify(snapshot)).not.toContain('other-client.example');
+    // "Needs review" picks out the expired domain and its failed check, not the healthy one.
+    expect(
+      selectReportSection(snapshot, reportSelectionSchema.parse({ section: 1, attention: true })).rows.map((r) => r[1]),
+    ).toEqual(['harbordental.example']);
+  });
+  it('reports installed software with flags and who signs in, from the RMM inventory', async () => {
     await seed();
+    const [layout] = await t.handle.db
+      .select({ id: schema.assetLayouts.id })
+      .from(schema.assetLayouts)
+      .where(eq(schema.assetLayouts.key, 'report-workstation'));
+    const [pc] = await t.handle.db
+      .insert(schema.assets)
+      .values({ orgId, clientId, layoutId: layout!.id, name: 'Reception PC' })
+      .returning();
+    await t.handle.db.insert(schema.rmmDeviceStatus).values({
+      orgId,
+      clientId,
+      assetId: pc!.id,
+      source: 'test',
+      externalId: '2',
+      kind: 'workstation',
+      online: true,
+      software: [
+        { name: 'Adobe Flash Player 32', version: '32.0', publisher: 'Adobe', installedAt: null },
+        { name: '7-Zip 23.01', version: '23.01', publisher: 'Igor Pavlov', installedAt: null },
+      ],
+      signIns: [{ username: 'avery', domain: 'HDG', lastLogonAt: '2026-10-01T08:00:00.000Z', contactId: null }],
+      inventoryAt: new Date(),
+    });
+    const run = await generate('software');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual(['Summary', 'Software', 'Sign-ins']);
+    expect(snapshot.sections[0]!.rows).toEqual([['Harbor Dental', '1 of 2', '2', '1', '0', '0', '1']]);
+    expect(snapshot.sections[1]!.rows[0]).toEqual([
+      'Harbor Dental',
+      'Adobe Flash Player 32',
+      'Adobe',
+      '32.0',
+      '1',
+      'End of life',
+      expect.any(String),
+    ]);
+    expect(snapshot.sections[1]!.rows[1]!.slice(1, 2)).toEqual(['7-Zip 23.01']);
+    expect(snapshot.sections[2]!.rows).toEqual([
+      ['Harbor Dental', 'Reception PC', 'HDG\\avery', '', '2026-10-01T08:00:00.000Z'],
+    ]);
+    expect(snapshot.warnings).toContain('Harbor Dental: 1 of 2 devices have not reported software or sign-ins.');
+    expect(
+      selectReportSection(snapshot, reportSelectionSchema.parse({ section: 1, attention: true })).rows.map((r) => r[1]),
+    ).toEqual(['Adobe Flash Player 32']);
+  });
+  it('reviews the work done for a client over the chosen period', async () => {
+    await seed();
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000);
+    const ticket = { orgId, source: 'test', companyId: '1' };
+    await t.handle.db.insert(schema.tickets).values([
+      {
+        ...ticket,
+        externalId: 't1',
+        clientId,
+        number: '1001',
+        summary: 'Printer offline',
+        status: 'Closed',
+        closed: true,
+        openedAt: ago(10),
+        closedAt: ago(9),
+      },
+      { ...ticket, externalId: 't2', clientId, number: '1002', summary: 'New starter laptop', openedAt: ago(3) },
+      {
+        ...ticket,
+        externalId: 't3',
+        clientId,
+        number: '0900',
+        summary: 'Long-closed ticket',
+        closed: true,
+        openedAt: ago(200),
+        closedAt: ago(150),
+      },
+      {
+        ...ticket,
+        externalId: 't4',
+        clientId: otherId,
+        number: '2001',
+        summary: 'Other client ticket',
+        openedAt: ago(2),
+      },
+    ]);
+    await t.handle.db.insert(schema.checklistRuns).values([
+      { orgId, clientId, title: 'Monthly patch review', completedAt: ago(5) },
+      { orgId, clientId, title: 'Unfinished onboarding' },
+    ]);
+    const change = { orgId, clientId, actorName: 'Avery', action: 'Updated' };
+    await t.handle.db.insert(schema.activity).values([
+      { ...change, entityType: 'document', entityId: randomUUID(), title: 'Network guide' },
+      {
+        ...change,
+        action: 'Changed the password for',
+        entityType: 'password',
+        entityId: randomUUID(),
+        title: 'Firewall admin login',
+      },
+      { ...change, entityType: 'asset', entityId: randomUUID(), title: 'Last year change', createdAt: ago(400) },
+    ]);
+    const counts = (total: number, online: number, protectionRunning: number, offlineServers: number) => ({
+      total,
+      online,
+      protectionRunning,
+      offlineServers,
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    await t.handle.db.insert(schema.rmmHealthSnapshots).values([
+      { orgId, clientId, day: ago(20).toISOString().slice(0, 10), counts: counts(4, 3, 2, 1) },
+      { orgId, clientId, day: today, counts: counts(5, 5, 5, 0) },
+    ]);
+    const run = await generate('service');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual([
+      expect.stringMatching(/^Service summary, \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/),
+      'Device health trend',
+      'Tickets',
+      'Completed checklists',
+      'Activity',
+    ]);
+    const summary = snapshot.sections[0]!.rows[0]!;
+    // Opened in the period, closed in the period, still open, checklists, documentation, assets added.
+    expect(summary.slice(0, 7)).toEqual(['Harbor Dental', '2', '1', '1', '1', '1', '1']);
+    expect(Number(summary[7])).toBeGreaterThanOrEqual(2);
+    expect(snapshot.sections[1]!.rows).toEqual([
+      ['Harbor Dental', ago(20).toISOString().slice(0, 10), today, '4 → 5', '3 → 5', '2 → 5', '1 → 0'],
+    ]);
+    expect(snapshot.sections[2]!.rows.map((r) => r[1])).toEqual(['1001', '1002']);
+    expect(snapshot.sections[3]!.rows.map((r) => r[1])).toEqual(['Monthly patch review']);
+    const activity = JSON.stringify(snapshot.sections[4]);
+    expect(activity).toContain('Network guide');
+    const serialized = JSON.stringify(snapshot);
+    for (const hidden of ['Firewall admin login', 'Last year change', 'Long-closed ticket', 'Other client ticket'])
+      expect(serialized).not.toContain(hidden);
+  });
+  it('builds a review pack for one client from the reports it is made of, as one PDF and one link', async () => {
+    await seed();
+    expect((await generate('review', [clientId, otherId])).status).toBe(400);
+    const made = await generate('review');
+    expect(made.status, JSON.stringify(made.data)).toBe(201);
+    const { sections } = made.data.snapshot as ReportSnapshot;
+    expect([...new Set(sections.map((s) => s.part))]).toEqual([
+      'Executive summary',
+      'Security posture',
+      'Service review',
+      'Upcoming renewals',
+    ]);
+    expect(sections[0]!.title).toBe('Client overview');
+    // The client gets the count of changes, not the internal change log.
+    expect(sections.map((s) => s.title)).not.toContain('Activity');
+    expect(sections.some((s) => s.title.startsWith('Service summary'))).toBe(true);
+
+    // The whole pack as one PDF, named after the report.
+    const pdf = await owner.call('GET', `/api/reports/runs/${made.data.id}/export?format=pdf&whole=1`);
+    expect(pdf.status).toBe(200);
+    expect(String(pdf.data).startsWith('%PDF-')).toBe(true);
+    expect(pdf.headers['content-disposition']).toContain(
+      `filename*=UTF-8''${encodeURIComponent(`review report ${made.data.createdAt.slice(0, 10)}.pdf`)}`,
+    );
+    // And from a link: the client downloads all of it.
+    const link = await owner.call('POST', `/api/reports/runs/${made.data.id}/shares`, { expiresDays: 30 });
+    const token = link.data.url.split('/').pop() as string;
+    const shared = await t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}` });
+    expect(shared.json().sections[0]).toMatchObject({ part: 'Executive summary', title: 'Client overview' });
+    const whole = await t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}/pdf?section=all` });
+    expect(whole.statusCode).toBe(200);
+    expect(whole.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+  it('adds chosen asset fields to the inventory, never long text or fields that no longer exist', async () => {
+    await seed();
+    await t.handle.db
+      .update(schema.assetLayouts)
+      .set({
+        fields: [
+          { key: 'renewal', label: 'Warranty', type: 'date', expires: true },
+          { key: 'serial', label: 'Serial', type: 'text' },
+          { key: 'managed', label: 'Managed', type: 'checkbox' },
+          { key: 'notes', label: 'Build notes', type: 'textarea' },
+        ],
+      })
+      .where(eq(schema.assetLayouts.key, 'report-workstation'));
+    await t.handle.db
+      .update(schema.assets)
+      .set({ fields: { renewal: '2020-01-01', serial: 'SN-123', managed: true, notes: 'never-export-this' } })
+      .where(eq(schema.assets.name, 'Office workstation'));
+    const fields = [
+      'report-workstation:serial',
+      'report-workstation:managed',
+      'report-workstation:notes',
+      'report-workstation:gone',
+    ];
+    const run = await owner.call('POST', '/api/reports/runs', { ...definition('assets'), assetFields: fields });
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const snapshot = run.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections[0]!.columns).toEqual([
+      'Client',
+      'Asset',
+      'Type',
+      'Status',
+      'Workstation: Serial',
+      'Workstation: Managed',
+      'Last updated',
+    ]);
+    expect(snapshot.sections[0]!.rows[0]!.slice(1, 6)).toEqual([
+      'Office workstation',
+      'Workstation',
+      'active',
+      'SN-123',
+      'Yes',
+    ]);
+    expect(snapshot.warnings).toEqual([
+      'The asset field "report-workstation:notes" no longer exists or can\'t be reported, so it was left out.',
+      'The asset field "report-workstation:gone" no longer exists or can\'t be reported, so it was left out.',
+    ]);
+    expect(JSON.stringify(snapshot)).not.toContain('never-export-this');
+    const tooMany = Array.from({ length: 13 }, (_, i) => `report-workstation:f${i}`);
+    expect(
+      (await owner.call('POST', '/api/reports/runs', { ...definition('assets'), assetFields: tooMany })).status,
+    ).toBe(400);
+  });
+  it('shares a single-client snapshot by an expiring link, without people or IDs, until revoked', async () => {
+    await seed();
+    const run = (await generate('assets')).data;
+    const made = await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: 7 });
+    expect(made.status, JSON.stringify(made.data)).toBe(201);
+    expect(made.data.url).toMatch(/\/report\/[A-Za-z0-9_-]{32}$/);
+    expect(made.data.status).toBe('active');
+    const token = made.data.url.split('/').pop() as string;
+    const open = (path = '') => t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}${path}` });
+
+    const shared = await open();
+    expect(shared.statusCode).toBe(200);
+    expect(shared.headers['cache-control']).toBe('no-store');
+    const body = shared.json();
+    expect(body).toMatchObject({ title: 'assets report', client: 'Harbor Dental' });
+    expect(body.sections[0].rows[0]).toContain('Office workstation');
+    // Who ran it and the report's settings (with client IDs) stay inside Atlas.
+    const runner = (await owner.call('GET', '/api/session')).data.actor.name as string;
+    expect(JSON.stringify(body)).not.toContain(runner);
+    expect(JSON.stringify(body)).not.toContain(clientId);
+    const pdf = await open('/pdf?section=0');
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    expect((await open('/pdf?section=9')).statusCode).toBe(400);
+    const listed = (await owner.call('GET', `/api/reports/runs/${run.id}/shares`)).data;
+    // Each opening counts: the page, the PDF, and the request for a section that doesn't exist.
+    expect(listed[0]).toMatchObject({ views: 3, status: 'active' });
+
+    // Only one client's report can go outside Atlas.
+    const both = (await generate('assets', [clientId, otherId])).data;
+    expect((await owner.call('POST', `/api/reports/runs/${both.id}/shares`, {})).status).toBe(400);
+    // Links never last forever.
+    expect((await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: null })).status).toBe(400);
+
+    // Someone else can't see or share this person's report.
+    const temporary = 'temporary share pass 1234';
+    await owner.call('POST', '/api/users', {
+      email: 'share-viewer@atlas.test',
+      name: 'Share Viewer',
+      role: 'client_viewer',
+      password: temporary,
+      grants: [{ clientId, level: 'read' }],
+    });
+    const { b } = await signIn(t.app, 'share-viewer@atlas.test', temporary);
+    await b.call('POST', '/api/account/password', { current: temporary, next: 'replaced share pass 4321' });
+    expect((await b.call('GET', `/api/reports/runs/${run.id}/shares`)).status).toBe(404);
+    expect((await b.call('POST', `/api/reports/runs/${run.id}/shares`, {})).status).toBe(404);
+    expect((await b.call('DELETE', `/api/report-shares/${made.data.id}`)).status).toBe(404);
+
+    // Revoked, expired, mistyped or deleted: all look like no link at all.
+    expect((await owner.call('DELETE', `/api/report-shares/${made.data.id}`)).data[0].status).toBe('revoked');
+    expect((await open()).statusCode).toBe(404);
+    expect((await t.app.inject({ method: 'GET', url: '/api/shared-reports/short' })).statusCode).toBe(404);
+    const second = (await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: 30 })).data;
+    await t.handle.db
+      .update(schema.reportShares)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.reportShares.id, second.id));
+    expect(
+      (await t.app.inject({ method: 'GET', url: `/api/shared-reports/${second.url.split('/').pop()}` })).statusCode,
+    ).toBe(404);
+    const events = await t.handle.db
+      .select({ action: schema.securityEvents.action })
+      .from(schema.securityEvents)
+      .where(eq(schema.securityEvents.orgId, orgId));
+    expect(events.map((e) => e.action)).toEqual(
+      expect.arrayContaining(['Report shared by link', 'Report link revoked']),
+    );
+    expect((await owner.call('DELETE', `/api/reports/runs/${run.id}`)).status).toBe(200);
+    expect(await t.handle.db.select().from(schema.reportShares).where(eq(schema.reportShares.runId, run.id))).toEqual(
+      [],
+    );
+  });
+  it('collects every report type without private contents, archived records or other clients', async () => {
+    await seed();
+    await owner.call('PUT', '/api/integrations/m365', {
+      clientId: APP,
+      clientSecret: 'synthetic-secret',
+      partnerTenantId: USER,
+      authMode: 'gdap',
+      autoSync: false,
+    });
+    await settings.saveGdap(
+      orgId,
+      (await settings.m365(orgId))!,
+      {
+        refreshSealed: '',
+        oid: USER,
+        name: 'Partner',
+        email: 'partner@atlas.test',
+        connectedAt: new Date().toISOString(),
+      },
+      'synthetic-refresh',
+    );
+    await settings.patchM365(orgId, {
+      tenants: {
+        [clientId]: { tenantId: TENANT, tenantName: 'Harbor Dental', status: 'ok', checkedAt: null, detail: null },
+      },
+    });
     for (const kind of REPORT_KINDS) {
       const result = await generate(kind);
       expect(result.status, JSON.stringify(result.data)).toBe(201);
-      expect(result.data.snapshot.sections[0].rows.length).toBeGreaterThan(0);
+      expect(result.data.snapshot.sections[0].rows.length, kind).toBeGreaterThan(0);
+      if (kind === 'accounts' || kind === 'usage') {
+        expect(JSON.stringify(result.data.snapshot)).toContain('avery@harbor.example');
+        expect(result.data.snapshot.warnings).toEqual([]);
+      }
       const serialized = JSON.stringify(result.data);
       for (const hidden of ['never-export-this', 'Archived workstation', 'Other client asset'])
         expect(serialized).not.toContain(hidden);
@@ -265,6 +837,103 @@ describe('private client reports', () => {
       (await owner.call('GET', `/api/reports/runs/${run.id}/export?format=csv&selection=${encodeURIComponent('{bad')}`))
         .status,
     ).toBe(400);
+  });
+  it('reports security posture only where the reader may see passwords and rotation', async () => {
+    await seed();
+    expect(
+      (
+        await owner.call('POST', `/api/clients/${clientId}/passwords`, {
+          name: 'Shared router login',
+          username: 'never-export-this',
+          secret: 'password1',
+        })
+      ).status,
+    ).toBe(201);
+    await owner.call('POST', `/api/clients/${otherId}/passwords`, { name: 'Other client login', secret: 'password1' });
+    const [enrollment] = await t.handle.db
+      .insert(schema.bitlockerEnrollments)
+      .values({ orgId, clientId, name: 'Report test', tokenHash: 'report-test', publicKey: 'x', privateKey: 'x' })
+      .returning();
+    await t.handle.db.insert(schema.bitlockerDevices).values({
+      orgId,
+      clientId,
+      enrollmentId: enrollment!.id,
+      machineId: randomUUID(),
+      hostname: 'HDG-LAPTOP-01',
+      volumes: [
+        {
+          volumeId: 'c',
+          mountPoint: 'C:',
+          protection: 'Off',
+          encryptionMethod: 'None',
+          encryptionPercentage: 0,
+          conversionStatus: 'FullyDecrypted',
+          keyIds: [],
+        },
+      ],
+      collectedAt: new Date(),
+    });
+    const run = await generate('security');
+    expect(run.status, JSON.stringify(run.data)).toBe(201);
+    const { sections } = run.data.snapshot as ReportSnapshot;
+    expect(sections.map((s) => s.title)).toEqual([
+      'Security overview',
+      'Password issues',
+      'Device protection and encryption',
+      'Automatic password rotation',
+    ]);
+    const overview = sections[0]!;
+    const cell = (name: string) => overview.rows[0]![overview.columns.indexOf(name)];
+    expect([cell('Passwords'), cell('Password issues'), cell('Not encrypted'), cell('Rotation failing')]).toEqual([
+      '1',
+      '1',
+      '1',
+      '0',
+    ]);
+    expect(sections[1]!.rows).toEqual([
+      ['Harbor Dental', 'Shared router login', expect.any(String), expect.stringContaining('Weak')],
+    ]);
+    expect(sections[2]!.rows).toContainEqual([
+      'Harbor Dental',
+      'HDG-LAPTOP-01',
+      'Not in RMM',
+      'Not in RMM',
+      'Not encrypted',
+      expect.any(String),
+    ]);
+    expect(sections[2]!.rows).toContainEqual([
+      'Harbor Dental',
+      'Office workstation',
+      'Offline',
+      'Unknown',
+      'Not reported',
+      'Unknown',
+    ]);
+    const serialized = JSON.stringify(run.data);
+    for (const hidden of ['never-export-this', 'password1', 'Other client login'])
+      expect(serialized).not.toContain(hidden);
+
+    // A client account can run it too, but sees no passwords or rotation.
+    const temporary = 'temporary security pass 1234';
+    await owner.call('POST', '/api/users', {
+      email: 'security-viewer@atlas.test',
+      name: 'Security Viewer',
+      role: 'client_viewer',
+      password: temporary,
+      grants: [{ clientId, level: 'read' }],
+    });
+    const { b } = await signIn(t.app, 'security-viewer@atlas.test', temporary);
+    await b.call('POST', '/api/account/password', { current: temporary, next: 'replaced security pass 4321' });
+    const limited = await b.call('POST', '/api/reports/runs', definition('security'));
+    expect(limited.status, JSON.stringify(limited.data)).toBe(201);
+    const snapshot = limited.data.snapshot as ReportSnapshot;
+    expect(snapshot.sections.map((s) => s.title)).toEqual(['Security overview', 'Device protection and encryption']);
+    expect(snapshot.sections[0]!.rows[0]!.slice(1, 4)).toEqual(['Not available', 'Not available', 'Not available']);
+    expect(snapshot.warnings).toContain(
+      "Harbor Dental: passwords are not included because you don't have password access here.",
+    );
+    expect(snapshot.warnings).toContain('Automatic password rotation is shown to administrators only.');
+    expect(JSON.stringify(snapshot)).not.toContain('Shared router login');
   });
   it('keeps templates private, checks stale edits, validates inputs and purges client snapshots on deletion', async () => {
     const created = await owner.call('POST', '/api/reports/templates', {

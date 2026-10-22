@@ -17,6 +17,7 @@ import {
 import { HttpError, fail } from '../errors.js';
 import { API_ROUTES } from '../services/api-keys.js';
 import { actorFor, sameSecret, tokenHash, type IdentityService, type SessionContext } from './service.js';
+import { securityEvent } from '../services/security-log.js';
 
 const CODE_MS = 2 * 60_000;
 const DAY = 86_400_000;
@@ -146,7 +147,7 @@ export class NativeAppService {
           userAgent: (meta.userAgent ?? '').slice(0, 200),
         })
         .returning({ id: schema.sessions.id });
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,

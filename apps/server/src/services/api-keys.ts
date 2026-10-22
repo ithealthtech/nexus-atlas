@@ -6,6 +6,7 @@ import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { actorFor } from '../identity/service.js';
 import { isUuid } from './scope.js';
+import { securityEvent } from './security-log.js';
 
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 const PREFIX_ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -82,7 +83,7 @@ export class ApiKeyService {
           expiresAt: body.expiresDays ? new Date(Date.now() + body.expiresDays * 86_400_000) : null,
         })
         .returning();
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: actor.orgId,
         userId: actor.id,
         actor: actor.name,
@@ -104,7 +105,7 @@ export class ApiKeyService {
       .where(and(eq(schema.apiKeys.id, id), eq(schema.apiKeys.orgId, actor.orgId), isNull(schema.apiKeys.revokedAt)))
       .returning();
     if (!row) throw new HttpError(404, 'API key not found.');
-    await this.db.insert(schema.securityEvents).values({
+    await securityEvent(this.db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,

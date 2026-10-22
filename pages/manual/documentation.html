@@ -126,6 +126,9 @@
           <li>
             <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
           </li>
+          <li>
+            <a href="../manual/upgrading-to-2.html"><span class="num">17</span>Upgrading to 2.0</a>
+          </li>
         </ul>
         <p class="sidebar-group">Reference</p>
         <ul>
@@ -175,6 +178,34 @@
           </li>
           <li>Choose <strong>Save</strong>.</li>
         </ol>
+        <h3 id="smart-paste"><a class="anchor" href="#smart-paste">Smart paste</a></h3>
+        <p>Rather than typing a computer's details, let it tell you:</p>
+        <ol class="steps">
+          <li>
+            On the computer, run one of these:
+            <ul>
+              <li>
+                <strong>Windows:</strong> <code>ipconfig /all</code>, <code>systeminfo</code> or, in PowerShell,
+                <code>Get-ComputerInfo</code>. Several can be pasted together.
+              </li>
+              <li><strong>Mac:</strong> <code>system_profiler SPHardwareDataType</code>.</li>
+              <li><strong>Linux:</strong> <code>hostnamectl</code>.</li>
+            </ul>
+          </li>
+          <li>Copy what it prints.</li>
+          <li>
+            In the new asset, choose <strong>Smart paste</strong> and paste it. Or simply paste it into the
+            <strong>Name</strong> box: Atlas recognises it and opens Smart paste for you.
+          </li>
+        </ol>
+        <p>
+          Atlas shows what it found: the name, hostname, IP address (the network card with a gateway comes first), MAC
+          address, manufacturer, model, serial number, operating system and type (server, laptop or workstation). Empty
+          fields are ticked to fill. A field that already holds something different shows what it would replace, and
+          stays unticked. Choose <strong>Fill in</strong>, check the fields, then save. The text is read in your browser
+          and isn't sent or kept.
+        </p>
+        <p>It works with any layout that has fields with these names, not only Configurations.</p>
         <p>
           Devices from ConnectWise RMM and tenants from Microsoft 365 arrive as assets on their own; you don't need to
           add them by hand. Fields filled by a sync are kept up to date by the sync, and fields you add yourself are
@@ -398,7 +429,7 @@
     <footer class="footer">
       <div class="footer-inner">
         <p>
-          MSP Atlas 1.8.4. Documentation, passwords and client operations for managed service providers, on a server you
+          MSP Atlas 2.0.0. Documentation, passwords and client operations for managed service providers, on a server you
           own.
         </p>
         <p>

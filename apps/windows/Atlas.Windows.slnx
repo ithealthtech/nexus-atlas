@@ -10,4 +10,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Atlas.Windows.Core.Tests/Atlas.Windows.Core.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/AccessibilityScan/AccessibilityScan.csproj" />
+  </Folder>
 </Solution>

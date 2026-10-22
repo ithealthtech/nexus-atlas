@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { requireAdmin } from '../authz.js';
 import type { SettingsService } from '../services/settings.js';
+import { securityEvent } from '../services/security-log.js';
 
 /** The organization's ScreenConnect address, which the desktop app's Connect button opens. */
 export function registerScreenConnectRoutes(
@@ -22,7 +23,7 @@ export function registerScreenConnectRoutes(
     requireAdmin(actor);
     recent(req);
     const saved = await settings.saveScreenConnect(actor.orgId, req.body);
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,

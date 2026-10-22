@@ -170,7 +170,6 @@ describe('ticket values', () => {
           type: { id: 't', name: 'Incident' },
         },
         Date.now(),
-        new Set(),
         (n) => ticketLink('https://control.itsupport247.net', n, '19304'),
       ),
     ).toMatchObject({
@@ -195,10 +194,10 @@ describe('ticket values', () => {
     expect(
       portalIdIn('Connectwise ticket id 5283 is created to match ASIO ticket id 133023.1670', '133023.1671'),
     ).toBeNull();
-    // The platform's shape: a status ID in the Closed category closes it, whatever the status is called.
+    // The platform's shape: a status in the Closed category closes it, whatever the status is called.
     expect(
-      mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Done' } }, Date.now(), new Set(['s-x'])),
-    ).toMatchObject({ id: 'u-1', number: '7', status: 'Done', closed: true });
+      mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Waiting', category: 'Closed' } }),
+    ).toMatchObject({ id: 'u-1', number: '7', status: 'Waiting', closed: true });
   });
 });
 

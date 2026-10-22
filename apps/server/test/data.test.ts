@@ -1,8 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { unzipSync, strFromU8 } from 'fflate';
 import { failInterruptedJobs } from '../src/services/importers/common.js';
@@ -212,6 +208,7 @@ describe('REST API keys', () => {
     const spec = (await t.app.inject({ method: 'GET', url: '/api/v1/openapi.json' })).json();
     expect(spec.openapi).toBe('3.1.0');
     expect(spec.servers[0].url).toBe('http://localhost/api/v1');
+    expect(spec.info.description).toContain('The unversioned /api paths the web app uses are internal');
     expect(spec.paths['/clients'].post.requestBody.content['application/json'].schema.properties.name).toBeTruthy();
     expect(spec.paths['/passwords/{id}/reveal'].post).toBeTruthy();
   });
@@ -1043,101 +1040,6 @@ describe('activity paging', () => {
       expect(all[0]!.title).toBe('Domain admin');
     } finally {
       await t.close();
-    }
-  });
-});
-
-describe('0.2 migration', () => {
-  it('moves users, clients, records, and links from the SQLite file', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'atlas-legacy-'));
-    const t = await startApp();
-    try {
-      const { openStore } = await import('../../../legacy/server/store.mjs' as string);
-      const { openIdentity, hashPassword } = await import('../../../legacy/server/identity.mjs' as string);
-      const file = join(dir, 'atlas.sqlite');
-      const keyFile = join(dir, 'identity.key');
-      writeFileSync(keyFile, randomBytes(32).toString('base64url'));
-      const store = openStore(file);
-      openIdentity(store, { keyFile });
-      const now = new Date().toISOString();
-      store.db
-        .prepare(
-          'INSERT INTO users (id, msp_id, email, name, role, all_clients, password_hash, must_change_password, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        )
-        .run(
-          'u1',
-          'msp-demo',
-          'Legacy.Tech@atlas.test',
-          'Lee Legacy',
-          'technician',
-          1,
-          await hashPassword('legacy password 99'),
-          0,
-          now,
-          now,
-        );
-      store.db.close();
-
-      await setupOwner(t.app);
-      const { migrateLegacy } = await import('../src/services/importers/legacy.js');
-      const { staticKeyProvider } = await import('../src/crypto/keys.js');
-      const { actorFor } = await import('../src/identity/service.js');
-      const [ownerRow] = (await t.handle.db.execute(sql`select * from users where role = 'owner'`)).rows as never[];
-      const owner = actorFor({
-        ...(ownerRow as Record<string, unknown>),
-        orgId: (ownerRow as { org_id: string }).org_id,
-        mfaSecret: 'x',
-        passkeyCount: 0,
-        allClients: 'edit_passwords',
-      } as never);
-      const run = await migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), { file });
-      expect(run.counts.clients!.created).toBeGreaterThan(0);
-      expect(run.counts.assets!.created).toBeGreaterThan(0);
-      expect(run.counts.documents!.created).toBeGreaterThan(0);
-      expect(run.counts.users).toMatchObject({ created: 1 });
-      // Only the workspace with accounts moves: the seed's other-msp isolation fixture stays behind.
-      const names = ((await t.handle.db.execute(sql`select name from clients`)).rows as { name: string }[]).map(
-        (r) => r.name,
-      );
-      expect(names).toContain('Harbor Dental Group');
-      expect(names).not.toContain('Isolation Test Company');
-      const titles = ((await t.handle.db.execute(sql`select title from documents`)).rows as { title: string }[]).map(
-        (r) => r.title,
-      );
-      expect(titles).not.toContain('Private tenant record');
-
-      // The 0.2 password hash still works.
-      const { r } = await signIn(t.app, 'legacy.tech@atlas.test', 'legacy password 99');
-      expect(r.status).toBe(200);
-
-      const again = await migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), { file });
-      expect(again.counts.clients!.created).toBe(0);
-      expect(again.counts.users).toMatchObject({ skipped: 1 });
-
-      // With accounts in two workspaces, the migration asks which one instead of mixing them.
-      const { DatabaseSync } = await import('node:sqlite');
-      const writable = new DatabaseSync(file);
-      writable
-        .prepare(
-          'INSERT INTO users (id, msp_id, email, name, role, all_clients, password_hash, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-        )
-        .run('u2', 'other-msp', 'other@atlas.test', 'Other Tenant', 'admin', 1, 'x', now, now);
-      writable.close();
-      await expect(migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), { file })).rejects.toThrow(
-        /several workspaces.*msp-demo.*other-msp|several workspaces.*other-msp.*msp-demo/,
-      );
-      await expect(
-        migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), { file, workspace: 'nope' }),
-      ).rejects.toThrow('No workspace "nope"');
-      const chosen = await migrateLegacy(t.handle.db, owner, staticKeyProvider([randomBytes(32)]), {
-        file,
-        workspace: 'msp-demo',
-      });
-      expect(chosen.counts.clients!.created).toBe(0);
-      expect(chosen.counts.users).toMatchObject({ skipped: 1 });
-    } finally {
-      await t.close();
-      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

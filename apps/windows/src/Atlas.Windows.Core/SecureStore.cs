@@ -42,6 +42,20 @@ public sealed record AppSettings
 
     /// <summary>Minutes without keyboard or mouse use before the app locks; 0 never locks.</summary>
     public int LockAfterMinutes { get; init; } = 15;
+
+    /// <summary>"system" to follow Windows, or "light" or "dark".</summary>
+    public string Theme { get; init; } = "system";
+
+    /// <summary>The <see cref="SearchShortcut"/> that opens search from anywhere.</summary>
+    public string Shortcut { get; init; } = SearchShortcut.Default.Id;
+
+    /// <summary>Take the window, taskbar, tray, and shortcut icon from the Atlas's favicon.</summary>
+    public bool UseAtlasIcon { get; init; } = true;
+
+    /// <summary>The Atlas the saved icon came from, and its ETag, so it's fetched again only when it changes.</summary>
+    public string? IconFrom { get; init; }
+
+    public string? IconETag { get; init; }
 }
 
 /// <summary>

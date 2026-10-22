@@ -20,7 +20,7 @@ import { useClient, useSave } from '@/lib/queries';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
 import { StatusChart, SWATCH, type Slice, type Tone } from './StatusChart';
-import { Button, Card, CardHeader, Dialog, EmptyState, Skeleton, useToast } from './ui';
+import { Button, Card, CardHeader, EmptyState, Skeleton, useToast, Drawer } from './ui';
 
 export const useTrackers = (clientId?: string) =>
   useQuery({
@@ -193,7 +193,7 @@ function ItemList({
   const items = useTrackerItems(kind, { clientId, filter: pick?.filter ?? null });
   const list = items.data ?? [];
   return (
-    <Dialog
+    <Drawer
       open={!!pick}
       onClose={onClose}
       size="lg"
@@ -205,7 +205,7 @@ function ItemList({
       }
     >
       {items.isLoading ? <Skeleton className="h-24" /> : <ItemTable kind={kind} items={list} showClient={!clientId} />}
-    </Dialog>
+    </Drawer>
   );
 }
 

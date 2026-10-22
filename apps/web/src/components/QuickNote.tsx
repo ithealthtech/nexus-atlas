@@ -4,7 +4,7 @@ import { History, Pencil, StickyNote } from 'lucide-react';
 import { atLeast, type ClientSummary } from '@atlas/shared';
 import { api } from '@/lib/api';
 import { relativeTime } from '@/lib/format';
-import { Button, Card, Dialog, FormError, Textarea, useToast } from './ui';
+import { Button, Card, FormError, Textarea, useToast, Drawer } from './ui';
 import { RevisionsPanel } from './panels';
 
 /**
@@ -36,7 +36,7 @@ export function QuickNote({ client }: { client: ClientSummary }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-[13px] font-semibold text-warning">Quick note</p>
         {!editing && (
-          <div className="-my-1 flex gap-1">
+          <div className="-my-1 flex gap-1 print:hidden">
             {client.notesVersion > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setHistory(true)}>
                 <History /> History
@@ -70,7 +70,7 @@ export function QuickNote({ client }: { client: ClientSummary }) {
         </>
       )}
       {history && (
-        <Dialog open onClose={() => setHistory(false)} size="lg" title="Quick note history">
+        <Drawer open onClose={() => setHistory(false)} size="lg" title="Quick note history">
           <RevisionsPanel
             kind="client-notes"
             id={client.id}
@@ -82,7 +82,7 @@ export function QuickNote({ client }: { client: ClientSummary }) {
               setHistory(false);
             }}
           />
-        </Dialog>
+        </Drawer>
       )}
     </Card>
   );

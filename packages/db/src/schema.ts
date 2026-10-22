@@ -1170,6 +1170,26 @@ export const rmmHealthSnapshots = pgTable(
   (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('rmm_health_snapshots_day').on(t.orgId, t.day)],
 );
 
+// Each client's health score, one row per day (refreshed through the day), for its trend. The parts and what
+// lowered them are kept, so a day can be explained later.
+export const clientHealth = pgTable(
+  'client_health',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    /** 0–100, or null when nothing could be measured. */
+    score: integer('score'),
+    parts: jsonb('parts').notNull(),
+    updatedAt: updated(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.clientId, t.day] }), index('client_health_day').on(t.orgId, t.day)],
+);
+
 // Tickets synced from the ConnectWise platform, read-only in Atlas: every open ticket of each linked company, and
 // those closed in the last 90 days. A ticket ConnectWise stops returning is deleted when its company is read in full.
 export const tickets = pgTable(
@@ -1590,4 +1610,94 @@ export const documentShares = pgTable(
     createdAt: created(),
   },
   (t) => [uniqueIndex('document_shares_token').on(t.token), index('document_shares_document').on(t.documentId)],
+);
+
+// A link that shows one single-client report snapshot to someone without an account, such as the client. Unlike a
+// document link it always expires. Deleting the snapshot (or its client) removes its links.
+export const reportShares = pgTable(
+  'report_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => reportRuns.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    views: integer('views').notNull().default(0),
+    lastViewedAt: timestamp('last_viewed_at', { withTimezone: true }),
+    createdBy: createdBy(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('report_shares_token').on(t.token), index('report_shares_run').on(t.runId)],
+);
+
+// A report run on a schedule and emailed: the definition it runs, when, and to whom. It runs as its owner, with
+// the owner's access at the time, so a schedule never shows anyone more than its owner could see.
+export const reportSchedules = pgTable(
+  'report_schedules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    definition: jsonb('definition').notNull(),
+    cadence: text('cadence').notNull(),
+    day: integer('day').notNull(),
+    hour: integer('hour').notNull(),
+    recipients: jsonb('recipients').$type<string[]>().notNull(),
+    attachPdf: boolean('attach_pdf').notNull().default(true),
+    clientLink: boolean('client_link').notNull().default(false),
+    /** always, attention (only when something needs review), or new (only when something new does). */
+    sendWhen: text('send_when').notNull().default('always'),
+    enabled: boolean('enabled').notNull().default(true),
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }).notNull(),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    lastStatus: text('last_status'),
+    lastError: text('last_error').notNull().default(''),
+    lastRunId: uuid('last_run_id').references(() => reportRuns.id, { onDelete: 'set null' }),
+    version: integer('version').notNull().default(1),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    index('report_schedules_owner').on(t.orgId, t.ownerId),
+    index('report_schedules_due').on(t.enabled, t.nextRunAt),
+    check('report_schedules_cadence_check', sql`${t.cadence} in ('daily','weekly','monthly','quarterly')`),
+    check('report_schedules_send_when_check', sql`${t.sendWhen} in ('always','attention','new')`),
+  ],
+);
+
+// Each email a schedule sent or tried to send: one row per recipient, kept with the schedule (deleting it, or its
+// client, deletes these too). The snapshot it sent stays linked while it is in the owner's history, for resending.
+export const reportDeliveries = pgTable(
+  'report_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    scheduleId: uuid('schedule_id')
+      .notNull()
+      .references(() => reportSchedules.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').references(() => reportRuns.id, { onDelete: 'set null' }),
+    recipient: text('recipient').notNull(),
+    status: text('status').notNull(),
+    error: text('error').notNull().default(''),
+    /** Sent by the schedule, by Send now, or as a resend of an earlier delivery. */
+    trigger: text('trigger').notNull(),
+    createdAt: created(),
+  },
+  (t) => [
+    index('report_deliveries_schedule').on(t.scheduleId, t.createdAt),
+    check('report_deliveries_status_check', sql`${t.status} in ('sent','failed')`),
+    check('report_deliveries_trigger_check', sql`${t.trigger} in ('schedule','manual','resend')`),
+  ],
 );

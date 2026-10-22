@@ -102,7 +102,7 @@ export function AssetLabels() {
             <>
               <label className="flex items-center gap-2 text-sm">
                 <span className="text-muted">Label size</span>
-                <Select value={size} onChange={(e) => setSize(e.target.value as Size)} className="w-52">
+                <Select value={size} onChange={(e) => setSize(e.target.value as Size)} className="w-auto">
                   {(Object.keys(SIZES) as Size[]).map((k) => (
                     <option key={k} value={k}>
                       {SIZES[k].label}

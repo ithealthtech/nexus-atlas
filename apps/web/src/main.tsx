@@ -25,7 +25,6 @@ import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientLicenses } from '@/pages/client/Licenses';
 import { ClientOverview } from '@/pages/client/ClientOverview';
-import { ClientReport } from '@/pages/client/ClientReport';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
 import { DomainTracker, SslTracker } from '@/components/Trackers';
@@ -33,6 +32,7 @@ import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
 import { SharedArticle } from '@/pages/SharedArticle';
+import { SharedReport } from '@/pages/SharedReport';
 import { SendPage, Sends } from '@/pages/Sends';
 import { PersonalVault } from '@/pages/PersonalVault';
 import { ReasonProvider } from '@/lib/vault';
@@ -58,6 +58,8 @@ import { AssetLabels } from '@/pages/AssetLabels';
 import { BitlockerCollector } from '@/pages/BitlockerCollector';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
+import { WhatsNew } from '@/pages/WhatsNew';
+import { Setup } from '@/pages/Setup';
 import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
 import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
@@ -158,7 +160,10 @@ function Root() {
     <>
       <Outlet />
       {DEMO && (
-        <p className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full print:hidden bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md">
+        <p
+          data-demo-badge
+          className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full print:hidden bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md"
+        >
           Demo · sample data · resets when you reload
         </p>
       )}
@@ -224,7 +229,14 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
   createRoute({ getParentRoute: () => appRoute, path: '/reports', component: Reports }),
   clientRoute.addChildren(clientRoutes),
-  createRoute({ getParentRoute: () => appRoute, path: '/client-report/$clientId', component: ClientReport }),
+  // The old one-page monthly report, retired in 2.0: its links open the client's Reports tab.
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/client-report/$clientId',
+    beforeLoad: ({ params }) => {
+      throw redirect({ to: '/clients/$clientId/reports', params: { clientId: params.clientId } });
+    },
+  }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),
   createRoute({
     getParentRoute: () => appRoute,
@@ -283,6 +295,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/api-keys', component: adminOnly(ApiKeysPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/setup', component: adminOnly(Setup) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/rotation', component: adminOnly(PasswordRotation) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/bitlocker', component: adminOnly(BitlockerCollector) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
@@ -300,6 +313,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/checklists', component: ChecklistsPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklist-runs/$runId', component: RunPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
+  createRoute({ getParentRoute: () => appRoute, path: '/whats-new', component: WhatsNew }),
   // Atlas for Windows opens this in the browser to sign in (after the usual sign-in and second step).
   createRoute({ getParentRoute: () => appRoute, path: '/native/authorize', component: NativeAuthorize }),
   createRoute({
@@ -316,6 +330,7 @@ const router = createRouter({
     createRoute({ getParentRoute: () => rootRoute, path: '/share/$token', component: SharePage }),
     createRoute({ getParentRoute: () => rootRoute, path: '/send/$token', component: SendPage }),
     createRoute({ getParentRoute: () => rootRoute, path: '/kb/$token', component: SharedArticle }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/report/$token', component: SharedReport }),
     createRoute({
       getParentRoute: () => rootRoute,
       path: '/reset-password',

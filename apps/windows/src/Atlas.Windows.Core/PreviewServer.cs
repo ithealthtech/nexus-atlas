@@ -110,6 +110,117 @@ public sealed class PreviewServer : HttpMessageHandler
         new { id = "d-onboard", clientId = (string?)null, clientName = (string?)null, title = "New client onboarding checklist", status = "needs_review", updatedAt = Now, updatedByName = "Sam Ortiz" },
     ];
 
+    // Everything a document can hold, so the screenshots show each kind drawn.
+    private static readonly object OnboardContent = new
+    {
+        type = "doc",
+        content = new object[]
+        {
+            new { type = "paragraph", content = new object[] { new { type = "text", text = "Work through this in the first week. Anything that can't be done yet goes on the client's quick note." } } },
+            new
+            {
+                type = "blockquote",
+                content = new object[]
+                {
+                    new
+                    {
+                        type = "paragraph",
+                        content = new object[]
+                        {
+                            new { type = "text", text = "Never", marks = new object[] { new { type = "bold" } } },
+                            new { type = "text", text = " take admin passwords by email. Use a " },
+                            new { type = "text", text = "one-time share link", marks = new object[] { new { type = "highlight" } } },
+                            new { type = "hardBreak" },
+                            new { type = "text", text = "and store them in Atlas the same day. See " },
+                            new { type = "text", text = "the security policy", marks = new object[] { new { type = "link", attrs = new { href = "https://example.com/security-policy" } } } },
+                            new { type = "text", text = "." },
+                        },
+                    },
+                },
+            },
+            new { type = "heading", attrs = new { level = 2 }, content = new object[] { new { type = "text", text = "First visit" } } },
+            new
+            {
+                type = "taskList",
+                content = new object[]
+                {
+                    ChecklistItem(true, "Signed agreement and primary contact on file"),
+                    ChecklistItem(true, "Admin credentials collected and stored in Atlas"),
+                    ChecklistItem(false, "Network diagram drawn and attached"),
+                    ChecklistItem(false, "Backups checked: last good restore test"),
+                },
+            },
+            new { type = "heading", attrs = new { level = 2 }, content = new object[] { new { type = "text", text = "Agent install" } } },
+            new
+            {
+                type = "paragraph",
+                content = new object[]
+                {
+                    new { type = "text", text = "Run this on each server " },
+                    new { type = "text", text = "as an administrator", marks = new object[] { new { type = "italic" } } },
+                    new { type = "text", text = ", then check " },
+                    new { type = "text", text = "Get-Service ITSPlatform", marks = new object[] { new { type = "code" } } },
+                    new { type = "text", text = " says " },
+                    new { type = "text", text = "Running", marks = new object[] { new { type = "bold" } } },
+                    new { type = "text", text = ". The old agent's name was " },
+                    new { type = "text", text = "LTService", marks = new object[] { new { type = "strike" } } },
+                    new { type = "text", text = "." },
+                },
+            },
+            new
+            {
+                type = "codeBlock",
+                attrs = new { language = "powershell" },
+                content = new object[] { new { type = "text", text = "msiexec /i AgentSetup.msi /qn TOKEN=$env:ATLAS_SITE_TOKEN\nGet-Service ITSPlatform | Select-Object Status, StartType" } },
+            },
+            new { type = "heading", attrs = new { level = 3 }, content = new object[] { new { type = "text", text = "Standard VLANs" } } },
+            new
+            {
+                type = "table",
+                content = new object[]
+                {
+                    new { type = "tableRow", content = new object[] { Cell("tableHeader", "VLAN"), Cell("tableHeader", "Subnet"), Cell("tableHeader", "Use") } },
+                    new { type = "tableRow", content = new object[] { Cell("tableCell", "10"), Cell("tableCell", "10.x.0.0/24"), Cell("tableCell", "Servers and network gear") } },
+                    new { type = "tableRow", content = new object[] { Cell("tableCell", "20"), Cell("tableCell", "10.x.20.0/24"), Cell("tableCell", "Staff computers and printers") } },
+                    new { type = "tableRow", content = new object[] { Cell("tableCell", "30"), Cell("tableCell", "10.x.30.0/24"), Cell("tableCell", "Guest Wi-Fi, internet only") } },
+                },
+            },
+            new { type = "horizontalRule" },
+            new
+            {
+                type = "orderedList",
+                attrs = new { start = 1 },
+                content = new object[]
+                {
+                    new { type = "listItem", content = new object[] { new { type = "paragraph", content = new object[] { new { type = "text", text = "Book the 30-day review." } } } } },
+                    new
+                    {
+                        type = "listItem",
+                        content = new object[]
+                        {
+                            new { type = "paragraph", content = new object[] { new { type = "text", text = "Send the welcome pack:" } } },
+                            new
+                            {
+                                type = "bulletList",
+                                content = new object[]
+                                {
+                                    new { type = "listItem", content = new object[] { new { type = "paragraph", content = new object[] { new { type = "text", text = "How to reach the help desk" } } } } },
+                                    new { type = "listItem", content = new object[] { new { type = "paragraph", content = new object[] { new { type = "text", text = "What we monitor, and what we don't" } } } } },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    };
+
+    private static object ChecklistItem(bool done, string text) =>
+        new { type = "taskItem", attrs = new { @checked = done }, content = new object[] { new { type = "paragraph", content = new object[] { new { type = "text", text } } } } };
+
+    private static object Cell(string type, string text) =>
+        new { type, content = new object[] { new { type = "paragraph", content = new object[] { new { type = "text", text } } } } };
+
     private static readonly object RebootContent = new
     {
         type = "doc",
@@ -491,6 +602,9 @@ public sealed class PreviewServer : HttpMessageHandler
         return null;
     }
 
+    // A 128-pixel orange square with "ID" on it, standing in for an organization's icon.
+    private const string PreviewIcon = "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAFGklEQVR42u2cX2hbVRzHv+fe/E+a1rR0A+umc2wWRTco6KxOUFSYRWTCVvYiCr7Y4cuUjgllyEAEHZU9CGU+KIKj0mrRMXEoTCnr6Cxjf7rN1rGu1djYmbikSW+Se68Pvm3WntR05J7z/TzfpO35fc73d+7tPQcghBBCiI6I2/nDUp0xl0O+NM1HckIJAVjw2hdCsPB6iyBYeL1FECy83iIYLL53qcbYGyy+3hIIFl7vlmCw+HqngcHi6y2BwSHTG4OzX+8UMFh8vSUwWHy9JeAagGsAzn6dU4AJwATg7Nc5BZgATADOfp1TgAnABCAUgFAA9n891wFMACYAoQCEAhAKQCgAoQCEAhAKQCgAoQCEAhAKQCgAoQCEAhAKQCgAoQCEAhA18NXSL5M4dAFm05olr8v0PInSxGjVvm9RHBtuyYJbWoCbS8PJzMJJJ2H/9jPK0+MoXxmD/cc1CqBuPpoQwQhEMALEEjBX33vLJXZqCqVz32NhuB+lS8OA67IF6ITZvBahp15GQ88xJHrPIfz0qxD+EAXQVYbYKweR6D2DYFsHBdC2cyTuRHzPZ4h3HYYIhCmArgQf24mG/d/CiDdRAG1vs+7ZhPp9QxDRBgqgrQRrH0R890eAELwNrEWyfV2wZy7eNDJBGHUJiFgCZmML/K3t8K1vW/YKP7DpGYS37Ubh6CEKUGvYMxelHiwJfxCBtg5EXngDvjUPVPxzoi/ugzXcDyczyxbgRdySBevkANJ7H8WND16CW8hW9HkRjiGyfS/XAN43wYU1Moj0W1th/3q5oo+Gtu6CiNRTACVaR3ISmQPPwUkn5VMgGEHo8U4KoApOZhY3Du4CykX5BWENPSWkAFWgNHkaheOH5QVobf/nH0wUQB3yX/XCLVlyF5t++O5+iAIo1QrSSVgjg/L33+s2UwDlWsH5E9LXmqvWUQDVKI7/ID/wjS0UQLk2MDcNt5CTG/iGVRRASQlyf0o+DwhTABVxs3NyAvgpgJoCOI7shRRARYxYQq7+xTwFUFOAO+QEkFwsUgAPIUJRiGi99B0DBVAM/4YtgJAb0lrZUUQBqilAa7v0teVr5ymAWvkvKtoMUpocpQAqEdj8LMyW++TiP3WVawDVZn/k+T3Sl1unhvhCiEpEOl6Hf+Mj8gIM91MAZRZ+G7cgunO/fO8f/xHlqbMUQJW+X989CJjy2yvyQ++DG0O83vL9QYS3dSG6owcwTOnPFceOoXj2Owrg2cIHIwi270B0e3fFL3S4hSxyH78J7g2sQczV6+EWb3qh0+eHUdcII94Eo+kuBO5/Av4NDwO+AJa9/zA1RQFqkbrX+lb0+/OD78Ia+QLcHq4hhW8+xPznB8BTwqDf/sH5/reR//I98Jg4zXCy15Hr64J1+ih4TqBuu4ZPDiD3STecv1LgQZH6vAiI4pnjmB94B+VffgJPCtWE8vQFFEe/xsKJT2GnroJHxaqGXYZbXIBrzcPJ/A57bgZ2cgLlK2MoTYzCuT7j+T/xlmOrUp0xl5VXl+YjOcHnAIQCEApAKAChABSAUABCARa7TyTqPgNgAhAKQAEIBeA6QM/+zwQgiwvAFFB/9jMByH8LwBRQe/YzAcjSAjAF1J390glACdQsfkUtgBKoV3yuAUhlAjAF1Jr9y0oASqBO8YF/2RdQCdxD4N3CV2UNwDTwdvGrsgikBN4t/v9uAWwJ3i38ighAEbxT+BUVgCLUfuFviwAUgusqQgghhNQmfwMFvbi39KnpEAAAAABJRU5ErkJggg==";
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         await Task.Delay(60, cancellationToken).ConfigureAwait(false);
@@ -508,6 +622,13 @@ public sealed class PreviewServer : HttpMessageHandler
             return changedPerson;
         if (await ChangeDocumentsAsync(request, tail, cancellationToken).ConfigureAwait(false) is { } changedDocument)
             return changedDocument;
+        // The organization's own icon (its favicon), so the preview shows the app taking it.
+        if (tail == "branding/app-icon")
+        {
+            var picture = new ByteArrayContent(Convert.FromBase64String(PreviewIcon));
+            picture.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = picture };
+        }
         if (tail.EndsWith("/password-folders", StringComparison.Ordinal))
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Array.Empty<object>()) };
         var clientPage = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)(/contacts|/locations)?$");
@@ -575,7 +696,7 @@ public sealed class PreviewServer : HttpMessageHandler
             return null;
         // Keeps each field as written (a string stays a string), so lookups by id find it.
         var copy = Mutable(doc);
-        copy["content"] = id == "d-reboot" ? RebootContent : new { type = "doc", content = Array.Empty<object>() };
+        copy["content"] = id switch { "d-reboot" => RebootContent, "d-onboard" => OnboardContent, _ => new { type = "doc", content = Array.Empty<object>() } };
         copy["version"] = 1;
         copy["canEdit"] = true;
         return copy;

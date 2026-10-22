@@ -306,6 +306,19 @@ public sealed class SecureStoreTests : IDisposable
         Assert.True(store.LoadSettings().StartWithWindows);
     }
 
+    [Fact]
+    public void Keeps_the_theme_and_shortcut_and_reads_older_settings()
+    {
+        var store = new SecureStore(folder, new ReversingProtector());
+        store.SaveSettings(new AppSettings { Theme = "dark", Shortcut = "ctrl+alt+k" });
+        Assert.Equal(("dark", "ctrl+alt+k"), (store.LoadSettings().Theme, store.LoadSettings().Shortcut));
+
+        // A settings file from before these existed: the defaults apply.
+        File.WriteAllText(Path.Combine(folder, "settings.json"), """{"AtlasUrl":"https://atlas.example.com"}""");
+        var older = store.LoadSettings();
+        Assert.Equal(("system", "ctrl+shift+space", 15), (older.Theme, older.Shortcut, older.LockAfterMinutes));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(folder))
@@ -630,5 +643,19 @@ public class PasswordGeneratorTests
         }
         Assert.NotEqual(PasswordGenerator.Generate(), PasswordGenerator.Generate());
         Assert.Throws<ArgumentOutOfRangeException>(() => PasswordGenerator.Generate(4));
+    }
+}
+
+public class SearchShortcutTests
+{
+    [Fact]
+    public void Ctrl_Shift_Space_unless_another_is_chosen()
+    {
+        Assert.Equal("Ctrl+Shift+Space", SearchShortcut.For(null).Label);
+        Assert.Equal("Ctrl+Shift+Space", SearchShortcut.For("ctrl+shift+nonsense").Label);
+        var k = SearchShortcut.For("ctrl+alt+k");
+        Assert.Equal(("Ctrl+Alt+K", 0x0003u, 0x4Bu), (k.Label, k.Modifiers, k.Key));
+        Assert.Equal(SearchShortcut.Choices.Count, SearchShortcut.Choices.Select(c => c.Id).Distinct().Count());
+        Assert.Equal(SearchShortcut.Choices.Count, SearchShortcut.Choices.Select(c => (c.Modifiers, c.Key)).Distinct().Count());
     }
 }

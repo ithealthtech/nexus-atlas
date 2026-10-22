@@ -267,6 +267,41 @@
       "when": 1792461918561,
       "tag": "0037_report_client_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792538451963,
+      "tag": "0038_report_shares",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792542216951,
+      "tag": "0039_report_schedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792566190985,
+      "tag": "0040_report_deliveries",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792566471780,
+      "tag": "0041_report_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1792592471182,
+      "tag": "0042_client_health",
+      "breakpoints": true
     }
   ]
 }

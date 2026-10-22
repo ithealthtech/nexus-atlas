@@ -20,12 +20,14 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { useClient } from '@/lib/queries';
 import { useActor } from '@/lib/session';
+import { saveText } from '@/lib/download';
 
 const useChecklists = (client?: string) =>
   useQuery({
@@ -94,7 +96,7 @@ function RunList({ runs, showClient, empty }: { runs: RunView[] | undefined; sho
     <ul className="divide-y divide-border">
       {runs.map((r) => (
         <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 text-sm">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-48">
             <AppLink to={`/checklist-runs/${r.id}`} className="font-medium hover:underline">
               {r.title}
             </AppLink>
@@ -158,7 +160,7 @@ function ChecklistDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open={open}
       onClose={onClose}
       size="lg"
@@ -212,7 +214,7 @@ function ChecklistDialog({
         </fieldset>
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -560,12 +562,8 @@ export function RunPage() {
     }
   };
   const download = () => {
-    const url = URL.createObjectURL(new Blob([runMarkdown(run)], { type: 'text/markdown' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${run.title.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'checklist'}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const name = run.title.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'checklist';
+    saveText(runMarkdown(run), `${name}.md`, 'text/markdown');
   };
 
   return (

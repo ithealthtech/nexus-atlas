@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { requireAdmin } from '../authz.js';
 import type { RequestLogQuery, RequestLogService } from '../services/request-log.js';
+import { securityEvent } from '../services/security-log.js';
 
 /** The verbose request log (administrators only): entries, one entry in full, the on/off setting, and clearing it. */
 export function registerRequestLogRoutes(
@@ -19,7 +20,7 @@ export function registerRequestLogRoutes(
     return req.session!.actor.orgId;
   };
   const event = (req: FastifyRequest, action: string, detail: string) =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: req.session!.actor.orgId,
       userId: req.session!.actor.id,
       actor: req.session!.actor.name,

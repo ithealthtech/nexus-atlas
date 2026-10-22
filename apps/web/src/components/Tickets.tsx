@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 import { formatDate, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
-import { Button, Card, CardHeader, Dialog, EmptyState, FormError, Skeleton, Textarea } from './ui';
+import { Button, Card, CardHeader, EmptyState, FormError, Skeleton, Textarea, Drawer } from './ui';
 
 const query = (params: Record<string, string | undefined>) => {
   const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => e[1] !== undefined));
@@ -249,7 +249,8 @@ function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClien
   const staff = useActor().isStaff;
   const cols = showClient ? 7 : 6;
   return (
-    <div className="overflow-x-auto">
+    // Positioned, so the hidden "Notes" header stays inside the scroll area instead of widening the page.
+    <div className="relative overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="text-left text-xs text-muted">
           <tr className="border-b border-border">
@@ -357,7 +358,7 @@ function StatusList({
   const list = useTicketList(clientId, status ?? undefined, days, status !== null);
   const n = list.data?.length ?? 0;
   return (
-    <Dialog
+    <Drawer
       open={status !== null}
       onClose={onClose}
       size="lg"
@@ -369,7 +370,7 @@ function StatusList({
       ) : (
         <TicketTable tickets={list.data ?? []} showClient={!clientId} />
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

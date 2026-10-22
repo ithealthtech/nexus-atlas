@@ -4,6 +4,7 @@ import { schema, type Database } from '@atlas/db';
 import { createDocumentShareSchema, type DocumentShareView, type RichText, type SharedArticle } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { isUuid, type Scope } from './scope.js';
+import { securityEvent } from './security-log.js';
 
 /**
  * Sharing a document by link: anyone who has the link can read that one document, as it is now, without signing
@@ -43,12 +44,12 @@ export class DocumentShareService {
   }
 
   private event(scope: Scope, action: string, detail: string, ip: string) {
-    return scope.db.insert(schema.securityEvents).values({
+    return securityEvent(scope.db, {
       orgId: scope.actor.orgId,
       userId: scope.actor.id,
       actor: scope.actor.name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip,
     });
   }

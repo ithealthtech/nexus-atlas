@@ -15,7 +15,6 @@ import {
   Card,
   CardHeader,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -23,9 +22,11 @@ import {
   PageHeader,
   Skeleton,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
+import { useAction } from '@/lib/actions';
 
 function WebhookDialog({
   webhook,
@@ -57,7 +58,7 @@ function WebhookDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={webhook ? `Edit ${webhook.name}` : 'New webhook'}
@@ -114,7 +115,7 @@ function WebhookDialog({
         <Checkbox name="enabled" defaultChecked={webhook?.enabled ?? true} label="Turned on" />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -124,7 +125,7 @@ function Deliveries({ webhook, onClose }: { webhook: WebhookView; onClose: () =>
     queryFn: () => api<WebhookDeliveryView[]>(`/webhooks/${webhook.id}/deliveries`),
   });
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -156,7 +157,7 @@ function Deliveries({ webhook, onClose }: { webhook: WebhookView; onClose: () =>
           ))}
         </ul>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -167,18 +168,7 @@ export function Webhooks() {
   const [editing, setEditing] = useState<WebhookView | 'new' | null>(null);
   const [viewing, setViewing] = useState<WebhookView | null>(null);
   const [secret, setSecret] = useState<WebhookWithSecret | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<unknown>) => {
-    setBusy(name);
-    try {
-      await work();
-      await list.refetch();
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busy, act } = useAction({ toast: true, after: () => list.refetch() });
   return (
     <>
       <PageHeader
@@ -191,7 +181,7 @@ export function Webhooks() {
           </Button>
         }
       />
-      <div className="grid max-w-4xl gap-6">
+      <div className="grid gap-6">
         {secret && (
           <Card>
             <CardHeader
@@ -232,7 +222,7 @@ export function Webhooks() {
             <ul className="divide-y divide-border">
               {list.data.map((w) => (
                 <li key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3.5 text-sm">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-64">
                     <p className="flex flex-wrap items-center gap-2 font-medium">
                       {w.name}
                       {w.paused ? (

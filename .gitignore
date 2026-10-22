@@ -8,6 +8,7 @@ artifacts/
 tmp/
 test-results/
 playwright-report/
+playwright-report-demo/
 *.tsbuildinfo
 .env
 .env.*

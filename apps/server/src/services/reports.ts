@@ -3,6 +3,7 @@ import { schema } from '@atlas/db';
 import {
   reportDefinitionSchema,
   reportTemplateSchema,
+  type ReportDefinition,
   type ReportSnapshot,
   type ReportRunDetail,
   type ReportRunView,
@@ -12,7 +13,7 @@ import { z } from 'zod';
 import { HttpError } from '../errors.js';
 import { requireClient } from '../authz.js';
 import { type Scope, isUuid } from './scope.js';
-import { collectReport } from './report-data.js';
+import { collectReport, type SecuritySources } from './report-data.js';
 import type { SettingsService } from './settings.js';
 
 const runs = schema.reportRuns;
@@ -59,45 +60,57 @@ export class ReportService {
   constructor(
     private settings: SettingsService,
     private fetcher?: typeof fetch,
+    private security?: SecuritySources,
   ) {}
   async authorize(scope: Scope, ids: string[]) {
     for (const id of ids) await requireClient(scope.db, scope.actor, id, 'read');
   }
   async generate(scope: Scope, input: unknown): Promise<ReportRunDetail> {
+    const { definition, snapshot } = await this.collect(scope, input);
+    return this.store(scope, definition, snapshot);
+  }
+  /** Captures a snapshot without keeping it (a scheduled report that may have nothing to send). */
+  async collect(scope: Scope, input: unknown) {
     const definition = reportDefinitionSchema.parse(input);
     const key = `${scope.actor.orgId}:${scope.actor.id}`;
     if (active.has(key)) throw new HttpError(409, 'A report is already running. Wait for it to finish.');
     active.add(key);
     try {
-      const snapshot = await collectReport(scope, definition, this.settings, this.fetcher);
-      // Client deletion takes an exclusive lock. Never insert a snapshot after its client was deleted.
-      return await scope.db.transaction(async (tx) => {
-        const current = await tx
-          .select({ id: schema.clients.id })
-          .from(schema.clients)
-          .where(and(eq(schema.clients.orgId, scope.actor.orgId), inArray(schema.clients.id, definition.clientIds)))
-          .for('share');
-        if (current.length !== definition.clientIds.length) throw new HttpError(404, 'Client not found.');
-        await this.authorize(scope, definition.clientIds);
-        const [row] = await tx
-          .insert(runs)
-          .values({
-            orgId: scope.actor.orgId,
-            ownerId: scope.actor.id,
-            kind: definition.kind,
-            title: definition.title,
-            clientIds: definition.clientIds,
-            clients: snapshot.clients,
-            warningCount: snapshot.warnings.length,
-            rowCount: snapshot.sections.reduce((n, s) => n + s.rows.length, 0),
-            snapshot,
-          })
-          .returning();
-        return { ...runView(row!), snapshot };
-      });
+      return {
+        definition,
+        snapshot: await collectReport(scope, definition, this.settings, this.fetcher, this.security),
+      };
     } finally {
       active.delete(key);
     }
+  }
+  /** Keeps a snapshot in its owner's history. */
+  async store(scope: Scope, definition: ReportDefinition, snapshot: ReportSnapshot): Promise<ReportRunDetail> {
+    // Client deletion takes an exclusive lock. Never insert a snapshot after its client was deleted.
+    return await scope.db.transaction(async (tx) => {
+      const current = await tx
+        .select({ id: schema.clients.id })
+        .from(schema.clients)
+        .where(and(eq(schema.clients.orgId, scope.actor.orgId), inArray(schema.clients.id, definition.clientIds)))
+        .for('share');
+      if (current.length !== definition.clientIds.length) throw new HttpError(404, 'Client not found.');
+      await this.authorize(scope, definition.clientIds);
+      const [row] = await tx
+        .insert(runs)
+        .values({
+          orgId: scope.actor.orgId,
+          ownerId: scope.actor.id,
+          kind: definition.kind,
+          title: definition.title,
+          clientIds: definition.clientIds,
+          clients: snapshot.clients,
+          warningCount: snapshot.warnings.length,
+          rowCount: snapshot.sections.reduce((n, s) => n + s.rows.length, 0),
+          snapshot,
+        })
+        .returning();
+      return { ...runView(row!), snapshot };
+    });
   }
   async history(scope: Scope) {
     const allowed = await scope.readableClientIds();

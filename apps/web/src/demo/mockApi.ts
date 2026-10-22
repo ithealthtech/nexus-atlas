@@ -1,9 +1,17 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  REPORT_INFO,
+  reportDefinitionSchema,
+  type ReportDefinition,
+  type ReportRunDetail,
+  type ReportRunView,
+  type ReportSection,
+  type ReportSnapshot,
   licenseSchema,
   licenseUpdateSchema,
   type LicenseView,
+  type MicrosoftLicenseView,
   remoteAccessRequestSchema,
   type RemoteAccessView,
   CHECKLIST_TEMPLATES,
@@ -35,10 +43,14 @@ import {
   type ServiceRun,
   type SystemServicesView,
   type SystemStatus,
+  type UpdateInfo,
   type Branding,
   type CsvImportResult,
   type ImportJobView,
   type ExpirationItem,
+  type ClientHealthDetail,
+  type ClientHealthSummary,
+  type HealthPartScore,
   type RmmHealthCounts,
   type RmmHealthDevice,
   type RmmHealthFilter,
@@ -852,16 +864,118 @@ const find = <T extends { id: string }>(list: T[], id: string, what = 'Item') =>
 const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_passwords' });
 
 on('GET', '/reports/templates', () => []);
-on('GET', '/reports/runs', () => []);
-
-on('GET', '/reports/templates', () => []);
-on('GET', '/reports/runs', () => []);
+on('GET', '/reports/schedules', () => []);
 
 // Client license tracking in the clickable demo. Microsoft writes are never simulated as live changes.
-const licenseRecords: LicenseView[] = [];
+// Harbor Dental Group has a Microsoft 365 tenant linked through GDAP, and two subscriptions tracked in Atlas.
+const harbor = db.clients.find((c) => c.name === 'Harbor Dental Group');
+const licenseRecords: LicenseView[] = harbor
+  ? [
+      {
+        ...licenseSchema.parse({
+          name: 'Dentrix Ascend',
+          vendor: 'Henry Schein One',
+          seats: 12,
+          assignments: [
+            'Front desk 1',
+            'Front desk 2',
+            'Dr. Patel',
+            'Dr. Okafor',
+            'Hygiene 1',
+            'Hygiene 2',
+            'Billing',
+            'Office manager',
+            'Assistant 1',
+          ],
+          unitCostCents: 8900,
+          renewalDate: daysFromNow(18),
+        }),
+        id: uuid(),
+        clientId: harbor.id,
+        version: 1,
+        updatedAt: ago(60 * 24 * 12),
+      },
+      {
+        ...licenseSchema.parse({
+          name: 'Datto SaaS Protection',
+          vendor: 'Datto',
+          seats: 25,
+          unitCostCents: 30000,
+          billingCycle: 'annual',
+          renewalDate: daysFromNow(140),
+          autoRenew: true,
+        }),
+        id: uuid(),
+        clientId: harbor.id,
+        version: 1,
+        updatedAt: ago(60 * 24 * 40),
+      },
+    ]
+  : [];
+const HARBOR_SKUS = [
+  {
+    id: 'cbdc14ab-d96c-4c30-b9f4-6ada7cdc1d46',
+    name: 'Microsoft 365 Business Premium',
+    part: 'SPB',
+    enabled: 25,
+    assigned: 21,
+    status: 'Enabled',
+  },
+  {
+    id: '4b9405b0-7788-4568-add1-99614e613b69',
+    name: 'Exchange Online (Plan 1)',
+    part: 'EXCHANGESTANDARD',
+    enabled: 5,
+    assigned: 5,
+    status: 'Enabled',
+  },
+  {
+    id: 'ee02fd1b-340e-4a4b-b355-4a514e4c8943',
+    name: 'Exchange Online Archiving',
+    part: 'EXCHANGEARCHIVE_ADDON',
+    enabled: 3,
+    assigned: 1,
+    status: 'Enabled',
+  },
+  {
+    id: 'f30db892-07e9-47e9-837c-80727f46fd3d',
+    name: 'Microsoft Power Automate Free',
+    part: 'FLOW_FREE',
+    enabled: 10000,
+    assigned: 2,
+    status: 'Enabled',
+  },
+];
+// Made once, so each person keeps their ID between reads.
+const HARBOR_USERS = (() => {
+  const [premium, exchange, archive] = HARBOR_SKUS.map((s) => s.id);
+  const person = (name: string, upn: string, skuIds: string[], enabled = true, groupSkuIds: string[] = []) => ({
+    id: uuid(),
+    name,
+    upn: `${upn}@harbordental.example`,
+    enabled,
+    skuIds,
+    groupSkuIds,
+  });
+  return [
+    person('Anika Patel', 'apatel', [premium!, archive!]),
+    person('Ben Okafor', 'bokafor', [premium!]),
+    person('Front Desk', 'frontdesk', [exchange!]),
+    person('Grace Liu', 'gliu', [premium!], true, [premium!]),
+    person('Jordan Smith', 'jsmith', [premium!, archive!], false),
+    person('Marcus Reed', 'mreed', [premium!]),
+    person('Billing', 'billing', [exchange!]),
+    person('Scanner', 'scanner', []),
+    person('Old Reception', 'reception-old', [exchange!], false),
+  ];
+})();
 on('GET', '/clients/:id/licenses', (m) => {
   find(db.clients, m[1]!, 'Client');
-  return { licenses: licenseRecords.filter((l) => l.clientId === m[1]), microsoft: null };
+  return {
+    licenses: licenseRecords.filter((l) => l.clientId === m[1]),
+    microsoft:
+      m[1] === harbor?.id ? { tenantId: 'harbordental.example', name: 'Harbor Dental Group', mode: 'gdap' } : null,
+  };
 });
 on('POST', '/clients/:id/licenses', (m, b) => {
   find(db.clients, m[1]!, 'Client');
@@ -890,8 +1004,426 @@ on('DELETE', '/clients/:client/licenses/:id', (m, b) => {
   licenseRecords.splice(licenseRecords.indexOf(item), 1);
   return { ok: true };
 });
-on('GET', '/clients/:client/licenses/microsoft', () => notInDemo('GDAP license management'));
+on('GET', '/clients/:client/licenses/microsoft', (m): MicrosoftLicenseView => {
+  if (m[1] !== harbor?.id) notInDemo('GDAP license management');
+  return { tenantId: 'harbordental.example', checkedAt: ago(4), skus: HARBOR_SKUS, users: HARBOR_USERS };
+});
 on('POST', '/clients/:client/licenses/microsoft/assignments', () => notInDemo('GDAP license management'));
+
+// Reports in the demo: built from the sample data the way the server builds them, kept in memory as history.
+// Licensing and savings use Harbor Dental Group's tracked subscriptions and Microsoft 365 tenant.
+const reportRuns: ReportRunDetail[] = [];
+// List prices per seat per month, as the server's Microsoft price list has them.
+const DEMO_PRICES: Record<string, number> = {
+  'Microsoft 365 Business Premium': 2200,
+  'Exchange Online (Plan 1)': 400,
+  'Exchange Online Archiving': 300,
+};
+const usd = (cents: number) =>
+  `USD ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : 'Not recorded');
+function demoReport(definition: ReportDefinition): ReportRunDetail {
+  const chosen = db.clients.filter((c) => definition.clientIds.includes(c.id));
+  const name = (id: string | null) => chosen.find((c) => c.id === id)?.name ?? '';
+  const sections: ReportSection[] = [];
+  const sources: ReportSnapshot['sources'] = [];
+  const warnings: string[] = [];
+  const tracked = licenseRecords.filter((l) => definition.clientIds.includes(l.clientId));
+  const withTenant = harbor && definition.clientIds.includes(harbor.id) && definition.includeMicrosoft;
+  for (const c of chosen) if (c.id !== harbor?.id) warnings.push(`${c.name}: no Microsoft 365 tenant is linked.`);
+  if (withTenant)
+    sources.push({
+      name: 'Microsoft 365: Harbor Dental Group',
+      updatedAt: ago(4),
+      detail:
+        'Read through GDAP. Purchased enabled seats and assignment totals; pricing and renewal dates are not provided.',
+    });
+  if (definition.kind === 'licenses') {
+    sections.push({
+      title: 'Manually tracked subscriptions',
+      columns: ['Client', 'Product', 'Status', 'Seats', 'Assigned', 'Available', 'Cost / billing period', 'Renewal'],
+      rows: tracked.map((l) => [
+        name(l.clientId),
+        l.name,
+        l.status,
+        String(l.seats),
+        String(l.assignments.length),
+        String(Math.max(0, l.seats - l.assignments.length)),
+        `${l.currency} ${((l.unitCostCents * l.seats) / 100).toFixed(2)} / ${l.billingCycle}`,
+        day(l.renewalDate),
+      ]),
+    });
+    if (withTenant)
+      sections.push({
+        title: 'Microsoft 365 via GDAP',
+        columns: ['Client', 'Product', 'Status', 'Enabled seats', 'Assigned', 'Available'],
+        rows: HARBOR_SKUS.map((s) => [
+          'Harbor Dental Group',
+          s.name,
+          s.status,
+          String(s.enabled),
+          String(s.assigned),
+          String(Math.max(0, s.enabled - s.assigned)),
+        ]),
+      });
+  } else if (definition.kind === 'savings') {
+    const unused = [
+      ...tracked.map((l) => ({
+        client: name(l.clientId),
+        subscription: l.name,
+        source: 'Tracked in Atlas',
+        seats: l.seats,
+        assigned: l.assignments.length,
+        price: Math.round(l.billingCycle === 'annual' ? l.unitCostCents / 12 : l.unitCostCents),
+      })),
+      ...(withTenant
+        ? HARBOR_SKUS.filter((s) => DEMO_PRICES[s.name]).map((s) => ({
+            client: 'Harbor Dental Group',
+            subscription: s.name,
+            source: 'Microsoft 365',
+            seats: s.enabled,
+            assigned: s.assigned,
+            price: DEMO_PRICES[s.name]!,
+          }))
+        : []),
+    ].filter((u) => u.seats > u.assigned);
+    const blocked = withTenant
+      ? HARBOR_USERS.filter((u) => !u.enabled && u.skuIds.length).map((u) => ({
+          account: u.upn,
+          subscriptions: u.skuIds.map((id) => HARBOR_SKUS.find((s) => s.id === id)!.name),
+          price: u.skuIds.reduce((n, id) => n + (DEMO_PRICES[HARBOR_SKUS.find((s) => s.id === id)!.name] ?? 0), 0),
+        }))
+      : [];
+    const renewals = tracked.filter(
+      (l) => l.renewalDate && new Date(l.renewalDate).getTime() - Date.now() < definition.withinDays * 86_400_000,
+    );
+    const waste =
+      unused.reduce((n, u) => n + u.price * (u.seats - u.assigned), 0) + blocked.reduce((n, b) => n + b.price, 0);
+    sections.push(
+      {
+        title: 'Savings summary',
+        columns: ['Client', 'Seats to reclaim', 'Monthly waste', 'Yearly waste', 'Renewals due', 'Renewal value'],
+        rows: chosen.map((c) => {
+          const mine = c.name === 'Harbor Dental Group';
+          return [
+            c.name,
+            String(mine ? unused.reduce((n, u) => n + u.seats - u.assigned, 0) + blocked.length : 0),
+            mine ? usd(waste) : 'USD 0.00',
+            mine ? usd(waste * 12) : 'USD 0.00',
+            String(mine ? renewals.length : 0),
+            mine ? usd(renewals.reduce((n, l) => n + l.unitCostCents * l.seats, 0)) : 'USD 0.00',
+          ];
+        }),
+      },
+      {
+        title: 'Unused seats',
+        columns: [
+          'Client',
+          'Subscription',
+          'Source',
+          'Seats',
+          'Assigned',
+          'Unused',
+          'Price / seat / month',
+          'Monthly waste',
+        ],
+        rows: unused.map((u) => [
+          u.client,
+          u.subscription,
+          u.source,
+          String(u.seats),
+          String(u.assigned),
+          String(u.seats - u.assigned),
+          usd(u.price),
+          usd(u.price * (u.seats - u.assigned)),
+        ]),
+      },
+      {
+        title: 'Licenses on blocked accounts',
+        columns: ['Client', 'Account', 'Subscriptions', 'Monthly cost'],
+        rows: blocked.map((b) => ['Harbor Dental Group', b.account, b.subscriptions.join(', '), usd(b.price)]),
+      },
+      {
+        title: `Renewals in the next ${definition.withinDays} days`,
+        columns: [
+          'Client',
+          'Subscription',
+          'Renewal',
+          'Seats',
+          'Unused',
+          'Renewal value',
+          'Auto-renew',
+          'Before it renews',
+        ],
+        rows: renewals.map((l) => [
+          name(l.clientId),
+          l.name,
+          day(l.renewalDate),
+          String(l.seats),
+          String(l.seats - l.assignments.length),
+          usd(l.unitCostCents * l.seats),
+          l.autoRenew ? 'Yes' : 'No',
+          l.seats > l.assignments.length ? `Reduce to ${l.assignments.length} seats` : 'Confirm it is still needed',
+        ]),
+      },
+    );
+  } else if (definition.kind === 'accounts' || definition.kind === 'usage') {
+    // Harbor Dental Group's tenant: its accounts, and a month of made-up activity for them.
+    const people = withTenant ? HARBOR_USERS : [];
+    if (definition.kind === 'accounts') {
+      const licensed = (u: (typeof people)[0]) => u.skuIds.length > 0;
+      const location = (u: (typeof people)[0]) => (u.name === 'Scanner' || u.name === 'Billing' ? '' : 'US');
+      sections.push(
+        {
+          title: 'Account summary',
+          columns: [
+            'Client',
+            'Accounts',
+            'Members',
+            'Guests',
+            'Enabled',
+            'Blocked',
+            'Licensed',
+            'Unlicensed',
+            'Blocked & licensed',
+            'No usage location',
+          ],
+          rows: people.length
+            ? [
+                [
+                  'Harbor Dental Group',
+                  String(people.length),
+                  String(people.length),
+                  '0',
+                  String(people.filter((u) => u.enabled).length),
+                  String(people.filter((u) => !u.enabled).length),
+                  String(people.filter(licensed).length),
+                  String(people.filter((u) => !licensed(u)).length),
+                  String(people.filter((u) => !u.enabled && licensed(u)).length),
+                  String(people.filter((u) => licensed(u) && !location(u)).length),
+                ],
+              ]
+            : [],
+        },
+        {
+          title: 'Accounts',
+          columns: ['Client', 'Name', 'Sign-in name', 'Status', 'Type', 'Licenses', 'Usage location'],
+          rows: people.map((u) => [
+            'Harbor Dental Group',
+            u.name,
+            u.upn,
+            u.enabled ? 'Enabled' : 'Blocked',
+            'Member',
+            String(u.skuIds.length),
+            location(u),
+          ]),
+        },
+      );
+    } else {
+      const day = (n: number) => daysFromNow(-n);
+      // Days since each person last used email, Teams, OneDrive and SharePoint ('' for not in the period).
+      const activity: Record<string, [number | '', number | '', number | '', number | '']> = {
+        'Anika Patel': [0, 0, 1, 3],
+        'Ben Okafor': [1, 2, 5, ''],
+        'Front Desk': [0, '', '', ''],
+        'Grace Liu': [2, 1, 2, 9],
+        'Marcus Reed': [0, 4, '', 12],
+        Billing: [6, '', '', ''],
+      };
+      const licensedPeople = people.filter((u) => u.enabled && u.skuIds.length);
+      const active = licensedPeople.map((u) => {
+        const [mail, teams, drive, share] = (activity[u.name] ?? ['', '', '', '']).map((d) => (d === '' ? '' : day(d)));
+        const last = [mail, teams, drive, share].filter(Boolean).sort().at(-1) ?? '';
+        return [
+          'Harbor Dental Group',
+          u.name,
+          u.upn,
+          last ? 'Yes' : 'No',
+          last || 'Never',
+          mail || '—',
+          teams || '—',
+          drive || '—',
+          share || '—',
+        ];
+      });
+      active.sort((a, b) => a[3]!.localeCompare(b[3]!) || a[1]!.localeCompare(b[1]!));
+      const used = (i: number) => String(active.filter((r) => r[i] !== '—').length);
+      const activeCount = active.filter((r) => r[3] === 'Yes').length;
+      const rowFor = (u: (typeof people)[0], i: number, extra: (n: number) => string[]) => {
+        const d = activity[u.name]?.[i];
+        return [
+          'Harbor Dental Group',
+          u.name,
+          u.upn,
+          d === undefined || d === '' ? 'Never' : day(d),
+          ...extra(d === undefined || d === '' ? 0 : 1),
+        ];
+      };
+      sections.push(
+        {
+          title: 'Usage summary',
+          columns: ['Client', 'Licensed accounts', 'Active', 'Inactive', 'Email', 'Teams', 'OneDrive', 'SharePoint'],
+          rows: active.length
+            ? [
+                [
+                  'Harbor Dental Group',
+                  String(active.length),
+                  String(activeCount),
+                  String(active.length - activeCount),
+                  used(5),
+                  used(6),
+                  used(7),
+                  used(8),
+                ],
+              ]
+            : [],
+        },
+        {
+          title: 'Active users',
+          columns: [
+            'Client',
+            'Name',
+            'Sign-in name',
+            'Active',
+            'Last active',
+            'Email',
+            'Teams',
+            'OneDrive',
+            'SharePoint',
+          ],
+          rows: active,
+        },
+        {
+          title: 'Email (Exchange)',
+          columns: ['Client', 'Name', 'Sign-in name', 'Last activity', 'Sent', 'Received', 'Read'],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 0, (on) => [String(on * (40 + i * 17)), String(on * (120 + i * 31)), String(on * (95 + i * 23))]),
+          ),
+        },
+        {
+          title: 'Teams',
+          columns: ['Client', 'Name', 'Sign-in name', 'Last activity', 'Chat messages', 'Calls', 'Meetings'],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 1, (on) => [String(on * (60 + i * 13)), String(on * (3 + i)), String(on * (5 + i * 2))]),
+          ),
+        },
+        {
+          title: 'OneDrive',
+          columns: [
+            'Client',
+            'Name',
+            'Sign-in name',
+            'Last activity',
+            'Viewed or edited',
+            'Synced',
+            'Shared inside',
+            'Shared outside',
+          ],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 2, (on) => [
+              String(on * (25 + i * 9)),
+              String(on * (140 + i * 20)),
+              String(on * (2 + i)),
+              String(on * (i % 2)),
+            ]),
+          ),
+        },
+        {
+          title: 'SharePoint',
+          columns: [
+            'Client',
+            'Name',
+            'Sign-in name',
+            'Last activity',
+            'Viewed or edited',
+            'Synced',
+            'Pages visited',
+            'Shared outside',
+          ],
+          rows: licensedPeople.map((u, i) =>
+            rowFor(u, 3, (on) => [String(on * (10 + i * 4)), String(on * (30 + i * 6)), String(on * (8 + i * 3)), '0']),
+          ),
+        },
+      );
+    }
+  } else if (definition.kind === 'assets') {
+    sections.push({
+      title: 'Asset inventory',
+      columns: ['Client', 'Asset', 'Type', 'Status', 'Last updated'],
+      rows: assets
+        .filter((a) => definition.clientIds.includes(a.clientId))
+        .map((a) => [
+          name(a.clientId),
+          a.name,
+          db.layouts.find((l) => l.id === a.layoutId)?.name ?? '',
+          a.status[0]!.toUpperCase() + a.status.slice(1),
+          day(a.updatedAt),
+        ]),
+    });
+  } else if (definition.kind === 'documentation') {
+    sections.push({
+      title: 'Documentation health',
+      columns: ['Client', 'Article', 'Status', 'Review due', 'Last updated', 'Attention'],
+      rows: documents
+        .filter((d) => d.clientId && definition.clientIds.includes(d.clientId))
+        .map((d) => [
+          name(d.clientId),
+          d.title,
+          d.status === 'needs_review' ? 'Outdated' : d.status[0]!.toUpperCase() + d.status.slice(1),
+          day(d.reviewDate),
+          day(d.updatedAt),
+          d.status === 'needs_review' ? 'Review overdue' : 'No date-based issue detected',
+        ]),
+    });
+  } else {
+    // The other reports read sources the demo doesn't have (RMM, tickets, password health): a summary per client.
+    sections.push({
+      title: 'Client summary',
+      columns: ['Client', 'Assets', 'Documents', 'Subscriptions', 'Status'],
+      rows: chosen.map((c) => [
+        c.name,
+        String(assets.filter((a) => a.clientId === c.id).length),
+        String(documents.filter((d) => d.clientId === c.id).length),
+        String(licenseRecords.filter((l) => l.clientId === c.id).length),
+        'Active',
+      ]),
+    });
+    warnings.push(
+      `The demo shows a sample of ${REPORT_INFO[definition.kind].name}: the full report needs a connected Atlas server.`,
+    );
+  }
+  const snapshot: ReportSnapshot = {
+    schemaVersion: 1,
+    organization: 'IT Done Right',
+    definition,
+    generatedAt: now(),
+    generatedBy: 'Alex Rivera',
+    clients: chosen.map((c) => ({ id: c.id, name: c.name })),
+    sources,
+    warnings,
+    sections,
+  };
+  const run: ReportRunDetail = {
+    id: uuid(),
+    title: definition.title,
+    kind: definition.kind,
+    createdAt: snapshot.generatedAt,
+    clients: snapshot.clients,
+    warningCount: warnings.length,
+    rowCount: sections.reduce((n, s) => n + s.rows.length, 0),
+    snapshot,
+  };
+  reportRuns.unshift(run);
+  return run;
+}
+const reportRunView = ({ snapshot: _snapshot, ...view }: ReportRunDetail): ReportRunView => view;
+on('POST', '/reports/runs', (_m, b) => demoReport(reportDefinitionSchema.parse(b)));
+on('GET', '/reports/runs', () => reportRuns.map(reportRunView));
+on('GET', '/reports/runs/:id', (m) => find(reportRuns, m[1]!, 'Report'));
+on('DELETE', '/reports/runs/:id', (m) => {
+  reportRuns.splice(reportRuns.indexOf(find(reportRuns, m[1]!, 'Report')), 1);
+  return { ok: true };
+});
 
 // session and account
 on('GET', '/setup', () => ({ needed: false, passwordReset: true }));
@@ -2053,6 +2585,148 @@ on('GET', '/settings/notifications', () => notifications);
 on('PUT', '/settings/notifications', (_m, b) => (notifications = { ...notifications, ...(b as typeof notifications) }));
 on('GET', '/expirations', (_m, _b, q) => expirations(Number(q.get('days')) || 90));
 on('GET', '/rmm-health', (_m, _b, q) => rmmHealth(q.get('client')));
+// Client health: one client healthy, one needing attention, one at risk, each with 90 days of history.
+const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] = [
+  {
+    score: 91,
+    drift: 6,
+    parts: [
+      {
+        part: 'security',
+        score: 94,
+        detail: '18 passwords, protection on 24 devices, BitLocker on 20',
+        findings: [{ text: '1 of 18 passwords has issues', gain: 2, section: '/passwords' }],
+      },
+      {
+        part: 'endpoints',
+        score: 96,
+        detail: '24 devices in the RMM',
+        findings: [{ text: '1 device not checked in within 7 days', gain: 1, section: '/assets' }],
+      },
+      {
+        part: 'documentation',
+        score: 88,
+        detail: '31 assets, 12 documents',
+        findings: [{ text: '2 documents past their review date', gain: 3, section: '/documents' }],
+      },
+      {
+        part: 'renewals',
+        score: 85,
+        detail: '9 dated items',
+        findings: [{ text: '1 SSL certificate expiring soon', gain: 2, section: '/trackers/ssl' }],
+      },
+    ],
+  },
+  {
+    score: 72,
+    drift: -4,
+    parts: [
+      {
+        part: 'security',
+        score: 67,
+        detail: '9 passwords, protection on 12 devices',
+        findings: [
+          { text: '3 of 9 passwords have issues, 1 found in a data breach', gain: 10, section: '/passwords' },
+          { text: '1 device without endpoint protection running', gain: 1, section: '/assets' },
+        ],
+      },
+      {
+        part: 'endpoints',
+        score: 88,
+        detail: '12 devices in the RMM',
+        findings: [{ text: '1 device not online', gain: 1, section: '/assets' }],
+      },
+      {
+        part: 'documentation',
+        score: 62,
+        detail: '14 assets, 2 documents',
+        findings: [
+          { text: 'No locations', gain: 4, section: '/locations' },
+          { text: '1 document past its review date', gain: 3, section: '/documents' },
+        ],
+      },
+      {
+        part: 'renewals',
+        score: 75,
+        detail: '6 dated items',
+        findings: [{ text: '1 warranty expired', gain: 3, section: '/assets' }],
+      },
+    ],
+  },
+  {
+    score: 54,
+    drift: -11,
+    parts: [
+      {
+        part: 'security',
+        score: 48,
+        detail: '6 passwords, protection on 9 devices, BitLocker on 4',
+        findings: [
+          { text: '1 device with a disk not encrypted', gain: 6, section: '/assets' },
+          { text: '2 of 6 passwords have issues', gain: 3, section: '/passwords' },
+        ],
+      },
+      {
+        part: 'endpoints',
+        score: 61,
+        detail: '9 devices in the RMM',
+        findings: [{ text: '3 devices not checked in within 7 days', gain: 4, section: '/assets' }],
+      },
+      {
+        part: 'documentation',
+        score: 50,
+        detail: '6 assets, 0 documents',
+        findings: [{ text: 'No documents yet', gain: 4, section: '/documents' }],
+      },
+      {
+        part: 'renewals',
+        score: 58,
+        detail: '5 dated items',
+        findings: [{ text: '1 SSL certificate expired', gain: 4, section: '/trackers/ssl' }],
+      },
+    ],
+  },
+];
+const demoHealth = (clientId: string, days = 90) => {
+  const client = find(db.clients, clientId, 'Client');
+  const h = DEMO_HEALTH[db.clients.indexOf(client) % DEMO_HEALTH.length]!;
+  // A gentle walk from where it started to today's score.
+  const trend = Array.from({ length: days }, (_, i) => ({
+    day: ago((days - 1 - i) * 24 * 60).slice(0, 10),
+    score: Math.round(h.score - h.drift * (1 - i / (days - 1)) + Math.sin(i / 3) * 1.5),
+  }));
+  trend[days - 1]!.score = h.score;
+  return { client, h, trend };
+};
+on('GET', '/clients/:id/health', (m): ClientHealthDetail => {
+  const { client, h, trend } = demoHealth(m[1]!);
+  return {
+    clientId: client.id,
+    clientName: client.name,
+    score: h.score,
+    parts: h.parts,
+    computedAt: ago(20),
+    trend,
+    change: h.score - trend[Math.max(0, trend.length - 30)]!.score,
+  };
+});
+on('GET', '/client-health', (): ClientHealthSummary[] =>
+  db.clients
+    .map((c) => {
+      const { h, trend } = demoHealth(c.id, 30);
+      const weakest = [...h.parts].sort((a, b) => a.score! - b.score!)[0]!;
+      return {
+        clientId: c.id,
+        clientName: c.name,
+        score: h.score,
+        change: h.score - trend[0]!.score,
+        weakest: weakest.score! < 90 ? weakest.part : null,
+        trend: trend.map((p) => p.score),
+      };
+    })
+    .sort((a, b) => a.score - b.score),
+);
+
 // ConnectWise security and compliance is read live, so the demo has none: the cards stay hidden.
 on('GET', '/clients/:id/security', () => ({ linked: false }));
 on('GET', '/assets/:id/security', () => ({ linked: false }));
@@ -2834,6 +3508,20 @@ on('POST', '/system/access', (_m, b) => {
   if (!parsed.success) throw new MockError(400, parsed.error.issues[0]?.message ?? 'Check the settings.');
   return notInDemo('Changing how Atlas is reached');
 });
+// Up to date, checked recently. Installing needs a real server.
+const updateInfo = (): UpdateInfo => ({
+  current: '1.0.1',
+  repo: 'ithealthtech/nexus-atlas',
+  checkedAt: ago(40),
+  checkError: null,
+  available: [],
+  canApply: true,
+  run: { state: 'idle', tag: null, requestedBy: null, requestedAt: null, finishedAt: null, message: null },
+});
+on('GET', '/updates', updateInfo);
+on('POST', '/updates/check', updateInfo);
+on('POST', '/updates/apply', () => notInDemo('Installing an update'));
+
 on('GET', '/status', (): SystemStatus => ({
   version: '1.0.1',
   node: 'v22.12.0',
@@ -3169,12 +3857,29 @@ on('DELETE', '/favorites/:type/:id', (m) => {
   return { favorite: false };
 });
 on('GET', '/account/workspace', () => resolveWorkspace(workspace));
+// The demo's organization is part-way set up: a brand and clients, but no email, RMM, or backup yet.
+on('GET', '/admin/setup', () => ({
+  branding: true,
+  email: false,
+  client: db.clients.length > 0,
+  import: true,
+  rmm: false,
+  microsoft: true,
+  team: true,
+  backup: false,
+}));
 on('PUT', '/account/workspace', (_m, b) => {
-  workspace = { ...b, menu: b.menu ?? resolveWorkspace(workspace).menu };
+  const saved = resolveWorkspace(workspace);
+  workspace = { ...b, menu: b.menu ?? saved.menu, seenWhatsNew: saved.seenWhatsNew };
   return resolveWorkspace(workspace);
 });
 on('DELETE', '/account/workspace', () => {
-  workspace = { menu: resolveWorkspace(workspace).menu };
+  const { menu, seenWhatsNew } = resolveWorkspace(workspace);
+  workspace = { menu, seenWhatsNew };
+  return resolveWorkspace(workspace);
+});
+on('POST', '/account/whats-new', (_m, b) => {
+  workspace = { ...resolveWorkspace(workspace), seenWhatsNew: String(b.seen ?? '') };
   return resolveWorkspace(workspace);
 });
 on('GET', '/workspace/clients/:id/counts', (m) => {
