@@ -4,7 +4,8 @@ import QRCode from 'qrcode';
 import { Download, Printer, QrCode, Wifi } from 'lucide-react';
 import { WIFI_SECURITY, WIFI_SECURITY_LABELS, wifiJoinCode, type PasswordView, type WifiSecurity } from '@atlas/shared';
 import { Button, Card, CardHeader, Checkbox, Field, Input, Select, useToast } from '@/components/ui';
-import { saveBlob, useReveal } from '@/lib/vault';
+import { useReveal } from '@/lib/vault';
+import { saveBlob } from '@/lib/download';
 
 /**
  * A Wi-Fi password's scan-to-join code: guests and staff point a phone's camera at it and join without typing. The

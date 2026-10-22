@@ -2,7 +2,9 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.0.0] - 2026-10-21
+
+The Landmark Update brings expanded reporting, client health scores, a refreshed workspace, and Atlas for Windows 2.0. See [the upgrade guide](docs/UPGRADING-2.0.md) before updating.
 
 ### Added
 
@@ -95,7 +97,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - The text is read in the browser and never sent.
 - **Wi-Fi join codes.** A Wi-Fi password now has a **Join this network** card: a QR code that phones scan with their camera to join, with no typing. **Print** makes a guest card with the network name, the code and the password, ready to frame. The password is revealed the usual way (recorded, with a reason where required), and the code hides again after a minute. WEP, open and hidden networks are supported, and Wi-Fi entries call their username **Network name**.
 - **Welcome to Atlas 2.0.**
-  - Staff see a welcome card on their dashboard after the update. **See what's new** opens a page that describes each part of 2.0 in plain words, with a link to try it: reports, the client health score, smart paste and Wi-Fi codes, the cleaner workspace, and Atlas for Windows 1.0.
+  - Staff see a welcome card on their dashboard after the update. **See what's new** opens a page that describes each part of 2.0 in plain words, with a link to try it: reports, the client health score, smart paste and Wi-Fi codes, the cleaner workspace, and Atlas for Windows 2.0.
   - The card goes once you've opened the page or dismissed it, and that's remembered for your account, not just your browser.
   - The page stays under **What's new** in the account menu.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:

@@ -319,7 +319,24 @@ describe('private client reports', () => {
               },
             ],
           });
-    if (url.pathname.endsWith('/users')) return Response.json({ value: [] });
+    if (url.pathname.endsWith('/users'))
+      return Response.json({
+        value: [
+          {
+            id: USER,
+            displayName: 'Avery Example',
+            userPrincipalName: 'avery@harbor.example',
+            accountEnabled: true,
+            userType: 'Member',
+            usageLocation: 'US',
+            assignedLicenses: [{ skuId: APP }],
+          },
+        ],
+      });
+    if (url.pathname.startsWith('/v1.0/reports/'))
+      return new Response(
+        'Display Name,User Principal Name,Is Deleted,Exchange Last Activity Date,Last Activity Date\nAvery Example,avery@harbor.example,False,2026-10-20,2026-10-20\n',
+      );
     throw new Error('Unexpected request');
   }) as typeof fetch;
   beforeEach(async () => {
@@ -756,10 +773,38 @@ describe('private client reports', () => {
   });
   it('collects every report type without private contents, archived records or other clients', async () => {
     await seed();
+    await owner.call('PUT', '/api/integrations/m365', {
+      clientId: APP,
+      clientSecret: 'synthetic-secret',
+      partnerTenantId: USER,
+      authMode: 'gdap',
+      autoSync: false,
+    });
+    await settings.saveGdap(
+      orgId,
+      (await settings.m365(orgId))!,
+      {
+        refreshSealed: '',
+        oid: USER,
+        name: 'Partner',
+        email: 'partner@atlas.test',
+        connectedAt: new Date().toISOString(),
+      },
+      'synthetic-refresh',
+    );
+    await settings.patchM365(orgId, {
+      tenants: {
+        [clientId]: { tenantId: TENANT, tenantName: 'Harbor Dental', status: 'ok', checkedAt: null, detail: null },
+      },
+    });
     for (const kind of REPORT_KINDS) {
       const result = await generate(kind);
       expect(result.status, JSON.stringify(result.data)).toBe(201);
-      expect(result.data.snapshot.sections[0].rows.length).toBeGreaterThan(0);
+      expect(result.data.snapshot.sections[0].rows.length, kind).toBeGreaterThan(0);
+      if (kind === 'accounts' || kind === 'usage') {
+        expect(JSON.stringify(result.data.snapshot)).toContain('avery@harbor.example');
+        expect(result.data.snapshot.warnings).toEqual([]);
+      }
       const serialized = JSON.stringify(result.data);
       for (const hidden of ['never-export-this', 'Archived workstation', 'Other client asset'])
         expect(serialized).not.toContain(hidden);

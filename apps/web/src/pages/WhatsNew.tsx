@@ -95,7 +95,7 @@ const HIGHLIGHTS: Highlight[] = [
   },
   {
     icon: Monitor,
-    title: 'Atlas for Windows 1.0',
+    title: 'Atlas for Windows 2.0',
     summary:
       'The desktop app for technicians: search from anywhere with Ctrl+Shift+Space, copy passwords behind Windows Hello, and read documents with their formatting.',
     points: [
@@ -126,7 +126,7 @@ export function WhatsNew() {
       <PageHeader
         eyebrow={`Atlas ${WHATS_NEW}`}
         title={`What’s new in Atlas ${WHATS_NEW}`}
-        description="The biggest update yet: reports that do the work, a health score for every client, faster documenting, a cleaner workspace, and Atlas for Windows 1.0."
+        description="The biggest update yet: reports that do the work, a health score for every client, faster documenting, a cleaner workspace, and Atlas for Windows 2.0."
       />
       <div className="space-y-5">
         {HIGHLIGHTS.map(({ icon: Icon, title, summary, points, to, link }) => (
@@ -189,7 +189,7 @@ export function WhatsNewCard({ prefs }: { prefs: WorkspacePrefs | undefined }) {
       <div className="min-w-0 flex-1">
         <h2 className="text-sm font-bold">Welcome to Atlas {WHATS_NEW}</h2>
         <p className="mt-0.5 text-[13px] text-text-2">
-          Reports that do the work, a health score for every client, smart paste, and Atlas for Windows 1.0.
+          Reports that do the work, a health score for every client, smart paste, and Atlas for Windows 2.0.
         </p>
       </div>
       <div className="flex items-center gap-2">
