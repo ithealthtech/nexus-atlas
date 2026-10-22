@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DASHBOARD_WIDGETS } from '@atlas/shared';
+import { DASHBOARD_WIDGETS, WHATS_NEW } from '@atlas/shared';
 import { enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TEMP = 'temporary pass 1234';
@@ -217,6 +217,17 @@ describe('favorites, quick notes, and workspace preferences', () => {
     });
     expect((await owner.call('PUT', '/api/account/workspace', { ...current, menu: 'sideways' })).status).toBe(400);
     expect((await get()).menu).toBe('top');
+  });
+
+  it('remembers that someone has seen What’s new, whatever else they save or reset', async () => {
+    const get = async () => (await owner.call('GET', '/api/account/workspace')).data;
+    expect((await get()).seenWhatsNew).toBeUndefined();
+    expect((await owner.call('POST', '/api/account/whats-new', { seen: WHATS_NEW })).data.seenWhatsNew).toBe(WHATS_NEW);
+    await owner.call('PUT', '/api/account/workspace', { widgets: [], hiddenSections: ['map'] });
+    expect((await get()).seenWhatsNew).toBe(WHATS_NEW);
+    await owner.call('DELETE', '/api/account/workspace');
+    expect(await get()).toMatchObject({ seenWhatsNew: WHATS_NEW, hiddenSections: [] });
+    expect((await owner.call('POST', '/api/account/whats-new', { seen: '' })).status).toBe(400);
   });
 
   it('saves dashboard cards and hidden sections per person', async () => {

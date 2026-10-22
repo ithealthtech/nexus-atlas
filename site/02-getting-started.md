@@ -74,6 +74,10 @@ Choose **Customize** on the dashboard to show, hide and reorder its cards. Your 
 
 Choose the appearance in the account menu. Atlas remembers it per browser.
 
+## What's new
+
+After an update with new features, your dashboard shows a **Welcome** card. **See what's new** opens a page describing each new part in plain words, with a link to try it. Opening the page, or choosing **Dismiss**, puts the card away for you; the page stays under **What's new** in the account menu (your initials, top right) to come back to.
+
 ## What you can do depends on your role
 
 Everyone in Atlas has one role, plus an access level for each client.

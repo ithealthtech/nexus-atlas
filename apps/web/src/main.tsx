@@ -59,6 +59,7 @@ import { AssetLabels } from '@/pages/AssetLabels';
 import { BitlockerCollector } from '@/pages/BitlockerCollector';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
+import { WhatsNew } from '@/pages/WhatsNew';
 import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
 import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
@@ -301,6 +302,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/checklists', component: ChecklistsPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/checklist-runs/$runId', component: RunPage }),
   createRoute({ getParentRoute: () => appRoute, path: '/account', component: Account }),
+  createRoute({ getParentRoute: () => appRoute, path: '/whats-new', component: WhatsNew }),
   // Atlas for Windows opens this in the browser to sign in (after the usual sign-in and second step).
   createRoute({ getParentRoute: () => appRoute, path: '/native/authorize', component: NativeAuthorize }),
   createRoute({

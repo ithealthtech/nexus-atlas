@@ -6,6 +6,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Welcome to Atlas 2.0.**
+  - Staff see a welcome card on their dashboard after the update. **See what's new** opens a page that describes each part of 2.0 in plain words, with a link to try it: reports, the client health score, smart paste and Wi-Fi codes, the cleaner workspace, and Atlas for Windows 1.0.
+  - The card goes once you've opened the page or dismissed it, and that's remembered for your account, not just your browser.
+  - The page stays under **What's new** in the account menu.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

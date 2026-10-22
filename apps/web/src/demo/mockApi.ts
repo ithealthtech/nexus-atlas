@@ -3170,11 +3170,17 @@ on('DELETE', '/favorites/:type/:id', (m) => {
 });
 on('GET', '/account/workspace', () => resolveWorkspace(workspace));
 on('PUT', '/account/workspace', (_m, b) => {
-  workspace = { ...b, menu: b.menu ?? resolveWorkspace(workspace).menu };
+  const saved = resolveWorkspace(workspace);
+  workspace = { ...b, menu: b.menu ?? saved.menu, seenWhatsNew: saved.seenWhatsNew };
   return resolveWorkspace(workspace);
 });
 on('DELETE', '/account/workspace', () => {
-  workspace = { menu: resolveWorkspace(workspace).menu };
+  const { menu, seenWhatsNew } = resolveWorkspace(workspace);
+  workspace = { menu, seenWhatsNew };
+  return resolveWorkspace(workspace);
+});
+on('POST', '/account/whats-new', (_m, b) => {
+  workspace = { ...resolveWorkspace(workspace), seenWhatsNew: String(b.seen ?? '') };
   return resolveWorkspace(workspace);
 });
 on('GET', '/workspace/clients/:id/counts', (m) => {

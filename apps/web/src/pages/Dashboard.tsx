@@ -39,6 +39,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
+import { WhatsNewCard } from '@/pages/WhatsNew';
 import { FavoritesCard } from '@/components/Favorites';
 import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard, useRmmHealth } from '@/components/RmmHealth';
@@ -397,6 +398,7 @@ export function Dashboard() {
           </Button>
         }
       />
+      {actor.isStaff && <WhatsNewCard prefs={prefs.data} />}
       {!actor.isStaff && branding?.portalWelcome && (
         <Card className="mb-7 flex items-start gap-4 p-5">
           <Info className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
