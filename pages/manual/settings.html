@@ -325,7 +325,11 @@
             Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs.
           </li>
           <li>Every use is in the security log. <strong>Revoke</strong> keys you no longer use.</li>
-          <li>The API is described at <code>/api/openapi.json</code> on your Atlas.</li>
+          <li>
+            The API is at <code>/api/v1</code> on your Atlas, described at <code>/api/v1/openapi.json</code>. Within v1,
+            updates only add to it, so your scripts keep working. The other <code>/api</code> addresses are the web
+            app's own and can change in any release.
+          </li>
         </ul>
         <h2 id="theme"><a class="anchor" href="#theme">Theme</a></h2>
         <figure>

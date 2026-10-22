@@ -200,6 +200,17 @@ The Landmark Update brings expanded reporting, client health scores, a refreshed
   - A single contact no longer has a divider beside it.
   - Password rotation and BitLocker collector say "Vault" above their titles, where they live.
 - The demo's **Updates** page loads, instead of showing empty placeholders.
+- **`/api/v1` is the supported API.** Only `/api/v1` is supported for scripts and integrations, and its description has moved to `/api/v1/openapi.json`.
+  - Within v1, changes only add endpoints, fields and optional parameters.
+  - A breaking change would come as `/api/v2`, with v1 kept beside it for at least the next major release.
+  - The unversioned `/api` paths belong to the web app. They're internal and can change in any release, and API keys never worked there.
+- **Node.js and PostgreSQL checks.** System status now warns when Node.js or PostgreSQL is older than Atlas supports (Node.js 22.12, PostgreSQL 16). It also warns six months before the server's Node.js version stops getting security fixes. CI now also runs the tests on Node.js 24 and PostgreSQL 17.
+
+### Removed
+
+- **The Atlas 0.2 importer.** `npm run migrate-legacy` and the 0.2 prototype it read from are gone. To move a 0.2 database, run the migration with Atlas 1.8 first, then update.
+- **The old monthly client report.** The **Monthly report** button and its printable page are gone from the client header. The client's **Reports** tab replaces them, with PDFs, share links and scheduled delivery. Old links to the page open that tab.
+- **Leftover ConnectWise PSA status lookups in ticket sync.** Ticket sync reads only the ConnectWise platform API; a ticket's state comes from its own status.
 
 ## [1.8.4] - 2026-10-21
 

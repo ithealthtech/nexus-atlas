@@ -152,7 +152,8 @@ export function openApiSpec(origin: string) {
       title: 'MSP Atlas API',
       version: '1',
       description:
-        'Authenticate with an API key from Settings → API keys: `Authorization: Bearer atlas_…`. A key acts as the administrator who created it, limited by its scopes. Limit: 600 requests a minute per key.',
+        'Authenticate with an API key from Settings → API keys: `Authorization: Bearer atlas_…`. A key acts as the administrator who created it, limited by its scopes. Limit: 600 requests a minute per key.\n\n' +
+        'Within v1, changes only add endpoints, response fields, and optional parameters; anything that would break a client comes as /api/v2, with v1 kept beside it for at least the next major release. The unversioned /api paths the web app uses are internal and can change in any release.',
     },
     servers: [{ url: `${origin}/api/v1` }],
     security: [{ apiKey: [] }],

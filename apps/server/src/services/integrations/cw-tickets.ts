@@ -72,13 +72,12 @@ export function ticketLink(web: string | undefined, number: string, companyNumbe
 }
 
 /**
- * Maps a ticket record onto Atlas's fields, reading whichever names are present; null without an ID. A status
- * whose ID is in `closedStatuses` (ConnectWise's "Closed" category) marks the ticket closed.
+ * Maps a ticket record onto Atlas's fields, reading whichever names are present; null without an ID. A status in
+ * ConnectWise's "Closed" category marks the ticket closed, whatever the status is called.
  */
 export function mapTicket(
   t: Json,
   now = Date.now(),
-  closedStatuses: ReadonlySet<string> = new Set(),
   link?: (number: string) => string | null,
 ): CwTicket | null {
   const id = text(t, 'id', 'ticketId', 'ticketNumber');
@@ -91,7 +90,6 @@ export function mapTicket(
   const flag = pick(t, 'closedFlag', 'isClosed', 'closed', 'status.closed', 'status.closedStatus');
   const category = text(t, 'status.category', 'statusCategory');
   const closed =
-    closedStatuses.has(text(t, 'status.id', 'statusId')) ||
     /^closed$/i.test(category) ||
     (typeof flag === 'boolean' ? flag : !!closedAt || CLOSED_STATUS.test(status));
   // The portal's ticket number is short; prefer whichever field carries one. A long alert ID is never it.
@@ -126,8 +124,7 @@ export function mapTicket(
 }
 
 /**
- * Reads a company's tickets from the ConnectWise platform's v2 service ticketing API, newest first. Only v2 is
- * used: the v1 company and status lookups belong to the legacy PSA.
+ * Reads a company's tickets from the ConnectWise platform's v2 service ticketing API, newest first.
  */
 export class CwTicketReader {
   /** What the last ticket list looked like (field names only), for a job note. */
@@ -172,7 +169,7 @@ export class CwTicketReader {
     const since = now - KEEP_CLOSED_DAYS * DAY;
     const seen = new Set<string>();
     const list = records
-      .map((r) => mapTicket(r, now, new Set(), link))
+      .map((r) => mapTicket(r, now, link))
       .filter((t): t is CwTicket => !!t)
       .filter((t) => !t.closed || ((t.closedAt ?? t.updatedAt ?? t.openedAt)?.getTime() ?? 0) >= since)
       .filter((t) => !seen.has(t.id) && !!seen.add(t.id));

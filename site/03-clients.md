@@ -5,7 +5,7 @@ out: manual/clients.html
 group: Using Atlas
 order: 3
 number: 3
-summary: The client list, a client's workspace and overview, quick notes, the monthly report, and exporting a client.
+summary: The client list, a client's workspace and overview, quick notes, reports, and exporting a client.
 ---
 
 # Clients
@@ -39,7 +39,7 @@ You need edit access to every client to add one. Administrators always have it.
 
 Opening a client shows:
 
-- **The header:** the client's name and type, your access, the star to add it to your favourites, and for staff the client's health score (see [Client health](#client-health)). **Monthly report**, **Review pack**, **Export**, **Edit client**, and for administrators **Delete**, are on the right. **Review pack** downloads this client's quarterly business review as one PDF (see [Client review pack](#client-review-pack)).
+- **The header:** the client's name and type, your access, the star to add it to your favourites, and for staff the client's health score (see [Client health](#client-health)). **Review pack**, **Export**, **Edit client**, and for administrators **Delete**, are on the right. **Review pack** downloads this client's quarterly business review as one PDF (see [Client review pack](#client-review-pack)).
 - **The quick note:** a short note at the top of every page for this client, for the thing everyone should know before they touch anything.
 - **The tabs:** **Overview**, **Assets**, **Documents**, **Passwords**, **Contacts**, **Locations**, **Checklists**, **Licenses**, **Map** and **Activity**. Counts appear for the sections that provide them. The **Trackers** row underneath has **Domain Tracker** and **SSL Tracker**. A tracker count turns amber when something needs attention.
 
@@ -225,10 +225,6 @@ A report run for a single client can be shared with that client by link. Choose 
 - **Only when something new needs review** sends only when something needs review that didn't in the last report sent. That email lists just the new items.
 
 For example, **Security posture**, every day, **only when something new needs review**, tells you the morning after a password turns up in a breach or a device loses its protection, and stays quiet otherwise. **Domains & SSL** set up the same way warns as each certificate or domain starts to expire. Runs that send nothing aren't kept in your history, and the schedule shows **Nothing to send**. **Send now** always sends.
-
-## The monthly report
-
-**Monthly report** in the client header opens a printable page with the client's assets and documents. Use your browser's **Print**, and choose **Save as PDF** to send it to the client.
 
 ## Export a client
 

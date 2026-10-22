@@ -22,6 +22,43 @@ export function ago(ms: number): string {
   return `${Math.floor(hours / 24)} days ago`;
 }
 
+/** The oldest Node.js and PostgreSQL Atlas supports, and when each Node.js line stops getting security fixes. */
+export const MIN_NODE = [22, 12] as const;
+export const MIN_POSTGRES = 16;
+const NODE_END_OF_LIFE: Record<number, string> = { 22: '2027-04-30', 24: '2028-04-30' };
+
+/**
+ * Warnings about the Node.js and PostgreSQL Atlas runs on: older than supported, or a Node.js line within six months
+ * of its end of life. The in-app updater can't upgrade either, so these say what to do.
+ */
+export function runtimeChecks(node: string, postgresVersionNum: number, now = new Date()): StatusCheck[] {
+  const checks: StatusCheck[] = [];
+  const [major = 0, minor = 0] = node.replace(/^v/, '').split('.').map(Number);
+  if (major < MIN_NODE[0] || (major === MIN_NODE[0] && minor < MIN_NODE[1]))
+    checks.push({
+      id: 'node',
+      level: 'error',
+      title: `Node.js ${node} is older than Atlas supports`,
+      detail: `Install Node.js ${MIN_NODE.join('.')} or later (Node.js 24 LTS is recommended), then restart Atlas.`,
+    });
+  else if (NODE_END_OF_LIFE[major] && Date.parse(NODE_END_OF_LIFE[major]) - now.getTime() < 183 * DAY)
+    checks.push({
+      id: 'node',
+      level: 'warn',
+      title: `Node.js ${major} stops getting security fixes on ${NODE_END_OF_LIFE[major]}`,
+      detail: `Install Node.js ${major + 2} LTS on the server, then restart Atlas.`,
+    });
+  const pgMajor = Math.floor(postgresVersionNum / 10_000);
+  if (pgMajor && pgMajor < MIN_POSTGRES)
+    checks.push({
+      id: 'postgres',
+      level: 'error',
+      title: `PostgreSQL ${pgMajor} is older than Atlas supports`,
+      detail: `Upgrade the database to PostgreSQL ${MIN_POSTGRES} or later. Take a backup first.`,
+    });
+  return checks;
+}
+
 async function disk(path: string) {
   try {
     const s = await statfs(path);
@@ -55,9 +92,9 @@ export class StatusService {
 
     const [pg] = (
       await db.execute(
-        sql`select current_setting('server_version') as version, pg_database_size(current_database())::bigint as size`,
+        sql`select current_setting('server_version') as version, current_setting('server_version_num')::int as num, pg_database_size(current_database())::bigint as size`,
       )
-    ).rows as { version: string; size: string }[];
+    ).rows as { version: string; num: number; size: string }[];
     const applied = Number(
       ((await db.execute(sql`select count(*)::int as n from drizzle.__drizzle_migrations`)).rows[0] as { n: number }).n,
     );
@@ -181,6 +218,7 @@ export class StatusService {
         'The security log has not been checked recently',
         'Open the security log and choose "Verify now".',
       );
+    checks.push(...runtimeChecks(process.version, Number(pg!.num), now));
     if (applied < journal.entries.length)
       add('migrations', 'error', 'Database updates are pending', 'Restart Atlas to apply them.');
 

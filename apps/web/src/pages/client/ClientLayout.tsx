@@ -168,14 +168,6 @@ export function ClientLayout() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {actor.isStaff && (
-            <AppLink
-              to={`/client-report/${client.id}`}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[13px] font-semibold hover:bg-surface-3"
-            >
-              <FileText className="size-4" aria-hidden /> Monthly report
-            </AppLink>
-          )}
           {actor.isStaff && <ReviewPackButton clientId={client.id} clientName={client.name} />}
           {actor.isStaff && <ExportButton clientId={client.id} canIncludePasswords={actor.isAdmin} />}
           {atLeast(client.access, 'edit') && (

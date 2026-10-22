@@ -64,8 +64,35 @@ jobs:
         env:
           ATLAS_TEST_CADDY: https://127.0.0.1:8443
       - run: npm audit --omit=dev --audit-level=high
-      - name: Legacy 0.2 suite (kept until the M3 data migration)
-        run: npm run legacy:test
+
+  # The oldest supported Node.js and PostgreSQL run in the job above; this proves the newest LTS of each works too.
+  newer-runtimes:
+    name: Unit tests on Node.js 24 and PostgreSQL 17
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:extension
+      - run: npm test
 
   # Runs beside the checks above instead of after them: the browser tests are the slow part.
   e2e:
