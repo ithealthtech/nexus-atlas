@@ -138,6 +138,7 @@ function setFavicon(href: string) {
  */
 export function applyTheme(theme: Branding | null, orgName = '') {
   const t = theme ?? DEFAULT_BRANDING;
+  applied = t;
   const dark = isDark();
   applyAccent(t, dark);
   applySidebar(t, dark);
@@ -151,6 +152,20 @@ export function applyTheme(theme: Branding | null, orgName = '') {
   setFavicon(t.favicon ?? DEFAULT_FAVICON);
   // Blank fields fall back to the organization's name, then to the product name.
   document.title = t.browserTitle || t.brandName || orgName || DEFAULT_TITLE;
+}
+
+// Paper always gets the light theme (styles.css keeps dark mode to screens), so the brand colours switch to their
+// light versions for printing and back afterwards.
+let applied: Branding = DEFAULT_BRANDING;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeprint', () => {
+    applyAccent(applied, false);
+    applySidebar(applied, false);
+  });
+  window.addEventListener('afterprint', () => {
+    applyAccent(applied, isDark());
+    applySidebar(applied, isDark());
+  });
 }
 
 /** Tracks light/dark mode, so components can pick the right logo. */

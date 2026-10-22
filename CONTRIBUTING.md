@@ -42,6 +42,14 @@ npm run test:e2e
 npm audit --omit=dev
 ```
 
+`npx playwright test -c playwright.demo.config.ts` (after `npm run build:demo -w @atlas/web`)
+checks every page of the demo against WCAG 2.2 AA in both themes and at phone width, and
+compares the main pages with the reference screenshots in `e2e/demo/screenshots`. The
+screenshots are taken on Linux in CI, where fonts match, so add `-g WCAG` to run only the
+accessibility checks on another system. To accept an intended change to the look, delete the
+old image and push: CI takes a new one, and it's in the run's `demo-screenshots` artifact to
+commit.
+
 `npm test` needs `TEST_DATABASE_URL` and `npm run test:e2e` needs `E2E_DATABASE_URL`, each
 pointing at a database the tests may erase. CI runs all of these, plus a Windows build and a
 Docker image build, on every pull request.

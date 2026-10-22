@@ -180,7 +180,7 @@ export function DocumentsView({ clientId }: { clientId: string | null }) {
           }
         />
       )}
-      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label="Folders" className="flex gap-1 overflow-x-auto lg:flex-col">
           <AppLink
             to={base}

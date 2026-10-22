@@ -145,6 +145,47 @@ jobs:
             test-results/**/error-context.md
           retention-days: 7
 
+  # The clickable demo needs no server or database, so every page is checked in both themes and at phone width.
+  demo:
+    name: Accessibility and screenshots (demo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @atlas/shared
+      - run: npm run build:demo -w @atlas/web
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npx playwright test -c playwright.demo.config.ts
+      # The reference images, including any this run had to take, ready to commit to e2e/demo/screenshots.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-screenshots
+          path: e2e/demo/screenshots
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: demo-report
+          path: |
+            playwright-report-demo
+            test-results/demo
+          retention-days: 7
+
   windows:
     name: Build and unit tests (Windows)
     runs-on: windows-latest

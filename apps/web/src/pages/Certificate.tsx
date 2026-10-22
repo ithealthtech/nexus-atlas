@@ -235,7 +235,7 @@ export function Certificate() {
                   The web proxy on this server renews the portal’s own certificate by itself, often several times a day,
                   so its dates above are short. Computers trust the authority, which lasts until{' '}
                   {formatDate(c.authority.validTo)}. If the certificate ever looks stale, restart the web proxy on the{' '}
-                  <AppLink to="/admin/services" className="text-primary underline-offset-4 hover:underline">
+                  <AppLink to="/admin/services" className="text-primary underline underline-offset-4">
                     Services page
                   </AppLink>
                   .

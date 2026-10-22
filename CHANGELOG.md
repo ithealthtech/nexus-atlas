@@ -205,6 +205,9 @@ The Landmark Update brings expanded reporting, client health scores, a refreshed
   - A breaking change would come as `/api/v2`, with v1 kept beside it for at least the next major release.
   - The unversioned `/api` paths belong to the web app. They're internal and can change in any release, and API keys never worked there.
 - **Node.js and PostgreSQL checks.** System status now warns when Node.js or PostgreSQL is older than Atlas supports (Node.js 22.12, PostgreSQL 16). It also warns six months before the server's Node.js version stops getting security fixes. CI now also runs the tests on Node.js 24 and PostgreSQL 17.
+- **Readable status colours.** Green, amber and orange status text, as on the Domains tracker, is darker in the light theme so it meets the 4.5:1 contrast ratio.
+- **A link on the Certificate page** is underlined, so it doesn't rely on colour to stand out from the sentence around it.
+- **Printing.** Pages print as dark text on white paper even when you use dark mode, with your brand colours in their light versions. Buttons, the favourite star, copy and show icons, empty Files and Related boxes, and the activity and version history panels are left off the page.
 
 ### Removed
 

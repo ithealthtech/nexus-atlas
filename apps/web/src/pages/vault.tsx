@@ -873,7 +873,7 @@ export function FavoriteButton({ item }: { item: PasswordView }) {
       aria-pressed={item.favorite}
       aria-label={label}
       title={item.favorite ? 'Favorite' : 'Add to favorites'}
-      className="grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-3 hover:text-warning aria-pressed:text-warning disabled:opacity-60"
+      className="grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-3 hover:text-warning aria-pressed:text-warning disabled:opacity-60 print:hidden"
     >
       <Star className={cn('size-4', item.favorite && 'fill-current')} aria-hidden />
     </button>

@@ -76,7 +76,8 @@ function GroupCard({ group, onMerged }: { group: DuplicateGroup; onMerged: () =>
         {group.clientName && <span className="text-sm text-muted">· {group.clientName}</span>}
         <span className="ml-auto text-xs text-muted">{group.items.length} records</span>
       </div>
-      <fieldset>
+      {/* A fieldset is as wide as its content unless told otherwise, and the details here can be long. */}
+      <fieldset className="min-w-0">
         <legend className="sr-only">Record to keep for {group.name}</legend>
         <ul className="divide-y divide-border rounded-lg border border-border">
           {group.items.map((item) => (
