@@ -1,6 +1,6 @@
 {
   "name": "msp-atlas",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "type": "module",
   "description": "Self-hosted IT documentation and password manager for MSPs",
