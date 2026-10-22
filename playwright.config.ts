@@ -10,6 +10,8 @@ export const E2E = {
 
 export default defineConfig({
   testDir: 'e2e',
+  // The demo's accessibility and screenshot checks have their own config (playwright.demo.config.ts).
+  testIgnore: 'demo/**',
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

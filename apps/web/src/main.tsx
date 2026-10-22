@@ -159,7 +159,10 @@ function Root() {
     <>
       <Outlet />
       {DEMO && (
-        <p className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full print:hidden bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md">
+        <p
+          data-demo-badge
+          className="pointer-events-none fixed right-3 bottom-3 z-40 rounded-full print:hidden bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning shadow-md"
+        >
           Demo · sample data · resets when you reload
         </p>
       )}

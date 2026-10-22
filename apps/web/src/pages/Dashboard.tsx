@@ -405,7 +405,13 @@ export function Dashboard() {
       )}
       {totals.length > 0 && <div className="mb-5">{totals}</div>}
       {main.length + side.length > 0 ? (
-        <div className={cn('grid gap-5', main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
+        <div
+          className={cn(
+            // One column that never grows past the screen; on wide screens, the main column beside the side one.
+            'grid grid-cols-[minmax(0,1fr)] gap-5',
+            main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]',
+          )}
+        >
           {main.length > 0 && <div className="space-y-5">{main}</div>}
           {side.length > 0 && (
             <div className={cn(main.length ? 'space-y-5' : 'grid items-start gap-6 md:grid-cols-2 xl:grid-cols-3')}>

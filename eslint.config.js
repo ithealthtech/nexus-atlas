@@ -14,6 +14,7 @@ export default tseslint.config(
       'packages/db/drizzle/**',
       'node_modules/**',
       'playwright-report/**',
+      'playwright-report-demo/**',
       'test-results/**',
     ],
   },

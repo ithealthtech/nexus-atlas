@@ -55,6 +55,13 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Timestamps in tables read as "2026-10-20 12:41 UTC", and alternate rows are shaded.
   - A PNG or JPEG logo is used; an SVG logo, which PDF can't embed, falls back to the brand name.
 
+### Fixed
+
+- **Phone layouts.** Five pages no longer scroll sideways on a phone: the dashboard, Assets, Documents, the client overview (its tickets table) and Duplicates. Card buttons, such as the CSV exports on the security log, now wrap onto a second line instead of running off the screen.
+- **Readable status colours.** Green, amber and orange status text, as on the Domains tracker, is darker in the light theme so it meets the 4.5:1 contrast ratio.
+- **A link on the Certificate page** is underlined, so it doesn't rely on colour to stand out from the sentence around it.
+- **The demo's Updates page** no longer loads forever.
+
 ## [1.8.4] - 2026-10-21
 
 ### Fixed

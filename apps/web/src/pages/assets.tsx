@@ -321,7 +321,7 @@ export function AssetsView({ clientId }: { clientId?: string }) {
           description="Every documented device, service, and subscription you can access."
         />
       )}
-      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label="Asset layouts" className="flex gap-1 overflow-x-auto lg:flex-col">
           <button
             onClick={() => setLayout(undefined)}
