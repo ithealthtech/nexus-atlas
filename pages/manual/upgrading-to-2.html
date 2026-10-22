@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <title>Upgrading to Atlas 2.0 · MSP Atlas manual</title>
+    <meta
+      name="description"
+      content="What changes in 2.0, the few things to do after upgrading, and how to go back if you need to."
+    />
+    <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../assets/site.css" />
+    <script src="../assets/theme.js"></script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body class="chapter">
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="../index.html"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="currentColor" />
+            <path
+              d="M9 23 16 8l7 15M11.6 18h8.8"
+              fill="none"
+              stroke="var(--bg)"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span>MSP Atlas</span></a
+        >
+        <nav class="topnav" aria-label="Site">
+          <a href="../manual/index.html" aria-current="page">Manual</a>
+          <a href="../install.html">Install</a>
+          <a href="../security.html">Security</a>
+          <a href="../support.html">Support</a>
+        </nav>
+        <div class="topbar-tools">
+          <div class="search" data-root="../">
+            <label class="sr-only" for="site-search">Search the manual</label>
+            <input id="site-search" type="search" placeholder="Search the manual" autocomplete="off" />
+            <kbd>/</kbd>
+            <div class="search-results" role="listbox" hidden></div>
+          </div>
+          <button class="theme" type="button" aria-label="Switch between light and dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <a
+            class="gh"
+            href="https://github.com/ithealthtech/nexus-atlas"
+            aria-label="MSP Atlas on GitHub"
+            rel="noopener"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
+          </a>
+          <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Contents</button>
+        </div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="sidebar" id="sidebar" aria-label="Manual">
+        <p class="sidebar-group">Start here</p>
+        <ul>
+          <li><a href="../manual/index.html">About this manual</a></li>
+        </ul>
+        <p class="sidebar-group">Using Atlas</p>
+        <ul>
+          <li>
+            <a href="../manual/how-atlas-works.html"><span class="num">1</span>How Atlas fits together</a>
+          </li>
+          <li>
+            <a href="../manual/getting-started.html"><span class="num">2</span>Getting started</a>
+          </li>
+          <li>
+            <a href="../manual/clients.html"><span class="num">3</span>Clients</a>
+          </li>
+          <li>
+            <a href="../manual/documentation.html"><span class="num">4</span>Documentation</a>
+          </li>
+          <li>
+            <a href="../manual/passwords.html"><span class="num">5</span>Passwords</a>
+          </li>
+          <li>
+            <a href="../manual/monitoring.html"><span class="num">6</span>Monitoring and alerts</a>
+          </li>
+          <li>
+            <a href="../manual/apps.html"><span class="num">7</span>Extension and Windows app</a>
+          </li>
+          <li>
+            <a href="../manual/client-portal.html"><span class="num">8</span>For your clients</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Running Atlas</p>
+        <ul>
+          <li>
+            <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
+          </li>
+          <li>
+            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+          </li>
+          <li>
+            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+          </li>
+          <li>
+            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+          </li>
+          <li>
+            <a href="../manual/upgrading-to-2.html" aria-current="page"><span class="num">17</span>Upgrading to 2.0</a>
+          </li>
+        </ul>
+        <p class="sidebar-group">Reference</p>
+        <ul>
+          <li>
+            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+          </li>
+          <li>
+            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+          </li>
+          <li>
+            <a href="../security.html"><span class="num">16</span>Security model</a>
+          </li>
+        </ul>
+      </nav>
+      <main id="content" class="doc">
+        <p class="eyebrow">Chapter 17</p>
+        <h1>Upgrading to Atlas 2.0</h1>
+        <p>
+          Atlas 2.0 is the biggest update yet, but upgrading works like any other release: your data, settings, master
+          key and everyone's preferences carry over. This page covers what's new, the few things worth doing afterwards,
+          and how to go back.
+        </p>
+        <h2 id="before-you-upgrade"><a class="anchor" href="#before-you-upgrade">Before you upgrade</a></h2>
+        <ol class="steps">
+          <li>
+            <strong>Check that last night's backup finished.</strong> It's under
+            <strong>Administration → System status</strong>. If backups sit on the same disk as Atlas, copy the newest
+            one somewhere else.
+          </li>
+          <li>
+            <strong>Make sure you can lay your hands on the master key</strong> (<code>/etc/msp-atlas/master.key</code>
+            on Linux, or wherever you keep your copy). A backup can't be restored without it.
+          </li>
+          <li>
+            <strong>Pick a quiet time.</strong> Atlas restarts while it updates, and is usually back within a few
+            minutes.
+          </li>
+        </ol>
+        <h2 id="upgrade"><a class="anchor" href="#upgrade">Upgrade</a></h2>
+        <ul>
+          <li>
+            <strong>Installed with the Linux installer:</strong> go to <strong>Administration → Updates</strong> and
+            choose <strong>Install</strong> on 2.0. Atlas asks for your password and takes a backup before anything
+            changes. It then installs the release and restarts. If the install fails, it puts the previous version back
+            on its own. From a terminal, <code>sudo atlas-install --version v2.0.0</code> does the same.
+          </li>
+          <li>
+            <strong>Docker:</strong> pull the 2.0 image and run <code>docker compose ... up -d</code>, after a backup.
+          </li>
+          <li>
+            <strong>Windows Server:</strong> run the 2.0 package's <code>Install-Atlas.ps1</code>, after a backup.
+          </li>
+        </ul>
+        <p>Atlas updates its database the first time 2.0 starts. Nothing needs doing by hand.</p>
+        <h2 id="what-s-new"><a class="anchor" href="#what-s-new">What's new</a></h2>
+        <p>
+          Everyone sees a <strong>Welcome to Atlas 2.0</strong> card on their dashboard. It leads to the What's new
+          page, which is always under <strong>What's new</strong> in the account menu. In short:
+        </p>
+        <ul>
+          <li>
+            <strong>Reports:</strong>
+            <ul>
+              <li>a client review pack;</li>
+              <li>
+                reports that email themselves on a schedule, and alerts that only send when something new needs
+                attention;
+              </li>
+              <li>a cyber insurance readiness report;</li>
+              <li>a savings finder;</li>
+              <li>Microsoft 365 accounts and usage;</li>
+              <li>every report readable on one page.</li>
+            </ul>
+          </li>
+          <li><strong>A health score for every client.</strong></li>
+          <li>
+            <strong>Faster documenting:</strong> smart paste for assets, Wi-Fi join codes, and the Licenses page showing
+            everything at once.
+          </li>
+          <li>
+            <strong>A cleaner workspace.</strong> Your menu style (rail and panel, sidebar, or top bar) carries over.
+          </li>
+          <li><strong>Atlas for Windows 1.0.</strong></li>
+        </ul>
+        <h2 id="after-you-upgrade"><a class="anchor" href="#after-you-upgrade">After you upgrade</a></h2>
+        <p>These take a few minutes, and only the ones that apply to you matter.</p>
+        <h3 id="everyone"><a class="anchor" href="#everyone">Everyone</a></h3>
+        <ul>
+          <li>
+            <strong>Look at the dashboard's Set up Atlas card</strong> (administrators). It lists anything an
+            installation should have and doesn't yet, such as email or a recent backup.
+          </li>
+        </ul>
+        <h3 id="if-you-use-microsoft-365-with-gdap">
+          <a class="anchor" href="#if-you-use-microsoft-365-with-gdap">If you use Microsoft 365 with GDAP</a>
+        </h3>
+        <p>
+          The new <strong>Microsoft 365 usage</strong> report reads Microsoft's usage reports, which need a permission
+          Atlas didn't ask for before.
+        </p>
+        <ol class="steps">
+          <li>
+            In your partner app registration, add the Microsoft Graph delegated permission
+            <strong>Reports.Read.All</strong> and grant consent.
+          </li>
+          <li>
+            Give your GDAP security group a role that can read usage reports, such as <strong>Reports Reader</strong>.
+          </li>
+          <li>
+            In Atlas, under <strong>Administration → Import &amp; export → Microsoft 365</strong>, choose
+            <strong>Reconnect partner account</strong>.
+          </li>
+        </ol>
+        <p>
+          Everything else carries on as before. Until you do this, the usage report says what's missing rather than
+          failing quietly. See <a href="integrations.html">Data and integrations</a>.
+        </p>
+        <h3 id="if-you-send-reports-or-alerts-by-email">
+          <a class="anchor" href="#if-you-send-reports-or-alerts-by-email">If you send reports or alerts by email</a>
+        </h3>
+        <p>
+          Scheduled reports and alerts are sent through the email server under
+          <strong>Administration → Email &amp; alerts</strong>. Choose <strong>Send test</strong> there to make sure it
+          works.
+        </p>
+        <h3 id="if-your-favicon-is-an-svg">
+          <a class="anchor" href="#if-your-favicon-is-an-svg">If your favicon is an SVG</a>
+        </h3>
+        <p>
+          Atlas for Windows uses your favicon as its icon, and Windows can't draw an SVG. Open
+          <strong>Administration → Theme</strong> and choose <strong>Save</strong> once: Atlas makes a picture Windows
+          can use.
+        </p>
+        <h3 id="atlas-for-windows"><a class="anchor" href="#atlas-for-windows">Atlas for Windows</a></h3>
+        <p>
+          Technicians' copies offer <strong>Install and restart</strong> for version 1.0 on their own, within six hours,
+          or straight away from <strong>Check for updates</strong>. New installs download it from
+          <strong>Your account → Desktop apps</strong>.
+        </p>
+        <ul>
+          <li>One download works on every PC, including Arm laptops.</li>
+          <li>
+            If your organization hasn't set up code signing, Windows SmartScreen still asks before the setup program
+            runs: choose <strong>More info</strong>, then <strong>Run anyway</strong>.
+          </li>
+        </ul>
+        <h2 id="going-back-to-1-x"><a class="anchor" href="#going-back-to-1-x">Going back to 1.x</a></h2>
+        <p>
+          If something important doesn't work, you can return to the version you had. The backup taken before the
+          upgrade holds everything as it was.
+        </p>
+        <p>On Linux (installed with the installer):</p>
+        <ol class="steps">
+          <li>Install the previous release, for example <code>sudo atlas-install --version v1.8.4</code>.</li>
+          <li>Stop Atlas: <code>sudo systemctl stop msp-atlas</code>.</li>
+          <li>
+            Restore the backup taken just before the upgrade. It's the newest file in the backups folder (<code
+              >/var/lib/msp-atlas/backups</code
+            >
+            unless you changed <code>ATLAS_BACKUP_DIR</code>) from before you upgraded:
+          </li>
+        </ol>
+        <p>
+          ``<code
+            >bash cd /opt/msp-atlas sudo runuser -u atlas -- node --env-file=/etc/msp-atlas/atlas.env
+            apps/server/dist/cli/restore.js /var/lib/msp-atlas/backups/&lt;file&gt;.atlasbak --replace </code
+          >``
+        </p>
+        <ol class="steps" start="4">
+          <li>Start Atlas: <code>sudo systemctl start msp-atlas</code>. Everyone signs in again.</li>
+        </ol>
+        <p>
+          Anything changed in Atlas after the upgrade is lost by going back, because the backup is from before it. For
+          Docker and Windows, go back to the previous image or package, then restore the same way (see
+          <a href="looking-after-atlas.html#restore-a-backup">Keeping Atlas healthy</a>).
+        </p>
+        <p>
+          If you go back, please say what didn't work through the support channel or GitHub, so it can be fixed in
+          2.0.1.
+        </p>
+        <nav class="pager" aria-label="Chapters">
+          <a class="prev" href="../security.html"><span>Previous</span>Security model</a>
+        </nav>
+      </main>
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#before-you-upgrade">Before you upgrade</a></li>
+          <li><a href="#upgrade">Upgrade</a></li>
+          <li><a href="#what-s-new">What's new</a></li>
+          <li><a href="#after-you-upgrade">After you upgrade</a></li>
+          <li><a href="#going-back-to-1-x">Going back to 1.x</a></li>
+        </ul>
+      </nav>
+    </div>
+    <footer class="footer">
+      <div class="footer-inner">
+        <p>
+          MSP Atlas 1.8.4. Documentation, passwords and client operations for managed service providers, on a server you
+          own.
+        </p>
+        <p>
+          <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          <a href="../security.html#reporting-a-vulnerability">Report a vulnerability</a>
+          <a href="https://github.com/ithealthtech/nexus-atlas/issues" rel="noopener">Issues</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

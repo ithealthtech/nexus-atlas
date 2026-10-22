@@ -706,5 +706,40 @@
     "s": "Reporting a vulnerability",
     "h": "reporting-a-vulnerability",
     "t": "Never in a public issue. Use GitHub's private vulnerability reporting (**Security → Report a vulnerability**) with the affected version, impact and steps to reproduce. See the [security policy](https://github.com/ithealthtech/nexus-atlas/blob/main/SECURITY.md)."
+  },
+  {
+    "u": "manual/upgrading-to-2.html",
+    "p": "Upgrading to 2.0",
+    "s": "Before you upgrade",
+    "h": "before-you-upgrade",
+    "t": "**Check that last night's backup finished.** It's under **Administration → System status**. If backups sit on the same disk as Atlas, copy the newest one somewhere else. **Make sure you can lay your hands on the master key** (`/etc/msp-atlas/master.key` on Linux, or wherever you keep your copy). A backup can't be restored without it. **Pick a quiet time.** Atlas restarts while it updates, and is usually back within a few minutes."
+  },
+  {
+    "u": "manual/upgrading-to-2.html",
+    "p": "Upgrading to 2.0",
+    "s": "Upgrade",
+    "h": "upgrade",
+    "t": "**Installed with the Linux installer:** go to **Administration → Updates** and choose **Install** on 2.0. Atlas asks for your password and takes a backup before anything changes. It then installs the release and restarts. If the install fails, it puts the previous version back on its own. From a terminal, `sudo atlas-install --version v2.0.0` does the same. **Docker:** pull the 2.0 image and run `docker compose ... up -d`, after a backup. **Windows Server:** run the 2.0 package's `Install-Atlas.ps1`, after a backup. Atlas updates its database the first time 2.0 starts. Nothing needs doing by hand."
+  },
+  {
+    "u": "manual/upgrading-to-2.html",
+    "p": "Upgrading to 2.0",
+    "s": "What's new",
+    "h": "what-s-new",
+    "t": "Everyone sees a **Welcome to Atlas 2.0** card on their dashboard. It leads to the What's new page, which is always under **What's new** in the account menu. In short: **Reports:** a client review pack; reports that email themselves on a schedule, and alerts that only send when something new needs attention; a cyber insurance readiness report; a savings finder; Microsoft 365 accounts and usage; every report readable on one page. **A health score for every client.** **Faster documenting:** smart paste for assets, Wi-Fi join codes, and the Licenses page showing everything at once. **A cleaner workspace.** Your menu style (rail and panel, sidebar, or top bar) carries over. **Atlas for Windows 1.0.**"
+  },
+  {
+    "u": "manual/upgrading-to-2.html",
+    "p": "Upgrading to 2.0",
+    "s": "After you upgrade",
+    "h": "after-you-upgrade",
+    "t": "These take a few minutes, and only the ones that apply to you matter. Everyone **Look at the dashboard's Set up Atlas card** (administrators). It lists anything an installation should have and doesn't yet, such as email or a recent backup. If you use Microsoft 365 with GDAP The new **Microsoft 365 usage** report reads Microsoft's usage reports, which need a permission Atlas didn't ask for before. In your partner app registration, add the Microsoft Graph delegated permission **Reports.Read.All** and grant consent. Give your GDAP security group a role that can read usage reports, such as **Reports Reader**. In Atlas, under **Administration → Import & export → Microsoft 365**, choose **Reconnect partner account**. Everything else carries on as before. Until you do this, the usage report says what's missing rather than failing quietly. See [Data and integrations](integrations.html). If you send reports or alerts by email Scheduled reports and alerts are sent through the email server under **Administration → Email & alerts**. Choose **Send test** there to make sure it works. If your favicon is an SVG Atlas for Windows uses your favicon as its icon, and Windows can't draw an SVG. Open **Administration → Theme** and choose **Save** once: Atlas makes a picture Windows can use. Atlas for Windows Technicians' copies offer **Install and restart** for version 1.0 on their own, within six hours, or straight away from **Check for updates**. New installs download it from **Your account → Desktop apps**. One download works on every PC, including Arm laptops. If your organization hasn't set up code signing, Windows SmartScreen still asks before the setup program runs: choose **More info**, then **Run anyway**."
+  },
+  {
+    "u": "manual/upgrading-to-2.html",
+    "p": "Upgrading to 2.0",
+    "s": "Going back to 1.x",
+    "h": "going-back-to-1-x",
+    "t": "If something important doesn't work, you can return to the version you had. The backup taken before the upgrade holds everything as it was. On Linux (installed with the installer): Install the previous release, for example `sudo atlas-install --version v1.8.4`. Stop Atlas: `sudo systemctl stop msp-atlas`. Restore the backup taken just before the upgrade. It's the newest file in the backups folder (`/var/lib/msp-atlas/backups` unless you changed `ATLAS_BACKUP_DIR`) from before you upgraded: ```bash cd /opt/msp-atlas sudo runuser -u atlas -- node --env-file=/etc/msp-atlas/atlas.env apps/server/dist/cli/restore.js /var/lib/msp-atlas/backups/.atlasbak --replace ``` Start Atlas: `sudo systemctl start msp-atlas`. Everyone signs in again. Anything changed in Atlas after the upgrade is lost by going back, because the backup is from before it. For Docker and Windows, go back to the previous image or package, then restore the same way (see [Keeping Atlas healthy](looking-after-atlas.html#restore-a-backup)). If you go back, please say what didn't work through the support channel or GitHub, so it can be fixed in 2.0.1."
   }
 ]
