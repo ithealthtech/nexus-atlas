@@ -16,8 +16,8 @@ Microsoft Teams is under **Administration → Microsoft Teams**. Imports and syn
 
 ## Microsoft Teams
 
-Under **Administration → Microsoft Teams**, connect a Microsoft account for discussions and install the Atlas bot
-in the teams that should receive notifications. Map each client to its own channel, with an optional separate
+Under **Administration → Microsoft Teams**, connect a Microsoft work account for discussions and automatic
+notifications. No Azure Bot resource or Teams app installation is required. Map each client to its own channel, with an optional separate
 security destination. Staff open **More → Teams** in a client workspace to read posts and replies, start a
 discussion, or edit messages they created through Atlas.
 
@@ -26,7 +26,8 @@ reviews arrive as a daily digest at reminder milestones; security events are che
 time zone and alert types, use **Send test notification** after saving, and check **Delivery history** if a message
 does not arrive. Password values and recovery keys are never posted. See the
 [Teams setup guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md) for Microsoft registration,
-the custom Teams app package, permissions, and the infection-event feed.
+account permissions, reconnection, and the infection-event feed. Alerts appear under the connected account and stay
+queued if Microsoft requires sign-in again.
 
 ## Import from Hudu
 

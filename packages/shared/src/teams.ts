@@ -10,11 +10,6 @@ const channelId = z
   .min(1)
   .max(250)
   .regex(/^19:[A-Za-z0-9._:@-]+$/, 'Enter a Teams channel ID.');
-const publicUrl = z
-  .string()
-  .url()
-  .max(2000)
-  .refine((v) => new URL(v).protocol === 'https:', 'Use an HTTPS address.');
 export const TEAMS_ALERT_KINDS = ['expiration', 'review', 'breach', 'infection'] as const;
 export type TeamsAlertKind = (typeof TEAMS_ALERT_KINDS)[number];
 export const TEAMS_ALERT_LABELS: Record<TeamsAlertKind, string> = {
@@ -37,9 +32,6 @@ export const teamsSettingsSchema = z
     tenantId: guid.optional(),
     appId: guid.optional(),
     clientSecret: z.string().max(4000).optional(),
-    websiteUrl: publicUrl.optional(),
-    privacyUrl: publicUrl.optional(),
-    termsUrl: publicUrl.optional(),
     alerts: z
       .array(z.enum(TEAMS_ALERT_KINDS))
       .max(4)

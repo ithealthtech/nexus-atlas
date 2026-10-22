@@ -4,9 +4,9 @@ import { ROLE_INFO, type TeamsPost, type TeamsPostPage, teamsPostSchema } from '
 import { HttpError } from '../../errors.js';
 import { type Scope, isUuid } from '../scope.js';
 import { securityEvent } from '../security-log.js';
-import { TeamsSettingsStore } from './settings.js';
+import type { TeamsSettingsStore } from './settings.js';
+import { TeamsClient, TeamsRequestError } from './client.js';
 
-const GRAPH = 'https://graph.microsoft.com/v1.0';
 const segment = (value: string) => encodeURIComponent(value);
 export interface GraphMessage {
   id: string;
@@ -32,10 +32,13 @@ export function teamsText(message: GraphMessage): string {
     : content;
 }
 export class TeamsGraph {
+  private readonly client: TeamsClient;
   constructor(
     private readonly settings: TeamsSettingsStore,
-    private readonly fetcher: typeof fetch = fetch,
-  ) {}
+    fetcher: typeof fetch = fetch,
+  ) {
+    this.client = new TeamsClient(settings, fetcher);
+  }
 
   async mapping(scope: Scope, clientId: string, write = false) {
     if (!ROLE_INFO[scope.actor.role].staff || !isUuid(clientId)) throw new HttpError(404, 'Teams channel not found.');
@@ -45,37 +48,29 @@ export class TeamsGraph {
     if (!mapping) throw new HttpError(404, 'No Teams channel is mapped to this client.');
     return mapping;
   }
-  private async request(orgId: string, path: string, method = 'GET', body?: unknown) {
-    const token = await this.settings.delegatedToken(orgId, this.fetcher);
-    let res: Response;
-    try {
-      res = await this.fetcher(GRAPH + path, {
-        method,
-        redirect: 'error',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: AbortSignal.timeout(25_000),
-      });
-    } catch {
-      throw new HttpError(
-        502,
-        method === 'GET'
-          ? 'Microsoft Teams could not be reached.'
-          : 'Teams did not confirm the change. Check the channel before trying again.',
-      );
-    }
-    if (res.status === 429) throw new HttpError(429, 'Teams is busy. Wait a moment before trying again.');
-    if (!res.ok)
-      throw new HttpError(
-        res.status === 404 ? 404 : 502,
-        res.status === 404
-          ? 'Teams post not found.'
-          : 'Microsoft refused the Teams request. Check the connection and channel permissions.',
-      );
-    return res.status === 204 ? null : res.json();
-  }
   private base(mapping: { teamId: string; channelId: string }) {
     return `/teams/${segment(mapping.teamId)}/channels/${segment(mapping.channelId)}/messages`;
+  }
+  async notify(
+    scope: Scope,
+    clientId: string,
+    destination: { teamId: string; channelId: string },
+    content: string,
+    parentMessageId?: string,
+  ) {
+    const mapping = await this.mapping(scope, clientId, true);
+    if (
+      mapping.teamId !== destination.teamId ||
+      ![mapping.channelId, mapping.securityChannelId].includes(destination.channelId)
+    )
+      throw new HttpError(409, 'The Teams destination changed. Check the saved client mapping.');
+    const path = this.base(destination) + (parentMessageId ? `/${segment(parentMessageId)}/replies` : '');
+    const message = (await this.client.request(scope.actor.orgId, path, 'POST', {
+      body: { contentType: 'text', content },
+    })) as GraphMessage | null;
+    if (!message || typeof message.id !== 'string' || !message.id)
+      throw new TeamsRequestError('uncertain', 'Teams did not return a message ID. Check the channel before retrying.');
+    return { graphMessageId: message.id };
   }
   async list(scope: Scope, clientId: string, parentId?: string, cursor?: string): Promise<TeamsPostPage> {
     const mapping = await this.mapping(scope, clientId);
@@ -98,7 +93,7 @@ export class TeamsGraph {
         throw new HttpError(400, 'Invalid Teams page.');
       path = url.pathname.slice('/v1.0'.length) + url.search;
     }
-    const result = (await this.request(scope.actor.orgId, path)) as {
+    const result = (await this.client.request(scope.actor.orgId, path)) as {
       value?: GraphMessage[];
       '@odata.nextLink'?: string;
     };
@@ -133,7 +128,7 @@ export class TeamsGraph {
     const mapping = await this.mapping(scope, clientId, true);
     const { content } = teamsPostSchema.parse(input);
     const path = this.base(mapping) + (parentId ? `/${segment(parentId)}/replies` : '');
-    const message = (await this.request(scope.actor.orgId, path, 'POST', {
+    const message = (await this.client.request(scope.actor.orgId, path, 'POST', {
       body: { contentType: 'text', content },
     })) as GraphMessage;
     await scope.db.insert(schema.teamsPosts).values({
@@ -174,7 +169,7 @@ export class TeamsGraph {
       );
     if (!owned) throw new HttpError(404, 'Only your own Atlas-created Teams posts can be edited here.');
     const path = this.base(mapping) + (parentId ? `/${segment(parentId)}/replies` : '') + `/${segment(id)}`;
-    await this.request(scope.actor.orgId, path, 'PATCH', { body: { contentType: 'text', content } });
+    await this.client.request(scope.actor.orgId, path, 'PATCH', { body: { contentType: 'text', content } });
     await securityEvent(scope.db, {
       orgId: scope.actor.orgId,
       userId: scope.actor.id,

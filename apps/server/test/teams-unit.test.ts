@@ -4,44 +4,8 @@ import { teamsText } from '../src/services/teams/graph.js';
 import { teamsReminder, teamsLocalHour } from '../src/services/teams/alerts.js';
 import { API_ROUTES } from '../src/services/api-keys.js';
 import { isPrivatePath, isPrivateTeamsUrl } from '../src/services/request-log.js';
-import { teamsAppPackage } from '../src/services/teams/manifest.js';
-import { unzipSync, unzlibSync } from 'fflate';
-import { TeamsBot } from '../src/services/teams/bot.js';
-
-/** Decode RGBA PNG pixels so the package check also catches a blank or invisible icon. */
-function pngPixels(bytes: Uint8Array) {
-  const png = Buffer.from(bytes);
-  const width = png.readUInt32BE(16);
-  const height = png.readUInt32BE(20);
-  expect(png[24]).toBe(8);
-  expect(png[25]).toBe(6);
-  const chunks: Buffer[] = [];
-  for (let offset = 8; offset < png.length;) {
-    const length = png.readUInt32BE(offset);
-    if (png.toString('ascii', offset + 4, offset + 8) === 'IDAT')
-      chunks.push(png.subarray(offset + 8, offset + 8 + length));
-    offset += length + 12;
-  }
-  const rows = unzlibSync(Buffer.concat(chunks));
-  const stride = width * 4;
-  const pixels = new Uint8Array(height * stride);
-  for (let y = 0; y < height; y++) {
-    const filter = rows[y * (stride + 1)]!;
-    expect(filter).toBeLessThanOrEqual(4);
-    for (let x = 0; x < stride; x++) {
-      const index = y * stride + x;
-      const left = x >= 4 ? pixels[index - 4]! : 0;
-      const above = y > 0 ? pixels[index - stride]! : 0;
-      const corner = y > 0 && x >= 4 ? pixels[index - stride - 4]! : 0;
-      const prediction = left + above - corner;
-      const distances = [left, above, corner].map((value) => Math.abs(prediction - value));
-      const paeth = [left, above, corner][distances.indexOf(Math.min(...distances))]!;
-      pixels[index] =
-        rows[y * (stride + 1) + x + 1]! + [0, left, above, Math.floor((left + above) / 2), paeth][filter]!;
-    }
-  }
-  return pixels;
-}
+import { TeamsClient } from '../src/services/teams/client.js';
+import { HttpError } from '../src/errors.js';
 
 describe('Teams input and rendering', () => {
   it('defaults to a disabled connection, security alerts, daily digests and expiry milestones', () => {
@@ -117,91 +81,109 @@ describe('Teams input and rendering', () => {
     ])
       expect(allowed(path)).toBe(false);
   });
-  it('builds an installable app package with correctly sized PNG icons and no credentials', () => {
+  it('accepts saved settings from 2.1.0 without retaining obsolete bot package fields', () => {
     const settings = teamsSettingsSchema.parse({
-      appId: '11111111-2222-4333-8444-555555555555',
+      tenantId: '11111111-2222-4333-8444-555555555555',
+      appId: '22222222-2222-4333-8444-555555555555',
       websiteUrl: 'https://atlas.example',
       privacyUrl: 'https://atlas.example/privacy',
       termsUrl: 'https://atlas.example/terms',
     });
-    const files = unzipSync(teamsAppPackage(settings, 'https://atlas.example'));
-    expect(Object.keys(files).sort()).toEqual(['color.png', 'manifest.json', 'outline.png']);
-    const manifest = JSON.parse(Buffer.from(files['manifest.json']!).toString());
-    expect(manifest.bots[0].botId).toBe(settings.appId);
-    expect(manifest.bots[0].isNotificationOnly).toBe(true);
-    expect(Buffer.from(files['color.png']!).readUInt32BE(16)).toBe(192);
-    expect(Buffer.from(files['outline.png']!).readUInt32BE(16)).toBe(32);
-    const pixels = pngPixels(files['outline.png']!);
-    const visible = [];
-    for (let i = 0; i < pixels.length; i += 4)
-      if (pixels[i + 3]! > 0) {
-        expect([...pixels.subarray(i, i + 3)]).toEqual([255, 255, 255]);
-        visible.push(i / 4);
-      }
-    expect(visible.length).toBeGreaterThan(200);
-    expect(visible.length).toBeLessThan(850);
-    expect(visible.some((pixel) => pixel < 32)).toBe(true);
-    expect(visible.some((pixel) => pixel >= 32 * 31)).toBe(true);
-    expect(() => teamsAppPackage(teamsSettingsSchema.parse({}), 'https://atlas.example')).toThrow('privacy');
+    expect(settings.appId).toBe('22222222-2222-4333-8444-555555555555');
+    expect(settings).not.toHaveProperty('websiteUrl');
+    expect(settings).not.toHaveProperty('privacyUrl');
+    expect(settings).not.toHaveProperty('termsUrl');
   });
 });
 
-describe('Teams bot delivery', () => {
-  const saved = {
-    ...teamsSettingsSchema.parse({
-      enabled: true,
-      tenantId: '11111111-2222-4333-8444-555555555555',
-      appId: '22222222-2222-4333-8444-555555555555',
-    }),
-    generation: 'synthetic',
-    ownerId: '11111111-2222-4333-8444-555555555555',
-    secretSealed: null,
-    connection: null,
-  };
-  const settings = { load: async () => saved, secret: () => 'synthetic-secret' };
-  it('uses the bot audience, sends to the selected channel, and replies in the existing thread', async () => {
-    const calls: { url: string; body: string }[] = [];
-    const bot = new TeamsBot(settings, (async (input: string | URL | Request, init?: RequestInit) => {
-      const url = String(input);
-      calls.push({ url, body: String(init?.body) });
-      return url.includes('login.microsoftonline.com')
-        ? Response.json({ access_token: 'bot-token' })
-        : Response.json({ id: 'conversation', activityId: 'activity' });
+describe('Teams Graph delivery', () => {
+  const settings = { delegatedToken: async () => 'delegated-teams-token' };
+  it('sends plain-text messages and replies through the connected account', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const client = new TeamsClient(settings, (async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return Response.json({ id: 'graph-message' }, { status: 201 });
     }) as typeof fetch);
-    expect(await bot.send('org', '19:channel@thread.tacv2', 'Example alert')).toEqual({
-      conversationId: 'conversation',
-      activityId: 'activity',
+    const path = '/teams/team/channels/19%3Achannel%40thread.tacv2/messages';
+    expect(await client.request('org', path, 'POST', { body: { contentType: 'text', content: 'Alert' } })).toEqual({
+      id: 'graph-message',
     });
-    expect(calls[0]!.body).toContain('api.botframework.com');
-    expect(JSON.parse(calls[1]!.body).channelData.channel.id).toBe('19:channel@thread.tacv2');
-    expect(JSON.parse(calls[1]!.body).activity.textFormat).toBe('plain');
-    await bot.send('org', '19:channel@thread.tacv2', 'Resolved', {
-      conversationId: 'conversation',
-      activityId: 'activity',
+    await client.request('org', path + '/original-message/replies', 'POST', {
+      body: { contentType: 'text', content: 'Resolved' },
     });
-    expect(calls.at(-1)!.url).toBe(
-      'https://smba.trafficmanager.net/teams/v3/conversations/conversation/activities/activity',
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://graph.microsoft.com/v1.0' + path,
+      'https://graph.microsoft.com/v1.0' + path + '/original-message/replies',
+    ]);
+    expect(new Headers(calls[0]!.init?.headers).get('authorization')).toBe('Bearer delegated-teams-token');
+    expect(JSON.parse(String(calls[0]!.init?.body)).body.contentType).toBe('text');
+  });
+  it('classifies a missing Microsoft connection before making any Graph request', async () => {
+    let calls = 0;
+    const client = new TeamsClient(
+      {
+        delegatedToken: async () => {
+          throw new HttpError(409, 'Connect Microsoft.');
+        },
+      },
+      (async () => {
+        calls++;
+        return Response.json({});
+      }) as typeof fetch,
     );
-    expect(JSON.parse(calls.at(-1)!.body).replyToId).toBe('activity');
+    await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.toMatchObject({
+      outcome: 'connection',
+      status: 409,
+    });
+    expect(calls).toBe(0);
   });
   it('honors Retry-After without classifying a known throttle as an ambiguous send', async () => {
-    const bot = new TeamsBot(settings, (async (input: string | URL | Request) =>
-      String(input).includes('login.microsoftonline.com')
-        ? Response.json({ access_token: 'bot-token' })
-        : Response.json({}, { status: 429, headers: { 'retry-after': '120' } })) as typeof fetch);
-    await expect(bot.send('org', '19:channel@thread.tacv2', 'Alert')).rejects.toMatchObject({
+    const client = new TeamsClient(settings, (async () =>
+      Response.json({}, { status: 429, headers: { 'retry-after': '120' } })) as typeof fetch);
+    await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.toMatchObject({
       outcome: 'retry',
       retrySeconds: 120,
     });
   });
-  it('holds a lost response as uncertain and never exposes transport details', async () => {
-    const bot = new TeamsBot(settings, (async (input: string | URL | Request) => {
-      if (String(input).includes('login.microsoftonline.com')) return Response.json({ access_token: 'bot-token' });
+  it('pauses authentication failures and keeps permission errors separate', async () => {
+    for (const [status, outcome] of [
+      [401, 'connection'],
+      [403, 'failed'],
+    ] as const) {
+      const client = new TeamsClient(settings, (async () =>
+        Response.json({ error: 'private Microsoft details' }, { status })) as typeof fetch);
+      await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.toMatchObject({
+        outcome,
+      });
+      await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.not.toThrow(
+        'private',
+      );
+    }
+  });
+  it('retries reads but holds uncertain writes when Microsoft returns a server error', async () => {
+    const client = new TeamsClient(settings, (async () => Response.json({}, { status: 503 })) as typeof fetch);
+    await expect(client.request('org', '/teams/team/channels/channel/messages')).rejects.toMatchObject({
+      outcome: 'retry',
+    });
+    await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.toMatchObject({
+      outcome: 'uncertain',
+    });
+  });
+  it('holds a lost write response and never exposes transport details', async () => {
+    const client = new TeamsClient(settings, (async () => {
       throw new Error('private transport details');
     }) as typeof fetch);
-    await expect(bot.send('org', '19:channel@thread.tacv2', 'Alert')).rejects.toMatchObject({
+    await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.toMatchObject({
       outcome: 'uncertain',
-      message: 'The Teams response was lost. Check the channel before retrying.',
+    });
+    await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.not.toThrow(
+      'private',
+    );
+  });
+  it('holds an unreadable write response as uncertain instead of sending it again', async () => {
+    const client = new TeamsClient(settings, (async () => new Response('not JSON', { status: 201 })) as typeof fetch);
+    await expect(client.request('org', '/teams/team/channels/channel/messages', 'POST', {})).rejects.toMatchObject({
+      outcome: 'uncertain',
     });
   });
 });

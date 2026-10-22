@@ -15,9 +15,16 @@ import { Scope } from '../scope.js';
 import { Repeating, type ErrorLog } from '../repeating.js';
 import { securityEvent } from '../security-log.js';
 import { TeamsSettingsStore, type StoredTeams } from './settings.js';
-import { TeamsBot, TeamsSendError } from './bot.js';
+import type { TeamsGraph } from './graph.js';
+import { TeamsRequestError } from './client.js';
 
 type Delivery = typeof schema.teamsDeliveries.$inferSelect;
+const rootWaitOutcomes: Record<string, TeamsRequestError['outcome']> = {
+  pending: 'retry',
+  sending: 'retry',
+  uncertain: 'uncertain',
+  failed: 'failed',
+};
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export function teamsReminder(daysLeft: number, reminders: number[]) {
   return [...reminders].sort((a, b) => a - b).find((day) => daysLeft <= day);
@@ -32,7 +39,7 @@ export class TeamsAlerts {
     private readonly db: Database,
     private readonly deps: {
       settings: TeamsSettingsStore;
-      bot: TeamsBot;
+      graph: TeamsGraph;
       expirations: ExpirationService;
       health: { report(scope: Scope): Promise<PasswordHealthReport> };
       publicOrigin: string;
@@ -104,15 +111,14 @@ export class TeamsAlerts {
     });
     return { ok: true };
   }
-  async test(orgId: string, clientId: string) {
-    const saved = await this.deps.settings.load(orgId);
-    const mapping = saved?.enabled && saved.mappings.find((m) => m.clientId === clientId);
-    if (!mapping) throw new HttpError(409, 'Enable Teams and save the client mapping first.');
-    try {
-      await this.deps.bot.send(orgId, mapping.channelId, 'Atlas test notification. No security incident was detected.');
-    } catch (error) {
-      throw new HttpError(502, error instanceof TeamsSendError ? error.message : 'The Teams test failed.');
-    }
+  async test(scope: Scope, clientId: string) {
+    const mapping = await this.deps.graph.mapping(scope, clientId, true);
+    await this.deps.graph.notify(
+      scope,
+      clientId,
+      mapping,
+      'Atlas test notification. No security incident was detected.',
+    );
     return { ok: true };
   }
   async retry(orgId: string, id: string, confirmUncertain: boolean) {
@@ -202,11 +208,13 @@ export class TeamsAlerts {
         .from(schema.users)
         .where(and(eq(schema.users.id, saved.ownerId), eq(schema.users.orgId, org.id)));
       if (!owner || owner.disabled || !ROLE_INFO[owner.role as keyof typeof ROLE_INFO]?.admin) continue;
-      await this.collect(org.id, saved, new Scope(this.db, actorFor(owner)));
-      await this.deliver(org.id, saved, now);
+      const scope = new Scope(this.db, actorFor(owner));
+      await this.collect(org.id, saved, scope);
+      if (saved.connection) await this.deliver(scope, saved, now);
     }
   }
-  private async deliver(orgId: string, saved: StoredTeams, now: Date) {
+  private async deliver(scope: Scope, saved: StoredTeams, now: Date) {
+    const orgId = scope.actor.orgId;
     const table = schema.teamsDeliveries;
     const due = await this.db.transaction(async (tx) => {
       const rows = await tx
@@ -250,84 +258,120 @@ export class TeamsAlerts {
     for (const rows of groups.values())
       for (let i = 0; i < rows.length; i += 15) {
         const batch = rows.slice(i, i + 15);
-        const first = batch[0]!;
-        const valid = batch.every((row) => {
-          const m = saved.mappings.find((m) => m.clientId === row.clientId);
-          return (
-            m &&
-            saved.alerts.includes(row.kind as TeamsAlertKind) &&
-            m.teamId === row.teamId &&
-            (row.kind === 'breach' || row.kind === 'infection' ? (m.securityChannelId ?? m.channelId) : m.channelId) ===
-              row.channelId
-          );
-        });
-        try {
-          if (!valid) throw new TeamsSendError('failed');
-          const [root] = first.rootKey
-            ? await this.db
-                .select()
-                .from(table)
-                .where(
-                  and(
-                    eq(table.orgId, orgId),
-                    eq(table.eventKey, first.rootKey),
-                    eq(table.teamId, first.teamId),
-                    eq(table.channelId, first.channelId),
-                    eq(table.status, 'sent'),
-                  ),
-                )
-            : [];
-          const result = await this.deps.bot.send(
-            orgId,
-            first.channelId,
-            batch.map((r) => r.text).join('\n\n'),
-            root?.conversationId && root.activityId
-              ? { conversationId: root.conversationId, activityId: root.activityId }
-              : undefined,
-          );
-          await this.db.transaction(async (tx) => {
-            await tx
-              .update(table)
-              .set({ status: 'sent', attempts: first.attempts + 1, error: '', updatedAt: now, ...result })
-              .where(
-                inArray(
-                  table.id,
-                  batch.map((r) => r.id),
-                ),
-              );
-            await securityEvent(tx, {
-              orgId,
-              userId: saved.ownerId,
-              actor: 'Atlas Teams notifications',
-              action: 'Sent Teams notifications',
-              detail: `${batch.length} ${first.kind} notification(s); channel ${first.channelId}`,
-            });
-          });
-        } catch (error) {
-          const failure = error instanceof TeamsSendError ? error : new TeamsSendError('uncertain');
-          const attempts = first.attempts + 1;
+        const waiting = await this.sendBatch(scope, saved, batch, now);
+        if (waiting) {
+          // Return every still-claimed delivery to the queue without consuming attempts while sign-in is required.
           await this.db
             .update(table)
             .set({
-              status:
-                failure.outcome === 'retry' && attempts < 5
-                  ? 'pending'
-                  : failure.outcome === 'uncertain'
-                    ? 'uncertain'
-                    : 'failed',
-              attempts,
-              error: failure.message,
+              status: 'pending',
+              claimedAt: null,
+              error: waiting,
               updatedAt: now,
-              nextAttemptAt: new Date(now.getTime() + Math.max(failure.retrySeconds, 30 * 2 ** attempts) * 1000),
+              nextAttemptAt: new Date(now.getTime() + 60_000),
             })
             .where(
-              inArray(
-                table.id,
-                batch.map((r) => r.id),
+              and(
+                inArray(
+                  table.id,
+                  due.map((row) => row.id),
+                ),
+                eq(table.status, 'sending'),
               ),
             );
+          return;
         }
       }
+  }
+  private async sendBatch(scope: Scope, saved: StoredTeams, batch: Delivery[], now: Date): Promise<string | undefined> {
+    const table = schema.teamsDeliveries;
+    const orgId = scope.actor.orgId;
+    const first = batch[0]!;
+    try {
+      const valid = batch.every((row) => {
+        const m = saved.mappings.find((m) => m.clientId === row.clientId);
+        return (
+          m &&
+          saved.alerts.includes(row.kind as TeamsAlertKind) &&
+          m.teamId === row.teamId &&
+          (row.kind === 'breach' || row.kind === 'infection' ? (m.securityChannelId ?? m.channelId) : m.channelId) ===
+            row.channelId
+        );
+      });
+      if (!valid) throw new TeamsRequestError('failed', 'The Teams mapping or alert settings changed.');
+      const [root] = first.rootKey
+        ? await this.db
+            .select()
+            .from(table)
+            .where(
+              and(
+                eq(table.orgId, orgId),
+                eq(table.eventKey, first.rootKey),
+                eq(table.teamId, first.teamId),
+                eq(table.channelId, first.channelId),
+              ),
+            )
+        : [];
+      if (root && root.status !== 'sent')
+        throw new TeamsRequestError(
+          rootWaitOutcomes[root.status] ?? 'failed',
+          'The original notification is waiting for delivery. Resolve its delivery status first.',
+        );
+      const result = await this.deps.graph.notify(
+        scope,
+        first.clientId,
+        first,
+        batch.map((r) => r.text).join('\n\n'),
+        root?.graphMessageId ?? undefined,
+      );
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(table)
+          .set({ status: 'sent', attempts: first.attempts + 1, error: '', updatedAt: now, ...result })
+          .where(
+            inArray(
+              table.id,
+              batch.map((r) => r.id),
+            ),
+          );
+        await securityEvent(tx, {
+          orgId,
+          userId: saved.ownerId,
+          actor: 'Atlas Teams notifications',
+          action: 'Sent Teams notifications',
+          detail: `${batch.length} ${first.kind} notification(s); channel ${first.channelId}`,
+        });
+      });
+    } catch (error) {
+      const failure =
+        error instanceof TeamsRequestError
+          ? error
+          : error instanceof HttpError
+            ? new TeamsRequestError('failed', error.message)
+            : new TeamsRequestError('uncertain', 'Delivery was interrupted. Check Teams before retrying.');
+      if (failure.outcome === 'connection') return failure.message;
+      const attempts = first.attempts + 1;
+      await this.db
+        .update(table)
+        .set({
+          status:
+            failure.outcome === 'retry' && attempts < 5
+              ? 'pending'
+              : failure.outcome === 'uncertain'
+                ? 'uncertain'
+                : 'failed',
+          attempts,
+          error: failure.message,
+          updatedAt: now,
+          nextAttemptAt: new Date(now.getTime() + Math.max(failure.retrySeconds, 30 * 2 ** attempts) * 1000),
+        })
+        .where(
+          inArray(
+            table.id,
+            batch.map((r) => r.id),
+          ),
+        );
+    }
   }
   async history(orgId: string): Promise<TeamsDelivery[]> {
     const rows = await this.db
