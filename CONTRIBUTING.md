@@ -34,6 +34,7 @@ sample data in the browser.
 
 ```powershell
 npm run lint
+npm run duplicates
 npm run typecheck
 npm test
 npm run build
@@ -44,6 +45,10 @@ npm audit --omit=dev
 `npm test` needs `TEST_DATABASE_URL` and `npm run test:e2e` needs `E2E_DATABASE_URL`, each
 pointing at a database the tests may erase. CI runs all of these, plus a Windows build and a
 Docker image build, on every pull request.
+
+`npm run duplicates` fails when copied code passes 1% of the source (it was 0.93% when the check
+was added) and lists each copy. Move a copy into a shared helper rather than raising the limit;
+lower the limit in `.jscpd.json` once duplicates are removed.
 
 ## Rules for code on the request path
 

@@ -1,0 +1,9 @@
+{
+  "path": ["apps/server/src", "apps/web/src", "apps/extension/src", "packages/shared/src", "packages/db/src"],
+  "ignore": ["**/*.test.ts", "**/demo/**"],
+  "minLines": 10,
+  "minTokens": 70,
+  "threshold": 1,
+  "reporters": ["console"],
+  "gitignore": true
+}
