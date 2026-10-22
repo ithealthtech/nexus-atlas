@@ -432,14 +432,14 @@
     "p": "Installing Atlas",
     "s": "Docker (Linux)",
     "h": "docker-linux",
-    "t": "Point a DNS name at the server, and open ports 80 and 443. Caddy uses them to get and renew the certificate. Copy `.env.example` to `.env` and set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD` and `ATLAS_MASTER_KEY`. Generate the key with: Start Atlas and read the setup code from the log: A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-atlas:2.0.2`."
+    "t": "Point a DNS name at the server, and open ports 80 and 443. Caddy uses them to get and renew the certificate. Copy `.env.example` to `.env` and set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD` and `ATLAS_MASTER_KEY`. Generate the key with: Start Atlas and read the setup code from the log: A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-atlas:2.1.0`."
   },
   {
     "u": "install.html",
     "p": "Installing Atlas",
     "s": "Windows Server",
     "h": "windows-server",
-    "t": "Install Node.js 22 or 24 LTS and PostgreSQL 16 or 17, and create an empty database and user for Atlas. Download `msp-atlas-2.0.2-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\\Program Files\\MSP Atlas`. From an elevated PowerShell prompt, run: The script creates `C:\\ProgramData\\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\\\nas\\atlas-backups` to keep backups on another machine. To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key."
+    "t": "Install Node.js 22 or 24 LTS and PostgreSQL 16 or 17, and create an empty database and user for Atlas. Download `msp-atlas-2.1.0-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\\Program Files\\MSP Atlas`. From an elevated PowerShell prompt, run: The script creates `C:\\ProgramData\\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\\\nas\\atlas-backups` to keep backups on another machine. To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key."
   },
   {
     "u": "install.html",
@@ -538,6 +538,13 @@
     "s": "Webhooks",
     "h": "webhooks",
     "t": "**Admin → Webhooks** makes Atlas post a short message to an address of yours whenever something changes, so a chat channel, an automation or another tool can react. Choose **New webhook**, give it a name and an `https://` address, and tick the kinds of item it should hear about: clients, assets, documents, passwords, contacts, locations, checklists. Copy the **signing secret**, shown once. The receiver uses it to check a message came from Atlas. Choose **Send test** to post a `ping`. A message names the event (such as `asset.updated` or `password.rotated`), who did it, the client, and the item's name and address. It never carries the item's contents, and a password message gives only the entry's name. **Delivery.** Anything other than a 2xx answer within 10 seconds is a failure, tried again after 1 minute, 5 minutes, 30 minutes, 2 hours and 6 hours. After ten messages in a row have been given up on, the webhook is paused; fix the receiver and choose **Resume**. **Deliveries** shows the latest 50 and why any failed. An RMM sync changes many assets at once, and each change is a message. Leave **Assets** unticked on a webhook that posts to a chat channel. The signature format and headers are in the [administrator guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md#webhooks)."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
+    "s": "Microsoft Teams",
+    "h": "microsoft-teams",
+    "t": "Under **Administration → Microsoft Teams**, connect a Microsoft account for discussions and install the Atlas bot in the teams that should receive notifications. Map each client to its own channel, with an optional separate security destination. Staff open **More → Teams** in a client workspace to read posts and replies, start a discussion, or edit messages they created through Atlas. Alerts cover expirations, document reviews, password breaches and confirmed infection events. Expirations and reviews arrive as a daily digest at reminder milestones; security events are checked every minute. Configure the time zone and alert types, use **Send test notification** after saving, and check **Delivery history** if a message does not arrive. Password values and recovery keys are never posted. See the [Teams setup guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md) for Microsoft registration, the custom Teams app package, permissions, and the infection-event feed."
   },
   {
     "u": "manual/integrations.html",

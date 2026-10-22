@@ -149,8 +149,9 @@
         <p class="eyebrow">Chapter 12</p>
         <h1>Data and integrations</h1>
         <p>
-          Everything on this page is under <strong>Admin → Import &amp; export</strong>, except the BitLocker collector
-          and password rotation, which are in the Vault area.
+          Microsoft Teams is under <strong>Administration → Microsoft Teams</strong>. Imports and syncs are under
+          <strong>Admin → Import &amp; export</strong>; the BitLocker collector and password rotation are in the Vault
+          area.
         </p>
         <figure>
           <a href="../images/manual/import-export.png"
@@ -158,6 +159,24 @@
           /></a>
           <figcaption>Admin → Import &amp; export.</figcaption>
         </figure>
+        <h2 id="microsoft-teams"><a class="anchor" href="#microsoft-teams">Microsoft Teams</a></h2>
+        <p>
+          Under <strong>Administration → Microsoft Teams</strong>, connect a Microsoft account for discussions and
+          install the Atlas bot in the teams that should receive notifications. Map each client to its own channel, with
+          an optional separate security destination. Staff open <strong>More → Teams</strong> in a client workspace to
+          read posts and replies, start a discussion, or edit messages they created through Atlas.
+        </p>
+        <p>
+          Alerts cover expirations, document reviews, password breaches and confirmed infection events. Expirations and
+          reviews arrive as a daily digest at reminder milestones; security events are checked every minute. Configure
+          the time zone and alert types, use <strong>Send test notification</strong> after saving, and check
+          <strong>Delivery history</strong> if a message does not arrive. Password values and recovery keys are never
+          posted. See the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md" rel="noopener"
+            >Teams setup guide</a
+          >
+          for Microsoft registration, the custom Teams app package, permissions, and the infection-event feed.
+        </p>
         <h2 id="import-from-hudu"><a class="anchor" href="#import-from-hudu">Import from Hudu</a></h2>
         <ol class="steps">
           <li>
@@ -432,6 +451,7 @@
       <nav class="toc" aria-label="On this page">
         <p>On this page</p>
         <ul>
+          <li><a href="#microsoft-teams">Microsoft Teams</a></li>
           <li><a href="#import-from-hudu">Import from Hudu</a></li>
           <li><a href="#import-a-spreadsheet-csv">Import a spreadsheet (CSV)</a></li>
           <li><a href="#connectwise-rmm">ConnectWise RMM</a></li>
@@ -446,7 +466,7 @@
     <footer class="footer">
       <div class="footer-inner">
         <p>
-          MSP Atlas 2.0.2. Documentation, passwords and client operations for managed service providers, on a server you
+          MSP Atlas 2.1.0. Documentation, passwords and client operations for managed service providers, on a server you
           own.
         </p>
         <p>

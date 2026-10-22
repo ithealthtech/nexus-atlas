@@ -10,9 +10,23 @@ summary: Importing from Hudu and spreadsheets, ConnectWise RMM, Microsoft 365 an
 
 # Data and integrations
 
-Everything on this page is under **Admin → Import & export**, except the BitLocker collector and password rotation, which are in the Vault area.
+Microsoft Teams is under **Administration → Microsoft Teams**. Imports and syncs are under **Admin → Import & export**; the BitLocker collector and password rotation are in the Vault area.
 
 ![Import & export](../images/manual/import-export.png "Admin → Import & export.")
+
+## Microsoft Teams
+
+Under **Administration → Microsoft Teams**, connect a Microsoft account for discussions and install the Atlas bot
+in the teams that should receive notifications. Map each client to its own channel, with an optional separate
+security destination. Staff open **More → Teams** in a client workspace to read posts and replies, start a
+discussion, or edit messages they created through Atlas.
+
+Alerts cover expirations, document reviews, password breaches and confirmed infection events. Expirations and
+reviews arrive as a daily digest at reminder milestones; security events are checked every minute. Configure the
+time zone and alert types, use **Send test notification** after saving, and check **Delivery history** if a message
+does not arrive. Password values and recovery keys are never posted. See the
+[Teams setup guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md) for Microsoft registration,
+the custom Teams app package, permissions, and the infection-event feed.
 
 ## Import from Hudu
 

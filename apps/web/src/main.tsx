@@ -21,6 +21,8 @@ import { sessionKey, useActor, useSession, useSetupNeeded } from '@/lib/session'
 import { applyTheme, storedTheme } from '@/lib/theme';
 import { Dashboard } from '@/pages/Dashboard';
 import { Reports } from '@/pages/Reports';
+import { TeamsSettingsPage } from '@/pages/Teams';
+import { ClientTeams } from '@/pages/client/Teams';
 import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientLicenses } from '@/pages/client/Licenses';
@@ -219,6 +221,7 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
   createRoute({ getParentRoute: () => clientRoute, path: '/licenses', component: ClientLicenses }),
   createRoute({ getParentRoute: () => clientRoute, path: '/reports', component: Reports }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/teams', component: ClientTeams }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
   createRoute({ getParentRoute: () => clientRoute, path: '/trackers/domains', component: DomainTracker }),
@@ -290,6 +293,7 @@ const routes = [
     },
   }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/email', component: adminOnly(EmailAlertsPage) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/teams', component: adminOnly(TeamsSettingsPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/monitoring', component: adminOnly(MonitoringPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/sign-in', component: adminOnly(SignInPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/api-keys', component: adminOnly(ApiKeysPage) }),

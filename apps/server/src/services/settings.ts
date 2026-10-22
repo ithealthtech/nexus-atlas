@@ -53,6 +53,7 @@ import {
 } from '@atlas/shared';
 import { open, seal, type KeyProvider } from '../crypto/keys.js';
 import { HttpError } from '../errors.js';
+import { TeamsSettingsStore } from './teams/settings.js';
 
 /** Email settings as stored: the SMTP password and the Graph client secret are sealed with the master key. */
 interface StoredSmtp {
@@ -273,6 +274,7 @@ export class SettingsService {
       return seal(this.keys, open(this.keys, value, aad), aad);
     };
     for (const { id } of await this.db.select({ id: schema.orgs.id }).from(schema.orgs)) {
+      count += await new TeamsSettingsStore(this.db, this.keys).rewrap(id);
       const stored = await this.load(id);
       if (stored.smtp)
         await this.put(id, 'smtp', {

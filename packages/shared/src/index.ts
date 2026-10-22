@@ -24,3 +24,4 @@ export * from './smart-paste.js';
 export * from './wifi.js';
 export * from './setup.js';
 export * from './bitdefender.js';
+export * from './teams.js';

@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-10-22
+
+### Added
+
+- **Microsoft Teams integration.** Map each client to a Teams channel. Staff can read posts and discussions, create posts and replies, and edit their own Atlas-created messages. Automatic bot notifications cover expirations, document reviews, breached passwords and confirmed infection events, with a separate optional security channel, daily digests, reminder milestones, deduplication and delivery history. Administrators can download a tenant-specific Teams app package and connect Microsoft under Administration → Microsoft Teams. See [Teams setup](docs/TEAMS.md).
+
 ## [2.0.2] - 2026-10-22
 
 ### Fixed

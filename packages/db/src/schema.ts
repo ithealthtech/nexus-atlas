@@ -1743,3 +1743,57 @@ export const reportDeliveries = pgTable(
     check('report_deliveries_trigger_check', sql`${t.trigger} in ('schedule','manual','resend')`),
   ],
 );
+
+export const teamsPosts = pgTable(
+  'teams_posts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    teamId: text('team_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id').notNull(),
+    parentId: text('parent_id').notNull().default(''),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('teams_posts_message').on(t.orgId, t.teamId, t.channelId, t.messageId)],
+);
+
+export const teamsDeliveries = pgTable(
+  'teams_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    eventKey: text('event_key').notNull(),
+    rootKey: text('root_key'),
+    kind: text('kind').notNull(),
+    teamId: text('team_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    text: text('text').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    error: text('error').notNull().default(''),
+    conversationId: text('conversation_id'),
+    activityId: text('activity_id'),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    uniqueIndex('teams_deliveries_event').on(t.orgId, t.eventKey, t.teamId, t.channelId),
+    index('teams_deliveries_due').on(t.status, t.nextAttemptAt),
+    check('teams_deliveries_status', sql`${t.status} in ('pending','sending','sent','failed','uncertain')`),
+    check('teams_deliveries_kind', sql`${t.kind} in ('expiration','review','breach','infection')`),
+  ],
+);
