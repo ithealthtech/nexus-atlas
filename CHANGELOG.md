@@ -112,6 +112,7 @@ The Landmark Update brings expanded reporting, client health scores, a refreshed
   - a first backup
 
   Steps tick themselves off from what's really there, however they were done. Until the essential ones are finished, administrators see the next few on their dashboard.
+- **Upgrade guide for 2.0** in the manual (*Running Atlas → Upgrading to 2.0*): what to check before upgrading, how each kind of installation upgrades, what's new, the few things to do after upgrading (Microsoft 365's new permission, email for scheduled reports, an SVG favicon, Atlas for Windows), and how to go back to 1.x from the pre-update backup.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.
