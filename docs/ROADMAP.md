@@ -29,7 +29,7 @@ v1.0 is a production-ready, self-hosted documentation and password manager for a
 | **2.3** Owner insights | 9 Feb 2027 | ★ Hardware lifecycle and budget forecast; documentation coverage; portfolio heatmap; reports pinned to the dashboard; Monday digest for owners; team pulse |
 | **2.4** Client portal | 9 Mar 2027 | ★ Portal home page; shared reports in the portal; new starter and leaver requests; new-client onboarding tracker |
 | **2.5** Compliance | 6 Apr 2027 | ★ Access review campaigns; ★ compliance evidence pack |
-| **Atlas for Windows 1.1** | 12 Jan 2027 | Windows Hello before restricted reveals; a global search hotkey; jump list and Send to Atlas |
+| **Atlas for Windows 1.1** | 12 Jan 2027 | Windows Hello before restricted reveals; jump list and Send to Atlas |
 | **Atlas for Windows 1.2** | 9 Mar 2027 | ★ Recognizes the client network it's on; ★ notifications you can act on; reports in the app; signed MSIX |
 
 Each release has a tracking issue in its [milestone](https://github.com/ithealthtech/nexus-atlas/milestones).
