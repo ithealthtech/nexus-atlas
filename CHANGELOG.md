@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Bitdefender finds a partner's customer companies.** A partner account listed only its own company. Atlas now lists every company it manages: those directly under it, those in company folders, and those under sub-partners (resellers). Each endpoint stays with the company it belongs to, even when a partner-level listing returns other companies' endpoints too. When GravityZone asks Atlas to slow down, Atlas now waits as long as it asks, up to a minute.
+
 ## [2.0.1] - 2026-10-22
 
 ### Added
