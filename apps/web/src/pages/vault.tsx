@@ -79,6 +79,7 @@ import {
 import { AppLink, useGo } from '@/components/AppLink';
 import { BackLink, DetailHeader } from '@/components/DetailHeader';
 import { RelatedPanel } from '@/components/panels';
+import { WifiJoinCard } from '@/components/WifiJoin';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime, relativeTime } from '@/lib/format';
@@ -2397,7 +2398,11 @@ export function PasswordDetail() {
                 <div className="flex items-center gap-3 px-5 py-3.5">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium text-muted">
-                      {item.kind === 'bitlocker' ? 'Recovery key ID' : 'Username'}
+                      {item.kind === 'bitlocker'
+                        ? 'Recovery key ID'
+                        : item.category === 'wifi'
+                          ? 'Network name'
+                          : 'Username'}
                     </p>
                     <p className="mt-0.5 font-mono text-sm break-all">{item.username}</p>
                   </div>
@@ -2459,6 +2464,7 @@ export function PasswordDetail() {
               {item.hasNotes && <SecretRow label="Notes" item={item} field="notes" mono={false} />}
             </div>
           </Card>
+          {item.kind === 'login' && item.category === 'wifi' && !item.archived && <WifiJoinCard item={item} />}
           {actor.isStaff && item.kind !== 'note' && (
             <Card>
               <CardHeader title="Health" />
