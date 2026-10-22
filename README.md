@@ -143,7 +143,6 @@ data/attachments            Uploaded files, outside the web root under random na
 | `packages/db` | Drizzle schema and SQL migrations |
 | `deploy` | Docker Compose with Caddy (automatic HTTPS), the Linux and Windows installers, and the RMM rotation script |
 | `e2e` | Playwright browser tests with axe accessibility checks |
-| `legacy` | The 0.2 prototype, kept for `npm run migrate-legacy` |
 | `integrations/bitlocker` | The standalone BitLocker prototype the collector was ported from. Reference only; nothing in it runs |
 
 Full detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -200,7 +199,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the installer's options.
 
 ## Local development
 
-Node.js 22 or later and PostgreSQL 16 are required.
+Node.js 22.12 or later and PostgreSQL 16 or later are required; Node.js 24 and PostgreSQL 17 are tested too. **System status** warns when either is too old, and six months before a Node.js version stops getting security fixes.
 
 ```powershell
 npm install

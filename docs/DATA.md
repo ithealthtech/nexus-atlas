@@ -4,7 +4,8 @@ Everything on this page is under **Import & export** (administrators) and **API 
 
 ## REST API
 
-- **Address:** `https://<atlas>/api/v1/…`, using the same paths as the web app without the `/api` prefix (for example `GET /api/v1/clients`). The OpenAPI 3.1 description is at `/api/openapi.json`.
+- **Address:** `https://<atlas>/api/v1/…`, using the same paths as the web app without the `/api` prefix (for example `GET /api/v1/clients`). The OpenAPI 3.1 description is at `/api/v1/openapi.json`.
+- **What's supported:** `/api/v1` is the supported API. Within v1, changes only add things: new endpoints, new fields in responses, and new optional parameters. A change that would break a script comes as `/api/v2`, with v1 kept beside it for at least the next major release. The unversioned `/api/…` paths are the web app's own: they're internal, can change in any release, and don't accept API keys.
 - **API keys:** administrators create them under **Administration → API keys**, which needs a recent password confirmation. A key is shown once. It looks like `atlas_<prefix>_<secret>`, and only its SHA-256 hash is stored. Send it as `Authorization: Bearer <key>`.
 - **Scopes:**
   - `read` allows GET requests.
@@ -62,20 +63,6 @@ Staff can choose **Export** on a client to download a zip of everything they can
 - The attachments.
 
 Administrators can add **decrypted passwords**. This needs a recent password confirmation, and every export is recorded, noting whether passwords were included. Keep such exports encrypted and delete them when you're done.
-
-## Moving from the 0.2 prototype
-
-The 0.2 prototype stored everything in one SQLite file. Run this once against a new or existing Atlas database:
-
-```bash
-npm run migrate-legacy -w @atlas/server -- /path/to/atlas.sqlite [--legacy-key /path/to/0.2/master.key] [--owner you@example.com] [--workspace msp-demo]
-```
-
-- **What moves:** clients and their contacts. Records become assets in the Configurations layout, or documents. Relationships move with them.
-- **People:** users keep their passwords (same scrypt format) and client grants.
-- **Two-step verification:** authenticator apps carry over only when the 0.2 key file is given; otherwise those people set up two-step verification again.
-- **One workspace per run:** a 0.2 file can hold several workspaces. Atlas migrates the only one with user accounts, and otherwise stops and lists them so you can choose one with `--workspace`.
-- **Safe to repeat:** running it again skips what was already migrated.
 
 ## Branding and the client portal
 

@@ -84,7 +84,7 @@ API keys let your RMM, PSA or scripts read and update Atlas through its REST API
 - **The key acts as you,** with your access, limited to its scopes.
 - Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs.
 - Every use is in the security log. **Revoke** keys you no longer use.
-- The API is described at `/api/openapi.json` on your Atlas.
+- The API is at `/api/v1` on your Atlas, described at `/api/v1/openapi.json`. Within v1, updates only add to it, so your scripts keep working. The other `/api` addresses are the web app's own and can change in any release.
 
 ## Theme
 

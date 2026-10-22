@@ -72,7 +72,7 @@ For **GDAP**, choose **GDAP — sign in with a partner Microsoft account**, save
 
 - **One client:** **Export** on the client's page. See [Clients](clients.html#export-a-client).
 - **Everything:** System status → **Back up now** makes a full encrypted backup. See [Keeping Atlas healthy](looking-after-atlas.html#backups).
-- **The API:** with an API key, `/api/openapi.json` describes every endpoint.
+- **The API:** with an API key, `/api/v1/openapi.json` describes every endpoint.
 
 ## BitLocker collector
 

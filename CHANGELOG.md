@@ -55,6 +55,17 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Timestamps in tables read as "2026-10-20 12:41 UTC", and alternate rows are shaded.
   - A PNG or JPEG logo is used; an SVG logo, which PDF can't embed, falls back to the brand name.
 
+- **`/api/v1` is the supported API.** Only `/api/v1` is supported for scripts and integrations, and its description has moved to `/api/v1/openapi.json`.
+  - Within v1, changes only add endpoints, fields and optional parameters.
+  - A breaking change would come as `/api/v2`, with v1 kept beside it for at least the next major release.
+  - The unversioned `/api` paths belong to the web app. They're internal and can change in any release, and API keys never worked there.
+- **Node.js and PostgreSQL checks.** System status now warns when Node.js or PostgreSQL is older than Atlas supports (Node.js 22.12, PostgreSQL 16). It also warns six months before the server's Node.js version stops getting security fixes. CI now also runs the tests on Node.js 24 and PostgreSQL 17.
+
+### Removed
+
+- **The Atlas 0.2 importer.** `npm run migrate-legacy` and the 0.2 prototype it read from are gone. To move a 0.2 database, run the migration with Atlas 1.8 first, then update.
+- **Leftover ConnectWise PSA status lookups in ticket sync.** Ticket sync reads only the ConnectWise platform API; a ticket's state comes from its own status.
+
 ## [1.8.4] - 2026-10-21
 
 ### Fixed

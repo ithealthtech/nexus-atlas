@@ -432,7 +432,7 @@
     "p": "Installing Atlas",
     "s": "Windows Server",
     "h": "windows-server",
-    "t": "Install Node.js 22 LTS and PostgreSQL 16, and create an empty database and user for Atlas. Download `msp-atlas-1.8.4-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\\Program Files\\MSP Atlas`. From an elevated PowerShell prompt, run: The script creates `C:\\ProgramData\\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\\\nas\\atlas-backups` to keep backups on another machine. To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key."
+    "t": "Install Node.js 22 or 24 LTS and PostgreSQL 16 or 17, and create an empty database and user for Atlas. Download `msp-atlas-1.8.4-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\\Program Files\\MSP Atlas`. From an elevated PowerShell prompt, run: The script creates `C:\\ProgramData\\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\\ProgramData\\MSP Atlas\\logs\\MSPAtlas.out.log`. Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\\\nas\\atlas-backups` to keep backups on another machine. To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key."
   },
   {
     "u": "install.html",
@@ -516,7 +516,7 @@
     "p": "Settings",
     "s": "API keys",
     "h": "api-keys",
-    "t": "API keys let your RMM, PSA or scripts read and update Atlas through its REST API. Choose **New key**. Atlas asks for your password again. Give it a **Name**, choose its scopes (`read`, `write`, and optionally `passwords`), and when it **Expires** (a year unless you choose otherwise). Copy the key. It's shown once; Atlas keeps only a hash of it. **The key acts as you,** with your access, limited to its scopes. Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs. Every use is in the security log. **Revoke** keys you no longer use. The API is described at `/api/openapi.json` on your Atlas."
+    "t": "API keys let your RMM, PSA or scripts read and update Atlas through its REST API. Choose **New key**. Atlas asks for your password again. Give it a **Name**, choose its scopes (`read`, `write`, and optionally `passwords`), and when it **Expires** (a year unless you choose otherwise). Copy the key. It's shown once; Atlas keeps only a hash of it. **The key acts as you,** with your access, limited to its scopes. Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs. Every use is in the security log. **Revoke** keys you no longer use. The API is at `/api/v1` on your Atlas, described at `/api/v1/openapi.json`. Within v1, updates only add to it, so your scripts keep working. The other `/api` addresses are the web app's own and can change in any release."
   },
   {
     "u": "manual/settings.html",
@@ -565,7 +565,7 @@
     "p": "Data and integrations",
     "s": "Export",
     "h": "export",
-    "t": "**One client:** **Export** on the client's page. See [Clients](clients.html#export-a-client). **Everything:** System status → **Back up now** makes a full encrypted backup. See [Keeping Atlas healthy](looking-after-atlas.html#backups). **The API:** with an API key, `/api/openapi.json` describes every endpoint."
+    "t": "**One client:** **Export** on the client's page. See [Clients](clients.html#export-a-client). **Everything:** System status → **Back up now** makes a full encrypted backup. See [Keeping Atlas healthy](looking-after-atlas.html#backups). **The API:** with an API key, `/api/v1/openapi.json` describes every endpoint."
   },
   {
     "u": "manual/integrations.html",

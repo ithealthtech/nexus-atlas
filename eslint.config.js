@@ -9,7 +9,6 @@ export default tseslint.config(
       '**/dist/**',
       'apps/extension/package/**',
       '**/dist-demo/**',
-      'legacy/**',
       'integrations/**',
       'packages/db/drizzle/**',
       'node_modules/**',
