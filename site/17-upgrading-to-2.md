@@ -42,6 +42,12 @@ Everyone sees a **Welcome to Atlas 2.0** card on their dashboard. It leads to th
 - **A cleaner workspace.** Your menu style (rail and panel, sidebar, or top bar) carries over.
 - **Atlas for Windows 1.0.**
 
+## What's gone
+
+- **The Monthly report button** on a client's page. The client's **Reports** tab replaces it, with PDFs, share links and schedules, and old links to the monthly report open that tab.
+- **The 0.2 importer.** If you still have an Atlas 0.2 database, move it with Atlas 1.8 before upgrading.
+- **Scripts:** the supported API is `/api/v1`. API keys only ever worked there, so nothing you've set up changes.
+
 ## After you upgrade
 
 These take a few minutes, and only the ones that apply to you matter.

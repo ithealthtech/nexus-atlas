@@ -16,7 +16,7 @@ summary: MSP Atlas is client documentation, a password vault and device monitori
 <section class="band">
 <h2>2.0: the Landmark Update</h2>
 <p>Fifteen report types turn your records into client review packs, cyber-insurance evidence, savings opportunities and Microsoft 365 usage reports. Schedule branded PDFs or expiring links, and send alerts only when something new needs review.</p>
-<p>Client health scores show what to improve next. Smart paste fills assets from system details, Wi-Fi codes make guest networks easy to join, and Atlas for Windows 2.0 adds formatted documents, a fuller Home page, settings and native ARM64 support.</p>
+<p>Client health scores show what to improve next. Smart paste fills assets from system details, Wi-Fi codes make guest networks easy to join, and Atlas for Windows 1.0 adds formatted documents, a fuller Home page, settings and native ARM64 support.</p>
 <p><a href="manual/clients.html#reports">Explore reports</a> · <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/UPGRADING-2.0.md">Read the upgrade guide</a></p>
 </section>
 

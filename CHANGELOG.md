@@ -2,9 +2,9 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [2.0.0] - 2026-10-21
+## [2.0.0] - 2026-10-22
 
-The Landmark Update brings expanded reporting, client health scores, a refreshed workspace, and Atlas for Windows 2.0. See [the upgrade guide](docs/UPGRADING-2.0.md) before updating.
+The Landmark Update brings expanded reporting, client health scores, a refreshed workspace, and Atlas for Windows 1.0. See [the upgrade guide](docs/UPGRADING-2.0.md) before updating.
 
 ### Added
 
@@ -97,7 +97,7 @@ The Landmark Update brings expanded reporting, client health scores, a refreshed
   - The text is read in the browser and never sent.
 - **Wi-Fi join codes.** A Wi-Fi password now has a **Join this network** card: a QR code that phones scan with their camera to join, with no typing. **Print** makes a guest card with the network name, the code and the password, ready to frame. The password is revealed the usual way (recorded, with a reason where required), and the code hides again after a minute. WEP, open and hidden networks are supported, and Wi-Fi entries call their username **Network name**.
 - **Welcome to Atlas 2.0.**
-  - Staff see a welcome card on their dashboard after the update. **See what's new** opens a page that describes each part of 2.0 in plain words, with a link to try it: reports, the client health score, smart paste and Wi-Fi codes, the cleaner workspace, and Atlas for Windows 2.0.
+  - Staff see a welcome card on their dashboard after the update. **See what's new** opens a page that describes each part of 2.0 in plain words, with a link to try it: reports, the client health score, smart paste and Wi-Fi codes, the cleaner workspace, and Atlas for Windows 1.0.
   - The card goes once you've opened the page or dismissed it, and that's remembered for your account, not just your browser.
   - The page stays under **What's new** in the account menu.
 - **Set up Atlas.** A new page under Administration lists a new installation's first steps, each with why it matters and a link to do it:
@@ -181,8 +181,15 @@ The Landmark Update brings expanded reporting, client health scores, a refreshed
   - Timestamps in tables read as "2026-10-20 12:41 UTC", and alternate rows are shaded.
   - A PNG or JPEG logo is used; an SVG logo, which PDF can't embed, falls back to the brand name.
 
+- **`/api/v1` is the supported API.** Only `/api/v1` is supported for scripts and integrations, and its description has moved to `/api/v1/openapi.json`.
+  - Within v1, changes only add endpoints, fields and optional parameters.
+  - A breaking change would come as `/api/v2`, with v1 kept beside it for at least the next major release.
+  - The unversioned `/api` paths belong to the web app. They're internal and can change in any release, and API keys never worked there.
+- **Node.js and PostgreSQL checks.** System status now warns when Node.js or PostgreSQL is older than Atlas supports (Node.js 22.12, PostgreSQL 16). It also warns six months before the server's Node.js version stops getting security fixes. CI now also runs the tests on Node.js 24 and PostgreSQL 17.
+
 ### Fixed
 
+- **HP warranty checks say why they failed.** HP's anonymous warranty lookup now asks for a captcha, and Atlas read its refusal as "HP has no warranty on record". It now says HP refused the lookup and points to support.hp.com to look the date up by hand. Nothing is saved, and automatic lookups pause HP for 15 minutes, as for any other vendor failure.
 - **Service review device trend.** Its online count (for example "35 → 38") was counted as needing review, and its arrow printed as an empty box in PDFs. It now isn't flagged, and PDFs read "35 to 38".
 - Report PDFs no longer draw a one-bar "Needs review, by section" chart for a report with one section, say "1 row" rather than "1 rows", and show source times as "2026-10-21 13:05 UTC".
 - **The Top bar menu style takes the sidebar colour,** like Rail and panel and Sidebar. With a Sidebar colour set under Administration → Theme, the whole top bar uses it: the areas, search, your account, and the row of pages beneath them. Before, it stayed white while its links used the sidebar's text colours.
@@ -200,11 +207,6 @@ The Landmark Update brings expanded reporting, client health scores, a refreshed
   - A single contact no longer has a divider beside it.
   - Password rotation and BitLocker collector say "Vault" above their titles, where they live.
 - The demo's **Updates** page loads, instead of showing empty placeholders.
-- **`/api/v1` is the supported API.** Only `/api/v1` is supported for scripts and integrations, and its description has moved to `/api/v1/openapi.json`.
-  - Within v1, changes only add endpoints, fields and optional parameters.
-  - A breaking change would come as `/api/v2`, with v1 kept beside it for at least the next major release.
-  - The unversioned `/api` paths belong to the web app. They're internal and can change in any release, and API keys never worked there.
-- **Node.js and PostgreSQL checks.** System status now warns when Node.js or PostgreSQL is older than Atlas supports (Node.js 22.12, PostgreSQL 16). It also warns six months before the server's Node.js version stops getting security fixes. CI now also runs the tests on Node.js 24 and PostgreSQL 17.
 - **Readable status colours.** Green, amber and orange status text, as on the Domains tracker, is darker in the light theme so it meets the 4.5:1 contrast ratio.
 - **A link on the Certificate page** is underlined, so it doesn't rely on colour to stand out from the sentence around it.
 - **Printing.** Pages print as dark text on white paper even when you use dark mode, with your brand colours in their light versions. Buttons, the favourite star, copy and show icons, empty Files and Related boxes, and the activity and version history panels are left off the page.

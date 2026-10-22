@@ -738,6 +738,13 @@
   {
     "u": "manual/upgrading-to-2.html",
     "p": "Upgrading to 2.0",
+    "s": "What's gone",
+    "h": "what-s-gone",
+    "t": "**The Monthly report button** on a client's page. The client's **Reports** tab replaces it, with PDFs, share links and schedules, and old links to the monthly report open that tab. **The 0.2 importer.** If you still have an Atlas 0.2 database, move it with Atlas 1.8 before upgrading. **Scripts:** the supported API is `/api/v1`. API keys only ever worked there, so nothing you've set up changes."
+  },
+  {
+    "u": "manual/upgrading-to-2.html",
+    "p": "Upgrading to 2.0",
     "s": "After you upgrade",
     "h": "after-you-upgrade",
     "t": "These take a few minutes, and only the ones that apply to you matter. Everyone **Look at the dashboard's Set up Atlas card** (administrators). It lists anything an installation should have and doesn't yet, such as email or a recent backup. If you use Microsoft 365 with GDAP The new **Microsoft 365 usage** report reads Microsoft's usage reports, which need a permission Atlas didn't ask for before. In your partner app registration, add the Microsoft Graph delegated permission **Reports.Read.All** and grant consent. Give your GDAP security group a role that can read usage reports, such as **Reports Reader**. In Atlas, under **Administration → Import & export → Microsoft 365**, choose **Reconnect partner account**. Everything else carries on as before. Until you do this, the usage report says what's missing rather than failing quietly. See [Data and integrations](integrations.html). If you send reports or alerts by email Scheduled reports and alerts are sent through the email server under **Administration → Email & alerts**. Choose **Send test** there to make sure it works. If your favicon is an SVG Atlas for Windows uses your favicon as its icon, and Windows can't draw an SVG. Open **Administration → Theme** and choose **Save** once: Atlas makes a picture Windows can use. Atlas for Windows Technicians' copies offer **Install and restart** for version 1.0 on their own, within six hours, or straight away from **Check for updates**. New installs download it from **Your account → Desktop apps**. One download works on every PC, including Arm laptops. If your organization hasn't set up code signing, Windows SmartScreen still asks before the setup program runs: choose **More info**, then **Run anyway**."

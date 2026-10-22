@@ -1,14 +1,15 @@
 # Upgrading to MSP Atlas 2.0
 
 The Landmark Update brings 15 report types, scheduled PDF and link delivery, report alerts, client health scores,
-smart paste, Wi-Fi join codes, and Atlas for Windows 2.0. Existing clients, vault entries, documents, integrations,
-and personal menu choices are kept. No features are retired in this release.
+smart paste, Wi-Fi join codes, and Atlas for Windows 1.0. Existing clients, vault entries, documents, integrations,
+and personal menu choices are kept. A few old things are retired; see *What's removed* below.
 
 ## Before updating
 
 1. Make an encrypted Atlas backup and verify it using the backup tools in [Deployment](DEPLOYMENT.md). Keep a copy
    off the server, and keep the master key separately. Record your current version and retain its installation package.
-2. Check that your host meets the existing requirements: Node.js 22.12 or later and PostgreSQL 16. Docker users
+2. Check that your host meets the existing requirements: Node.js 22.12 or later and PostgreSQL 16 or later (Node.js 24
+   and PostgreSQL 17 are tested too). System status now warns when either is too old. Docker users
    receive the Node runtime in the image. The Windows desktop app's setup carries its runtime.
 3. Allow a maintenance window. Database migrations run automatically at startup. This release adds report shares,
    schedules, deliveries, triggers, and client health history (migrations 0038–0042).
@@ -31,6 +32,16 @@ After startup:
 - Confirm RMM and Microsoft 365 syncs, then check Atlas for Windows sign-in, search, document rendering, and updates.
 - Staff can open What's new from their account menu; its welcome card appears on the dashboard until dismissed.
 
+## What's removed
+
+- **The Atlas 0.2 importer** (`npm run migrate-legacy`). To move a 0.2 database, migrate it with Atlas 1.8 first,
+  then update to 2.0.
+- **The old monthly client report.** Its **Monthly report** button is gone from the client header; the client's
+  **Reports** tab, with PDFs, share links and scheduled delivery, replaces it. Old links open that tab.
+- **Scripts and integrations use `/api/v1` only.** It is the supported API, described at `/api/v1/openapi.json`. The
+  unversioned `/api` paths are the web app's own and can change in any release; API keys never worked there, so
+  existing integrations are unaffected.
+
 ## Roll back
 
 Keep the backup from before the upgrade. Stop Atlas before restoring. Reinstall the previous version and restore
@@ -41,8 +52,6 @@ status, sign-in, and a vault reveal after the restore.
 
 ## Still planned
 
-The broader [2.0 roadmap](https://github.com/ithealthtech/nexus-atlas/issues/229) also tracks future work. Items
-without an implementation are not included in this release: saved list views, guided setup, automatic update
-rollback, access review campaigns, hardware budget forecasting, and reports inside the Windows app or client portal.
-Windows code signing is used only when the repository's signing configuration is set up; otherwise its installer
-remains unsigned, as described in [Code signing](CODE-SIGNING.md).
+2.0's scope is fixed at what's described above. What comes next, release by release, is in the
+[roadmap](ROADMAP.md#20-and-after). Windows code signing is used only when the repository's signing configuration is
+set up; otherwise its installer remains unsigned, as described in [Code signing](CODE-SIGNING.md).
