@@ -100,6 +100,11 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - run: npm run build:extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-extension
+          path: apps/extension/package/msp-atlas-extension-*.zip
       - run: npm prune --omit=dev --no-audit --no-fund
       # The same files as the Docker image, plus the installer and the docs.
       - name: Package
@@ -231,6 +236,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows-app
+      - uses: actions/download-artifact@v4
+        with:
+          name: browser-extension
       - name: Release notes from the changelog
         run: |
           awk -v v="${{ needs.check.outputs.version }}" '
@@ -254,3 +262,4 @@ jobs:
             msp-atlas-*-windows.zip.sha256
             AtlasForWindowsSetup.exe
             AtlasForWindowsSetup.exe.sha256
+            msp-atlas-extension-*.zip
