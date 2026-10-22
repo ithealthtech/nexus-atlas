@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -18,11 +17,13 @@ import {
   Textarea,
   useToast,
   type Tone,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useClients, useSave } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
+import { HealthChange, HealthRing, useHealthList } from '@/components/ClientHealth';
 
 export const statusTone: Record<ClientSummary['status'], Tone> = {
   active: 'success',
@@ -58,7 +59,7 @@ export function ClientForm({ client, open, onClose }: { client?: ClientSummary; 
     }
   };
   return (
-    <Dialog
+    <Drawer
       open={open}
       onClose={onClose}
       title={client ? 'Edit client' : 'Add a client'}
@@ -142,13 +143,15 @@ export function ClientForm({ client, open, onClose }: { client?: ClientSummary; 
         />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
 export function Clients() {
   const actor = useActor();
   const { data, isLoading } = useClients();
+  const health = useHealthList();
+  const scores = new Map(health.data?.map((h) => [h.clientId, h]));
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'all' | ClientSummary['status']>('all');
   const [adding, setAdding] = useState(false);
@@ -236,6 +239,7 @@ export function Clients() {
                 <tr>
                   <th className="px-5 py-3 font-medium">Client</th>
                   <th className="px-5 py-3 font-medium">Status</th>
+                  {actor.isStaff && <th className="hidden px-5 py-3 font-medium sm:table-cell">Health</th>}
                   <th className="hidden px-5 py-3 font-medium sm:table-cell">Your access</th>
                   <th className="hidden px-5 py-3 font-medium md:table-cell">Updated</th>
                 </tr>
@@ -259,6 +263,16 @@ export function Clients() {
                         {c.status}
                       </Badge>
                     </td>
+                    {actor.isStaff && (
+                      <td className="hidden px-5 py-3.5 sm:table-cell">
+                        {scores.has(c.id) && (
+                          <span className="inline-flex items-center gap-2">
+                            <HealthRing score={scores.get(c.id)!.score} size={30} />
+                            <HealthChange change={scores.get(c.id)!.change} />
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="hidden px-5 py-3.5 sm:table-cell">
                       <Badge tone="quiet">{LEVEL_INFO[c.access].label}</Badge>
                     </td>

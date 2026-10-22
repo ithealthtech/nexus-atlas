@@ -6,6 +6,55 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Microsoft 365 reports, like the IT Health Tech portal's.** A new **Microsoft 365** group in the report library holds two reports. Both read through the GDAP connection.
+  - **Microsoft 365 accounts** lists every account in each linked tenant: enabled or blocked, member or guest, its licenses, and its usage location. It flags blocked accounts that still hold licenses, and licensed accounts with no usage location.
+  - **Microsoft 365 usage** covers the last 30 to 180 days. It shows each licensed account's last activity in email, Teams, OneDrive and SharePoint, and flags accounts with none. It then has a section each for Exchange email (sent, received, read), Teams (chats, calls, meetings), OneDrive and SharePoint (files viewed, synced and shared), and the Microsoft 365 apps (Windows, Mac, mobile, web).
+  - **Permissions.** The usage report needs the **Reports.Read.All** permission, which Atlas now requests when the partner account connects. It also needs a GDAP role that can read usage reports, such as Reports Reader. Existing connections must reconnect once; until then, the report explains what's missing.
+  - **Hidden names.** If a tenant hides names in its reports, the report says where to turn that off.
+- **Savings finder report.** What each client pays for and doesn't use, priced per month and per year:
+  - Unused seats on tracked subscriptions and in Microsoft 365, read live through GDAP.
+  - Microsoft 365 licenses held by accounts whose sign-in is blocked, usually people who have left.
+  - Renewals coming up, with what each costs and what cutting its unused seats saves before it renews.
+
+  Microsoft seats are priced from your tracked subscription of the same name, or estimated at Microsoft's list price and marked "(list)". Nothing is guessed: subscriptions without recorded assignments are listed in a notice instead of counted.
+
+- **Cyber insurance readiness report.** The questions cyber insurers ask, answered for each client from what Atlas holds, with the evidence and its source for every answer. It covers 13 questions:
+  - MFA, endpoint protection, encryption, supported operating systems, and devices managed and up to date.
+  - Backups with a restore test in the last 12 months, Global Administrators, local admin rotation, and password breaches and reuse.
+  - Email spoofing protection: each domain's DMARC record is looked up live when the report runs.
+  - A written incident response plan, a continuity plan, and security awareness training.
+
+  Answers are Yes, Partly, No or **Not evidenced**. What Atlas can't see is never counted as Yes.
+
+  **Gaps to close before renewal** lists what to fix, refusals first, and the readiness summary gives each client a percentage.
+- **Clearer report PDFs.** Columns are as wide as what they hold, so evidence and names wrap less and reports run to fewer pages. States and answers are coloured: Offline, Not encrypted and No in red, Partly in amber, Yes and Online in green. In a whole-report PDF, a one-client summary shows as figures.
+
+- **Client health score.** Every client has a score from 0 to 100, beside its name: Healthy, Good, Needs attention or At risk, with how far it moved in 30 days.
+  - It is made of four weighted parts: security (passwords, endpoint protection, encryption), endpoints (online and checking in), documentation (the essentials on record and reviews on time), and renewals (domains, certificates, warranties and subscriptions in date).
+  - A part with nothing to measure is left out, never assumed healthy.
+  - Choose the score to see each part and **What would raise it most**: every gap, with the points fixing it would add, linked to where you fix it.
+  - Atlas keeps a score per client per day, so each has a trend.
+  - The dashboard's new **Client health** card lists clients lowest first, and the client list has a **Health** column.
+  - The executive summary report includes the scores, and the review pack shows the score on its cover. Scores are for staff only.
+
+- **Client review pack.** A quarterly business review for one client in a single branded PDF, from one click on **Review pack** in the client's header.
+  - It brings together the executive summary, security posture, service review and upcoming renewals for the last quarter, or any period from 30 days to a year.
+  - It opens with a cover page: the client, the period, how much of each report needs review, and contents with page numbers. Each report follows on its own pages with its charts, and one-client summaries show as figures.
+  - It's also under Reports as **Client review pack**, so it can be compared with the last one, shared with the client by link, or scheduled every quarter.
+- **Report PDFs are named after the report**, such as `Harbor Dental quarterly review 2026-10-21.pdf`, and a shared report's page offers the whole report as one PDF.
+
+- **Scheduled reports, emailed.** Set up any report, choose **Schedule**, and Atlas emails it every week, month, or quarter, on the day and at the hour you choose, to up to 20 people.
+  - Each run captures a fresh snapshot with the owner's access at that moment, kept in their history so **Compare with** works on it.
+  - The email carries a summary and the whole report as a branded PDF. For a report about one client it can include a 30-day client link.
+  - The **Scheduled** tab shows when each schedule runs next and how the last delivery went, down to any address that refused it. You can send one now, pause it, change it, or delete it.
+  - Two servers never send the same report twice. A schedule whose owner can no longer sign in stops rather than sending, and deleting a client removes its schedules.
+- **Report alerts.** A schedule can run every day, and send only when something needs review, or only when something new needs review since the last report sent. An alert lists just the new items.
+  - For example, a daily **Security posture** alert tells you the morning after a password turns up in a breach or a device loses its protection.
+  - A daily **Domains & SSL** alert warns as each certificate starts to expire.
+  - Quiet days send nothing and add nothing to your history.
+- **Delivery log for scheduled reports.** Each schedule's **Deliveries** list shows every email it sent or tried to send, recipient by recipient, and why any was refused. Any one can be sent again, as the same snapshot, without running the report again.
+- **Emails in your brand.** Atlas's emails now use your brand name and accent colour from Administration → Theme, instead of a fixed green.
+- **Report PDFs can cover the whole report.** Every section is printed, with the summary and charts, for emailed reports.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.
@@ -49,11 +98,50 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Changed
 
+- **Reports read like the IT Health Tech portal's.** The library, the workspace, and the results are separate cards with room to breathe, instead of one crowded box.
+  - **Library.** Reports are grouped by what they answer: client reviews, licensing & spend, security & compliance, infrastructure & documentation. It folds away once a report is open; **Change report** brings it back.
+  - **At a glance.** A report opens with its figures. A license report shows products, seats purchased, assigned, available, and how much is in use. The savings finder shows seats to reclaim and monthly and yearly waste. Every report shows how many rows need review, and pressing that figure filters the report.
+  - **Everything at once.** Every section shows on the page, one under another, with no list to pick a section from. One search and a **Needs review only** switch cover the whole report.
+  - **Easier to scan.** States show as coloured pills. Figures and amounts line up on the right. A subscription's assigned seats show as a bar against what was bought. Rows that need review carry an amber edge.
+  - **Exports.** **PDF** exports the whole report. Each section has its own **CSV**.
+  - **Shared links.** A shared report link shows every section the same way.
+  - **Demo.** The demo now runs reports on its sample data.
+- **A client's Licenses, redesigned.** It now has two list panels in the IT Health Tech portal style, with counts across the top that filter the list, a search bar, column labels, and rows with a status pill and quiet row actions.
+  - **Subscriptions & seats** lists Microsoft 365 subscriptions, read live through GDAP, alongside the ones tracked in Atlas. Each shows seats used against bought, with a bar, its cost and renewal, and filters for seats available, fully used, and renewing within 30 days. Free products with thousands of placeholder seats show as having no seat limit.
+  - **People & licenses** lists everyone in the tenant with their account state and licenses, filtered by licensed, unlicensed, and blocked but still licensed.
+  - Who holds a subscription, and one person's licenses, open in drawers, where administrators assign and remove licenses as before.
+- **Drawers for longer work.** Forms for a record, and lists opened from a card, now slide in from the right as a full-height drawer, with the page still visible behind them.
+  - The forms are passwords, assets, clients, contacts and locations, subscriptions, people, groups, asset layouts, checklists, webhooks and Sends.
+  - The lists are devices, tickets, warranties, trackers and applications from the overview cards, plus note and version history, webhook deliveries, sharing, and customizing the dashboard.
+  - A long form scrolls inside the drawer with **Save** always in reach. A click on the dimmed page closes it, as Escape does.
+  - On a phone the drawer fills the screen, and the menu slides in from the left.
+  - Confirmations and short prompts stay as dialogs in the middle of the screen.
+- **Administration has tabs like every other area.** Instead of a list beside the page (or a scrolling strip of buttons on smaller screens), its pages are underlined tabs, as in Overview. The tabs show the section you're in, such as People and security, and **More** lists the other pages under their headings: Data, System and Settings.
 - **Branded report PDFs with charts.** PDF exports now use your logo, brand name, and accent colour from Administration → Theme, instead of a fixed blue.
   - The first page shows summary tiles (clients, rows, needs review, notices).
   - Up to three charts follow, drawn from the report itself: what needs review in each section, the spread of status columns such as online, protection or encryption, and due or expiry dates by month with overdue items first.
   - Timestamps in tables read as "2026-10-20 12:41 UTC", and alternate rows are shaded.
   - A PNG or JPEG logo is used; an SVG logo, which PDF can't embed, falls back to the brand name.
+
+### Fixed
+
+- **Service review device trend.** Its online count (for example "35 → 38") was counted as needing review, and its arrow printed as an empty box in PDFs. It now isn't flagged, and PDFs read "35 to 38".
+- Report PDFs no longer draw a one-bar "Needs review, by section" chart for a report with one section, say "1 row" rather than "1 rows", and show source times as "2026-10-21 13:05 UTC".
+- **The Top bar menu style takes the sidebar colour,** like Rail and panel and Sidebar. With a Sidebar colour set under Administration → Theme, the whole top bar uses it: the areas, search, your account, and the row of pages beneath them. Before, it stayed white while its links used the sidebar's text colours.
+- **Phones.** No page scrolls sideways any more. Five pages used to: the dashboard, a client's overview, Assets, the security log and Duplicates.
+  - Rows that were squeezed to a word or two read properly again: password names, webhooks, groups and checklist runs.
+  - The password list keeps the two copy buttons on a phone and leaves the rest to the password's page.
+  - The asset list shows each asset's client under its name.
+  - A client's header fits without the star dropping to its own line.
+  - The dashboard and Password health show their figures in pairs.
+- **Computers.**
+  - **Webhooks** and **Duplicates** use the page's full width like other lists. **API keys** lines up with its heading.
+  - Password health's figures sit in two even rows.
+  - A client's Assets card shows full layout names.
+  - Password rotation and QR label dropdowns show their whole choice.
+  - A single contact no longer has a divider beside it.
+  - Password rotation and BitLocker collector say "Vault" above their titles, where they live.
+- The demo's **Updates** page loads, instead of showing empty placeholders.
 
 ## [1.8.4] - 2026-10-21
 

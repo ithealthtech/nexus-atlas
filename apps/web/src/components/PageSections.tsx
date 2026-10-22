@@ -62,8 +62,9 @@ export function PageSections({ children, className }: { children: ReactNode; cla
   }, [entries]);
 
   return (
-    <div className={cn('grid gap-10 lg:grid-cols-[11.5rem_minmax(0,1fr)]', className)}>
-      <nav aria-label="On this page" className="hidden lg:block">
+    // A page of one section has no contents to show, and no empty column for them.
+    <div className={cn('grid gap-10', entries.length > 1 && 'lg:grid-cols-[11.5rem_minmax(0,1fr)]', className)}>
+      <nav aria-label="On this page" className={entries.length > 1 ? 'hidden lg:block' : 'hidden'}>
         {entries.length > 1 && (
           <ul className="sticky top-8 space-y-px border-l border-border in-data-[menu=top]:top-32">
             {entries.map((e) => (

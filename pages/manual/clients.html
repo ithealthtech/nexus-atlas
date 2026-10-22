@@ -197,9 +197,12 @@
         <p>Opening a client shows:</p>
         <ul>
           <li>
-            <strong>The header:</strong> the client's name and type, your access, and the star to add it to your
-            favourites. <strong>Monthly report</strong>, <strong>Export</strong>, <strong>Edit client</strong>, and for
-            administrators <strong>Delete</strong>, are on the right.
+            <strong>The header:</strong> the client's name and type, your access, the star to add it to your favourites,
+            and for staff the client's health score (see <a href="#client-health">Client health</a>).
+            <strong>Monthly report</strong>, <strong>Review pack</strong>, <strong>Export</strong>,
+            <strong>Edit client</strong>, and for administrators <strong>Delete</strong>, are on the right.
+            <strong>Review pack</strong> downloads this client's quarterly business review as one PDF (see
+            <a href="#client-review-pack">Client review pack</a>).
           </li>
           <li>
             <strong>The quick note:</strong> a short note at the top of every page for this client, for the thing
@@ -220,6 +223,76 @@
         <p>
           Choose <strong>Choose which sections show</strong> (the sliders at the right of the tabs) and untick the
           sections you don't need. This only changes your own view; other people still see every tab.
+        </p>
+        <h3 id="client-health"><a class="anchor" href="#client-health">Client health</a></h3>
+        <p>Every client has a health score from 0 to 100, beside its name, with a word for how it's doing:</p>
+        <ul>
+          <li><strong>Healthy:</strong> 90 and over.</li>
+          <li><strong>Good:</strong> 75 to 89.</li>
+          <li><strong>Needs attention:</strong> 60 to 74.</li>
+          <li><strong>At risk:</strong> under 60.</li>
+        </ul>
+        <p>An arrow shows how far it has moved in the last 30 days.</p>
+        <p>The score is made of four parts, weighted by how much they matter:</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Part</th>
+                <th>Weight</th>
+                <th>What it measures</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Security</strong></td>
+                <td>30%</td>
+                <td>
+                  Passwords without issues, endpoint protection running, and disks encrypted (where the BitLocker
+                  collector reports).
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Endpoints</strong></td>
+                <td>25%</td>
+                <td>Devices online, and devices that checked in with the RMM on time.</td>
+              </tr>
+              <tr>
+                <td><strong>Documentation</strong></td>
+                <td>25%</td>
+                <td>
+                  A primary contact, a location, assets, and documents on record, and documents reviewed by their review
+                  date.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Renewals</strong></td>
+                <td>20%</td>
+                <td>
+                  Domains, SSL certificates, warranties and subscriptions in date. An expired item counts fully against
+                  it; one due soon counts half.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A part with nothing to measure, such as a client with no RMM devices, is left out and the others count for
+          more. It is never assumed to be healthy.
+        </p>
+        <p>
+          Choose the score to see each part and <strong>What would raise it most</strong>: each thing pulling the score
+          down, with how many points fixing it would add, linked to where you fix it.
+        </p>
+        <p>
+          Atlas works the scores out every hour with the owner's view, so everyone on staff sees the same number. It
+          keeps one score per client per day, for the trend. Scores are for staff only; client accounts don't see them.
+        </p>
+        <p>
+          The dashboard's <strong>Client health</strong> card lists every client you can open, lowest first, with its
+          trend; <strong>Customize</strong> moves or hides it. The client list has a <strong>Health</strong> column. The
+          <strong>Executive summary</strong> report includes each client's score and its parts, and the
+          <a href="#client-review-pack">Client review pack</a> shows the score on its cover.
         </p>
         <h2 id="the-overview"><a class="anchor" href="#the-overview">The overview</a></h2>
         <p>The overview is the client at a glance. Scroll down for the detail.</p>
@@ -372,16 +445,21 @@
           <strong>Reports</strong> tab for that workspace. The built-in reports are:
         </p>
         <ul>
+          <li>Client review pack</li>
           <li>Executive summary</li>
           <li>Security posture</li>
+          <li>Cyber insurance readiness</li>
           <li>Service review</li>
           <li>Asset inventory</li>
           <li>License utilization</li>
+          <li>Savings finder</li>
           <li>Upcoming renewals</li>
           <li>Domains &amp; SSL</li>
           <li>Documentation health</li>
           <li>Endpoint health</li>
           <li>Software &amp; sign-ins</li>
+          <li>Microsoft 365 accounts</li>
+          <li>Microsoft 365 usage</li>
         </ul>
         <p>
           Choose a report and up to 25 clients, set the report title and any lookahead, and choose
@@ -393,12 +471,11 @@
           linked GDAP connection. Microsoft reseller costs and renewal dates are not supplied by that inventory.
         </p>
         <p>
-          Choose <strong>Needs review</strong> to focus on flagged records. Use <strong>Search report results</strong>,
-          <strong>Search field</strong>, and <strong>Visible columns</strong> to refine the table.
-          <strong>CSV</strong> and <strong>PDF</strong> export the selected section's matching rows and columns, with
-          capture details and data coverage. The browser displays the first 500 matching rows; CSV includes all matches,
-          up to the 10,000-row generation limit. PDF supports up to 2,000 matching rows; filter larger reports or export
-          CSV.
+          A report opens with its figures across the top, then every section of it, one after another. Press
+          <strong>Needs review</strong> (or tick <strong>Needs review only</strong>) to show just the flagged rows, and
+          use the search box to search the whole report. Each section's <strong>CSV</strong> exports its matching rows,
+          up to the 10,000-row generation limit; <strong>PDF</strong> exports the whole report, with capture details and
+          data coverage. The page shows the first 500 rows of a section; the CSV has them all.
         </p>
         <p>
           <strong>Save template</strong> stores reusable settings privately in your account.
@@ -413,32 +490,203 @@
           overdue, expired, or unchanged for a year), devices that are offline or unprotected, BitLocker encryption
           reported by the collector, and the last result of automatic password rotation. Password names appear only for
           clients whose passwords you can open, and only administrators see rotation. Passwords, usernames, notes, and
-          recovery keys are never included. <strong>Domains &amp; SSL</strong> lists each client's domains and SSL
-          certificates with their registrar or issuer, expiry date, days left, and the result of the latest automatic
-          check, soonest first. A summary counts what has expired, what expires within the chosen window, and failed
-          checks. Records the trackers haven't checked yet show the dates as entered.
-          <strong>Software &amp; sign-ins</strong> reads the inventory the ConnectWise RMM sync saves. It lists every
-          application installed on each client's devices, with versions, how many devices have it, and the same flags as
-          the client's Software tab: end of life, no license recorded, or more installs than licensed seats. It also
-          lists the accounts that sign in to each device, with the matching contact. Devices that haven't reported an
-          inventory are counted in the report's notices rather than treated as having nothing installed.
-          <strong>Service review</strong> looks back over a period you choose (the last 30 days to a year): tickets
-          opened and closed, tickets still open, checklists completed, documentation updated, assets added, and every
-          change recorded in Atlas, with each client's device health at the start of the period against now. It suits a
-          monthly or quarterly review with the client. Password changes are counted only for clients whose passwords you
-          can open, and are never listed. For <strong>Asset inventory</strong>, <strong>Asset fields</strong> adds up to
-          12 fields from your asset layouts as extra columns, such as serial number, model, warranty date, or IP
-          address. Long text fields are never included, because they often hold notes and configuration. A field removed
-          from its layout since a template was saved is left out, with a notice. PDF exports carry your organization's
-          look from <strong>Administration → Theme</strong>: the logo (PNG or JPEG; an SVG logo shows your brand name
-          instead), the brand name, and the accent colour. The first page summarizes the report: how many clients and
-          rows it covers, how many rows need review, and any notices. It also charts what needs review in each section,
-          the spread of status columns (online, protection, encryption, status), and due or expiry dates by month. When
-          you have run the same report for the same clients before, <strong>Compare with</strong> shows what changed
-          since the most recent earlier run. New rows are marked <strong>New</strong>, changed values are highlighted
-          with the previous value beneath, and rows that have gone are listed under <strong>removed since</strong>.
+          recovery keys are never included.
+        </p>
+        <p><strong>Savings finder</strong> shows what each client pays for and doesn't use, priced per month:</p>
+        <ul>
+          <li>
+            <strong>Unused seats:</strong> seats bought but not assigned. A subscription tracked under
+            <strong>Licenses</strong> counts only when its assignments are recorded, so nothing is guessed; a notice
+            lists the ones without assignments.
+          </li>
+          <li>
+            <strong>Licenses on blocked accounts:</strong> Microsoft 365 licenses held by accounts whose sign-in is
+            blocked, usually people who have left. Remove the licenses, or convert the mailbox to a shared mailbox,
+            which needs no license under 50 GB.
+          </li>
+          <li>
+            <strong>Renewals:</strong> tracked subscriptions renewing within the window you choose, with what each
+            renewal costs, how many seats go unused, and what cutting them saves before it renews.
+          </li>
+        </ul>
+        <p>
+          The summary totals each client's monthly and yearly waste, in each currency separately. Microsoft 365 seats
+          come live through GDAP (choose <strong>Include Microsoft 365 inventory through GDAP</strong>). GDAP doesn't
+          give prices, so a Microsoft seat is priced from a tracked subscription of the same name when you have one.
+          Otherwise it's estimated at Microsoft's published list price in US dollars, marked &quot;(list)&quot;, and
+          products Atlas has no price for show as &quot;Not priced&quot;. A product Microsoft reports is counted from
+          Microsoft's live assignments, never twice.
+        </p>
+        <p>
+          <strong>Microsoft 365 accounts</strong> lists every account in each client's linked tenant: enabled or
+          blocked, member or guest, how many licenses it holds, and its usage location. Blocked accounts that still hold
+          licenses, and licensed accounts with no usage location, are flagged.
+        </p>
+        <p>
+          <strong>Microsoft 365 usage</strong> shows who uses Microsoft 365 and how, over the last 30 to 180 days
+          (Microsoft keeps 180): each licensed account's last activity in email, Teams, OneDrive and SharePoint,
+          flagging accounts with none, then a section each for Exchange email, Teams, OneDrive, SharePoint and the
+          Microsoft 365 apps. It reads Microsoft's usage reports, which need the
+          <strong>Reports.Read.All</strong> permission and a GDAP role that can read reports (see
+          <em>Microsoft 365 with GDAP</em> in the administrator's guide). If a tenant hides names in its reports, the
+          report says how to show them.
+        </p>
+        <p>
+          <strong>Cyber insurance readiness</strong> answers the questions cyber insurers ask, for each client, from
+          what Atlas holds. Each answer is <strong>Yes</strong>, <strong>Partly</strong>, <strong>No</strong> or
+          <strong>Not evidenced</strong>, with the evidence and where it came from:
+        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Question</th>
+                <th>Answered from</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>MFA for email and remote access</td>
+                <td>Not tracked in Atlas: confirm it in Microsoft Entra</td>
+              </tr>
+              <tr>
+                <td>Endpoint protection on every device</td>
+                <td>ConnectWise RMM</td>
+              </tr>
+              <tr>
+                <td>Laptops and workstations encrypted</td>
+                <td>The BitLocker collector</td>
+              </tr>
+              <tr>
+                <td>Operating systems still supported</td>
+                <td>Device operating systems on assets</td>
+              </tr>
+              <tr>
+                <td>Devices managed and up to date</td>
+                <td>RMM check-ins (patch levels are in the RMM)</td>
+              </tr>
+              <tr>
+                <td>Backups in place and restore-tested in 12 months</td>
+                <td><strong>Backups</strong> assets and their <strong>Last restore test</strong></td>
+              </tr>
+              <tr>
+                <td>Administrator accounts limited</td>
+                <td>Global Administrators of the synced Microsoft 365 tenant (fewer than five)</td>
+              </tr>
+              <tr>
+                <td>Local administrator passwords rotated</td>
+                <td>Automatic password rotation (administrators only)</td>
+              </tr>
+              <tr>
+                <td>Stored passwords free of breaches and reuse</td>
+                <td>Password health</td>
+              </tr>
+              <tr>
+                <td>Email protected against spoofing</td>
+                <td>
+                  Each <strong>Domains</strong> asset's DMARC record, looked up when the report runs, and the filtering
+                  service on <strong>Email</strong> assets
+                </td>
+              </tr>
+              <tr>
+                <td>Incident response plan</td>
+                <td>A document titled as one</td>
+              </tr>
+              <tr>
+                <td>Business continuity or disaster recovery plan</td>
+                <td>A document titled as one</td>
+              </tr>
+              <tr>
+                <td>Security awareness training</td>
+                <td>Not tracked in Atlas</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Readiness summary</strong> gives each client's readiness: Yes counts fully and Partly half, out of the
+          questions Atlas could answer. <strong>Gaps to close before renewal</strong> lists every answer that isn't Yes,
+          refusals first, each with what to do. <strong>Not evidenced</strong> means Atlas holds no proof either way, so
+          answer it from your own records rather than as a Yes. A DMARC lookup that fails is a notice, never &quot;no
+          record&quot;. <strong>Domains &amp; SSL</strong> lists each client's domains and SSL certificates with their
+          registrar or issuer, expiry date, days left, and the result of the latest automatic check, soonest first. A
+          summary counts what has expired, what expires within the chosen window, and failed checks. Records the
+          trackers haven't checked yet show the dates as entered. <strong>Software &amp; sign-ins</strong> reads the
+          inventory the ConnectWise RMM sync saves. It lists every application installed on each client's devices, with
+          versions, how many devices have it, and the same flags as the client's Software tab: end of life, no license
+          recorded, or more installs than licensed seats. It also lists the accounts that sign in to each device, with
+          the matching contact. Devices that haven't reported an inventory are counted in the report's notices rather
+          than treated as having nothing installed. <strong>Service review</strong> looks back over a period you choose
+          (the last 30 days to a year): tickets opened and closed, tickets still open, checklists completed,
+          documentation updated, assets added, and every change recorded in Atlas, with each client's device health at
+          the start of the period against now. It suits a monthly or quarterly review with the client. Password changes
+          are counted only for clients whose passwords you can open, and are never listed. For
+          <strong>Asset inventory</strong>, <strong>Asset fields</strong> adds up to 12 fields from your asset layouts
+          as extra columns, such as serial number, model, warranty date, or IP address. Long text fields are never
+          included, because they often hold notes and configuration. A field removed from its layout since a template
+          was saved is left out, with a notice. PDF exports carry your organization's look from
+          <strong>Administration → Theme</strong>: the logo (PNG or JPEG; an SVG logo shows your brand name instead),
+          the brand name, and the accent colour. The first page summarizes the report: how many clients and rows it
+          covers, how many rows need review, and any notices. It also charts what needs review in each section, the
+          spread of status columns (online, protection, encryption, status), and due or expiry dates by month. When you
+          have run the same report for the same clients before, <strong>Compare with</strong> shows what changed since
+          the most recent earlier run. New rows are marked <strong>New</strong>, changed values are highlighted with the
+          previous value beneath, and rows that have gone are listed under <strong>removed since</strong>.
           <strong>Changes only</strong> hides everything else. Values that move on every run, such as check-in times or
           days left, don't count as changes.
+        </p>
+        <h3 id="client-review-pack"><a class="anchor" href="#client-review-pack">Client review pack</a></h3>
+        <p>
+          The <strong>Client review pack</strong> is a business review for one client in a single PDF, ready to send
+          before a quarterly meeting. It is made of four reports, run together: <strong>Executive summary</strong>,
+          <strong>Security posture</strong>, <strong>Service review</strong> and <strong>Upcoming renewals</strong>. Its
+          period looks back for the service review and ahead for renewals: a quarter by default, or anything from 30
+          days to a year.
+        </p>
+        <p>
+          The fastest way to make one is <strong>Review pack</strong> in the client's header: it captures the last
+          quarter and downloads the PDF in one click. You can also choose <strong>Client review pack</strong> under
+          Reports, pick the client and period, and choose <strong>Run report</strong>, then
+          <strong>Review pack PDF</strong>.
+        </p>
+        <p>
+          The PDF opens with a cover page in your organization's look. It shows the client, the period, how much of each
+          report needs review, and the contents with page numbers. Each report follows on its own pages, with its
+          charts, and one-client summaries shown as figures rather than a one-row table. On screen,
+          <strong>Report section</strong> groups the sections under the report each belongs to.
+        </p>
+        <p>
+          The pack leaves out Atlas's internal change log; the service review still counts the changes made. Like any
+          single-client report, a review pack can be compared with the last one, shared with the client by link (the
+          client can download all of it as one PDF), or scheduled, for example every quarter on the 1st.
+        </p>
+        <h3 id="scheduled-reports"><a class="anchor" href="#scheduled-reports">Scheduled reports</a></h3>
+        <p>
+          To have a report emailed regularly, set it up (report type, clients, and any options), then choose
+          <strong>Schedule</strong>. Choose:
+        </p>
+        <ul>
+          <li>
+            how often it runs: every day, week, month, or quarter (quarters start in January, April, July, and October);
+          </li>
+          <li>the day and the hour, in the server's time zone;</li>
+          <li>who receives it: up to 20 addresses, staff or client contacts.</li>
+        </ul>
+        <p>
+          Each time it runs, Atlas captures a fresh snapshot with your access at that moment and keeps it in your
+          <strong>History</strong>, so <strong>Compare with</strong> works on it. Then it emails each recipient a
+          summary, with the whole report attached as a PDF in your organization's look. For a report about one client,
+          it can also include a 30-day link the client can open without an account.
+        </p>
+        <p>
+          The <strong>Scheduled</strong> tab lists your schedules, when each runs next, and how the last delivery went,
+          including any addresses that refused it. <strong>Deliveries</strong> lists every email a schedule sent or
+          tried to send, recipient by recipient, with the reason any was refused. Send one again to its recipient with
+          the resend button: it sends the same snapshot, without running the report again, while that snapshot is still
+          in your history. <strong>Send now</strong> sends one straight away without moving its regular time.
+          <strong>Pause</strong> stops it until you resume it. Schedules are private to the person who made them. A
+          schedule stops if its owner can no longer sign in, and deleting a client removes the schedules that report on
+          it. Email must be set up under <strong>Administration → Email &amp; alerts</strong>.
         </p>
         <h3 id="sharing-a-report-with-the-client">
           <a class="anchor" href="#sharing-a-report-with-the-client">Sharing a report with the client</a>
@@ -447,14 +695,27 @@
           A report run for a single client can be shared with that client by link. Choose <strong>Share</strong>, pick
           how long the link works (7, 30, or 90 days; report links always expire), and choose
           <strong>Create link</strong>; the link is copied for you. Whoever has the link sees that snapshot, every
-          section as it was captured, and can download each section as a PDF, without an account. The page names your
-          organization and the client, never the person who ran the report. The dialog shows how often each link was
-          opened, and <strong>Revoke</strong> stops a link at once. Deleting the report or the client stops its links
-          too. Only the person who ran the report can share it, and only with edit access to the client. Making and
-          revoking links appear in the security log.
+          section as it was captured, and can download the whole report or one section as a PDF, without an account. The
+          page names your organization and the client, never the person who ran the report. The dialog shows how often
+          each link was opened, and <strong>Revoke</strong> stops a link at once. Deleting the report or the client
+          stops its links too. Only the person who ran the report can share it, and only with edit access to the client.
+          Making and revoking links appear in the security log.
         </p>
+        <p><strong>Send</strong> decides which runs are emailed, so a schedule can work as an alert:</p>
+        <ul>
+          <li><strong>Every time</strong> sends every run.</li>
+          <li><strong>Only when something needs review</strong> sends only runs with flagged rows.</li>
+          <li>
+            <strong>Only when something new needs review</strong> sends only when something needs review that didn't in
+            the last report sent. That email lists just the new items.
+          </li>
+        </ul>
         <p>
-          Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
+          For example, <strong>Security posture</strong>, every day,
+          <strong>only when something new needs review</strong>, tells you the morning after a password turns up in a
+          breach or a device loses its protection, and stays quiet otherwise. <strong>Domains &amp; SSL</strong> set up
+          the same way warns as each certificate or domain starts to expire. Runs that send nothing aren't kept in your
+          history, and the schedule shows <strong>Nothing to send</strong>. <strong>Send now</strong> always sends.
         </p>
         <h2 id="the-monthly-report"><a class="anchor" href="#the-monthly-report">The monthly report</a></h2>
         <p>

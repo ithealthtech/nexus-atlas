@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -16,6 +15,7 @@ import {
   Select,
   Skeleton,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ItemIcon, LAYOUT_ICONS } from '@/components/ItemIcon';
 import { ApiError, api } from '@/lib/api';
@@ -78,7 +78,7 @@ function LayoutEditor({ layout, onClose }: { layout?: LayoutView; onClose: () =>
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -238,7 +238,7 @@ function LayoutEditor({ layout, onClose }: { layout?: LayoutView; onClose: () =>
         </fieldset>
         <FormError message={error?.message ?? null} />
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 

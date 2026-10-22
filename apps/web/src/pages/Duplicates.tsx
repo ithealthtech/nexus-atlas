@@ -160,7 +160,7 @@ export function Duplicates() {
         title="Duplicates"
         description="Records with the same name in the same client, often from importing twice or from Hudu and ConnectWise RMM both. Choose the one to keep; the rest are merged into it."
       />
-      <Card className="max-w-4xl">
+      <Card>
         <CardHeader
           title={
             groups.data ? `${groups.data.length} possible duplicate${groups.data.length === 1 ? '' : 's'}` : 'Looking…'

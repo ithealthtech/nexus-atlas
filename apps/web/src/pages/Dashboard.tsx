@@ -31,15 +31,16 @@ import {
   Card,
   CardHeader,
   Checkbox,
-  Dialog,
   EmptyState,
   PageHeader,
   Skeleton,
   Stat,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
 import { FavoritesCard } from '@/components/Favorites';
+import { ClientHealthCard } from '@/components/ClientHealth';
 import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard, useRmmHealth } from '@/components/RmmHealth';
 import { TrackerCard } from '@/components/Trackers';
@@ -136,7 +137,7 @@ export function Dashboard() {
 
   const cards: Record<DashboardWidget, ReactNode> = {
     stats: (
-      <div className={cn('grid gap-4 sm:grid-cols-2', actor.isStaff ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
+      <div className={cn('grid grid-cols-2 gap-4', actor.isStaff ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
         <Stat
           label="Client workspaces"
           value={clients.isLoading ? skeleton : list.length}
@@ -183,6 +184,7 @@ export function Dashboard() {
     trackers: <TrackerCard />,
     tickets: <TicketsCard />,
     'asset-stats': <AssetStatsCard />,
+    health: <ClientHealthCard />,
     favorites: <FavoritesCard />,
     'recent-clients': (
       <Card>
@@ -405,7 +407,9 @@ export function Dashboard() {
       )}
       {totals.length > 0 && <div className="mb-5">{totals}</div>}
       {main.length + side.length > 0 ? (
-        <div className={cn('grid gap-5', main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
+        <div
+          className={cn('grid grid-cols-1 gap-5', main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]')}
+        >
           {main.length > 0 && <div className="space-y-5">{main}</div>}
           {side.length > 0 && (
             <div className={cn(main.length ? 'space-y-5' : 'grid items-start gap-6 md:grid-cols-2 xl:grid-cols-3')}>
@@ -484,7 +488,7 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
   };
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Customize your dashboard"
@@ -553,6 +557,6 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
         })}
         <p className="text-xs text-muted">To hide sections of client workspaces, use Customize on any client.</p>
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

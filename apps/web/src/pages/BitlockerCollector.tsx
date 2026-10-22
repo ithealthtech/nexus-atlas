@@ -157,7 +157,7 @@ export function BitlockerCollector() {
   return (
     <>
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Vault"
         title="BitLocker collector"
         description="A script your RMM runs on each Windows machine. It reads BitLocker status and recovery keys, encrypts the keys on the machine, and sends them here. Keys go to the client's vault; status shows on the device's asset."
         actions={
@@ -214,7 +214,7 @@ export function BitlockerCollector() {
             <ul className="divide-y divide-border">
               {data.enrollments.map((e) => (
                 <li key={e.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 text-sm">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-48">
                     <p className="font-medium">
                       {e.clientName} · {e.name}
                     </p>
@@ -263,7 +263,7 @@ export function BitlockerCollector() {
             <ul className="divide-y divide-border">
               {data.devices.map((d) => (
                 <li key={d.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 px-5 py-3 text-sm">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-48">
                     <p className="font-medium">
                       {d.assetId ? (
                         <AppLink to={`/assets/${d.assetId}`} className="hover:underline">

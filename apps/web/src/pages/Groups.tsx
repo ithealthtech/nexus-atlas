@@ -13,8 +13,8 @@ import {
   PageHeader,
   Select,
   Skeleton,
-  Dialog,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { useClients, useGroups, useSave, useUsers } from '@/lib/queries';
@@ -56,7 +56,7 @@ function GroupDialog({ group, onClose }: { group?: GroupView; onClose: () => voi
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -140,10 +140,10 @@ function GroupDialog({ group, onClose }: { group?: GroupView; onClose: () => voi
             {clients.data?.length === 0 && <p className="p-4 text-sm text-muted">No clients yet.</p>}
             {clients.data?.map((c) => (
               <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                <span className="truncate text-sm">{c.name}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">{c.name}</span>
                 <Select
                   aria-label={`Group access to ${c.name}`}
-                  className="h-8 w-44 text-[13px]"
+                  className="h-8 w-36 shrink-0 text-[13px] sm:w-44"
                   value={grants[c.id] ?? 'none'}
                   onChange={(e) => setGrants((g) => ({ ...g, [c.id]: e.target.value as AccessLevel }))}
                 >
@@ -159,7 +159,7 @@ function GroupDialog({ group, onClose }: { group?: GroupView; onClose: () => voi
         </fieldset>
         <FormError message={error && !error.fields?.name ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -207,7 +207,7 @@ export function Groups() {
                 <span className="grid size-10 place-items-center rounded-lg bg-primary-soft text-primary">
                   <UsersRound className="size-5" aria-hidden />
                 </span>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-48">
                   <p className="font-semibold">{g.name}</p>
                   <p className="truncate text-sm text-muted">
                     {g.description ||

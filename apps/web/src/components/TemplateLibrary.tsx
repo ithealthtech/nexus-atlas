@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Library } from 'lucide-react';
 import type { TemplateView } from '@atlas/shared';
 import { AppLink } from '@/components/AppLink';
-import { Badge, Button, Dialog, FormError, Skeleton, useToast } from '@/components/ui';
+import { Badge, Button, FormError, Skeleton, useToast, Drawer } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 
 /**
@@ -47,7 +47,7 @@ export function TemplateLibrary({ kind }: { kind: TemplateView['kind'] }) {
       <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         <Library /> Template library
       </Button>
-      <Dialog
+      <Drawer
         open={open}
         onClose={() => setOpen(false)}
         size="lg"
@@ -110,7 +110,7 @@ export function TemplateLibrary({ kind }: { kind: TemplateView['kind'] }) {
             ))}
           </ul>
         )}
-      </Dialog>
+      </Drawer>
     </>
   );
 }

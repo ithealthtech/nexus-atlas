@@ -12,14 +12,14 @@ const ROTATION_RESULT: Record<RotationRunStatus, string> = {
 };
 
 /** A machine's BitLocker state: any unprotected volume counts against it, and no volumes is not "encrypted". */
-function encryptionOf(volumes: schema.BitlockerVolume[]) {
+export function encryptionOf(volumes: schema.BitlockerVolume[]) {
   if (!volumes.length) return 'Unknown';
   if (volumes.some((v) => v.protection === 'Off')) return 'Not encrypted';
   return volumes.every((v) => v.protection === 'On') ? 'Encrypted' : 'Unknown';
 }
 
 /** Password health for the clients whose vault this person can open, through the vault's own access rules. */
-async function passwords(report: ReportContext) {
+export async function passwords(report: ReportContext) {
   const { security, scope } = report;
   const vaultIds = new Set<string>();
   if (security && ROLE_INFO[report.actor.role].staff)

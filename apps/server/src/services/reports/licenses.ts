@@ -1,5 +1,6 @@
-import { gdapClient } from '../../routes/m365-gdap.js';
+import type { MicrosoftLicenseView } from '@atlas/shared';
 import type { Collector, ReportContext } from './context.js';
+import { gdapTenants } from './microsoft.js';
 
 /** Manually tracked subscriptions, and (when asked) Microsoft 365 seats read through GDAP. */
 export const licenses: Collector = async (report) => {
@@ -22,53 +23,49 @@ export const licenses: Collector = async (report) => {
   else report.warn('Microsoft 365 inventory was excluded from this snapshot.');
 };
 
-/** Seats per linked tenant, through GDAP only: no application credentials, and no guessed seat counts. */
-async function microsoftSeats(report: ReportContext) {
-  const saved = await report.settings.m365(report.actor.orgId);
-  const linked = report.clients.filter((c) => saved?.tenants[c.id]);
-  for (const c of report.clients.filter((c) => !saved?.tenants[c.id]))
-    report.warn(`${c.name}: no Microsoft 365 tenant is linked.`);
-  if (!linked.length) return;
-  if (saved?.authMode !== 'gdap') {
-    report.warn(
-      'Microsoft inventory is unavailable: the connection must use GDAP. Application credentials were not used.',
-    );
-    return;
-  }
-  let microsoft;
-  try {
-    microsoft = await gdapClient(report.settings, report.actor.orgId, report.fetcher, true);
-  } catch {
-    report.warn('Microsoft inventory is unavailable. Check the GDAP connection and refresh the report.');
-    return;
-  }
-  const rows: string[][] = [];
+/**
+ * Each linked client's Microsoft 365 subscriptions and licensed users, through GDAP only: no application
+ * credentials, and no guessed seat counts. Clients that can't be read get a notice and are left out.
+ */
+export async function microsoftInventory(report: ReportContext): Promise<Map<string, MicrosoftLicenseView>> {
+  const found = new Map<string, MicrosoftLicenseView>();
+  const tenants = await gdapTenants(report);
+  if (!tenants) return found;
+  const { microsoft, linked } = tenants;
   for (const c of linked) {
     try {
-      const data = await microsoft.licenses(saved.tenants[c.id]!.tenantId);
+      const data = await microsoft.licenses(c.tenantId);
       report.source(
         `Microsoft 365: ${c.name}`,
         'Read through GDAP. Purchased enabled seats and assignment totals; pricing and renewal dates are not provided.',
         data.checkedAt,
       );
-      for (const sku of data.skus)
-        rows.push([
-          c.name,
-          sku.name,
-          sku.status,
-          String(sku.enabled),
-          String(sku.assigned),
-          String(Math.max(0, sku.enabled - sku.assigned)),
-        ]);
+      found.set(c.id, data);
     } catch {
       report.warn(
         `${c.name}: Microsoft inventory could not be read through GDAP. No application fallback or inferred seat counts were used.`,
       );
     }
   }
+  return found;
+}
+
+/** Seats per linked tenant. */
+async function microsoftSeats(report: ReportContext) {
+  const inventory = await microsoftInventory(report);
+  if (!inventory.size) return;
   report.section(
     'Microsoft 365 via GDAP',
     ['Client', 'Product', 'Status', 'Enabled seats', 'Assigned', 'Available'],
-    rows,
+    [...inventory].flatMap(([clientId, data]) =>
+      data.skus.map((sku) => [
+        report.client(clientId),
+        sku.name,
+        sku.status,
+        String(sku.enabled),
+        String(sku.assigned),
+        String(Math.max(0, sku.enabled - sku.assigned)),
+      ]),
+    ),
   );
 }

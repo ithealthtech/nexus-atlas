@@ -11,11 +11,15 @@ import { documentation } from './reports/documentation.js';
 import { domains } from './reports/domains.js';
 import { endpoints } from './reports/endpoints.js';
 import { executive } from './reports/executive.js';
+import { insurance } from './reports/insurance.js';
 import { licenses } from './reports/licenses.js';
 import { renewals } from './reports/renewals.js';
+import { savings } from './reports/savings.js';
+import { review } from './reports/review.js';
 import { security } from './reports/security.js';
 import { service } from './reports/service.js';
 import { software } from './reports/software.js';
+import { accounts, usage } from './reports/microsoft.js';
 
 export { MAX_REPORT_ROWS, type SecuritySources };
 
@@ -24,16 +28,21 @@ export { MAX_REPORT_ROWS, type SecuritySources };
  * type doesn't compile until it has a collector.
  */
 const COLLECTORS: Record<ReportKind, Collector> = {
+  review,
   executive,
   security,
+  insurance,
   service,
   assets,
   licenses,
+  savings,
   renewals,
   domains,
   documentation,
   endpoints,
   software,
+  accounts,
+  usage,
 };
 
 /** Export explicit metadata only: never include vault secrets, document content, or arbitrary custom fields. */

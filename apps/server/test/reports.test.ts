@@ -9,6 +9,8 @@ import {
   compareReportSections,
   previousReportRun,
   reportDefinitionSchema,
+  reportNeedsAttention,
+  reportSectionGroups,
   reportSelectionSchema,
   selectReportSection,
   type ReportSnapshot,
@@ -216,6 +218,67 @@ describe('report exports', () => {
     // A broken image is skipped rather than failing the export.
     const broken = await reportPdf(sample, selection, { name: '', logo: 'data:image/png;base64,AAAA', accent: null });
     expect(broken.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+  it('lays out a whole review pack as a document: a cover, then each report it is made of', async () => {
+    const section = (part: string, title: string, columns: string[], rows: string[][]) => ({
+      part,
+      title,
+      columns,
+      rows,
+    });
+    const trend = section(
+      'Service review',
+      'Device health trend',
+      ['Client', 'From', 'To', 'Devices', 'Online'],
+      [['Harbor Dental', '2026-07-21', '2026-10-19', '10 → 12', '9 → 11']],
+    );
+    const pack: ReportSnapshot = {
+      ...sample,
+      definition: { ...sample.definition, kind: 'review', title: 'Harbor Dental quarterly review' },
+      sections: [
+        section(
+          'Executive summary',
+          'Client overview',
+          ['Client', 'Assets', 'Offline'],
+          [['Harbor Dental', '12', '1']],
+        ),
+        section(
+          'Security posture',
+          'Device protection and encryption',
+          ['Client', 'Device', 'Online'],
+          [
+            ['Harbor Dental', 'WS-1', 'Offline'],
+            ['Harbor Dental', 'WS-2', 'Online'],
+          ],
+        ),
+        trend,
+        section(
+          'Upcoming renewals',
+          'Renewals',
+          ['Client', 'Item', 'Due date', 'Status'],
+          [['Harbor Dental', 'Firewall', '2026-11-01', 'Upcoming']],
+        ),
+      ],
+    };
+    const pages = (pdf: Buffer) => (pdf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length;
+    const whole = await reportPdf(pack, 'all');
+    if (process.env.ATLAS_PDF_SAMPLE_DIR)
+      writeFileSync(resolve(process.env.ATLAS_PDF_SAMPLE_DIR, 'atlas-review-pack-sample.pdf'), whole);
+    // The cover, a page for each of the four reports, then the notices and sources.
+    expect(pages(whole)).toBe(6);
+    // One section of it, as filtered on screen, is a plain export.
+    expect(pages(await reportPdf(pack, reportSelectionSchema.parse({ section: 1 })))).toBe(1);
+    expect(reportSectionGroups(pack.sections).map((g) => [g.part, g.items.map((i) => i.index)])).toEqual([
+      ['Executive summary', [0]],
+      ['Security posture', [1]],
+      ['Service review', [2]],
+      ['Upcoming renewals', [3]],
+    ]);
+    // A health trend's online count isn't a device that is offline.
+    expect(reportNeedsAttention(trend, trend.rows[0]!)).toBe(false);
+    expect(reportNeedsAttention(pack.sections[1]!, pack.sections[1]!.rows[0]!)).toBe(true);
+    // A review pack is for one client.
+    expect(reportDefinitionSchema.safeParse({ ...pack.definition, clientIds: [TENANT, APP] }).success).toBe(false);
   });
 });
 
@@ -532,6 +595,39 @@ describe('private client reports', () => {
     const serialized = JSON.stringify(snapshot);
     for (const hidden of ['Firewall admin login', 'Last year change', 'Long-closed ticket', 'Other client ticket'])
       expect(serialized).not.toContain(hidden);
+  });
+  it('builds a review pack for one client from the reports it is made of, as one PDF and one link', async () => {
+    await seed();
+    expect((await generate('review', [clientId, otherId])).status).toBe(400);
+    const made = await generate('review');
+    expect(made.status, JSON.stringify(made.data)).toBe(201);
+    const { sections } = made.data.snapshot as ReportSnapshot;
+    expect([...new Set(sections.map((s) => s.part))]).toEqual([
+      'Executive summary',
+      'Security posture',
+      'Service review',
+      'Upcoming renewals',
+    ]);
+    expect(sections[0]!.title).toBe('Client overview');
+    // The client gets the count of changes, not the internal change log.
+    expect(sections.map((s) => s.title)).not.toContain('Activity');
+    expect(sections.some((s) => s.title.startsWith('Service summary'))).toBe(true);
+
+    // The whole pack as one PDF, named after the report.
+    const pdf = await owner.call('GET', `/api/reports/runs/${made.data.id}/export?format=pdf&whole=1`);
+    expect(pdf.status).toBe(200);
+    expect(String(pdf.data).startsWith('%PDF-')).toBe(true);
+    expect(pdf.headers['content-disposition']).toContain(
+      `filename*=UTF-8''${encodeURIComponent(`review report ${made.data.createdAt.slice(0, 10)}.pdf`)}`,
+    );
+    // And from a link: the client downloads all of it.
+    const link = await owner.call('POST', `/api/reports/runs/${made.data.id}/shares`, { expiresDays: 30 });
+    const token = link.data.url.split('/').pop() as string;
+    const shared = await t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}` });
+    expect(shared.json().sections[0]).toMatchObject({ part: 'Executive summary', title: 'Client overview' });
+    const whole = await t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}/pdf?section=all` });
+    expect(whole.statusCode).toBe(200);
+    expect(whole.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
   });
   it('adds chosen asset fields to the inventory, never long text or fields that no longer exist', async () => {
     await seed();

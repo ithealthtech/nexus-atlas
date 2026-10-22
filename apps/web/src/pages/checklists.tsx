@@ -20,6 +20,7 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -95,7 +96,7 @@ function RunList({ runs, showClient, empty }: { runs: RunView[] | undefined; sho
     <ul className="divide-y divide-border">
       {runs.map((r) => (
         <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 text-sm">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-48">
             <AppLink to={`/checklist-runs/${r.id}`} className="font-medium hover:underline">
               {r.title}
             </AppLink>
@@ -159,7 +160,7 @@ function ChecklistDialog({
     }
   };
   return (
-    <Dialog
+    <Drawer
       open={open}
       onClose={onClose}
       size="lg"
@@ -213,7 +214,7 @@ function ChecklistDialog({
         </fieldset>
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
-    </Dialog>
+    </Drawer>
   );
 }
 

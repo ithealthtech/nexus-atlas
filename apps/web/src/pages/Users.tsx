@@ -26,6 +26,7 @@ import {
   Select,
   Skeleton,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
@@ -129,7 +130,7 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
     }
   };
   return (
-    <Dialog
+    <Drawer
       open={open}
       onClose={onClose}
       size="lg"
@@ -341,7 +342,7 @@ function UserDialog({ user, open, onClose }: { user?: UserView; open: boolean; o
         />
       </form>
       {user && <ResetDialog user={user} open={resetting} onClose={() => setResetting(false)} />}
-    </Dialog>
+    </Drawer>
   );
 }
 
