@@ -40,6 +40,8 @@ jobs:
       - run: npm ci
       - run: npx prettier --check .
       - run: npm run lint
+      # Fails when copied code passes 1% of the source, and lists every copy it found for the review.
+      - run: npm run duplicates
       - run: node scripts/build-site.mjs --check
       - run: npm run build
       - run: npm run build:extension
