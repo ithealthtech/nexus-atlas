@@ -5,7 +5,7 @@ out: manual/clients.html
 group: Using Atlas
 order: 3
 number: 3
-summary: The client list, a client's workspace and overview, quick notes, the monthly report, and exporting a client.
+summary: The client list, a client's workspace and overview, quick notes, reports, and exporting a client.
 ---
 
 # Clients
@@ -39,7 +39,7 @@ You need edit access to every client to add one. Administrators always have it.
 
 Opening a client shows:
 
-- **The header:** the client's name and type, your access, and the star to add it to your favourites. **Monthly report**, **Export**, **Edit client**, and for administrators **Delete**, are on the right.
+- **The header:** the client's name and type, your access, and the star to add it to your favourites. **Export**, **Edit client**, and for administrators **Delete**, are on the right.
 - **The quick note:** a short note at the top of every page for this client, for the thing everyone should know before they touch anything.
 - **The tabs:** **Overview**, **Assets**, **Documents**, **Passwords**, **Contacts**, **Locations**, **Checklists**, **Licenses**, **Map** and **Activity**. Counts appear for the sections that provide them. The **Trackers** row underneath has **Domain Tracker** and **SSL Tracker**. A tracker count turns amber when something needs attention.
 
@@ -135,10 +135,6 @@ When you have run the same report for the same clients before, **Compare with** 
 A report run for a single client can be shared with that client by link. Choose **Share**, pick how long the link works (7, 30, or 90 days; report links always expire), and choose **Create link**; the link is copied for you. Whoever has the link sees that snapshot, every section as it was captured, and can download each section as a PDF, without an account. The page names your organization and the client, never the person who ran the report. The dialog shows how often each link was opened, and **Revoke** stops a link at once. Deleting the report or the client stops its links too. Only the person who ran the report can share it, and only with edit access to the client. Making and revoking links appear in the security log.
 
 Scheduling, automatic triggers, and email delivery are planned for Phase 2. Phase 1 runs reports on demand.
-
-## The monthly report
-
-**Monthly report** in the client header opens a printable page with the client's assets and documents. Use your browser's **Print**, and choose **Save as PDF** to send it to the client.
 
 ## Export a client
 

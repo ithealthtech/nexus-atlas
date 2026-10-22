@@ -64,6 +64,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Removed
 
 - **The Atlas 0.2 importer.** `npm run migrate-legacy` and the 0.2 prototype it read from are gone. To move a 0.2 database, run the migration with Atlas 1.8 first, then update.
+- **The old monthly client report.** The **Monthly report** button and its printable page are gone from the client header. The client's **Reports** tab replaces them, with PDFs, share links and scheduled delivery. Old links to the page open that tab.
 - **Leftover ConnectWise PSA status lookups in ticket sync.** Ticket sync reads only the ConnectWise platform API; a ticket's state comes from its own status.
 
 ## [1.8.4] - 2026-10-21

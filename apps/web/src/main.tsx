@@ -25,7 +25,6 @@ import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientLicenses } from '@/pages/client/Licenses';
 import { ClientOverview } from '@/pages/client/ClientOverview';
-import { ClientReport } from '@/pages/client/ClientReport';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
 import { DomainTracker, SslTracker } from '@/components/Trackers';
@@ -225,7 +224,14 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
   createRoute({ getParentRoute: () => appRoute, path: '/reports', component: Reports }),
   clientRoute.addChildren(clientRoutes),
-  createRoute({ getParentRoute: () => appRoute, path: '/client-report/$clientId', component: ClientReport }),
+  // The old one-page monthly report, retired in 2.0: its links open the client's Reports tab.
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/client-report/$clientId',
+    beforeLoad: ({ params }) => {
+      throw redirect({ to: '/clients/$clientId/reports', params: { clientId: params.clientId } });
+    },
+  }),
   createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),
   createRoute({
     getParentRoute: () => appRoute,

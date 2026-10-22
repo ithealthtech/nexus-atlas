@@ -94,7 +94,7 @@ service account passwords on a schedule through the RMM.
 Reusable checklists run step by step for a client, recording who ticked each step and when,
 with an assignee and a due date, from a built-in template library or your own. Each client
 also gets a relationship map of how its items link together, domain and SSL certificate
-trackers, an expirations view, and a monthly report.
+trackers, an expirations view, and its own Reports tab.
 
 ### Integrations
 
