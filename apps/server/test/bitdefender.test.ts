@@ -212,7 +212,8 @@ describe('Bitdefender GravityZone', () => {
     expect(JSON.stringify(ok.data)).not.toContain(SERVICE);
     const stored = await t.handle.db.execute(sql`select settings::text as s from orgs`);
     expect(JSON.stringify(stored.rows)).not.toContain(SERVICE);
-    expect(JSON.stringify(stored.rows)).toContain('"auth":"header"');
+    const auth = await t.handle.db.execute(sql`select settings->'bitdefender'->>'auth' as auth from orgs`);
+    expect(auth.rows[0]).toEqual({ auth: 'header' });
     // Saving again without a key keeps it.
     expect((await owner.call('PUT', '/api/integrations/bitdefender', { accessUrl: URL_ })).status).toBe(200);
 
@@ -291,6 +292,7 @@ describe('Bitdefender GravityZone', () => {
       password: 'temporary pass 1234',
       role: 'technician',
       allClients: 'none',
+      grants: [{ clientId: other, level: 'read' }],
     });
     const { b } = await signIn(t.app, 'casey@atlas.test', 'temporary pass 1234');
     await b.call('POST', '/api/account/password', { current: 'temporary pass 1234', next: 'cobalt fresh pass 12' });
