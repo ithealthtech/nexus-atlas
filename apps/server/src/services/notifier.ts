@@ -8,6 +8,7 @@ import type { ExpirationService } from './expirations.js';
 import type { MailService } from './mail.js';
 import { Scope } from './scope.js';
 import type { SettingsService } from './settings.js';
+import { Repeating, type ErrorLog } from './repeating.js';
 
 const LINK: Record<ExpirationItem['kind'], string> = { asset: 'assets', password: 'passwords', document: 'documents' };
 
@@ -26,7 +27,8 @@ export function isoWeek(date: Date) {
  * log retention, emergency access notices, and cleanup of expired sign-in records. A database lock keeps two servers from both sending.
  */
 export class Notifier {
-  private timer?: NodeJS.Timeout;
+  private readonly schedule = new Repeating(() => this.tick());
+  private log: ErrorLog = () => undefined;
   private running = false;
   /** When background work last completed, for the status page. */
   lastRunAt: Date | null = null;
@@ -48,13 +50,13 @@ export class Notifier {
     },
   ) {}
 
-  start(intervalMs = 10 * 60_000) {
-    this.timer = setInterval(() => void this.tick().catch(() => undefined), intervalMs);
-    this.timer.unref();
+  start(log: ErrorLog, intervalMs = 10 * 60_000) {
+    this.log = log;
+    this.schedule.start(intervalMs, log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   async tick(now = new Date()) {
@@ -68,8 +70,8 @@ export class Notifier {
         const orgs = await this.db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs);
         for (const org of orgs) {
           await this.deps.audit.applyRetention(org.id);
-          await this.deps.emergency?.announceStarts(org.id, now).catch(() => undefined);
-          await this.deps.health?.nightly(org.id).catch(() => undefined);
+          await this.deps.emergency?.announceStarts(org.id, now).catch(this.log);
+          await this.deps.health?.nightly(org.id).catch(this.log);
           await this.deps.audit.checkpoint(org.id);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
         }

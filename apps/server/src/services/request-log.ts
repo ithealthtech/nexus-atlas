@@ -12,6 +12,7 @@ import {
 } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import type { SettingsService } from './settings.js';
+import { Repeating, type ErrorLog } from './repeating.js';
 
 /**
  * Verbose request logging: every outbound call Atlas makes (ConnectWise, Hudu, Microsoft, GitHub, …) and every
@@ -191,7 +192,7 @@ export class RequestLogService {
   private queue: (typeof schema.requestLog.$inferInsert)[] = [];
   private flushing: Promise<void> | null = null;
   private flushTimer: NodeJS.Timeout | null = null;
-  private pruneTimer: NodeJS.Timeout | null = null;
+  private readonly pruning = new Repeating(() => this.prune());
 
   constructor(
     private readonly db: Database,
@@ -431,15 +432,12 @@ export class RequestLogService {
     );
   }
 
-  start() {
-    const run = () => void this.prune().catch(() => undefined);
-    run();
-    this.pruneTimer = setInterval(run, 3600_000);
-    this.pruneTimer.unref();
+  start(log: ErrorLog) {
+    this.pruning.start(3600_000, log, { now: true });
   }
 
   async stop() {
-    if (this.pruneTimer) clearInterval(this.pruneTimer);
+    this.pruning.stop();
     await this.flush();
   }
 }

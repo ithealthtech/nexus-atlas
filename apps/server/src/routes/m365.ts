@@ -12,6 +12,7 @@ import { ClientService } from '../services/clients.js';
 import { ImportRun } from '../services/importers/common.js';
 import { runM365Sync, tenantLinks } from '../services/integrations/m365.js';
 import type { SettingsService } from '../services/settings.js';
+import { Repeating, type ErrorLog } from '../services/repeating.js';
 
 const SYNC_EVERY = 6 * 3_600_000;
 
@@ -20,7 +21,7 @@ async function startSync(
   settings: SettingsService,
   actor: Actor,
   fetcher: typeof fetch | undefined,
-  log: (error: unknown) => void,
+  log: ErrorLog,
 ) {
   const saved = await settings.m365(actor.orgId);
   if (!saved) throw new HttpError(400, 'Connect Microsoft 365 first.');
@@ -216,22 +217,21 @@ export function registerM365Routes(
 
 /** Runs each organization's Microsoft 365 sync every few hours, as the administrator who connected it. */
 export class M365Scheduler {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly schedule = new Repeating(() => this.tick());
 
   constructor(
     private readonly db: Database,
     private readonly settings: SettingsService,
-    private readonly log: (error: unknown) => void,
+    private readonly log: ErrorLog,
     private readonly fetcher?: typeof fetch,
   ) {}
 
   start(intervalMs = 15 * 60_000) {
-    this.timer = setInterval(() => void this.tick().catch(this.log), intervalMs);
-    this.timer.unref();
+    this.schedule.start(intervalMs, this.log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   async tick(now = Date.now()) {

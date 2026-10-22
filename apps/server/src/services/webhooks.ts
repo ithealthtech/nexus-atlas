@@ -15,6 +15,7 @@ import { requireAdmin } from '../authz.js';
 import type { VaultKeys } from '../crypto/vault-keys.js';
 import { HttpError } from '../errors.js';
 import { isUuid } from './scope.js';
+import { Repeating, type ErrorLog } from './repeating.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 type WebhookRow = typeof schema.webhooks.$inferSelect;
@@ -111,7 +112,7 @@ export const signWebhook = (secret: string, timestamp: string, body: string) =>
 
 /** Webhook administration and delivery. */
 export class WebhookService {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly schedule = new Repeating(() => this.tick());
   private running = false;
   private pruned = 0;
 
@@ -485,12 +486,11 @@ export class WebhookService {
     }
   }
 
-  start(intervalMs = 5_000, log: (error: unknown) => void = () => undefined) {
-    this.timer = setInterval(() => void this.tick().catch(log), intervalMs);
-    this.timer.unref();
+  start(intervalMs: number, log: ErrorLog) {
+    this.schedule.start(intervalMs, log);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.schedule.stop();
   }
 }
