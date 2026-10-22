@@ -309,6 +309,13 @@
       "when": 1792653806364,
       "tag": "0043_bitdefender_endpoints",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792692058874,
+      "tag": "0044_teams_integration",
+      "breakpoints": true
     }
   ]
 }

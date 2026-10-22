@@ -4,6 +4,10 @@ import {
   bitdefenderHealth,
   type BitdefenderEndpointView,
   type BitdefenderView,
+  teamsSettingsSchema,
+  teamsPostSchema,
+  type TeamsSettingsView,
+  type TeamsPost,
   REPORT_INFO,
   reportDefinitionSchema,
   type ReportDefinition,
@@ -4022,6 +4026,86 @@ const mockRequestSync = (method: string, path: string, body: Json) => {
   }
   throw new MockError(404, 'Not found.');
 };
+
+// Teams conversations in the demo stay in the browser; no Microsoft request is made.
+let demoTeams: TeamsSettingsView = {
+  ...teamsSettingsSchema.parse({
+    enabled: true,
+    tenantId: '11111111-2222-4333-8444-555555555555',
+    appId: '22222222-2222-4333-8444-555555555555',
+    timeZone: 'America/New_York',
+    mappings: db.clients.map((c) => ({
+      clientId: c.id,
+      teamId: '22222222-2222-4333-8444-555555555555',
+      channelId: `19:${c.id}@thread.tacv2`,
+      channelName: `${c.name} — Team discussion`,
+    })),
+  }),
+  hasClientSecret: true,
+  connection: { name: 'Alex Rivera', connectedAt: new Date().toISOString() },
+};
+const demoThreads = new Map<string, TeamsPost[]>();
+const demoPosts = (clientId: string, parent = '') => {
+  find(db.clients, clientId, 'Client');
+  const key = clientId + ':' + parent;
+  if (!demoThreads.has(key))
+    demoThreads.set(
+      key,
+      parent
+        ? []
+        : [
+            {
+              id: 'sample-thread',
+              author: 'Robin Hale',
+              content: 'The client review is ready. Please add any follow-up items here.',
+              createdAt: ago(90),
+              editedAt: null,
+              canEdit: false,
+            },
+          ],
+    );
+  return demoThreads.get(key)!;
+};
+on('GET', '/integrations/teams', () => demoTeams);
+on('PUT', '/integrations/teams', (_m, b) => {
+  const { clientSecret: _secret, ...settings } = teamsSettingsSchema.parse(b);
+  demoTeams = { ...demoTeams, ...settings };
+  return demoTeams;
+});
+on('DELETE', '/integrations/teams', () => {
+  demoTeams = { ...demoTeams, enabled: false, connection: null };
+  return { ok: true };
+});
+on('GET', '/integrations/teams/deliveries', () => []);
+on('GET', '/clients/:id/teams', (m) => ({
+  name: find(db.clients, m[1]!, 'Client').name + ' — Team discussion',
+  canWrite: true,
+}));
+for (const suffix of ['', '/:parent/replies']) {
+  const path = '/clients/:id/teams/posts' + suffix;
+  on('GET', path, (m) => ({ posts: demoPosts(m[1]!, m[2]) }));
+  on('POST', path, (m, b) => {
+    const post = {
+      id: uuid(),
+      author: 'Alex Rivera',
+      content: teamsPostSchema.parse(b).content,
+      createdAt: new Date().toISOString(),
+      editedAt: null,
+      canEdit: true,
+    };
+    demoPosts(m[1]!, m[2]).unshift(post);
+    return { id: post.id };
+  });
+  on('PATCH', path + '/:post', (m, b) => {
+    const parent = suffix ? m[2] : undefined;
+    const id = suffix ? m[3] : m[2];
+    const post = find(demoPosts(m[1]!, parent), id!, 'Teams post');
+    if (!post.canEdit) throw new MockError(404, 'Only your own posts can be edited.');
+    post.content = teamsPostSchema.parse(b).content;
+    post.editedAt = new Date().toISOString();
+    return { ok: true };
+  });
+}
 
 /** Answers an API request from memory, after a short delay so loading states show as they would for real. */
 export async function mockRequest(path: string, method: string, body: unknown): Promise<unknown> {

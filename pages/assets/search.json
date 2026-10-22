@@ -542,6 +542,13 @@
   {
     "u": "manual/integrations.html",
     "p": "Data and integrations",
+    "s": "Microsoft Teams",
+    "h": "microsoft-teams",
+    "t": "Under **Administration → Microsoft Teams**, connect a Microsoft account for discussions and install the Atlas bot in the teams that should receive notifications. Map each client to its own channel, with an optional separate security destination. Staff open **More → Teams** in a client workspace to read posts and replies, start a discussion, or edit messages they created through Atlas. Alerts cover expirations, document reviews, password breaches and confirmed infection events. Expirations and reviews arrive as a daily digest at reminder milestones; security events are checked every minute. Configure the time zone and alert types, use **Send test notification** after saving, and check **Delivery history** if a message does not arrive. Password values and recovery keys are never posted. See the [Teams setup guide](https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md) for Microsoft registration, the custom Teams app package, permissions, and the infection-event feed."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
     "s": "Import from Hudu",
     "h": "import-from-hudu",
     "t": "In Hudu, go to **Admin → API Keys** and create a key. A key without password access imports everything except passwords. In Atlas, open **Import & export → Hudu**, enter the Hudu address (https only) and the key, and choose **Connect**. The key is encrypted with the master key. Choose what to bring in: kinds of data, companies, and asset layouts. The choices are saved for next time. **Preview** counts what Hudu has. **Start import** runs it in the background, with progress and a summary per type. Companies Clients. A company is matched to an existing client with the same name. Asset layouts and assets Layouts and assets under the matching client. Knowledge base articles Documents for the client, or the MSP knowledge base. Passwords The client's vault, including one-time code keys. Processes Checklists. Networks Networks assets. Relations Links between the imported items. **Running it again is safe.** Atlas remembers which Hudu item became which record and updates it rather than creating a duplicate. Archived Hudu items are skipped."

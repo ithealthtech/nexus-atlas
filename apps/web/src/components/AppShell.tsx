@@ -329,6 +329,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
           items: [
             { to: '/admin/setup', label: 'Set up Atlas', icon: ListChecks },
             { to: '/admin/email', label: 'Email & alerts', icon: Mail },
+            { to: '/admin/teams', label: 'Microsoft Teams', icon: Mail },
             { to: '/admin/monitoring', label: 'Monitoring', icon: Gauge },
             { to: '/admin/sign-in', label: 'Sign-in', icon: LogIn },
             { to: '/admin/api-keys', label: 'API keys', icon: KeySquare },

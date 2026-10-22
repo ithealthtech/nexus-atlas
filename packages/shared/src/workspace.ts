@@ -76,6 +76,7 @@ export const CLIENT_SECTIONS = [
   'reports',
   'map',
   'activity',
+  'teams',
 ] as const;
 export type ClientSection = (typeof CLIENT_SECTIONS)[number];
 

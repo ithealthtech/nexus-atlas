@@ -68,6 +68,7 @@ export async function startApp(
     bitdefenderFetch?: typeof fetch;
     warrantyFetch?: typeof fetch;
     m365Fetch?: typeof fetch;
+    teamsFetch?: typeof fetch;
     webhookFetch?: typeof fetch;
     breachFetch?: typeof fetch;
     entraFetch?: typeof fetch;

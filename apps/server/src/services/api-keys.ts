@@ -14,7 +14,9 @@ const PREFIX_ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ234567
 /** Paths an API key may call (after /api/v1 is mapped to /api). Accounts, people, and settings stay browser-only. */
 export const API_ROUTES = [
   // License management stays browser-only, including when reached through /api/v1.
-  /^\/api\/clients(?!\/[^/?]+\/licenses(?:\/|$|\?))(\/|$|\?)/,
+  /^\/api\/clients(?!\/[^/?]+\/(licenses|teams)(?:\/|$|\?))(\/|$|\?)/,
+  // Monitoring systems can submit confirmed infection events; Teams discussions remain browser-only.
+  /^\/api\/clients\/[^/?]+\/teams\/infections(?:$|\?)/,
   /^\/api\/(assets|documents|folders|contacts|locations|layouts|items|search|activity|passwords|expirations)(\/|$|\?)/,
 ];
 const PASSWORD_ROUTE = /^\/api\/(passwords|clients\/[^/]+\/password(s|-folders))(\/|$|\?)/;

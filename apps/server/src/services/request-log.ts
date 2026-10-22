@@ -37,6 +37,7 @@ const JWT = /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g;
 // Incoming requests whose bodies carry vault secrets or sign-in material: only the method, path, and status are kept.
 // Matched by path segment, so client-scoped routes (/api/clients/:id/passwords) count too.
 const PRIVATE_SEGMENTS = new Set([
+  'teams',
   'passwords',
   'password-folders',
   'vault',
@@ -162,6 +163,18 @@ export const isPrivatePath = (path: string) =>
 const isText = (contentType: string | null) =>
   !contentType || /json|text|xml|x-www-form-urlencoded|javascript|problem/i.test(contentType);
 
+export function isPrivateTeamsUrl(raw: string) {
+  try {
+    const url = new URL(raw);
+    return (
+      (url.hostname === 'graph.microsoft.com' && /^\/(v1\.0|beta)\/teams\//.test(url.pathname)) ||
+      (url.hostname === 'smba.trafficmanager.net' && url.pathname.startsWith('/teams/'))
+    );
+  } catch {
+    return false;
+  }
+}
+
 export interface NewRequestLogEntry {
   direction: RequestLogDirection;
   service: string;
@@ -273,8 +286,10 @@ export class RequestLogService {
       const requestHeaders = redactHeaders(new Headers(init?.headers ?? request?.headers));
       const body = init?.body;
       const contentType = requestHeaders['content-type'] ?? '';
-      const requestBody =
-        typeof body === 'string'
+      const hiddenTeamsBody = isPrivateTeamsUrl(url);
+      const requestBody = hiddenTeamsBody
+        ? '[not recorded: Teams conversation]'
+        : typeof body === 'string'
           ? redactBody(body, contentType)
           : body instanceof URLSearchParams
             ? redactBody(body.toString(), 'application/x-www-form-urlencoded')
@@ -307,7 +322,8 @@ export class RequestLogService {
         const type = res.headers?.get?.('content-type') ?? null;
         const length = Number(res.headers?.get?.('content-length') ?? 0);
         const entry = { ...base, status: res.status, durationMs, responseHeaders };
-        if (typeof res.clone !== 'function' || !isText(type) || length > 2 * 1024 * 1024)
+        if (hiddenTeamsBody) this.record({ ...entry, responseBody: '[not recorded: Teams conversation]' });
+        else if (typeof res.clone !== 'function' || !isText(type) || length > 2 * 1024 * 1024)
           this.record({ ...entry, responseBody: res.body ? '[binary or large body not recorded]' : '' });
         else
           void res
