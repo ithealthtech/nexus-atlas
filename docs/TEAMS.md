@@ -92,7 +92,7 @@ message text, credentials, or raw monitoring payloads are accepted. This integra
 
 ## Operators and developers
 
-Migration `0043_teams_integration` adds post ownership and the persistent delivery queue. It runs through Atlas's
+Migration `0044_teams_integration` adds post ownership and the persistent delivery queue. It runs through Atlas's
 normal startup migration process. Application secrets and Microsoft refresh tokens are encrypted under the master
 key, bound to the organization and field, and included in key re-wrapping. Outbound hosts are fixed to Microsoft;
 pagination is constrained to the currently mapped channel. Settings changes, posts, edits, tests, and retries are
