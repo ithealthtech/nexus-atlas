@@ -330,6 +330,8 @@ describe('private client reports', () => {
             userType: 'Member',
             usageLocation: 'US',
             assignedLicenses: [{ skuId: APP }],
+            // Microsoft returns these whenever they're selected; Atlas refuses licenses without them.
+            licenseAssignmentStates: [{ skuId: APP, assignedByGroup: null, state: 'Active' }],
           },
         ],
       });
