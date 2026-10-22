@@ -100,6 +100,18 @@ The Landmark Update brings expanded reporting, client health scores, a refreshed
   - Staff see a welcome card on their dashboard after the update. **See what's new** opens a page that describes each part of 2.0 in plain words, with a link to try it: reports, the client health score, smart paste and Wi-Fi codes, the cleaner workspace, and Atlas for Windows 2.0.
   - The card goes once you've opened the page or dismissed it, and that's remembered for your account, not just your browser.
   - The page stays under **What's new** in the account menu.
+- **Set up Atlas.** A new page under Administration lists a new installation's first steps, each with why it matters and a link to do it:
+  - two-step sign-in
+  - your branding
+  - email
+  - importing your documentation
+  - the first client
+  - ConnectWise RMM
+  - Microsoft 365
+  - your team
+  - a first backup
+
+  Steps tick themselves off from what's really there, however they were done. Until the essential ones are finished, administrators see the next few on their dashboard.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

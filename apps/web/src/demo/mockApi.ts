@@ -3857,6 +3857,17 @@ on('DELETE', '/favorites/:type/:id', (m) => {
   return { favorite: false };
 });
 on('GET', '/account/workspace', () => resolveWorkspace(workspace));
+// The demo's organization is part-way set up: a brand and clients, but no email, RMM, or backup yet.
+on('GET', '/admin/setup', () => ({
+  branding: true,
+  email: false,
+  client: db.clients.length > 0,
+  import: true,
+  rmm: false,
+  microsoft: true,
+  team: true,
+  backup: false,
+}));
 on('PUT', '/account/workspace', (_m, b) => {
   const saved = resolveWorkspace(workspace);
   workspace = { ...b, menu: b.menu ?? saved.menu, seenWhatsNew: saved.seenWhatsNew };

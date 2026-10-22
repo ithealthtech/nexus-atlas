@@ -28,6 +28,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   Lock,
+  ListChecks,
   LogIn,
   LogOut,
   Mail,
@@ -326,6 +327,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
         {
           title: 'Settings',
           items: [
+            { to: '/admin/setup', label: 'Set up Atlas', icon: ListChecks },
             { to: '/admin/email', label: 'Email & alerts', icon: Mail },
             { to: '/admin/monitoring', label: 'Monitoring', icon: Gauge },
             { to: '/admin/sign-in', label: 'Sign-in', icon: LogIn },

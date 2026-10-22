@@ -60,6 +60,7 @@ import { BitlockerCollector } from '@/pages/BitlockerCollector';
 import { Duplicates } from '@/pages/Duplicates';
 import { PasswordHealth } from '@/pages/PasswordHealth';
 import { WhatsNew } from '@/pages/WhatsNew';
+import { Setup } from '@/pages/Setup';
 import { ChecklistsPage, ClientChecklists, RunPage } from '@/pages/checklists';
 import { Status } from '@/pages/Status';
 import { Updates } from '@/pages/Updates';
@@ -285,6 +286,7 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/api-keys', component: adminOnly(ApiKeysPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/theme', component: adminOnly(Theme) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/data', component: adminOnly(DataTools) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/setup', component: adminOnly(Setup) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/rotation', component: adminOnly(PasswordRotation) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/bitlocker', component: adminOnly(BitlockerCollector) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/duplicates', component: adminOnly(Duplicates) }),
