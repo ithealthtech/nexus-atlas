@@ -165,7 +165,7 @@ export function ClientLayout() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 print:hidden">
           {actor.isStaff && (
             <AppLink
               to={`/client-report/${client.id}`}

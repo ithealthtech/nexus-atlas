@@ -36,7 +36,7 @@ export function QuickNote({ client }: { client: ClientSummary }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-[13px] font-semibold text-warning">Quick note</p>
         {!editing && (
-          <div className="-my-1 flex gap-1">
+          <div className="-my-1 flex gap-1 print:hidden">
             {client.notesVersion > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setHistory(true)}>
                 <History /> History

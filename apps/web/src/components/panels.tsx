@@ -38,7 +38,7 @@ export function RelatedPanel({
   const [adding, setAdding] = useState(false);
   const refresh = (next: unknown) => client.setQueryData(['relations', type, id], next);
   return (
-    <Card>
+    <Card className={cn(!data?.length && 'print:hidden')}>
       <CardHeader
         title="Related"
         actions={
@@ -66,7 +66,7 @@ export function RelatedPanel({
               </AppLink>
               {canEdit && (
                 <button
-                  className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-danger focus:opacity-100"
+                  className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-danger focus:opacity-100 print:hidden"
                   aria-label={`Unlink ${r.title}`}
                   onClick={async () => {
                     refresh(await api(`/items/${type}/${id}/relations/${r.relationId}`, { method: 'DELETE' }));
@@ -199,7 +199,7 @@ export function AttachmentsPanel({ type, id, canEdit }: { type: ItemType; id: st
       }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
-      className={cn(dragging && 'ring-2 ring-primary')}
+      className={cn(dragging && 'ring-2 ring-primary', !data?.length && 'print:hidden')}
     >
       <CardHeader
         title="Files"
@@ -309,7 +309,7 @@ export function RevisionsPanel({
   const { data } = useRevisions(kind, id);
   const [viewing, setViewing] = useState<RevisionView | null>(null);
   return (
-    <Card>
+    <Card className="print:hidden">
       <CardHeader title="Version history" description={`Version ${currentVersion}`} />
       <ul className="max-h-72 divide-y divide-border overflow-y-auto">
         {data?.map((r) => (
@@ -522,7 +522,7 @@ export function ActivityFeed({
 export function ItemActivity({ id }: { id: string }) {
   const { data } = useActivity({ item: id, limit: '10' });
   return (
-    <Card>
+    <Card className="print:hidden">
       <CardHeader title="Activity" />
       <ActivityFeed items={data} showClient={false} />
     </Card>

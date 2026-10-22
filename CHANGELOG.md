@@ -61,6 +61,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 - **Readable status colours.** Green, amber and orange status text, as on the Domains tracker, is darker in the light theme so it meets the 4.5:1 contrast ratio.
 - **A link on the Certificate page** is underlined, so it doesn't rely on colour to stand out from the sentence around it.
 - **The demo's Updates page** no longer loads forever.
+- **Printing.** Pages print as dark text on white paper even when you use dark mode, with your brand colours in their light versions. Buttons, the favourite star, copy and show icons, empty Files and Related boxes, and the activity and version history panels are left off the page.
 
 ## [1.8.4] - 2026-10-21
 
