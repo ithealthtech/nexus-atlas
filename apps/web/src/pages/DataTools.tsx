@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, CloudDownload, Factory, FileSpreadsheet, History, Info, Unplug, Upload } from 'lucide-react';
+import { CheckCircle2, CloudDownload, Factory, FileSpreadsheet, Info, Unplug, Upload } from 'lucide-react';
 import type { CsvImportResult, CsvTarget, HuduImportOptions, HuduPreview, ImportJobView } from '@atlas/shared';
 import { PageSections } from '@/components/PageSections';
 import { DangerZone } from './DangerZone';
@@ -26,6 +26,7 @@ import { CwRmmSync } from './CwRmm';
 import { M365Sync } from './M365';
 import { ScreenConnectSettingsCard } from './ScreenConnect';
 import { HuduImportChoices } from './ImportChoices';
+import { useAction } from '@/lib/actions';
 
 const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
   hudu: 'Hudu',
@@ -126,8 +127,7 @@ function HuduImport() {
   // Starts from the choices saved with the last run; sent with the next one, which saves them again.
   const [choices, setChoices] = useState<HuduImportOptions | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, act } = useAction();
   const job = useQuery({
     queryKey: ['import-job', jobId],
     queryFn: () => api<ImportJobView>(`/import/jobs/${jobId}`),
@@ -138,17 +138,6 @@ function HuduImport() {
     if (job.data && job.data.status !== 'running') void client.invalidateQueries({ queryKey: ['import-jobs'] });
   }, [job.data, client]);
 
-  const act = async (name: string, work: () => Promise<void>) => {
-    setBusy(name);
-    setError(null);
-    try {
-      await work();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
   const save = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -631,16 +620,6 @@ export function DataTools() {
         <CsvImport />
         <DetectManufacturers />
         <ImportHistory />
-        <div className="flex gap-3 rounded-xl border border-border bg-surface-2 p-4 text-sm text-text-2">
-          <History className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-          <p>
-            Moving from Atlas 0.2? Run{' '}
-            <code className="font-mono text-[13px]">
-              npm run migrate-legacy -w @atlas/server -- path/to/atlas.sqlite
-            </code>{' '}
-            on the server. People keep their passwords; see the deployment guide for details.
-          </p>
-        </div>
         {actor.isAdmin && <DangerZone />}
       </PageSections>
     </>

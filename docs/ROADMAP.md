@@ -18,6 +18,24 @@ v1.0 is a production-ready, self-hosted documentation and password manager for a
 | **M4a Operations** | Encrypted nightly backups with retention, verified restore (including older versions), system status page, Windows service installer | ✅ Done |
 | **M4b Release** | Security review and hardening tests, performance pass on a 2,000-client MSP, accessibility sweep of every screen with a keyboard walkthrough, admin and user guides, release workflow, v1.0.0 | ✅ Done |
 
+## 2.0 and after
+
+**2.0, the Landmark Update**, ships on 10 November 2026 with Atlas for Windows 1.0. Its scope is frozen: the [2.0 plan](https://github.com/ithealthtech/nexus-atlas/issues/229) lists what's in it. After that, a release comes out on the second Tuesday of each month, each with one headline feature (★).
+
+| Release | Date | What's in it |
+|---|---|---|
+| **2.1** Safe and current | 8 Dec 2026 | ★ Safe updates that roll back by themselves; ★ "Still accurate?" document verification; keyboard shortcuts; dormant access alerts |
+| **2.2** Technician speed | 12 Jan 2027 | ★ Saved list views; hover peek; recent viewers on passwords; site visit view on a phone; step-up before revealing restricted passwords |
+| **2.3** Owner insights | 9 Feb 2027 | ★ Hardware lifecycle and budget forecast; documentation coverage; portfolio heatmap; reports pinned to the dashboard; Monday digest for owners; team pulse |
+| **2.4** Client portal | 9 Mar 2027 | ★ Portal home page; shared reports in the portal; new starter and leaver requests; new-client onboarding tracker |
+| **2.5** Compliance | 6 Apr 2027 | ★ Access review campaigns; ★ compliance evidence pack |
+| **Atlas for Windows 1.1** | 12 Jan 2027 | Windows Hello before restricted reveals; jump list and Send to Atlas |
+| **Atlas for Windows 1.2** | 9 Mar 2027 | ★ Recognizes the client network it's on; ★ notifications you can act on; reports in the app; signed MSIX |
+
+Each release has a tracking issue in its [milestone](https://github.com/ithealthtech/nexus-atlas/milestones).
+
+## Before 2.0
+
 **Shipped since v1:** Entra ID sign-in and Microsoft 365 tenant sync; the ConnectWise RMM integration; and the BitLocker collector (see [BITLOCKER.md](BITLOCKER.md)). The changelog has the full list.
 
 **Still ahead:** more PSA/RMM integrations (Autotask, HaloPSA, NinjaOne, Datto); network discovery; IT Glue and ITBoost importers; mobile apps; and multi-tenant cloud hosting.

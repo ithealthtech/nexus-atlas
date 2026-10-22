@@ -14,6 +14,8 @@ import {
 import { HttpError } from '../errors.js';
 import { isUuid, type Scope } from './scope.js';
 import { TooLargeError, readLimited, type FileStorage } from './storage.js';
+import { Repeating, type ErrorLog } from './repeating.js';
+import { securityEvent } from './security-log.js';
 
 type Row = typeof schema.sends.$inferSelect;
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -34,7 +36,7 @@ export type OpenedSend =
  * and deletes even that once the Send can't be opened any more.
  */
 export class SendService {
-  private timer: ReturnType<typeof setInterval> | undefined;
+  private readonly schedule = new Repeating(() => this.purge());
 
   constructor(
     private readonly db: Database,
@@ -44,12 +46,11 @@ export class SendService {
   ) {}
 
   /** Clears used-up, revoked, and expired Sends every hour (and on each list and create). */
-  start() {
-    this.timer = setInterval(() => void this.purge().catch(() => undefined), 3_600_000);
-    this.timer.unref();
+  start(log: ErrorLog) {
+    this.schedule.start(3_600_000, log);
   }
   stop() {
-    clearInterval(this.timer);
+    this.schedule.stop();
   }
 
   private requireStaff(scope: Scope) {
@@ -57,13 +58,13 @@ export class SendService {
   }
 
   private async event(orgId: string, action: string, detail: string, ip: string, actor?: Scope['actor']) {
-    await this.db.insert(schema.securityEvents).values({
+    await securityEvent(this.db, {
       orgId,
       userId: actor?.id ?? null,
       actor: actor?.name ?? 'Send recipient',
       action,
       detail,
-      ip: ip.slice(0, 64),
+      ip,
     });
   }
 

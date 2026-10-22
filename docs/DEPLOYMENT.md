@@ -70,7 +70,7 @@ Atlas sends password reset links, expiry alerts, and a Monday digest. An adminis
 
 ## Bringing data in
 
-After setup, import from Hudu or CSV files under **Import & export**, or move a 0.2 prototype database with `npm run migrate-legacy -w @atlas/server -- <atlas.sqlite>` (in Docker: `docker compose -f deploy/docker-compose.yml exec app npm run migrate-legacy -w @atlas/server -- /data/atlas.sqlite`, after copying the file into the data volume). See [Data in and out](DATA.md).
+After setup, import from Hudu or CSV files under **Import & export**. See [Data in and out](DATA.md).
 
 ## Health, logs, and upgrades
 
@@ -150,7 +150,7 @@ The helper that knows these actions arrives with the release that has the Servic
 
 ## Windows Server
 
-1. Install [Node.js 22 LTS](https://nodejs.org) and PostgreSQL 16, and create an empty database and user for Atlas.
+1. Install [Node.js 22 or 24 LTS](https://nodejs.org) and PostgreSQL 16 or 17, and create an empty database and user for Atlas.
 2. Extract the Windows package from the GitHub release (`msp-atlas-<version>-windows.zip`, already built, with a `.sha256` checksum beside it) to, for example, `C:\Program Files\MSP Atlas`. From source instead: copy the repository there and run `npm ci` and `npm run build`.
 3. From an elevated PowerShell prompt:
    ```powershell

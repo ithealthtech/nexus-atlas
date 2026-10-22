@@ -6,6 +6,10 @@
 #ifndef SourceDir
   #define SourceDir "..\dist\app"
 #endif
+; The same app built for ARM64 (Snapdragon and other Arm PCs), installed there instead of the x64 build.
+#ifndef SourceDirArm64
+  #define SourceDirArm64 "..\dist\app-arm64"
+#endif
 #ifndef OutputDir
   #define OutputDir "..\dist"
 #endif
@@ -45,8 +49,14 @@ CloseApplications=no
 ; leaves it alone.
 Name: "startup"; Description: "Start {#AppName} when I sign in to Windows"; Check: FreshInstall
 
+[InstallDelete]
+; The app's folder holds only the app (settings live elsewhere), so an upgrade starts it clean: nothing left over from
+; an older version, or from the other build after moving between x64 and ARM64.
+Type: filesandordirs; Name: "{app}\*"
+
 [Files]
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: not IsArm64
+Source: "{#SourceDirArm64}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsArm64
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

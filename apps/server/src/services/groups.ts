@@ -4,6 +4,7 @@ import { ROLE_INFO, groupSchema, levelRank, type AccessLevel, type Actor, type G
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { isUuid } from './scope.js';
+import { securityEvent } from './security-log.js';
 
 /**
  * Groups give their members per-client access in one place. A member's effective level is still capped by
@@ -83,12 +84,12 @@ export class GroupService {
   }
 
   private event(tx: Database, actor: Actor, action: string, detail: string, ip: string) {
-    return tx.insert(schema.securityEvents).values({
+    return securityEvent(tx, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip,
     });
   }

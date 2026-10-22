@@ -60,7 +60,7 @@ Press **Ctrl+K** (or **⌘K** on a Mac) anywhere in Atlas, or click **Search** i
 
 ### Navigation and workspace tabs
 
-Atlas uses a single sidebar for **Overview**, **Clients**, **Documentation**, **Password Vault**, and **Administration**. Page links appear in the current workspace. The client directory stays in **Clients**, global search, and the client switcher in the header rather than filling a second sidebar.
+Atlas uses a single sidebar for **Overview**, **Clients**, **Documentation**, **Password Vault**, and **Administration**. Page links appear in the current workspace. Where the menu doesn't list them (on a phone, with the sidebar collapsed, or in the top menu style), they appear as tabs along the top of the page. **Administration** has many pages, so its tabs show the section you're in, such as People and security, and **More** lists the rest under their headings. The client directory stays in **Clients**, global search, and the client switcher in the header rather than filling a second sidebar.
 
 Choose **Collapse sidebar** at the bottom of the sidebar to make more space for tables. **Expand sidebar** restores labels. Atlas remembers this choice in your browser. On phones, choose **Open navigation** in the header; Escape closes the menu and returns focus to its trigger.
 
@@ -73,6 +73,10 @@ Choose **Customize** on the dashboard to show, hide and reorder its cards. Your 
 ### Light and dark
 
 Choose the appearance in the account menu. Atlas remembers it per browser.
+
+## What's new
+
+After an update with new features, your dashboard shows a **Welcome** card. **See what's new** opens a page describing each new part in plain words, with a link to try it. Opening the page, or choosing **Dismiss**, puts the card away for you; the page stays under **What's new** in the account menu (your initials, top right) to come back to.
 
 ## What you can do depends on your role
 

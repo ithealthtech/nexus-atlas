@@ -68,7 +68,8 @@ export function ClientOverview() {
         </dl>
       </Card>
       <div className="grid items-stretch gap-6 *:h-full lg:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))]">
-        <Card>
+        {/* Two columns of layouts only when the card is wide enough to show their names. */}
+        <Card className="@container">
           <CardHeader
             title="Assets"
             description={`${assets.length} documented`}
@@ -82,7 +83,7 @@ export function ClientOverview() {
             }
           />
           {counts.length ? (
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-3">
+            <div className="grid grid-cols-1 gap-x-2 gap-y-1 p-3 @sm:grid-cols-2">
               {counts.map((l) => (
                 <AppLink
                   key={l.id}

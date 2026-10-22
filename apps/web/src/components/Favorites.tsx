@@ -35,7 +35,7 @@ export function FavoriteStar({ type, id, name }: { type: FavoriteType; id: strin
       aria-pressed={on}
       aria-label={on ? `Remove ${name} from favorites` : `Add ${name} to favorites`}
       title={on ? 'Favorite' : 'Add to favorites'}
-      className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-warning aria-pressed:text-warning disabled:opacity-60"
+      className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-warning aria-pressed:text-warning disabled:opacity-60 print:hidden"
     >
       <Star className={cn('size-5', on && 'fill-current')} aria-hidden />
     </button>

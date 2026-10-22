@@ -19,6 +19,7 @@ import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { useClients } from '@/lib/queries';
 import { JobSummary } from './DataTools';
+import { useAction } from '@/lib/actions';
 
 type M365State = { connection: M365View | null; tenants: M365TenantLink[]; redirectUri: string };
 
@@ -42,19 +43,7 @@ export function M365Sync() {
     enabled: !!jobId,
     refetchInterval: (q) => (q.state.data?.status === 'running' ? 1500 : false),
   });
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<void>) => {
-    setBusy(name);
-    setError(null);
-    try {
-      await work();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busy, error, act } = useAction();
 
   // Back from Microsoft's consent screen: check that tenant straight away.
   const handled = useRef(false);
@@ -397,7 +386,7 @@ export function M365Sync() {
                 <ul className="divide-y divide-border rounded-lg border border-border">
                   {data.tenants.map((t) => (
                     <li key={t.clientId} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 text-sm">
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 basis-48">
                         <p className="font-medium">{t.clientName}</p>
                         <p className="truncate text-xs text-muted">
                           {t.tenantName ? `${t.tenantName} · ` : ''}

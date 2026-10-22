@@ -81,8 +81,8 @@ public sealed record ClientFacts(
         _ => $"{Expiring} expiring",
     };
 
-    public Brush AttentionBackground => (Brush)Application.Current.Resources[Expired > 0 ? "SystemFillColorCriticalBackgroundBrush" : "SystemFillColorCautionBackgroundBrush"];
-    public Brush AttentionForeground => (Brush)Application.Current.Resources[Expired > 0 ? "SystemFillColorCriticalBrush" : "SystemFillColorCautionBrush"];
+    public Brush AttentionBackground => Themed.Brush(Expired > 0 ? "SystemFillColorCriticalBackgroundBrush" : "SystemFillColorCautionBackgroundBrush");
+    public Brush AttentionForeground => Themed.Brush(Expired > 0 ? "SystemFillColorCriticalBrush" : "SystemFillColorCautionBrush");
 
     private static string Count(int? value) => value is { } n ? n.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : "–";
 
@@ -155,7 +155,7 @@ public sealed record ItemFacts(
         _ => "SubtleFillColorTertiaryBrush",
     });
 
-    private static Brush Resource(string key) => (Brush)Application.Current.Resources[key];
+    private static Brush Resource(string key) => Themed.Brush(key);
 
     private static Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
 }

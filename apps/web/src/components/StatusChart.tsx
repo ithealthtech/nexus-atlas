@@ -15,10 +15,11 @@ const STROKE: Record<Tone, string> = {
   critical: 'stroke-[#d03b3b]',
   unknown: 'stroke-[#c3c2b7] dark:stroke-[#5b5a55]',
 };
+// Text colours are darker in the light theme, so they read at 4.5:1 on a white card.
 export const SWATCH: Record<Tone, string> = {
-  good: 'text-[#0ca30c]',
-  warning: 'text-[#b27c0a] dark:text-[#fab219]',
-  serious: 'text-[#c75a30] dark:text-[#ec835a]',
+  good: 'text-[#0a7d0a] dark:text-[#0ca30c]',
+  warning: 'text-[#8f6206] dark:text-[#fab219]',
+  serious: 'text-[#b34d26] dark:text-[#ec835a]',
   critical: 'text-[#d03b3b] dark:text-[#ef8a7c]',
   unknown: 'text-muted',
 };

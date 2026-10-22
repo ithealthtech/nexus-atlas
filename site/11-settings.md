@@ -84,13 +84,13 @@ API keys let your RMM, PSA or scripts read and update Atlas through its REST API
 - **The key acts as you,** with your access, limited to its scopes.
 - Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs.
 - Every use is in the security log. **Revoke** keys you no longer use.
-- The API is described at `/api/openapi.json` on your Atlas.
+- The API is at `/api/v1` on your Atlas, described at `/api/v1/openapi.json`. Within v1, updates only add to it, so your scripts keep working. The other `/api` addresses are the web app's own and can change in any release.
 
 ## Theme
 
 ![The Theme page](../images/manual/theme.png "Admin → Theme. Changes preview as you make them, and apply for everyone once saved.")
 
-**Admin → Theme** sets the **Brand name**, **Tagline**, **Browser tab title**, **Favicon**, a **Logo** (and one for dark mode), the **Accent** colour (and one for dark mode), and the **Welcome message** client accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes preview as you make them, and apply for everyone once you save.
+**Admin → Theme** sets the **Brand name**, **Tagline**, **Browser tab title**, **Favicon**, a **Logo** (and one for dark mode), the **Accent** colour (and one for dark mode), and the **Welcome message** client accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes preview as you make them, and apply for everyone once you save. Atlas for Windows uses the favicon as its icon too, in its window, the taskbar, the tray, and the Start menu, and picks up a new one within six hours (or when it next starts).
 
 ## Webhooks
 

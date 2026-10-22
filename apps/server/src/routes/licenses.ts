@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { z } from 'zod';
 import { licenseAssignmentSchema } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
@@ -8,6 +8,7 @@ import { LicenseService } from '../services/licenses.js';
 import { Scope } from '../services/scope.js';
 import type { SettingsService } from '../services/settings.js';
 import { gdapClient } from './m365-gdap.js';
+import { securityEvent } from '../services/security-log.js';
 
 export function registerLicenseRoutes(
   app: FastifyInstance,
@@ -89,7 +90,7 @@ export function registerLicenseRoutes(
         'This license is assigned through a group. Manage its group membership in Microsoft Entra.',
       );
     const event = async (action: string) =>
-      db.insert(schema.securityEvents).values({
+      securityEvent(db, {
         orgId: scope.actor.orgId,
         userId: scope.actor.id,
         actor: scope.actor.name,

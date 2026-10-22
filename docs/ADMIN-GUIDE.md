@@ -157,7 +157,7 @@ Check **System status** every week or so. It shows:
 - **Scopes:** each key gets `read`, `write`, and optionally `passwords`.
 - **The key acts as you:** it acts with your access, is shown once, and expires after a year unless you choose otherwise.
 - **Revoke keys** you no longer use.
-- The API is documented at `/api/openapi.json`. See [Data in and out](DATA.md#rest-api).
+- The API is at `/api/v1`, documented at `/api/v1/openapi.json`. See [Data in and out](DATA.md#rest-api).
 
 ## Webhooks
 

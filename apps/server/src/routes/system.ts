@@ -1,12 +1,13 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { sql } from 'drizzle-orm';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { ACCESS_MODE_LABELS, SERVICE_ACTION_LABELS, type AccessMode, type ServiceAction } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import type { PortalCertificate } from '../services/portal-certificate.js';
 import type { SystemServices } from '../services/system-services.js';
 import type { RemoteAccess } from '../services/remote-access.js';
+import { securityEvent } from '../services/security-log.js';
 
 /**
  * The Services page: the state of the services Atlas runs on, and asking the server's helper to restart one or
@@ -57,7 +58,7 @@ export function registerSystemRoutes(
     recent(req);
     const run = await access.request(req.body, actor.name);
     const body = req.body as { mode?: unknown; publicUrl?: unknown };
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,
@@ -92,7 +93,7 @@ export function registerSystemRoutes(
     const actor = admin(req);
     recent(req);
     const run = await services.request(req.body?.action, actor.name);
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,

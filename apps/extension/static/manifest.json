@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "MSP Atlas",
   "short_name": "Atlas",
-  "version": "1.8.4",
+  "version": "2.0.0",
   "description": "Fill logins from your MSP Atlas vault. Nothing is stored in the browser: Atlas is asked each time.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -19,12 +19,17 @@
       "32": "icons/icon-32.png"
     }
   },
-  "background": { "service_worker": "background.js", "type": "module" },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "permissions": ["activeTab", "scripting", "storage"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+Shift+A" },
+      "suggested_key": {
+        "default": "Alt+Shift+A"
+      },
       "description": "Open Atlas for this site"
     }
   },

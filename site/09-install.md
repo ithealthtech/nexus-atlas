@@ -55,7 +55,7 @@ A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-a
 
 ## Windows Server
 
-1. Install Node.js 22 LTS and PostgreSQL 16, and create an empty database and user for Atlas.
+1. Install Node.js 22 or 24 LTS and PostgreSQL 16 or 17, and create an empty database and user for Atlas.
 2. Download `msp-atlas-{{version}}-windows.zip` from the [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), check it against the `.sha256` file beside it, and extract it to a folder such as `C:\Program Files\MSP Atlas`.
 3. From an elevated PowerShell prompt, run:
 
@@ -88,6 +88,8 @@ To rotate it, list the new key first and the old one after it, restart, run `npm
 5. **Bring your data in** from Hudu or spreadsheets under **Admin → Import & export**, or connect ConnectWise RMM. See [Data and integrations](manual/integrations.html).
 6. **Invite your team** and set their client access under **Admin → People & access**. See [People and access](manual/people-and-access.html).
 7. **Check System status** and make sure every check is green.
+
+**Admin → Set up Atlas** keeps track of these steps for you. Each one ticks itself off when it's really done (an email server saved, a client added, a backup taken), however you did it, and links straight to where it's done. Until the essential steps are finished, your dashboard shows a **Set up Atlas** card with the next ones.
 
 ## Where to go next
 

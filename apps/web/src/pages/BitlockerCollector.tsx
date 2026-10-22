@@ -27,6 +27,8 @@ import {
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime, relativeTime } from '@/lib/format';
 import { useClients } from '@/lib/queries';
+import { useAction } from '@/lib/actions';
+import { saveText } from '@/lib/download';
 
 type Overview = { enrollments: BitlockerEnrollmentView[]; devices: BitlockerDeviceView[] };
 
@@ -52,12 +54,7 @@ export function BitlockerStatusBadge({ status }: { status: BitlockerDeviceView['
 }
 
 function saveScript(made: BitlockerEnrollmentCreated) {
-  const url = URL.createObjectURL(new Blob([made.script], { type: 'text/plain' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = made.filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  saveText(made.script, made.filename);
 }
 
 function EnrollDialog({
@@ -154,24 +151,13 @@ export function BitlockerCollector() {
   });
   const [enrolling, setEnrolling] = useState(false);
   const [made, setMade] = useState<BitlockerEnrollmentCreated | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<unknown>) => {
-    setBusy(name);
-    try {
-      await work();
-      await overview.refetch();
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busy, act } = useAction({ toast: true, after: () => overview.refetch() });
   const data = overview.data;
   const unprotected = data?.devices.filter((d) => d.status === 'unprotected').length ?? 0;
   return (
     <>
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Vault"
         title="BitLocker collector"
         description="A script your RMM runs on each Windows machine. It reads BitLocker status and recovery keys, encrypts the keys on the machine, and sends them here. Keys go to the client's vault; status shows on the device's asset."
         actions={
@@ -228,7 +214,7 @@ export function BitlockerCollector() {
             <ul className="divide-y divide-border">
               {data.enrollments.map((e) => (
                 <li key={e.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 text-sm">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-48">
                     <p className="font-medium">
                       {e.clientName} · {e.name}
                     </p>
@@ -277,7 +263,7 @@ export function BitlockerCollector() {
             <ul className="divide-y divide-border">
               {data.devices.map((d) => (
                 <li key={d.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 px-5 py-3 text-sm">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-48">
                     <p className="font-medium">
                       {d.assetId ? (
                         <AppLink to={`/assets/${d.assetId}`} className="hover:underline">

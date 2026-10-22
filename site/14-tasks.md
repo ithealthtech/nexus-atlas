@@ -25,7 +25,7 @@ summary: The common jobs in one table, with where to go for each.
 | Keep my own login | **Vault → My vault** → **Add** |
 | Find weak or reused passwords | **Vault → Password health** |
 | Print a QR label | The asset → **QR label** |
-| Send a client their report | Client header → **Monthly report**, then print to PDF |
+| Send a client their report | The client's **Reports** tab → run a report → **PDF** or **Share** |
 | Change my menu layout | **Profile & sign-in → Menu** |
 | Add a technician | **Admin → People & access** → **Add person** |
 | Reset someone's two-step sign-in | **People & access → Manage → Reset sign-in** |

@@ -26,6 +26,8 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDateTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
+import { useAction } from '@/lib/actions';
+import { saveText } from '@/lib/download';
 
 const tone = (score: number | null) =>
   score === null ? 'neutral' : score >= 90 ? 'success' : score >= 70 ? 'warning' : 'danger';
@@ -41,35 +43,19 @@ export function PasswordHealth() {
   });
   const [client, setClient] = useState('');
   const [issue, setIssue] = useState<PasswordIssue | ''>('');
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, act } = useAction();
   const data = report.data;
   const items = useMemo(
     () => (data?.items ?? []).filter((i) => (!client || i.clientId === client) && (!issue || i.issues.includes(issue))),
     [data, client, issue],
   );
 
-  const act = async (name: string, work: () => Promise<void>) => {
-    setBusy(name);
-    setError(null);
-    try {
-      await work();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
   const exportCsv = () => {
     const rows = [
       ['Client', 'Password', 'Type', 'Issues'],
       ...items.map((i) => [i.clientName, i.name, i.category, i.issues.map((x) => PASSWORD_ISSUE_LABELS[x]).join('; ')]),
     ];
-    const href = URL.createObjectURL(
-      new Blob([rows.map((r) => r.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv' }),
-    );
-    Object.assign(document.createElement('a'), { href, download: 'password-health.csv' }).click();
-    setTimeout(() => URL.revokeObjectURL(href), 1000);
+    saveText(rows.map((r) => r.map(csvCell).join(',')).join('\r\n'), 'password-health.csv', 'text/csv');
   };
 
   return (
@@ -85,11 +71,12 @@ export function PasswordHealth() {
         }
       />
       {report.isLoading || !data ? (
-        <Skeleton className="h-64 max-w-4xl" />
+        <Skeleton className="h-64" />
       ) : (
-        <div className="grid max-w-5xl gap-6">
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            <Card className="p-4 sm:col-span-3 lg:col-span-2">
+        <div className="grid gap-6">
+          {/* The score and six counts: two even rows of four on a computer, pairs on a phone. */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Card className="col-span-2 p-4">
               <p className="text-xs text-muted">Overall health</p>
               <p className="mt-1 flex items-baseline gap-2">
                 <span className="text-4xl font-semibold tabular-nums">

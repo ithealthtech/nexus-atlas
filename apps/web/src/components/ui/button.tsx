@@ -15,7 +15,8 @@ const sizes: Record<Size, string> = {
   sm: 'h-8 px-3 text-[13px] gap-1.5',
   md: 'h-9 px-3 text-sm gap-2',
   lg: 'h-10 px-4 text-[15px] gap-2',
-  icon: 'h-9 w-9 justify-center',
+  // Icon-only buttons (copy, show, close, menus) are controls, never content, so they don't print.
+  icon: 'h-9 w-9 justify-center print:hidden',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

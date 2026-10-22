@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ClientSoftware, DeviceInventory, DeviceSoftware, SoftwareFlag } from '@atlas/shared';
 import { api } from '@/lib/api';
 import { formatDate, relativeTime } from '@/lib/format';
-import { Badge, Card, CardHeader, Dialog, Input, Skeleton, type Tone } from './ui';
+import { Badge, Card, CardHeader, Input, Skeleton, type Tone, Drawer } from './ui';
 
 const FLAG: Record<SoftwareFlag, { label: string; tone: Tone }> = {
   end_of_life: { label: 'Out of support', tone: 'danger' },
@@ -89,7 +89,7 @@ function AllDialog<T>({
   const [q, setQ] = useState('');
   const shown = items.filter((i) => search(i, q.trim().toLowerCase()));
   return (
-    <Dialog open={open} onClose={onClose} size="lg" title={title} description={`${items.length} applications.`}>
+    <Drawer open={open} onClose={onClose} size="lg" title={title} description={`${items.length} applications.`}>
       <Input
         placeholder="Filter by name or publisher"
         aria-label="Filter applications"
@@ -98,7 +98,7 @@ function AllDialog<T>({
         className="mb-3"
       />
       {render(shown)}
-    </Dialog>
+    </Drawer>
   );
 }
 

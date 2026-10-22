@@ -25,7 +25,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { api, type ApiError } from '@/lib/api';
-import { contrast, readableOn, setThemePreview, useBranding, useDarkMode } from '@/lib/branding';
+import { appIconFrom, contrast, readableOn, setThemePreview, useBranding, useDarkMode } from '@/lib/branding';
 
 const LABELS = {
   fontScale: { small: 'Small', default: 'Default', large: 'Large' },
@@ -71,7 +71,13 @@ export function Theme() {
     setBusy(true);
     setError(null);
     try {
-      await api('/branding', { method: 'PUT', body: theme });
+      // Atlas for Windows uses the favicon as its icon, from a PNG made here; it's made again only when the favicon changes.
+      const appIcon = !theme.favicon
+        ? null
+        : theme.favicon === base.favicon && base.appIcon
+          ? base.appIcon
+          : await appIconFrom(theme.favicon);
+      await api('/branding', { method: 'PUT', body: { ...theme, appIcon } });
       await client.invalidateQueries({ queryKey: ['branding'] });
       setDraft(null);
       toast('Theme saved. Everyone sees it the next time a page loads.');
@@ -124,7 +130,7 @@ export function Theme() {
             </Field>
             <ImageField
               label="Favicon"
-              help="Square PNG, SVG, or ICO, under 50 KB."
+              help="Square PNG, SVG, or ICO, under 50 KB. Atlas for Windows uses it as its icon too."
               accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon"
               maxKb={50}
               value={theme.favicon}

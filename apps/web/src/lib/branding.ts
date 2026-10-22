@@ -89,6 +89,36 @@ function applySidebar(theme: Branding, dark: boolean) {
   });
 }
 
+/**
+ * The favicon as a square PNG, for Atlas for Windows: Windows can't draw an SVG favicon, and a 16-pixel ICO makes a
+ * blurry taskbar icon. Drawn by the browser (which reads PNG, SVG, and ICO), centred and scaled to fit; a smaller
+ * size is tried if the PNG would be too big to save. Null if the browser can't draw it.
+ */
+export async function appIconFrom(favicon: string): Promise<string | null> {
+  const image = new Image();
+  image.src = favicon;
+  try {
+    await image.decode();
+  } catch {
+    return null;
+  }
+  for (const size of [256, 128]) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const width = image.naturalWidth || size;
+    const height = image.naturalHeight || size;
+    const scale = Math.min(size / width, size / height);
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(image, (size - width * scale) / 2, (size - height * scale) / 2, width * scale, height * scale);
+    const png = canvas.toDataURL('image/png');
+    // The theme accepts up to 200 KB (as base64, about 273,000 characters).
+    if (png.length < 270_000) return png;
+  }
+  return null;
+}
+
 function setFavicon(href: string) {
   let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
   if (!link) {
@@ -108,6 +138,7 @@ function setFavicon(href: string) {
  */
 export function applyTheme(theme: Branding | null, orgName = '') {
   const t = theme ?? DEFAULT_BRANDING;
+  applied = t;
   const dark = isDark();
   applyAccent(t, dark);
   applySidebar(t, dark);
@@ -121,6 +152,20 @@ export function applyTheme(theme: Branding | null, orgName = '') {
   setFavicon(t.favicon ?? DEFAULT_FAVICON);
   // Blank fields fall back to the organization's name, then to the product name.
   document.title = t.browserTitle || t.brandName || orgName || DEFAULT_TITLE;
+}
+
+// Paper always gets the light theme (styles.css keeps dark mode to screens), so the brand colours switch to their
+// light versions for printing and back afterwards.
+let applied: Branding = DEFAULT_BRANDING;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeprint', () => {
+    applyAccent(applied, false);
+    applySidebar(applied, false);
+  });
+  window.addEventListener('afterprint', () => {
+    applyAccent(applied, isDark());
+    applySidebar(applied, isDark());
+  });
 }
 
 /** Tracks light/dark mode, so components can pick the right logo. */

@@ -72,6 +72,7 @@ export async function startApp(
     entraFetch?: typeof fetch;
     domainLookup?: DomainLookup;
     certProbe?: CertProbe;
+    dmarcLookup?: (domain: string) => Promise<string | null>;
     updateFetch?: typeof fetch;
     serviceShow?: ShowUnit;
     portalProbe?: ChainProbe;

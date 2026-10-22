@@ -79,22 +79,27 @@ test('premium shell and report snapshots, filters, templates and exports work on
       .getByRole('link', { name: 'Reports', exact: true })
       .click();
     await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
+    // The library folds away once a report is open; its collections are a click on Change report away.
+    const library = async (collection: string) => {
+      const change = page.getByRole('button', { name: 'Change report', exact: true });
+      if (await change.isVisible()) await change.click();
+      await page.getByRole('button', { name: collection, exact: true }).click();
+    };
     await page.getByRole('button', { name: 'License utilization', exact: false }).click();
     await page.getByRole('checkbox', { name: 'Harbor Dental Group', exact: true }).check();
     await page.getByRole('checkbox', { name: 'Include Microsoft 365 inventory through GDAP', exact: false }).uncheck();
     await page.getByRole('button', { name: 'Run report', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Detailed results', exact: true })).toBeVisible();
+    // Every section shows at once, under its own heading.
+    await expect(page.getByRole('heading', { name: 'Manually tracked subscriptions', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Design Suite', exact: true })).toBeVisible();
     await page.screenshot({ path: resolve(screenshots, 'atlas-reports-desktop.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Needs review', exact: false }).click();
+    // The Needs review figure filters the report, and pressing it again shows everything.
+    await page.getByRole('button', { name: /^Needs review/ }).click();
     await expect(page.getByRole('cell', { name: 'Backup Service', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Design Suite', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'All records', exact: false }).click();
-    await page.getByText('Filters & columns', { exact: false }).click();
-    await page.getByLabel('Search field', { exact: true }).selectOption('1');
-    await page.getByRole('textbox', { name: 'Search report results', exact: true }).fill('Design');
-    await page.getByRole('checkbox', { name: 'Client', exact: true }).uncheck();
-    await expect(page.getByRole('columnheader', { name: 'Client', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: /^Needs review/ }).click();
+    await page.getByRole('searchbox', { name: 'Search the whole report', exact: true }).fill('Design');
+    await expect(page.getByRole('cell', { name: 'Design Suite', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Backup Service', exact: true })).toHaveCount(0);
     const csvEvent = page.waitForEvent('download');
     await page.getByRole('button', { name: 'CSV', exact: true }).click();
@@ -129,28 +134,43 @@ test('premium shell and report snapshots, filters, templates and exports work on
     expect(sharedViolations.map((v) => v.id)).toEqual([]);
     await shared.screenshot({ path: resolve(screenshots, 'atlas-shared-report.png'), fullPage: true });
     await visitor.close();
+    // Scheduling it: saved to the Scheduled tab. With email not set up, Send now records why it wasn't sent.
+    await page.getByRole('button', { name: 'Schedule', exact: true }).click();
+    const scheduleDialog = page.getByRole('dialog', { name: 'Schedule this report' });
+    await scheduleDialog.getByLabel('Send to').fill('office.manager@harbor.example');
+    await scheduleDialog.getByRole('button', { name: 'Schedule report', exact: true }).click();
+    await expect(scheduleDialog).toHaveCount(0);
+    await library('Scheduled');
+    await expect(page.getByText('Every month on day 1 at 07:00')).toBeVisible();
+    await page.getByRole('button', { name: 'Send now', exact: true }).click();
+    await expect(page.getByText(/Not delivered to office\.manager@harbor\.example: Email is not set up/)).toBeVisible();
+    await library('Built-in');
     await page.getByRole('button', { name: 'Save template', exact: true }).click();
     await page.getByLabel('Template name', { exact: true }).fill('Monthly client licenses');
     await page.getByRole('dialog').getByRole('button', { name: 'Save template', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await page.getByRole('button', { name: 'templates', exact: true }).click();
-    await page.getByRole('button', { name: 'Monthly client licenses', exact: true }).click();
+    await library('Templates');
+    await page.getByRole('button', { name: /^Monthly client licenses/ }).click();
     await expect(page.getByRole('button', { name: 'Run report', exact: true })).toBeVisible();
     // Running the same report again offers a comparison with the first run.
     await page.getByRole('button', { name: 'Run report', exact: true }).click();
     await page.getByRole('button', { name: /^Compare with / }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Compared with' })).toContainText(
-      '0 new · 0 changed · 0 removed',
-    );
+    await expect(page.getByRole('status').filter({ hasText: 'Compared with' })).toBeVisible();
+    await expect(page.getByText(/0 new, 0 changed, 0 removed/).first()).toBeVisible();
     await page.getByRole('button', { name: 'Stop comparing', exact: true }).click();
-    await page.getByRole('button', { name: 'history', exact: true }).click();
+    await library('History');
     await page
       .getByRole('button', { name: /^License utilization/ })
       .first()
       .click();
-    await expect(page.getByRole('heading', { name: 'Detailed results', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Built-in', exact: true }).click();
-    for (const dismiss of await page.getByRole('button', { name: 'Dismiss', exact: true }).all()) await dismiss.click();
+    await expect(page.getByRole('heading', { name: 'Manually tracked subscriptions', exact: true })).toBeVisible();
+    // One at a time: each notification also closes itself after a few seconds, so a list taken up front goes stale.
+    const toasts = page.getByRole('button', { name: 'Dismiss', exact: true });
+    while ((await toasts.count()) > 0)
+      await toasts
+        .first()
+        .click({ timeout: 2000 })
+        .catch(() => undefined);
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
       for (const width of [1600, 390]) {
@@ -174,6 +194,43 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await expect(page.getByRole('heading', { name: 'Client workspaces', exact: true })).toBeVisible();
     await page.goto(`${base}/clients/${client.id}/reports`);
     await expect(page.getByRole('checkbox', { name: 'Harbor Dental Group', exact: true })).toBeChecked();
+    // One click on the client's page: the quarterly review pack, as one PDF named after the client.
+    await page.setViewportSize({ width: 1600, height: 1100 });
+    const packEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Review pack', exact: true }).click();
+    const pack = await packEvent;
+    expect(pack.suggestedFilename()).toMatch(/^Harbor Dental Group quarterly review \d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(
+      readFileSync((await pack.path())!)
+        .subarray(0, 5)
+        .toString(),
+    ).toBe('%PDF-');
+    await pack.saveAs(resolve(screenshots, 'atlas-review-pack.pdf'));
+    // It's kept in the client's report history, grouped by the reports it's made of.
+    await page.getByRole('button', { name: 'History', exact: true }).click();
+    await page.getByRole('button', { name: /^Harbor Dental Group quarterly review/ }).click();
+    await expect(page.getByRole('button', { name: 'Review pack PDF', exact: true })).toBeVisible();
+    // Every part of the pack is on the page, each section marked with the report it belongs to.
+    for (const part of ['Executive summary', 'Security posture', 'Service review', 'Upcoming renewals'])
+      await expect(page.getByText(part, { exact: true }).first()).toBeVisible();
+    // Administration's pages are tabs like every other area's: the section you're in, and the rest under More.
+    const prefs = (await owner.call('GET', '/api/account/workspace')).data;
+    await owner.call('PUT', '/api/account/workspace', { ...prefs, menu: 'top' });
+    await page.setViewportSize({ width: 1600, height: 1100 });
+    await page.goto(`${base}/admin/users`);
+    const adminTabs = page.getByRole('navigation', { name: 'Workspace', exact: true });
+    await expect(adminTabs.getByRole('link', { name: 'People & access', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(adminTabs.getByRole('link', { name: 'Groups', exact: true })).toBeVisible();
+    await expect(adminTabs.getByRole('link', { name: 'Webhooks', exact: true })).toHaveCount(0);
+    await adminTabs.getByRole('button', { name: 'More administration pages', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Webhooks', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/webhooks$/);
+    await expect(adminTabs.getByRole('link', { name: 'Updates', exact: true })).toBeVisible();
+    await expect(adminTabs.getByRole('link', { name: 'Groups', exact: true })).toHaveCount(0);
+    await page.screenshot({ path: resolve(screenshots, 'atlas-admin-tabs.png') });
     expect(errors).toEqual([]);
   } finally {
     await context.close();

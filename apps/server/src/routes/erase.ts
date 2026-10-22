@@ -10,6 +10,7 @@ import { ERASE_WAIT_MS, ERASE_WINDOW_MS, eraseDocumentation, eraseStatus, requir
 import type { MailService } from '../services/mail.js';
 import type { SettingsService } from '../services/settings.js';
 import type { FileStorage } from '../services/storage.js';
+import { securityEvent } from '../services/security-log.js';
 
 /**
  * Erase all data: owner only, in two steps. The request needs the owner's password, a fresh authenticator code,
@@ -32,12 +33,12 @@ export function registerEraseRoutes(
 ) {
   const { db, authed, settings } = deps;
   const event = (req: FastifyRequest, action: string, detail = '') =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: req.session!.actor.orgId,
       userId: req.session!.actor.id,
       actor: req.session!.actor.name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip: req.ip,
     });
   const nameMatches = (req: FastifyRequest, typed: string) => {

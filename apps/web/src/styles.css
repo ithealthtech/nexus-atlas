@@ -1,7 +1,14 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/inter';
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* Dark mode applies on screen only, so printing from it still gives dark text on white paper. */
+@custom-variant dark {
+  @media screen {
+    &:where(.dark, .dark *) {
+      @slot;
+    }
+  }
+}
 
 /* Semantic colour tokens. Components use these names, so light and dark themes only change values here. */
 :root {
@@ -42,40 +49,48 @@
   --ring: #315fbc;
   --shadow: none;
 }
-.dark {
-  --bg: #0d1015;
-  --surface: #13181f;
-  --surface-2: #171d25;
-  --surface-3: #202732;
-  --border: #242c37;
-  --border-strong: #36414f;
-  --text: #e7ebf0;
-  --text-2: #b8c1cc;
-  --muted: #8a95a3;
-  --primary: #8dbbff;
-  --primary-hover: #afd0ff;
-  --primary-fg: #0b2040;
-  --primary-soft: #1c2c45;
-  --accent: #8dbbff;
-  --accent-fg: #0b2040;
-  --sidebar: #13181f;
-  --sidebar-2: #1c2c45;
-  --sidebar-text: #b8c1cc;
-  --sidebar-muted: #8a95a3;
-  --sidebar-active: #e7ebf0;
-  --sidebar-accent: #8dbbff;
-  --danger: #ef8a7c;
-  --danger-fg: #1f0906;
-  --danger-soft: #3a1d19;
-  --warning: #e3b95a;
-  --warning-soft: #33290f;
-  --success: #7fc59a;
-  --success-soft: #16301f;
-  --info: #8db4ea;
-  --info-soft: #182942;
-  --ring: #8dbbff;
-  --shadow: none;
-  color-scheme: dark;
+@media screen {
+  .dark {
+    --bg: #0d1015;
+    --surface: #13181f;
+    --surface-2: #171d25;
+    --surface-3: #202732;
+    --border: #242c37;
+    --border-strong: #36414f;
+    --text: #e7ebf0;
+    --text-2: #b8c1cc;
+    --muted: #8a95a3;
+    --primary: #8dbbff;
+    --primary-hover: #afd0ff;
+    --primary-fg: #0b2040;
+    --primary-soft: #1c2c45;
+    --accent: #8dbbff;
+    --accent-fg: #0b2040;
+    --sidebar: #13181f;
+    --sidebar-2: #1c2c45;
+    --sidebar-text: #b8c1cc;
+    --sidebar-muted: #8a95a3;
+    --sidebar-active: #e7ebf0;
+    --sidebar-accent: #8dbbff;
+    --danger: #ef8a7c;
+    --danger-fg: #1f0906;
+    --danger-soft: #3a1d19;
+    --warning: #e3b95a;
+    --warning-soft: #33290f;
+    --success: #7fc59a;
+    --success-soft: #16301f;
+    --info: #8db4ea;
+    --info-soft: #182942;
+    --ring: #8dbbff;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+/* Paper is white, not the screen's light gray page. */
+@media print {
+  :root {
+    --bg: #ffffff;
+  }
 }
 
 @theme inline {
@@ -132,6 +147,10 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+  /* Browsers keep a fieldset at least as wide as its content, which pushes a phone layout sideways. */
+  fieldset {
+    min-width: 0;
   }
   dialog::backdrop {
     background: rgb(5 8 12 / 0.62);
@@ -222,6 +241,25 @@ html[data-nav='subtle'] .nav-link[data-status='active'] {
 }
 @utility animate-dialog {
   animation: dialog-in 160ms ease-out;
+}
+/* Drawers slide in from their edge. */
+@keyframes drawer-in {
+  from {
+    opacity: 0.4;
+    transform: translateX(var(--drawer-from));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@utility animate-drawer-right {
+  --drawer-from: 2.5rem;
+  animation: drawer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@utility animate-drawer-left {
+  --drawer-from: -2.5rem;
+  animation: drawer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Rich-text content (editor and read-only view). TipTap's own CSS injection is off to keep the CSP strict. */
@@ -354,8 +392,10 @@ html[data-nav='subtle'] .nav-link[data-status='active'] {
   border-radius: 2px;
   padding: 0 0.1em;
 }
-.dark .prose-atlas mark {
-  background: #5a4b12;
+@media screen {
+  .dark .prose-atlas mark {
+    background: #5a4b12;
+  }
 }
 .prose-atlas hr {
   border: 0;
@@ -436,4 +476,17 @@ html[data-nav='subtle'] .top-nav-link[aria-current='page'] {
 .dashboard-workspace .empty-state > h3 {
   font-size: 0.8125rem;
   font-weight: 500;
+}
+
+/* A card printed on its own, such as a Wi-Fi code: everything else is left off the page while it prints. */
+.print-card {
+  display: none;
+}
+@media print {
+  html.printing-card body > :not(#print-card) {
+    display: none !important;
+  }
+  html.printing-card .print-card {
+    display: block;
+  }
 }

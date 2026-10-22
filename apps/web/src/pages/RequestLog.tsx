@@ -292,7 +292,10 @@ function Section({ title, text }: { title: string; text: string }) {
   return (
     <div className="min-w-0">
       <p className="mb-1 text-xs font-semibold text-text-2">{title}</p>
-      <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap">
+      <pre
+        tabIndex={0}
+        className="max-h-80 overflow-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap"
+      >
         {text || <span className="text-muted">(empty)</span>}
       </pre>
     </div>

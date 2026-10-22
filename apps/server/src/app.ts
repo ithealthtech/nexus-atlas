@@ -20,6 +20,7 @@ import {
 } from '@atlas/shared';
 import type { Config } from './config.js';
 import { HttpError } from './errors.js';
+import { appIcon } from './services/app-icon.js';
 import type { KeyProvider } from './crypto/keys.js';
 import { IdentityService, hasMfa, sameSecret, type SessionContext } from './identity/service.js';
 import { requireAdmin } from './authz.js';
@@ -29,6 +30,7 @@ import { LocalStorage, type FileStorage } from './services/storage.js';
 import { registerDocumentationRoutes } from './routes/docs.js';
 import { DomainLookup } from './services/domain-lookup.js';
 import { certProbe as realCertProbe, type CertProbe } from './services/cert-probe.js';
+import { dmarcRecord } from './services/dmarc.js';
 import { TrackerScheduler, TrackerService } from './services/trackers.js';
 import { registerTrackerRoutes } from './routes/trackers.js';
 import { registerScreenConnectRoutes } from './routes/screenconnect.js';
@@ -80,13 +82,21 @@ import {
   type ChainProbe,
 } from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerClientHealthRoutes } from './routes/client-health.js';
+import { ClientHealthService } from './services/client-health.js';
+import { registerSetupRoutes } from './routes/setup.js';
 import { UpdateService } from './services/updates.js';
 import { APP_VERSION } from './version.js';
 import { openApiSpec } from './openapi.js';
 import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl } from './services/request-log.js';
 import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
+import type { ErrorLog } from './services/repeating.js';
+import { ReportService } from './services/reports.js';
+import { ReportShareService } from './services/report-shares.js';
+import { ReportScheduleService } from './services/report-schedules.js';
 import { registerLicenseRoutes } from './routes/licenses.js';
+import { securityEvent } from './services/security-log.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -120,6 +130,8 @@ export interface AppOptions {
   domainLookup?: DomainLookup;
   /** Replaces reading served certificates for the SSL tracker. Tests leave it out, so nothing is connected to. */
   certProbe?: CertProbe;
+  /** Replaces looking up DMARC records for the insurance readiness report. Tests leave it out, so nothing is looked up. */
+  dmarcLookup?: (domain: string) => Promise<string | null>;
   /** Replaces asking systemd about the services Atlas runs on (tests use a fake). */
   serviceShow?: ShowUnit;
   /** Replaces connecting to the portal's own address to read its certificate. */
@@ -189,6 +201,7 @@ export async function buildApp({
   entraFetch,
   domainLookup,
   certProbe,
+  dmarcLookup,
   updateFetch,
   serviceShow,
   portalProbe,
@@ -748,6 +761,7 @@ export async function buildApp({
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
+  registerSetupRoutes(app, { db, authed, settings });
   const personal = new PersonalVaultService(vaultKeys, vault);
   registerPersonalVaultRoutes(app, { db, authed, recent, personal });
 
@@ -778,9 +792,22 @@ export async function buildApp({
     siem,
     requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA,
   });
+  // Reports, shared by their routes and the background pass that sends scheduled ones.
+  const reports = new ReportService(settings, m365Fetch, {
+    passwordHealth: (scope) => health.report(scope),
+    // Rotation is built just below; this runs only when a report does.
+    rotationTargets: (scope) => rotation.targets(scope.actor),
+    dmarc: dmarcLookup ?? (config.NODE_ENV === 'test' ? undefined : (domain) => dmarcRecord(domain)),
+  });
+  const reportShares = new ReportShareService(db, config.publicOrigin);
+  const reportSchedules = new ReportScheduleService(db, { reports, shares: reportShares, mail, settings });
+  const clientHealth = new ClientHealthService(db, { settings, passwords: health, trackers });
+  registerClientHealthRoutes(app, { db, authed, health: clientHealth });
   const notifier = registerAdminRoutes(app, {
     emergency,
     health,
+    reports: reportSchedules,
+    clientHealth,
     db,
     authed,
     recent,
@@ -869,29 +896,32 @@ export async function buildApp({
     // Nothing is running yet, so an import still marked running was cut off by the restart (an update, say).
     const interrupted = await failInterruptedJobs(db);
     if (interrupted) app.log.warn({ interrupted }, 'Imports stopped by the restart were marked as stopped');
-    notifier.start();
-    siem.start();
-    backups.start();
-    sends.start();
+    // Every background job reports its failures to the server log, named so they can be told apart.
+    const failuresOf =
+      (job: string): ErrorLog =>
+      (err) =>
+        app.log.error({ err }, job);
+    notifier.start(failuresOf('Background notifications'));
+    siem.start(failuresOf('SIEM forwarding'));
+    backups.start(failuresOf('Scheduled backup'));
+    sends.start(failuresOf('Send cleanup'));
     const cwRmm = new CwRmmScheduler(
       db,
       settings,
-      (err) => app.log.error({ err }, 'ConnectWise RMM sync'),
+      failuresOf('ConnectWise RMM sync'),
       cwRmmFetch,
       warranty,
       config.PUBLIC_URL,
       vault,
     );
     cwRmm.start();
-    const m365 = new M365Scheduler(db, settings, (err) => app.log.error({ err }, 'Microsoft 365 sync'), m365Fetch);
+    const m365 = new M365Scheduler(db, settings, failuresOf('Microsoft 365 sync'), m365Fetch);
     m365.start();
-    const rotations = new RotationScheduler(db, rotation, (err) => app.log.error({ err }, 'Password rotation'));
+    const rotations = new RotationScheduler(db, rotation, failuresOf('Password rotation'));
     rotations.start();
-    const trackerSchedule = new TrackerScheduler(database, settings, trackers, (err) =>
-      app.log.error({ err }, 'Domain and SSL tracker'),
-    );
+    const trackerSchedule = new TrackerScheduler(database, settings, trackers, failuresOf('Domain and SSL tracker'));
     trackerSchedule.start();
-    requestLog.start();
+    requestLog.start(failuresOf('Request log pruning'));
     app.addHook('onClose', async () => {
       trackerSchedule.stop();
       notifier.stop();
@@ -921,11 +951,21 @@ export async function buildApp({
     const [org] = await db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs).limit(1);
     return org ? { name: org.name, ...(await settings.branding(org.id)) } : { name: 'MSP Atlas', ...DEFAULT_BRANDING };
   });
+  // Public too: Atlas for Windows (through /api/v1) takes its window, taskbar, and tray icon from the favicon.
+  // If-None-Match with the last ETag answers 304, so its regular check is cheap.
+  app.get('/api/branding/app-icon', async (req, reply) => {
+    const [org] = await db.select({ id: schema.orgs.id }).from(schema.orgs).limit(1);
+    const icon = org ? appIcon(await settings.branding(org.id)) : null;
+    if (!icon) throw new HttpError(404, 'This Atlas has no icon of its own.', 'no_icon');
+    reply.header('etag', icon.etag).header('cache-control', 'no-cache');
+    if (req.headers['if-none-match'] === icon.etag) return reply.code(304).send();
+    return reply.type(icon.type).send(icon.body);
+  });
   // The theme carries its images inline (logos, favicon, sign-in background), so it may be larger than 1 MB.
   app.put('/api/branding', { ...authed, bodyLimit: 3 * 1024 * 1024 }, async (req) => {
     requireAdmin(actorOf(req));
     const saved = await settings.saveBranding(actorOf(req).orgId, req.body);
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actorOf(req).orgId,
       userId: actorOf(req).id,
       actor: actorOf(req).name,
@@ -969,12 +1009,9 @@ export async function buildApp({
     db,
     authed,
     settings,
-    fetcher: m365Fetch,
-    security: {
-      passwordHealth: (scope) => health.report(scope),
-      rotationTargets: (scope) => rotation.targets(scope.actor),
-    },
-    publicOrigin: config.publicOrigin,
+    service: reports,
+    shares: reportShares,
+    schedules: reportSchedules,
     shareLimiter: failureLimiter(30, 15 * 60_000),
   });
   registerLicenseRoutes(app, { db, authed, recent, settings, fetcher: m365Fetch });

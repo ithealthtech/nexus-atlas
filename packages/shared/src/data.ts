@@ -738,6 +738,9 @@ export const brandingSchema = z.object({
   logo: image('png|jpeg|svg\\+xml', 150, 'a logo'),
   logoDark: image('png|jpeg|svg\\+xml', 150, 'a logo'),
   favicon: image('png|svg\\+xml|x-icon|vnd\\.microsoft\\.icon', 50, 'a favicon'),
+  // A 256-pixel PNG of the favicon, made by the Theme page when it's saved, for Atlas for Windows (which can't draw
+  // SVG). Not edited on its own.
+  appIcon: image('png', 200, 'an app icon'),
   // Colours (null = Atlas default). Text on them is chosen automatically for contrast.
   accent: hex,
   accentDark: hex,

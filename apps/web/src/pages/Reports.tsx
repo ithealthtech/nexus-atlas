@@ -6,6 +6,8 @@ import {
   Archive,
   Building2,
   CalendarDays,
+  CalendarClock,
+  ChartColumn,
   ChartNoAxesCombined,
   Download,
   AppWindow,
@@ -19,19 +21,24 @@ import {
   Share2,
   ListFilter,
   LockKeyhole,
+  PiggyBank,
   Play,
+  Presentation,
   Save,
-  Search,
   ShieldCheck,
   Trash2,
+  TriangleAlert,
+  Umbrella,
+  Users,
 } from 'lucide-react';
 import {
+  type ReportScheduleView,
   MAX_REPORT_ASSET_FIELDS,
   REPORTABLE_FIELD_TYPES,
   REPORT_INFO,
-  REPORT_KINDS,
   compareReportSections,
   previousReportRun,
+  reportHighlights,
   reportNeedsAttention,
   selectReportSection,
   type ReportDefinition,
@@ -41,17 +48,21 @@ import {
   type ReportSelection,
   type ReportTemplateView,
 } from '@atlas/shared';
-import { AppLink } from '@/components/AppLink';
 import { ReportShareDialog } from '@/components/ReportShare';
+import { ScheduleDialog, ScheduleList } from '@/components/ReportSchedules';
+import { ReportCell, ReportHighlights, figureColumns, reportBodyCell, reportHeadCell } from '@/components/ReportTable';
 import {
   Badge,
   Button,
+  Card,
   Checkbox,
   Dialog,
   Field,
   FormError,
   Input,
+  ListToolbar,
   PageHeader,
+  PanelHeader,
   Select,
   Skeleton,
   useToast,
@@ -62,44 +73,73 @@ import { DEMO } from '@/lib/demo';
 import { cn } from '@/lib/cn';
 
 const ICONS = {
+  review: Presentation,
   executive: ChartNoAxesCombined,
   security: LockKeyhole,
+  insurance: Umbrella,
   service: Handshake,
   assets: Archive,
   licenses: ShieldCheck,
+  savings: PiggyBank,
   renewals: CalendarDays,
   domains: Globe,
   documentation: FileCheck2,
   endpoints: Activity,
   software: AppWindow,
-};
-/** The client page each report's "open client" link goes to; reports not listed open the client's overview. */
-const CLIENT_PAGE: Partial<Record<ReportKind, string>> = {
-  security: '/passwords',
-  assets: '/assets',
-  licenses: '/licenses',
-  domains: '/trackers/domains',
-  documentation: '/documents',
-  endpoints: '/assets',
-  software: '/assets',
+  accounts: Users,
+  usage: ChartColumn,
 };
 /** Reports with a time window (`withinDays`), and what the setting is called for each. */
 const WINDOW_LABEL: Partial<Record<ReportKind, string>> = {
+  review: 'Period',
   renewals: 'Renewal lookahead',
+  savings: 'Renewals within',
   domains: 'Expiring within',
   service: 'Period',
+  usage: 'Period',
 };
 const REPORT_SUBTITLE: Record<ReportKind, string> = {
+  review: 'A business review in one PDF',
   executive: 'Your client environment at a glance',
   security: 'Passwords, protection and encryption',
+  insurance: 'What insurers ask, with evidence',
   service: 'Work done over a period',
   assets: 'Hardware, systems and infrastructure',
   licenses: 'Subscriptions, seats and assignments',
+  savings: 'Unused seats and renewals, priced',
   renewals: 'Upcoming dates and overdue items',
   domains: 'Domain and certificate expiry',
   documentation: 'Coverage, ownership and review dates',
   endpoints: 'Device status and protection',
   software: 'Applications and who signs in',
+  accounts: 'Accounts, sign-in status and licenses',
+  usage: 'Email, Teams, OneDrive, SharePoint and apps',
+};
+/** The library, grouped by what each report answers, as the portal groups its reports. */
+const LIBRARY: { id: string; title: string; kinds: ReportKind[] }[] = [
+  { id: 'reviews', title: 'Client reviews', kinds: ['review', 'executive', 'service'] },
+  { id: 'licensing', title: 'Licensing & spend', kinds: ['licenses', 'savings', 'renewals'] },
+  { id: 'microsoft', title: 'Microsoft 365', kinds: ['accounts', 'usage'] },
+  { id: 'security', title: 'Security & compliance', kinds: ['security', 'insurance', 'endpoints', 'software'] },
+  { id: 'records', title: 'Infrastructure & documentation', kinds: ['assets', 'domains', 'documentation'] },
+];
+const LIBRARY_TABS = {
+  library: {
+    label: 'Built-in',
+    title: 'Choose a report',
+    description: 'Built-in reports, grouped by what they answer.',
+  },
+  templates: {
+    label: 'Templates',
+    title: 'Report templates',
+    description: 'Saved report settings, private to your account.',
+  },
+  history: {
+    label: 'History',
+    title: 'Report history',
+    description: 'Your latest 100 snapshots. Access is checked each time one opens.',
+  },
+  scheduled: { label: 'Scheduled', title: 'Scheduled reports', description: 'Reports emailed on a schedule.' },
 };
 const REPORT_STEPS = [
   { icon: Building2, title: 'Choose your scope', detail: 'One client or up to 25 workspaces.' },
@@ -172,30 +212,22 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const [sharing, setSharing] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [template, setTemplate] = useState<ReportTemplateView | null>(null);
-  const [libraryTab, setLibraryTab] = useState<'library' | 'templates' | 'history'>('library');
+  const [libraryTab, setLibraryTab] = useState<keyof typeof LIBRARY_TABS>('library');
+  // The library folds away once a report is open, so the results lead.
+  const [libraryOpen, setLibraryOpen] = useState(true);
+  // A schedule being made ('new') or changed.
+  const [scheduling, setScheduling] = useState<ReportScheduleView | 'new' | null>(null);
   const templates = useQuery({
     queryKey: ['report-templates'],
     queryFn: () => api<ReportTemplateView[]>('/reports/templates'),
   });
   const history = useQuery({ queryKey: ['report-history'], queryFn: () => api<ReportRunView[]>('/reports/runs') });
-  const currentSection = run?.snapshot.sections[selection.section];
-  const visible = run ? selectReportSection(run.snapshot, selection) : null;
   // The same report for the same clients, captured before this one, and (once asked for) what changed since.
   const [compare, setCompare] = useState<{ runId: string; previous: ReportRunDetail } | null>(null);
   const [comparing, setComparing] = useState(false);
   const [changesOnly, setChangesOnly] = useState(false);
   const previous = run && history.data ? previousReportRun(history.data, run) : null;
   const against = compare && run && compare.runId === run.id ? compare.previous : null;
-  const diff = useMemo(() => {
-    const before = against?.snapshot.sections[selection.section];
-    return before && currentSection ? compareReportSections(before, currentSection) : null;
-  }, [against, currentSection, selection.section]);
-  const added = new Set(diff?.added);
-  const changed = new Map(diff?.changed.map((c) => [c.index, c]));
-  const shownColumns = selection.columns ?? currentSection?.columns.map((_, i) => i) ?? [];
-  const shownRows = (visible?.rows ?? [])
-    .map((row, i) => ({ row, index: visible!.indexes[i]! }))
-    .filter(({ index }) => !diff || !changesOnly || added.has(index) || changed.has(index));
   const startCompare = async () => {
     if (!run || !previous) return;
     setComparing(true);
@@ -210,9 +242,24 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
     }
   };
   const when = (iso: string) => new Date(iso).toLocaleString();
-  const attention = currentSection?.rows.filter((row) => reportNeedsAttention(currentSection, row)).length ?? 0;
+  const highlights = useMemo(() => (run ? reportHighlights(run.snapshot) : []), [run]);
+  // How many rows the search and filter leave, across every section.
+  const matching = run
+    ? run.snapshot.sections.reduce(
+        (n, _, i) => n + selectReportSection(run.snapshot, { ...selection, section: i }).rows.length,
+        0,
+      )
+    : 0;
+  const allRows = run?.snapshot.sections.reduce((n, s) => n + s.rows.length, 0) ?? 0;
+  const clientCount = (n: number) => `${n} ${n === 1 ? 'client' : 'clients'}`;
   const selectKind = (kind: ReportKind) => {
-    setDefinition((d) => ({ ...d, kind, title: REPORT_INFO[kind].name }));
+    // A review pack is for one client.
+    setDefinition((d) => ({
+      ...d,
+      kind,
+      title: REPORT_INFO[kind].name,
+      clientIds: kind === 'review' ? d.clientIds.slice(0, 1) : d.clientIds,
+    }));
     setRun(null);
     setTemplate(null);
     setSelection(initialSelection());
@@ -225,6 +272,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
       const result = await api<ReportRunDetail>('/reports/runs', { method: 'POST', body: definition });
       setRun(result);
       setSelection(initialSelection());
+      setLibraryOpen(false);
       void qc.invalidateQueries({ queryKey: ['report-history'] });
     } catch (e) {
       setError((e as Error).message);
@@ -241,6 +289,7 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
       setDefinition(result.snapshot.definition);
       setTemplate(null);
       setSelection(initialSelection());
+      setLibraryOpen(false);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -275,13 +324,15 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
       setError((e as Error).message);
     }
   };
-  const exportReport = async (format: 'csv' | 'pdf') => {
+  // The PDF is the whole report (a review pack's with its cover); a CSV is one section, as searched and filtered.
+  const wholePdf = run?.kind === 'review';
+  const exportReport = async (format: 'csv' | 'pdf', section = 0) => {
     if (!run) return;
     setExporting(true);
     setError(null);
     try {
       await download(
-        `/reports/runs/${run.id}/export?format=${format}&selection=${encodeURIComponent(JSON.stringify(selection))}`,
+        `/reports/runs/${run.id}/export?format=${format}&selection=${encodeURIComponent(JSON.stringify({ ...selection, section }))}${format === 'pdf' ? '&whole=1' : ''}`,
         `atlas-report.${format}`,
       );
     } catch (e) {
@@ -293,84 +344,105 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const scoped = (ids: string[]) => !clientId || (ids.length === 1 && ids[0] === clientId);
   return (
     <>
-      <PageHeader title="Reports" description="Client insights, ready to review and share." />
+      <PageHeader
+        eyebrow="Insights & reporting"
+        title="Reports"
+        description="Client reports from your Atlas records and Microsoft 365, ready to review, export, and share."
+      />
       <FormError message={error} />
       {DEMO && (
-        <p className="mb-4 rounded-md border border-border bg-surface p-3 text-sm text-muted">
-          Report generation and PDF export require a connected Atlas server. The live application includes{' '}
-          {REPORT_KINDS.length} report types, private templates, and snapshot history.
+        <p className="mb-5 rounded-md border border-border bg-surface px-4 py-3 text-[13px] text-muted">
+          The demo runs reports on its sample data. Exports, sharing, and schedules need a connected Atlas server.
         </p>
       )}
-      <div className="report-studio grid min-w-0 overflow-hidden rounded-md border border-border bg-surface xl:grid-cols-[204px_minmax(0,1fr)] 2xl:grid-cols-[204px_minmax(0,1fr)_216px]">
-        <div className="min-w-0 border-b border-border bg-surface-2 xl:border-r xl:border-b-0">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold">Report library</h2>
-            <p className="mt-1 text-xs text-muted">{REPORT_KINDS.length} built-in reports</p>
-          </div>
-          <div className="flex border-b border-border p-1" aria-label="Report collections">
-            {(['library', 'templates', 'history'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setLibraryTab(tab)}
-                aria-pressed={libraryTab === tab}
-                className="min-h-9 flex-1 rounded px-1 text-xs font-medium text-muted capitalize aria-pressed:bg-surface aria-pressed:text-text"
-              >
-                {tab === 'library' ? 'Built-in' : tab}
-              </button>
-            ))}
-          </div>
-          {libraryTab === 'library' && (
-            <div className="p-2">
-              <label className="block p-2 xl:hidden">
-                <span className="mb-2 block text-xs font-semibold">Choose report</span>
-                <Select
-                  value={definition.kind}
-                  onChange={(e) => selectKind(e.target.value as ReportKind)}
-                  disabled={busy}
+      <div className="space-y-5">
+        <Card className="overflow-hidden">
+          <PanelHeader
+            eyebrow="Report library"
+            title={libraryOpen ? LIBRARY_TABS[libraryTab].title : 'Report library'}
+            description={
+              libraryOpen
+                ? LIBRARY_TABS[libraryTab].description
+                : 'Pick another report, or open a template or an earlier run.'
+            }
+            actions={
+              !libraryOpen ? (
+                <Button variant="secondary" onClick={() => setLibraryOpen(true)}>
+                  Change report
+                </Button>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Report collections"
+                  className="flex flex-wrap rounded-md border border-border bg-surface-2 p-0.5"
                 >
-                  {REPORT_KINDS.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {REPORT_INFO[kind].name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <div className="hidden xl:block">
-                <p className="px-2 py-2 text-[10px] font-semibold tracking-wider text-muted uppercase">
-                  Client reports
-                </p>
-                {REPORT_KINDS.map((kind) => {
-                  const Icon = ICONS[kind];
-                  return (
+                  {(['library', 'templates', 'history', 'scheduled'] as const).map((tab) => (
                     <button
-                      key={kind}
-                      onClick={() => selectKind(kind)}
-                      aria-pressed={definition.kind === kind}
-                      disabled={busy}
-                      className="mb-1 flex w-full gap-2.5 rounded-md border border-transparent px-2.5 py-2.5 text-left text-text-2 hover:bg-surface aria-pressed:border-border aria-pressed:bg-surface aria-pressed:text-primary disabled:opacity-60"
+                      key={tab}
+                      type="button"
+                      onClick={() => setLibraryTab(tab)}
+                      aria-pressed={libraryTab === tab}
+                      className="min-h-8 rounded px-3 text-xs font-semibold text-muted hover:text-text aria-pressed:bg-surface aria-pressed:text-text aria-pressed:shadow-sm"
                     >
-                      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-                      <span>
-                        <span className="block text-[13px] font-semibold">{REPORT_INFO[kind].name}</span>
-                        <span className="mt-1 block text-[11px] leading-4 text-muted">{REPORT_SUBTITLE[kind]}</span>
-                      </span>
+                      {LIBRARY_TABS[tab].label}
                     </button>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              )
+            }
+          />
+          {libraryOpen && libraryTab === 'library' && (
+            <div className="space-y-6 px-[21px] py-5 max-sm:px-[18px]">
+              {LIBRARY.map((group) => (
+                <section key={group.title} aria-labelledby={`library-${group.id}`}>
+                  <h3
+                    id={`library-${group.id}`}
+                    className="mb-2.5 text-[10px] font-bold tracking-[0.12em] text-muted uppercase"
+                  >
+                    {group.title}
+                  </h3>
+                  <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    {group.kinds.map((kind) => {
+                      const Icon = ICONS[kind];
+                      return (
+                        <button
+                          key={kind}
+                          type="button"
+                          onClick={() => selectKind(kind)}
+                          aria-pressed={definition.kind === kind}
+                          disabled={busy}
+                          className="group flex min-h-[66px] items-center gap-3 rounded-md border border-border bg-surface px-3.5 py-3 text-left hover:border-primary/40 hover:bg-primary-soft/40 aria-pressed:border-primary aria-pressed:bg-primary-soft/60 disabled:opacity-60"
+                        >
+                          <span
+                            aria-hidden
+                            className="grid size-[34px] shrink-0 place-items-center rounded-md border border-border bg-surface-2 text-text-2 group-aria-pressed:border-primary/30 group-aria-pressed:bg-surface group-aria-pressed:text-primary [&_svg]:size-4"
+                          >
+                            <Icon />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold text-text">{REPORT_INFO[kind].name}</span>
+                            <span className="mt-0.5 block text-xs leading-snug text-muted">
+                              {REPORT_SUBTITLE[kind]}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
-          {libraryTab === 'templates' && (
-            <div className="space-y-2 p-3">
-              <p className="text-xs text-muted">Private to your account.</p>
-              {templates.isLoading && <Skeleton className="h-20" />}
+          {libraryOpen && libraryTab === 'templates' && (
+            <div className="divide-y divide-border">
+              {templates.isLoading && <Skeleton className="m-5 h-16" />}
               <FormError message={templates.error?.message} />
               {templates.data
                 ?.filter((t) => scoped(t.definition.clientIds))
                 .map((t) => (
-                  <div key={t.id} className="flex items-start gap-1 border-b border-border pb-2">
+                  <div key={t.id} className="flex items-center gap-3 px-[21px] py-3 hover:bg-primary-soft/40">
                     <button
-                      className="min-h-9 min-w-0 flex-1 text-left text-sm font-medium hover:text-primary"
+                      className="min-h-10 min-w-0 flex-1 text-left"
                       disabled={busy}
                       onClick={() => {
                         setTemplate(t);
@@ -380,7 +452,10 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                         setError(null);
                       }}
                     >
-                      {t.name}
+                      <span className="block text-[13px] font-semibold hover:text-primary">{t.name}</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {REPORT_INFO[t.definition.kind].name} · {clientCount(t.definition.clientIds.length)}
+                      </span>
                     </button>
                     <Button
                       variant="ghost"
@@ -393,26 +468,35 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   </div>
                 ))}
               {!templates.isLoading && !templates.data?.some((t) => scoped(t.definition.clientIds)) && (
-                <p className="py-3 text-sm text-muted">No saved templates yet.</p>
+                <p className="px-[21px] py-10 text-center text-[13px] text-muted">
+                  No saved templates yet. Set a report up, then choose Save template.
+                </p>
               )}
             </div>
           )}
-          {libraryTab === 'history' && (
-            <div className="space-y-2 p-3">
-              <p className="text-xs text-muted">Your latest 100 snapshots. Access is checked each time.</p>
-              {history.isLoading && <Skeleton className="h-20" />}
+          {libraryOpen && libraryTab === 'scheduled' && (
+            <div className="px-2 py-1">
+              <ScheduleList scoped={scoped} onEdit={(s) => setScheduling(s)} />
+            </div>
+          )}
+          {libraryOpen && libraryTab === 'history' && (
+            <div className="divide-y divide-border">
+              {history.isLoading && <Skeleton className="m-5 h-16" />}
               <FormError message={history.error?.message} />
               {history.data
                 ?.filter((r) => scoped(r.clients.map((c) => c.id)))
                 .map((r) => (
-                  <div key={r.id} className="flex items-start gap-1 border-b border-border pb-2">
+                  <div key={r.id} className="flex items-center gap-3 px-[21px] py-3 hover:bg-primary-soft/40">
                     <button
                       disabled={busy}
                       onClick={() => void openRun(r.id)}
-                      className="min-h-9 min-w-0 flex-1 text-left"
+                      className="min-h-10 min-w-0 flex-1 text-left"
                     >
-                      <span className="block text-sm font-medium hover:text-primary">{r.title}</span>
-                      <span className="mt-1 block text-xs text-muted">{new Date(r.createdAt).toLocaleString()}</span>
+                      <span className="block text-[13px] font-semibold hover:text-primary">{r.title}</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {when(r.createdAt)} · {clientCount(r.clients.length)} · {r.rowCount.toLocaleString()}{' '}
+                        {r.rowCount === 1 ? 'row' : 'rows'}
+                      </span>
                     </button>
                     <Button
                       variant="ghost"
@@ -428,27 +512,32 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                   </div>
                 ))}
               {!history.isLoading && !history.data?.some((r) => scoped(r.clients.map((c) => c.id))) && (
-                <p className="py-3 text-sm text-muted">Run a report to capture your first snapshot.</p>
+                <p className="px-[21px] py-10 text-center text-[13px] text-muted">
+                  Run a report to capture your first snapshot.
+                </p>
               )}
             </div>
           )}
-        </div>
-        <div className="min-w-0">
-          <div className="min-w-0">
-            <div className="border-b border-border px-5 py-5">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted">
-                <ChartNoAxesCombined className="size-3.5" aria-hidden /> Report workspace
-              </p>
-              <h2 className="text-xl font-semibold tracking-tight">
-                {run?.title ?? REPORT_INFO[definition.kind].name}
-              </h2>
-              <p className="mt-1.5 max-w-xl text-[13px] leading-5 text-muted">
-                {REPORT_INFO[definition.kind].description}
-              </p>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Button onClick={() => void generate()} loading={busy} disabled={!definition.clientIds.length || DEMO}>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <PanelHeader
+            eyebrow="Report workspace"
+            title={run?.title ?? REPORT_INFO[definition.kind].name}
+            description={REPORT_INFO[definition.kind].description}
+            actions={
+              <>
+                <Button onClick={() => void generate()} loading={busy} disabled={!definition.clientIds.length}>
                   <Play />
-                  {run ? 'Refresh report' : 'Run report'}
+                  {run ? 'Refresh' : 'Run report'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy || !definition.clientIds.length || DEMO}
+                  onClick={() => setScheduling('new')}
+                >
+                  <CalendarClock />
+                  Schedule
                 </Button>
                 <Button
                   variant="secondary"
@@ -463,19 +552,11 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={!run || exporting || busy}
-                  onClick={() => void exportReport('csv')}
-                >
-                  <Download />
-                  CSV
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={!run || exporting || busy}
+                  disabled={!run || exporting || busy || DEMO}
                   onClick={() => void exportReport('pdf')}
                 >
                   <FileText />
-                  PDF
+                  {wholePdf ? 'Review pack PDF' : 'PDF'}
                 </Button>
                 {/* Only a single-client snapshot can go outside Atlas. */}
                 {run?.snapshot.clients.length === 1 && !DEMO && (
@@ -484,26 +565,29 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                     Share
                   </Button>
                 )}
-              </div>
-              {sharing && run && (
-                <ReportShareDialog
-                  runId={run.id}
-                  title={run.title}
-                  client={run.snapshot.clients[0]?.name ?? ''}
-                  onClose={() => setSharing(false)}
-                />
-              )}
-            </div>
-            <details
-              key={run?.id ?? definition.kind}
-              open={!run}
-              className="report-settings border-b border-border bg-surface-2 px-5 py-3"
-            >
-              <summary className="cursor-pointer text-xs font-medium text-text-2">
-                <Settings2 className="mr-1.5 inline size-3.5" aria-hidden />
-                Report settings{run ? ' · change settings, then refresh' : ''}
-              </summary>
-              <div className="mt-4 space-y-4">
+              </>
+            }
+          />
+          {sharing && run && (
+            <ReportShareDialog
+              runId={run.id}
+              title={run.title}
+              client={run.snapshot.clients[0]?.name ?? ''}
+              onClose={() => setSharing(false)}
+            />
+          )}
+          <details key={run?.id ?? definition.kind} open={!run} className="report-settings">
+            <summary className="flex min-h-12 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 px-[21px] py-3 text-[13px] font-semibold text-text-2 hover:bg-surface-2 max-sm:px-[18px]">
+              <Settings2 className="size-4" aria-hidden />
+              Report settings
+              <span className="font-normal text-muted">
+                · {definition.clientIds.length ? clientCount(definition.clientIds.length) : 'choose clients'}
+                {WINDOW_LABEL[definition.kind] ? ` · ${definition.withinDays} days` : ''}
+                {run ? ' · change, then refresh' : ''}
+              </span>
+            </summary>
+            <div className="grid gap-6 border-t border-border bg-surface-2/60 px-[21px] py-5 max-sm:px-[18px] lg:grid-cols-2">
+              <div className="space-y-4">
                 <Field label="Report title">
                   {(p) => (
                     <Input
@@ -514,33 +598,6 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                     />
                   )}
                 </Field>
-                <fieldset>
-                  <legend className="mb-2 text-[13px] font-semibold">Clients {clientId ? '' : '(up to 25)'}</legend>
-                  {clients.isLoading && <Skeleton className="h-12" />}
-                  <FormError message={clients.error?.message} />
-                  <div className="grid max-h-44 gap-3 overflow-y-auto sm:grid-cols-2">
-                    {clients.data
-                      ?.filter((c) => !clientId || c.id === clientId)
-                      .map((c) => (
-                        <Checkbox
-                          key={c.id}
-                          label={c.name}
-                          checked={definition.clientIds.includes(c.id)}
-                          disabled={
-                            !!clientId || (definition.clientIds.length >= 25 && !definition.clientIds.includes(c.id))
-                          }
-                          onChange={(e) =>
-                            setDefinition({
-                              ...definition,
-                              clientIds: e.currentTarget.checked
-                                ? [...definition.clientIds, c.id]
-                                : definition.clientIds.filter((id) => id !== c.id),
-                            })
-                          }
-                        />
-                      ))}
-                  </div>
-                </fieldset>
                 {WINDOW_LABEL[definition.kind] && (
                   <Field label={WINDOW_LABEL[definition.kind]}>
                     {(p) => (
@@ -556,20 +613,20 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                       >
                         {[30, 60, 90, 180, 365].map((day) => (
                           <option key={day} value={day}>
-                            {definition.kind === 'service' ? `Last ${day} days` : `${day} days, including overdue`}
+                            {definition.kind === 'service' || definition.kind === 'usage'
+                              ? `Last ${day} days`
+                              : definition.kind === 'savings'
+                                ? `${day} days`
+                                : definition.kind === 'review'
+                                  ? `Last ${day} days, and renewals in the next ${day}`
+                                  : `${day} days, including overdue`}
                           </option>
                         ))}
                       </Select>
                     )}
                   </Field>
                 )}
-                {definition.kind === 'assets' && (
-                  <AssetFieldPicker
-                    value={definition.assetFields ?? []}
-                    onChange={(assetFields) => setDefinition({ ...definition, assetFields })}
-                  />
-                )}
-                {definition.kind === 'licenses' && (
+                {(definition.kind === 'licenses' || definition.kind === 'savings') && (
                   <Checkbox
                     label="Include Microsoft 365 inventory through GDAP"
                     description="Linked clients are read through GDAP. Connection failures are shown as notices."
@@ -577,348 +634,162 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                     onChange={(e) => setDefinition({ ...definition, includeMicrosoft: e.currentTarget.checked })}
                   />
                 )}
+                {definition.kind === 'assets' && (
+                  <AssetFieldPicker
+                    value={definition.assetFields ?? []}
+                    onChange={(assetFields) => setDefinition({ ...definition, assetFields })}
+                  />
+                )}
               </div>
-            </details>
-          </div>
+              <fieldset className="min-w-0">
+                <legend className="mb-2 text-[13px] font-semibold">
+                  {definition.kind === 'review' ? 'Client' : `Clients ${clientId ? '' : '(up to 25)'}`}
+                </legend>
+                {clients.isLoading && <Skeleton className="h-12" />}
+                <FormError message={clients.error?.message} />
+                <div className="grid max-h-64 gap-x-4 gap-y-3 overflow-y-auto rounded-md border border-border bg-surface p-3.5 sm:grid-cols-2">
+                  {clients.data
+                    ?.filter((c) => !clientId || c.id === clientId)
+                    .map((c) => (
+                      <Checkbox
+                        key={c.id}
+                        label={c.name}
+                        checked={definition.clientIds.includes(c.id)}
+                        disabled={
+                          !!clientId || (definition.clientIds.length >= 25 && !definition.clientIds.includes(c.id))
+                        }
+                        onChange={(e) =>
+                          setDefinition({
+                            ...definition,
+                            // A review pack is for one client: choosing another replaces it.
+                            clientIds: e.currentTarget.checked
+                              ? definition.kind === 'review'
+                                ? [c.id]
+                                : [...definition.clientIds, c.id]
+                              : definition.clientIds.filter((id) => id !== c.id),
+                          })
+                        }
+                      />
+                    ))}
+                </div>
+              </fieldset>
+            </div>
+          </details>
           {!run && (
-            <div className="px-5 py-7">
+            <div className="border-t border-border px-[21px] py-7 max-sm:px-[18px]">
               <h3 className="text-sm font-semibold">Ready when you are</h3>
-              <p className="mt-1 text-[13px] leading-5 text-muted">
-                Choose your clients and run this report to capture current records.
+              <p className="mt-1 text-[13px] text-muted">
+                Choose your clients and run this report to capture their records as they are now.
               </p>
-              <div className="mt-6 grid gap-4 border-t border-border pt-5 sm:grid-cols-3">
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 {REPORT_STEPS.map(({ icon: Icon, title, detail }) => (
-                  <div key={title}>
-                    <Icon className="mb-2 size-4 text-muted" aria-hidden />
-                    <p className="text-xs font-medium">{title}</p>
+                  <div key={title} className="rounded-md border border-border bg-surface-2/60 px-4 py-3.5">
+                    <Icon className="mb-2.5 size-4 text-primary" aria-hidden />
+                    <p className="text-[13px] font-semibold">{title}</p>
                     <p className="mt-1 text-xs leading-5 text-muted">{detail}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          {run && (
-            <>
-              <div className="grid grid-cols-3 border-b border-border">
-                <button
-                  aria-pressed={!selection.attention}
-                  onClick={() => setSelection({ ...selection, attention: false })}
-                  className="border-r border-border border-b-2 border-b-transparent px-5 py-4 text-left hover:bg-surface-2 aria-pressed:border-b-primary aria-pressed:bg-primary-soft"
-                >
-                  <span className="block min-h-8 text-xs text-muted sm:min-h-0">All records</span>
-                  <span className="mt-1 block text-[26px] leading-none font-semibold tabular-nums">
-                    {currentSection?.rows.length ?? 0}
-                  </span>
-                </button>
-                <button
-                  aria-pressed={selection.attention}
-                  onClick={() => setSelection({ ...selection, attention: true })}
-                  className="border-r border-border border-b-2 border-b-transparent px-5 py-4 text-left hover:bg-surface-2 aria-pressed:border-b-primary aria-pressed:bg-primary-soft"
-                >
-                  <span className="block min-h-8 text-xs text-muted sm:min-h-0">Needs review</span>
-                  <span className="mt-1 block text-[26px] leading-none font-semibold text-warning tabular-nums">
-                    {attention}
-                  </span>
-                </button>
-                <div className="px-5 py-4">
-                  <span className="block min-h-8 text-xs text-muted sm:min-h-0">Clients in scope</span>
-                  <span className="mt-1 block text-[26px] leading-none font-semibold tabular-nums">
-                    {run.snapshot.clients.length}
-                  </span>
-                </div>
-              </div>
+        </Card>
+
+        {run && (
+          <>
+            <Card className="overflow-hidden">
+              <PanelHeader
+                eyebrow="Summary"
+                title="At a glance"
+                description={`Captured ${when(run.snapshot.generatedAt)} by ${run.snapshot.generatedBy} · ${clientCount(run.snapshot.clients.length)}`}
+                actions={
+                  previous && !against ? (
+                    <Button size="sm" variant="secondary" loading={comparing} onClick={() => void startCompare()}>
+                      <GitCompare /> Compare with {when(previous.createdAt)}
+                    </Button>
+                  ) : undefined
+                }
+              />
+              <ReportHighlights
+                items={highlights}
+                pressed={selection.attention ? 'Needs review' : undefined}
+                onPress={{ 'Needs review': () => setSelection({ ...selection, attention: !selection.attention }) }}
+              />
               {run.snapshot.warnings.length > 0 && (
-                <div className="border-b border-border bg-warning-soft px-5 py-3">
-                  <h3 className="text-sm font-semibold text-warning">Items worth reviewing</h3>
-                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-warning">
-                    {run.snapshot.warnings.map((w, i) => (
-                      <li key={i}>{w}</li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="space-y-2 border-b border-border px-[21px] py-4 max-sm:px-[18px]">
+                  {run.snapshot.warnings.map((w, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-2.5 rounded-md border border-warning/30 bg-warning-soft px-3.5 py-2.5 text-xs leading-5 text-warning"
+                    >
+                      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                      {w}
+                    </li>
+                  ))}
+                </ul>
               )}
-              <div className="min-w-0 overflow-hidden">
-                <div className="space-y-3 border-b border-border px-5 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold">Detailed results</h3>
-                    <Badge>{visible?.rows.length ?? 0} matching rows</Badge>
-                  </div>
-                  <p className="text-xs text-muted">
-                    Captured {new Date(run.snapshot.generatedAt).toLocaleString()} · {run.snapshot.generatedBy}
-                  </p>
-                  {previous && (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      {against && diff ? (
-                        <>
-                          <p className="text-xs" role="status">
-                            <span className="font-semibold">Compared with {when(against.snapshot.generatedAt)}:</span>{' '}
-                            {diff.added.length} new · {diff.changed.length} changed · {diff.removed.length} removed
-                          </p>
-                          <Checkbox
-                            label="Changes only"
-                            checked={changesOnly}
-                            onChange={(e) => setChangesOnly(e.currentTarget.checked)}
-                          />
-                          <Button size="sm" variant="ghost" onClick={() => setCompare(null)}>
-                            Stop comparing
-                          </Button>
-                        </>
-                      ) : (
-                        <Button size="sm" variant="secondary" loading={comparing} onClick={() => void startCompare()}>
-                          <GitCompare className="size-4" aria-hidden /> Compare with {when(previous.createdAt)}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {run.snapshot.sections.length > 1 && (
-                    <Field label="Report section">
-                      {(p) => (
-                        <Select
-                          {...p}
-                          value={selection.section}
-                          onChange={(e) => setSelection({ ...initialSelection(), section: Number(e.target.value) })}
-                        >
-                          {run.snapshot.sections.map((s, i) => (
-                            <option key={i} value={i}>
-                              {s.title}
-                            </option>
-                          ))}
-                        </Select>
-                      )}
-                    </Field>
-                  )}
-                  <div className="relative">
-                    <Search className="absolute top-2.5 left-3 size-4 text-muted" aria-hidden />
-                    <Input
-                      aria-label="Search report results"
-                      placeholder="Search report results"
-                      className="pl-9"
-                      value={selection.query}
-                      onChange={(e) => setSelection({ ...selection, query: e.target.value })}
-                      maxLength={200}
-                    />
-                  </div>
-                  <details>
-                    <summary className="cursor-pointer text-xs font-semibold">
-                      <ListFilter className="mr-1 inline size-3.5" aria-hidden />
-                      Filters & columns
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      <Field label="Search field">
-                        {(p) => (
-                          <Select
-                            {...p}
-                            value={selection.field ?? 'all'}
-                            onChange={(e) =>
-                              setSelection({
-                                ...selection,
-                                field: e.target.value === 'all' ? undefined : Number(e.target.value),
-                              })
-                            }
-                          >
-                            <option value="all">All columns</option>
-                            {currentSection?.columns.map((c, i) => (
-                              <option key={i} value={i}>
-                                {c}
-                              </option>
-                            ))}
-                          </Select>
-                        )}
-                      </Field>
-                      <fieldset>
-                        <legend className="mb-2 text-xs font-semibold">Visible columns</legend>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {currentSection?.columns.map((c, i) => {
-                            const selected = selection.columns ?? currentSection.columns.map((_, index) => index);
-                            return (
-                              <Checkbox
-                                key={i}
-                                label={c}
-                                checked={selected.includes(i)}
-                                disabled={selected.length === 1 && selected.includes(i)}
-                                onChange={(e) =>
-                                  setSelection({
-                                    ...selection,
-                                    columns: e.currentTarget.checked
-                                      ? [...selected, i].sort((a, b) => a - b)
-                                      : selected.filter((index) => index !== i),
-                                  })
-                                }
-                              />
-                            );
-                          })}
-                        </div>
-                      </fieldset>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setSelection({ ...initialSelection(), section: selection.section })}
-                      >
-                        Reset filters
-                      </Button>
-                    </div>
-                  </details>
-                </div>
-                <div className="max-h-[600px] overflow-auto" role="region" aria-label="Report results" tabIndex={0}>
-                  <table className="w-full text-left text-xs">
-                    <thead className="sticky top-0 bg-surface-2">
-                      <tr>
-                        {visible?.columns.map((c, i) => (
-                          <th
-                            key={i}
-                            scope="col"
-                            className="border-b border-border px-4 py-3 font-semibold whitespace-nowrap"
-                          >
-                            {c}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shownRows.slice(0, 500).map(({ row, index }) => {
-                        const isNew = added.has(index);
-                        const change = changed.get(index);
-                        return (
-                          <tr
-                            key={index}
-                            className={cn(
-                              'border-b border-border last:border-0 hover:bg-surface-2',
-                              isNew && 'bg-success-soft',
-                            )}
-                          >
-                            {row.map((value, j) => {
-                              const column = shownColumns[j]!;
-                              const moved = !!change?.columns.includes(column);
-                              return (
-                                <td
-                                  key={j}
-                                  className={cn(
-                                    'max-w-64 min-w-28 px-4 py-3 align-top break-words',
-                                    moved && 'bg-warning-soft',
-                                  )}
-                                >
-                                  {j === 0 && isNew && (
-                                    <Badge tone="success" className="mr-1.5">
-                                      New
-                                    </Badge>
-                                  )}
-                                  {value || '—'}
-                                  {moved && (
-                                    <span className="mt-0.5 block text-[11px] text-muted">
-                                      <span className="sr-only">Previously </span>
-                                      <span className="line-through">{change!.previous[column] || '—'}</span>
-                                    </span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {!shownRows.length && (
-                    <p className="p-8 text-center text-sm text-muted">
-                      {diff && changesOnly
-                        ? 'Nothing new or changed in this selection.'
-                        : 'No rows match this selection.'}
-                    </p>
-                  )}
-                  {against && diff && diff.removed.length > 0 && (
-                    <details className="border-t border-border px-4 py-3">
-                      <summary className="cursor-pointer text-xs font-semibold">
-                        {diff.removed.length} removed since {when(against.snapshot.generatedAt)}
-                      </summary>
-                      <table className="mt-2 w-full text-left text-xs text-muted">
-                        <thead>
-                          <tr>
-                            {shownColumns.map((c) => (
-                              <th key={c} scope="col" className="px-4 py-2 font-semibold whitespace-nowrap">
-                                {currentSection?.columns[c]}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {diff.removed.slice(0, 200).map((row, i) => (
-                            <tr key={i} className="border-t border-border">
-                              {shownColumns.map((c) => (
-                                <td key={c} className="max-w-64 px-4 py-2 align-top break-words line-through">
-                                  {row[c] || '—'}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </details>
-                  )}
-                </div>
-                {visible && visible.rows.length > 500 && (
-                  <p className="border-t border-border p-3 text-xs text-muted">
-                    Showing the first 500 matching rows. Exports contain all {visible.rows.length} matching rows. Filter
-                    to narrow the view; PDF supports up to 2,000 rows.
-                  </p>
-                )}
-                <p className="border-t border-border px-5 py-3 text-[11px] text-muted">
-                  CSV and PDF include this section’s matching rows and selected columns.
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-        <aside className="border-t border-border bg-surface-2 xl:col-span-2 2xl:col-span-1 2xl:border-t-0 2xl:border-l">
-          <div className="border-b border-border p-4">
-            <h2 className="mt-1 text-base font-semibold">Review & act</h2>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              Review flagged records, then open a client to take action.
-            </p>
-            {run && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={() => setSelection({ ...selection, attention: true })}
+              <ListToolbar
+                query={selection.query}
+                onQuery={(query) => setSelection({ ...selection, query })}
+                placeholder="Search the whole report"
+                shown={matching}
+                total={allRows}
+                noun="row"
               >
-                {attention} {attention === 1 ? 'record' : 'records'} to review
-              </Button>
-            )}
-            <div className="mt-4 space-y-2">
-              {(run?.snapshot.clients ?? clients.data?.filter((c) => definition.clientIds.includes(c.id)) ?? []).map(
-                (c) => (
-                  <AppLink
-                    key={c.id}
-                    to={`/clients/${c.id}${CLIENT_PAGE[definition.kind] ?? ''}`}
-                    className="flex min-h-9 items-start gap-2 text-xs font-medium text-primary hover:underline"
-                  >
-                    <Building2 className="size-4 shrink-0" aria-hidden />
-                    {c.name}
-                  </AppLink>
-                ),
+                <Checkbox
+                  label="Needs review only"
+                  checked={selection.attention}
+                  onChange={(e) => setSelection({ ...selection, attention: e.currentTarget.checked })}
+                />
+              </ListToolbar>
+              {against && (
+                <div
+                  className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border bg-primary-soft/40 px-[21px] py-3 text-xs max-sm:px-[18px]"
+                  role="status"
+                >
+                  <p className="font-semibold">Compared with {when(against.snapshot.generatedAt)}</p>
+                  <Checkbox
+                    label="Changes only"
+                    checked={changesOnly}
+                    onChange={(e) => setChangesOnly(e.currentTarget.checked)}
+                  />
+                  <Button size="sm" variant="ghost" onClick={() => setCompare(null)}>
+                    Stop comparing
+                  </Button>
+                </div>
               )}
-            </div>
-          </div>
-          <div className="p-4">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <History className="size-4" aria-hidden />
-              Snapshot & sources
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              Reports capture available records at a point in time. Refresh creates a new snapshot in your private
-              history.
-            </p>
-            {run?.snapshot.sources.map((source, i) => (
-              <div key={i} className="mt-3 border-t border-border pt-3">
-                <p className="text-xs font-semibold">{source.name}</p>
-                <p className="mt-1 text-xs text-muted">
-                  {source.updatedAt ? new Date(source.updatedAt).toLocaleString() : 'No data available'}
+              {run.snapshot.sources.length > 0 && (
+                <p className="px-[21px] py-3 text-[11px] leading-5 text-muted max-sm:px-[18px]">
+                  <History className="mr-1.5 inline size-3.5 align-[-2px]" aria-hidden />
+                  {run.snapshot.sources
+                    .map(
+                      (source) => `${source.name}, ${source.updatedAt ? `read ${when(source.updatedAt)}` : 'no data'}`,
+                    )
+                    .join(' · ')}
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-muted">{source.detail}</p>
-              </div>
+              )}
+            </Card>
+            {run.snapshot.sections.map((section, index) => (
+              <SectionTable
+                key={`${run.id}-${index}`}
+                snapshot={run.snapshot}
+                index={index}
+                selection={selection}
+                previous={against?.snapshot ?? null}
+                changesOnly={changesOnly}
+                exporting={exporting || busy}
+                onCsv={() => void exportReport('csv', index)}
+              />
             ))}
-          </div>
-        </aside>
+          </>
+        )}
       </div>
+      {scheduling && (
+        <ScheduleDialog
+          definition={definition}
+          schedule={scheduling === 'new' ? undefined : scheduling}
+          onClose={() => setScheduling(null)}
+        />
+      )}
       <Dialog
         open={saving}
         onClose={() => setSaving(false)}
@@ -950,5 +821,146 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
         <FormError message={error} />
       </Dialog>
     </>
+  );
+}
+
+/** One section of a report: its own card and table, all rows at once (up to 500), searched and filtered with the rest. */
+function SectionTable({
+  snapshot,
+  index,
+  selection,
+  previous,
+  changesOnly,
+  exporting,
+  onCsv,
+}: {
+  snapshot: ReportRunDetail['snapshot'];
+  index: number;
+  selection: ReportSelection;
+  previous: ReportRunDetail['snapshot'] | null;
+  changesOnly: boolean;
+  exporting: boolean;
+  onCsv: () => void;
+}) {
+  const section = snapshot.sections[index]!;
+  const visible = selectReportSection(snapshot, { ...selection, section: index });
+  // Against the earlier run's section with the same name.
+  const before = previous?.sections.find((s) => s.title === section.title);
+  const diff = before ? compareReportSections(before, section) : null;
+  const added = new Set(diff?.added);
+  const changed = new Map(diff?.changed.map((c) => [c.index, c]));
+  const rows = visible.rows
+    .map((row, i) => ({ row, index: visible.indexes[i]! }))
+    .filter(({ index: at }) => !diff || !changesOnly || added.has(at) || changed.has(at));
+  const figures = figureColumns(section.columns, section.rows);
+  const when = (iso: string) => new Date(iso).toLocaleString();
+  return (
+    <Card className="overflow-hidden">
+      <PanelHeader
+        eyebrow={section.part}
+        title={section.title}
+        description={
+          `${rows.length.toLocaleString()} of ${section.rows.length.toLocaleString()} ${section.rows.length === 1 ? 'row' : 'rows'}` +
+          (diff ? ` · ${diff.added.length} new, ${diff.changed.length} changed, ${diff.removed.length} removed` : '')
+        }
+        actions={
+          <Button size="sm" variant="secondary" disabled={exporting || DEMO || !rows.length} onClick={onCsv}>
+            <Download /> CSV
+          </Button>
+        }
+      />
+      {rows.length > 0 && (
+        <div className="max-h-[70vh] overflow-auto" role="region" aria-label={section.title} tabIndex={0}>
+          <table className="w-full border-separate border-spacing-0 text-left">
+            <thead className="sticky top-0 z-[1]">
+              <tr>
+                {section.columns.map((c, i) => (
+                  <th key={i} scope="col" className={cn(reportHeadCell, figures.has(i) && 'text-right')}>
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, 500).map(({ row, index: at }) => {
+                const isNew = added.has(at);
+                const change = changed.get(at);
+                const flagged = reportNeedsAttention(section, section.rows[at]!);
+                return (
+                  <tr key={at} className={cn('group hover:bg-primary-soft/40', isNew && 'bg-success-soft')}>
+                    {row.map((_, j) => {
+                      const moved = !!change?.columns.includes(j);
+                      return (
+                        <td
+                          key={j}
+                          className={cn(
+                            reportBodyCell,
+                            'max-w-80 min-w-28 border-b border-border break-words group-last:border-b-0',
+                            j === 0 && 'min-w-44 font-semibold',
+                            // A row that needs review carries an amber edge.
+                            j === 0 && flagged && 'shadow-[inset_3px_0_0_var(--warning)]',
+                            figures.has(j) && 'text-right whitespace-nowrap tabular-nums',
+                            moved && 'bg-warning-soft',
+                          )}
+                        >
+                          {j === 0 && isNew && (
+                            <Badge tone="success" className="mr-1.5">
+                              New
+                            </Badge>
+                          )}
+                          <ReportCell columns={section.columns} row={row} index={j} />
+                          {moved && (
+                            <span className="mt-0.5 block text-[11px] text-muted">
+                              <span className="sr-only">Previously </span>
+                              <span className="line-through">{change!.previous[j] || '—'}</span>
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!rows.length && (
+        <p className="px-[21px] py-6 text-[13px] text-muted max-sm:px-[18px]">
+          {!section.rows.length
+            ? 'Nothing to list.'
+            : diff && changesOnly
+              ? 'Nothing new or changed.'
+              : selection.attention
+                ? 'Nothing here needs review.'
+                : 'No rows match the search.'}
+        </p>
+      )}
+      {rows.length > 500 && (
+        <p className="border-t border-border px-[21px] py-3 text-[11px] text-muted max-sm:px-[18px]">
+          Showing the first 500 of {rows.length.toLocaleString()} rows. The CSV has them all.
+        </p>
+      )}
+      {diff && diff.removed.length > 0 && (
+        <details className="border-t border-border px-[21px] py-3">
+          <summary className="cursor-pointer text-xs font-semibold">
+            {diff.removed.length} removed since {previous && when(previous.generatedAt)}
+          </summary>
+          <table className="mt-2 w-full text-left text-xs text-muted">
+            <tbody>
+              {diff.removed.slice(0, 200).map((row, i) => (
+                <tr key={i} className="border-t border-border">
+                  {row.map((value, j) => (
+                    <td key={j} className="max-w-64 px-4 py-2 align-top break-words line-through">
+                      {value || '—'}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
+    </Card>
   );
 }

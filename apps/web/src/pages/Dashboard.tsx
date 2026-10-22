@@ -31,15 +31,18 @@ import {
   Card,
   CardHeader,
   Checkbox,
-  Dialog,
   EmptyState,
   PageHeader,
   Skeleton,
   Stat,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { AppLink } from '@/components/AppLink';
+import { WhatsNewCard } from '@/pages/WhatsNew';
+import { useSetupSteps } from '@/pages/Setup';
 import { FavoritesCard } from '@/components/Favorites';
+import { ClientHealthCard } from '@/components/ClientHealth';
 import { ActivityFeed } from '@/components/panels';
 import { RmmHealthCard, useRmmHealth } from '@/components/RmmHealth';
 import { TrackerCard } from '@/components/Trackers';
@@ -129,6 +132,7 @@ export function Dashboard() {
     ...(actor.isAdmin ? [{ done: (users.data?.length ?? 0) > 1, label: 'Invite a teammate', to: '/admin/users' }] : []),
   ];
   const remaining = steps.filter((s) => !s.done).length;
+  const adminSetup = useSetupSteps();
   const skeleton = <Skeleton className="h-8 w-12" />;
   const domainLayouts = (layouts.data ?? []).filter((l) => DOMAIN_LAYOUTS.includes(l.key));
   const domainAssets = (assets.data ?? []).filter((a) => domainLayouts.some((l) => l.id === a.layoutId)).length;
@@ -136,7 +140,7 @@ export function Dashboard() {
 
   const cards: Record<DashboardWidget, ReactNode> = {
     stats: (
-      <div className={cn('grid gap-4 sm:grid-cols-2', actor.isStaff ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
+      <div className={cn('grid grid-cols-2 gap-4', actor.isStaff ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
         <Stat
           label="Client workspaces"
           value={clients.isLoading ? skeleton : list.length}
@@ -183,6 +187,7 @@ export function Dashboard() {
     trackers: <TrackerCard />,
     tickets: <TicketsCard />,
     'asset-stats': <AssetStatsCard />,
+    health: <ClientHealthCard />,
     favorites: <FavoritesCard />,
     'recent-clients': (
       <Card>
@@ -250,29 +255,55 @@ export function Dashboard() {
         )}
       </Card>
     ),
-    setup:
-      remaining > 0 ? (
+    // Administrators see the installation's setup; everyone else, their own first steps.
+    setup: actor.isAdmin ? (
+      adminSetup.left > 0 ? (
         <Card>
-          <CardHeader title="Get set up" description={`${remaining} step${remaining === 1 ? '' : 's'} left`} />
+          <CardHeader
+            title="Set up Atlas"
+            description={`${adminSetup.left} essential step${adminSetup.left === 1 ? '' : 's'} left`}
+            actions={moreLink('/admin/setup', 'All steps')}
+          />
           <ul className="space-y-1 p-3">
-            {steps.map((s) => (
-              <li key={s.label}>
-                <AppLink
-                  to={s.to}
-                  className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-surface-2"
-                >
-                  {s.done ? (
-                    <CheckCircle2 className="size-5 text-success" aria-label="Done" />
-                  ) : (
+            {adminSetup.steps
+              .filter((s) => !s.done && !s.optional)
+              .slice(0, 4)
+              .map((s) => (
+                <li key={s.id}>
+                  <AppLink
+                    to={s.to}
+                    className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-surface-2"
+                  >
                     <Circle className="size-5 text-border-strong" aria-label="To do" />
-                  )}
-                  <span className={s.done ? 'text-muted line-through' : 'font-medium'}>{s.label}</span>
-                </AppLink>
-              </li>
-            ))}
+                    <span className="font-medium">{s.title}</span>
+                  </AppLink>
+                </li>
+              ))}
           </ul>
         </Card>
-      ) : null,
+      ) : null
+    ) : remaining > 0 ? (
+      <Card>
+        <CardHeader title="Get set up" description={`${remaining} step${remaining === 1 ? '' : 's'} left`} />
+        <ul className="space-y-1 p-3">
+          {steps.map((s) => (
+            <li key={s.label}>
+              <AppLink
+                to={s.to}
+                className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-surface-2"
+              >
+                {s.done ? (
+                  <CheckCircle2 className="size-5 text-success" aria-label="Done" />
+                ) : (
+                  <Circle className="size-5 text-border-strong" aria-label="To do" />
+                )}
+                <span className={s.done ? 'text-muted line-through' : 'font-medium'}>{s.label}</span>
+              </AppLink>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    ) : null,
     review: (
       <Card>
         <CardHeader title="Review queue" description="Keep knowledge current." />
@@ -397,6 +428,7 @@ export function Dashboard() {
           </Button>
         }
       />
+      {actor.isStaff && <WhatsNewCard prefs={prefs.data} />}
       {!actor.isStaff && branding?.portalWelcome && (
         <Card className="mb-7 flex items-start gap-4 p-5">
           <Info className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
@@ -405,7 +437,9 @@ export function Dashboard() {
       )}
       {totals.length > 0 && <div className="mb-5">{totals}</div>}
       {main.length + side.length > 0 ? (
-        <div className={cn('grid gap-5', main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]')}>
+        <div
+          className={cn('grid grid-cols-1 gap-5', main.length && side.length && 'lg:grid-cols-[minmax(0,1fr)_340px]')}
+        >
           {main.length > 0 && <div className="space-y-5">{main}</div>}
           {side.length > 0 && (
             <div className={cn(main.length ? 'space-y-5' : 'grid items-start gap-6 md:grid-cols-2 xl:grid-cols-3')}>
@@ -484,7 +518,7 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
   };
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Customize your dashboard"
@@ -553,6 +587,6 @@ function CustomizeDashboard({ prefs, onClose }: { prefs: WorkspacePrefs; onClose
         })}
         <p className="text-xs text-muted">To hide sections of client workspaces, use Customize on any client.</p>
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

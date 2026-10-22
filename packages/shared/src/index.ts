@@ -19,3 +19,7 @@ export * from './personal-vault.js';
 export * from './webhooks.js';
 export * from './licenses.js';
 export * from './reports.js';
+export * from './health.js';
+export * from './smart-paste.js';
+export * from './wifi.js';
+export * from './setup.js';

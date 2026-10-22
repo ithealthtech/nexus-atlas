@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Dialog,
   EmptyState,
   Field,
   FormError,
@@ -18,12 +17,14 @@ import {
   Skeleton,
   Textarea,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
-import { createFileSend, createTextSend, openSend, saveBlob, useSends, type OpenedSend } from '@/lib/vault';
+import { createFileSend, createTextSend, openSend, useSends, type OpenedSend } from '@/lib/vault';
+import { saveBlob } from '@/lib/download';
 
 const VIEW_CHOICES = [1, 2, 3, 5];
 const EXPIRY_CHOICES: [number, string][] = [
@@ -158,7 +159,7 @@ function NewSendDialog({ onClose }: { onClose: () => void }) {
   };
   const fields = error instanceof ApiError ? error.fields : undefined;
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -293,7 +294,7 @@ function NewSendDialog({ onClose }: { onClose: () => void }) {
           <FormError message={error ? error.message : null} />
         </div>
       )}
-    </Dialog>
+    </Drawer>
   );
 }
 

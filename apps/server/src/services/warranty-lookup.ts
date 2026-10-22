@@ -122,6 +122,20 @@ export function hpProductNumber(body: unknown): string {
 }
 
 /**
+ * Why HP's warranty check turned the request away, or '' when it answered. HP answers 200 with its own code in
+ * the body ({ code: 406, message: "Bad data in payload. invalid captcha." }), which must not read as "no warranty".
+ */
+export function hpRefusal(body: unknown): string {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return '';
+  const { code, message } = body as { code?: unknown; message?: unknown };
+  if (typeof code !== 'number' || (code >= 200 && code < 300)) return '';
+  const said = typeof message === 'string' ? message : '';
+  if (/captcha/i.test(said))
+    return "HP's warranty check now asks for a captcha, so Atlas can't read it. Look the serial up at support.hp.com and enter the date.";
+  return `HP's warranty check turned the request away (${code}${said ? `: ${said.slice(0, 120)}` : ''}).`;
+}
+
+/**
  * Looks device warranties up by serial number the way each vendor's own public warranty check does, so no API
  * keys are needed: Lenovo's and HP's support-site lookups, and Dell's warranty page. These aren't documented
  * APIs and can change; a vendor that stops answering is skipped for a while, and the date can still be typed in.
@@ -197,6 +211,8 @@ export class WarrantyLookup {
           })
         ).json(),
       );
+      // A serial HP doesn't know has no product to ask about.
+      if (!product) return '';
       const res = await this.call(
         vendor,
         'https://support.hp.com/wcc-services/profile/devices/warranty/specs?authState=anonymous&template=checkWarranty',
@@ -216,7 +232,10 @@ export class WarrantyLookup {
           }),
         },
       );
-      return latestEndDate(await res.json());
+      const body = await res.json();
+      const refused = hpRefusal(body);
+      if (refused) throw new HttpError(502, refused);
+      return latestEndDate(body);
     }
     const res = await this.call(
       vendor,

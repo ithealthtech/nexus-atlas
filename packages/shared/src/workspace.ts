@@ -25,6 +25,7 @@ export const DASHBOARD_WIDGETS = [
   'trackers',
   'tickets',
   'asset-stats',
+  'health',
   'favorites',
   'recent-clients',
   'activity',
@@ -44,6 +45,11 @@ export const DASHBOARD_WIDGET_INFO: Record<
   trackers: { label: 'Domain and SSL trackers', description: 'Domains and certificates by expiry.', area: 'top' },
   tickets: { label: 'Tickets', description: 'Open tickets from the ConnectWise platform.', area: 'top' },
   'asset-stats': { label: 'Asset statistics', description: 'Devices by kind and operating system.', area: 'top' },
+  health: {
+    label: 'Client health',
+    description: 'Every client scored 0–100, lowest first, with its trend.',
+    area: 'main',
+  },
   favorites: {
     label: 'Favorites',
     description: 'Clients, documents, assets, and passwords you starred.',
@@ -101,7 +107,14 @@ export const workspacePrefsSchema = z.object({
   // Left out by the dashboard and section editors, which then keep whatever is saved.
   menu: z.enum(MENU_STYLES).optional(),
 });
-export type WorkspacePrefs = Omit<z.infer<typeof workspacePrefsSchema>, 'menu'> & { menu: MenuStyle };
+export type WorkspacePrefs = Omit<z.infer<typeof workspacePrefsSchema>, 'menu'> & {
+  menu: MenuStyle;
+  /** The newest "What's new" this person has seen or put away (see WHATS_NEW). Set through its own route. */
+  seenWhatsNew?: string;
+};
+
+/** The release the What's new page describes. A person who hasn't seen it gets a card on their dashboard. */
+export const WHATS_NEW = '2.0';
 
 export const DEFAULT_WORKSPACE: WorkspacePrefs = {
   widgets: DASHBOARD_WIDGETS.map((id) => ({ id, visible: true })),
@@ -130,7 +143,8 @@ export function resolveWorkspace(saved: unknown): WorkspacePrefs {
     ...new Set((Array.isArray(raw.hiddenSections) ? raw.hiddenSections : []).filter((s) => sections.has(s))),
   ] as ClientSection[];
   const menu = MENU_STYLES.includes(raw.menu as MenuStyle) ? (raw.menu as MenuStyle) : DEFAULT_WORKSPACE.menu;
-  return { widgets, hiddenSections, menu };
+  const whatsNew = typeof raw.seenWhatsNew === 'string' ? { seenWhatsNew: raw.seenWhatsNew } : {};
+  return { widgets, hiddenSections, menu, ...whatsNew };
 }
 
 // ---------- client workspace ----------

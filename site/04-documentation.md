@@ -27,6 +27,21 @@ An asset is anything you look after: a server, a workstation, a firewall, a swit
 3. Fill in the fields. Atlas checks them as you save: an IP address, date, email address or web address in the wrong format is pointed out before anything is saved.
 4. Choose **Save**.
 
+### Smart paste
+
+Rather than typing a computer's details, let it tell you:
+
+1. On the computer, run one of these:
+   - **Windows:** `ipconfig /all`, `systeminfo` or, in PowerShell, `Get-ComputerInfo`. Several can be pasted together.
+   - **Mac:** `system_profiler SPHardwareDataType`.
+   - **Linux:** `hostnamectl`.
+2. Copy what it prints.
+3. In the new asset, choose **Smart paste** and paste it. Or simply paste it into the **Name** box: Atlas recognises it and opens Smart paste for you.
+
+Atlas shows what it found: the name, hostname, IP address (the network card with a gateway comes first), MAC address, manufacturer, model, serial number, operating system and type (server, laptop or workstation). Empty fields are ticked to fill. A field that already holds something different shows what it would replace, and stays unticked. Choose **Fill in**, check the fields, then save. The text is read in your browser and isn't sent or kept.
+
+It works with any layout that has fields with these names, not only Configurations.
+
 Devices from ConnectWise RMM and tenants from Microsoft 365 arrive as assets on their own; you don't need to add them by hand. Fields filled by a sync are kept up to date by the sync, and fields you add yourself are left alone.
 
 ### An asset's page

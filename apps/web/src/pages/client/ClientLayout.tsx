@@ -22,7 +22,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { SECTION_TAB } from '@/lib/tabs';
+import { SECTION_TAB, TAB_MENU_ITEM as MENU_ITEM } from '@/lib/tabs';
 import {
   CLIENT_SECTIONS,
   LEVEL_INFO,
@@ -43,6 +43,7 @@ import {
   Input,
   Skeleton,
   useToast,
+  Drawer,
 } from '@/components/ui';
 import { api, type ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -51,6 +52,8 @@ import { useActor } from '@/lib/session';
 import { ExportButton } from '@/components/ExportButton';
 import { FavoriteStar } from '@/components/Favorites';
 import { QuickNote } from '@/components/QuickNote';
+import { HealthBadge } from '@/components/ClientHealth';
+import { ReviewPackButton } from '@/components/ReviewPack';
 import { TRACKER, useTrackers } from '@/components/Trackers';
 import { ClientForm, statusTone } from '../Clients';
 
@@ -83,8 +86,6 @@ const SECTION_ICONS: Record<ClientSection | '', LucideIcon> = {
   map: MapIcon,
   activity: Activity,
 };
-const MENU_ITEM =
-  'flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-surface-3 data-[status=active]:font-semibold data-[status=active]:text-primary';
 
 export function ClientLayout() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
@@ -139,7 +140,7 @@ export function ClientLayout() {
         <div className="flex min-w-0 items-center gap-4">
           <span
             aria-hidden
-            className="grid size-11 shrink-0 place-items-center rounded-md border border-border bg-surface-2 text-sm font-bold text-text-2"
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-border bg-surface-2 text-sm font-bold text-text-2 max-sm:hidden"
           >
             {client.name
               .split(/\s+/)
@@ -150,7 +151,7 @@ export function ClientLayout() {
           <div className="min-w-0">
             <p className="mb-1.5 text-[10px] font-bold tracking-[0.12em] text-muted uppercase">Client workspace</p>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="flex flex-wrap items-center gap-3 text-[29px] leading-tight font-bold tracking-[-0.03em]">
+              <h1 className="flex flex-wrap items-center gap-3 text-2xl leading-tight font-bold tracking-[-0.03em] sm:text-[29px]">
                 {client.name}
                 {client.status !== 'active' && (
                   <Badge tone={statusTone[client.status]} className="capitalize">
@@ -159,21 +160,15 @@ export function ClientLayout() {
                 )}
               </h1>
               <FavoriteStar type="client" id={client.id} name={client.name} />
+              <HealthBadge clientId={client.id} />
             </div>
             <p className="mt-1 text-sm text-muted">
               {client.type} · {LEVEL_INFO[client.access].label}
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {actor.isStaff && (
-            <AppLink
-              to={`/client-report/${client.id}`}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[13px] font-semibold hover:bg-surface-3"
-            >
-              <FileText className="size-4" aria-hidden /> Monthly report
-            </AppLink>
-          )}
+        <div className="flex flex-wrap gap-2 print:hidden">
+          {actor.isStaff && <ReviewPackButton clientId={client.id} clientName={client.name} />}
           {actor.isStaff && <ExportButton clientId={client.id} canIncludePasswords={actor.isAdmin} />}
           {atLeast(client.access, 'edit') && (
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
@@ -318,7 +313,7 @@ function SectionsDialog({ prefs, onClose }: { prefs: WorkspacePrefs; onClose: ()
     }
   };
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="sm"
@@ -347,7 +342,7 @@ function SectionsDialog({ prefs, onClose }: { prefs: WorkspacePrefs; onClose: ()
           />
         ))}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 

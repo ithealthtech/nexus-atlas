@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, Link2 } from 'lucide-react';
 import type { ReportShareView } from '@atlas/shared';
-import { Badge, Button, Dialog, Field, Select, Skeleton, useToast } from '@/components/ui';
+import { Badge, Button, Field, Select, Skeleton, useToast, Drawer } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/format';
+import { useAction } from '@/lib/actions';
 
 /**
  * Links that let someone without an account (usually the client) see one report snapshot: make one, copy it, see
@@ -27,23 +28,12 @@ export function ReportShareDialog({
     queryFn: () => api<ReportShareView[]>(`/reports/runs/${runId}/shares`),
   });
   const [expires, setExpires] = useState('30');
-  const [busy, setBusy] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<unknown>) => {
-    setBusy(name);
-    try {
-      await work();
-      await shares.refetch();
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busy, act } = useAction({ toast: true, after: () => shares.refetch() });
   const copy = (share: ReportShareView) => navigator.clipboard.writeText(share.url).then(() => toast('Link copied.'));
   const active = (shares.data ?? []).filter((s) => s.status === 'active');
   const ended = (shares.data ?? []).filter((s) => s.status !== 'active');
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       size="lg"
@@ -92,7 +82,7 @@ export function ReportShareDialog({
           <ul className="divide-y divide-border text-sm">
             {[...active, ...ended].map((s) => (
               <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-48">
                   <p className="truncate font-mono text-xs">{s.url}</p>
                   <p className="text-xs text-muted">
                     Made {formatDate(s.createdAt)}
@@ -124,6 +114,6 @@ export function ReportShareDialog({
           </ul>
         )}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

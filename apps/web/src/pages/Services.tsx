@@ -206,7 +206,12 @@ export function Services() {
               title="If you can’t reach this page"
               description="The same things from the server’s own console, for when Atlas itself is down."
             />
-            <pre className="overflow-x-auto px-5 py-4 font-mono text-xs leading-6 text-text-2">
+            {/* Focusable, so a keyboard can scroll it where the commands are wider than a phone. */}
+            <pre
+              tabIndex={0}
+              aria-label="Commands to run on the server"
+              className="overflow-x-auto px-5 py-4 font-mono text-xs leading-6 text-text-2"
+            >
               {[
                 'sudo systemctl status msp-atlas caddy postgresql',
                 'sudo systemctl restart msp-atlas',
