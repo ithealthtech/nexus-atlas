@@ -759,7 +759,10 @@ describe('private client reports', () => {
     for (const kind of REPORT_KINDS) {
       const result = await generate(kind);
       expect(result.status, JSON.stringify(result.data)).toBe(201);
-      expect(result.data.snapshot.sections[0].rows.length).toBeGreaterThan(0);
+      // The Microsoft 365 reports need a linked tenant: without one they say so rather than list anything.
+      if (kind === 'accounts' || kind === 'usage')
+        expect(result.data.snapshot.warnings.join(' ')).toContain('no Microsoft 365 tenant is linked');
+      else expect(result.data.snapshot.sections[0].rows.length).toBeGreaterThan(0);
       const serialized = JSON.stringify(result.data);
       for (const hidden of ['never-export-this', 'Archived workstation', 'Other client asset'])
         expect(serialized).not.toContain(hidden);
