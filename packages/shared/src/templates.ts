@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { RichText } from './docs.js';
+import type { GuideAudience } from './guides.js';
 
 // ---------- built-in template library: checklists and knowledge-base runbooks for common MSP work ----------
 // Adding one copies it into the organization as an ordinary MSP checklist or knowledge-base document, which the
@@ -23,10 +24,12 @@ export interface RunbookTemplate {
 
 export interface TemplateView {
   key: string;
-  kind: 'checklist' | 'runbook';
+  kind: 'checklist' | 'runbook' | 'guide';
+  /** Who a guide is written for. */
+  audience?: GuideAudience;
   title: string;
   description: string;
-  /** Steps for a checklist, sections for a runbook. */
+  /** Steps for a checklist, sections for a runbook or guide. */
   size: number;
   /** The checklist or document made from it, while that still exists. */
   addedId: string | null;
@@ -495,7 +498,7 @@ const list = (type: 'bulletList' | 'orderedList', items: string[]) => ({
   content: items.map((i) => ({ type: 'listItem', content: [{ type: 'paragraph', content: text(i) }] })),
 });
 
-/** A runbook's body as the editor's rich text. */
+/** A runbook's or guide's body as the editor's rich text. */
 export function runbookContent(body: RunbookBlock[]): RichText {
   return {
     type: 'doc',

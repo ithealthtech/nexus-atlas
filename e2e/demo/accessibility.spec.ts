@@ -131,4 +131,5 @@ const DIALOGS: [string, string][] = [
   ['/clients/{client}/locations', 'Add location'],
   ['/admin/users', 'Add person'],
   ['/admin/api-keys', 'New key'],
+  ['/documents', 'Template library'],
 ];

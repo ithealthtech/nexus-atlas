@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Atlas guides in the template library.** **Docs → Knowledge base → Template library** now offers 27 how-to guides alongside the runbooks: 10 for technicians, 7 for clients' own staff and 10 for administrators. **Add all** puts them in a new **Atlas guides** folder, each titled by who it's for (such as "Client: View a password your IT provider shared"), to edit like any other document. Client accounts never see the knowledge base, so client guides are sent to a client's staff with **Share**.
+
 ## [2.0.1] - 2026-10-22
 
 ### Added
