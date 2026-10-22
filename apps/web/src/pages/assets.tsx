@@ -54,6 +54,7 @@ import { FavoriteStar } from '@/components/Favorites';
 import { RmmInsightPanel } from '@/components/RmmInsight';
 import { BitlockerPanel } from '@/components/BitlockerPanel';
 import { DeviceSecurityCard } from '@/components/CwSecurity';
+import { BitdefenderDeviceCard } from '@/components/Bitdefender';
 
 const statusTone = { active: 'success', inactive: 'warning', retired: 'neutral' } as const;
 
@@ -626,6 +627,7 @@ export function AssetDetail() {
             </dl>
           </Card>
           <DeviceSecurityCard assetId={asset.id} />
+          <BitdefenderDeviceCard assetId={asset.id} />
           <Card>
             <CardHeader title="Notes" />
             <p className="px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap text-text-2">

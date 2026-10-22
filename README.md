@@ -5,7 +5,7 @@
 **Self-hosted IT documentation and password management for managed service providers.**
 
 Client workspaces, flexible assets, runbooks, runnable checklists, and an encrypted credential
-vault in one application, kept current by syncs from ConnectWise RMM and Microsoft 365, with
+vault in one application, kept current by syncs from ConnectWise RMM, Microsoft 365 and Bitdefender, with
 per-client access for your technicians and read-only access for the clients you support.
 
 [![Version](https://img.shields.io/github/v/release/ithealthtech/nexus-atlas?label=version&color=1f6f4a)](CHANGELOG.md)
@@ -240,7 +240,7 @@ Results for each milestone are in [docs/VERIFICATION.md](docs/VERIFICATION.md).
 ## Current boundary
 
 Atlas covers documentation, the vault, checklists, accounts and security with Microsoft Entra
-sign-in, the REST API, ConnectWise RMM and Microsoft 365 sync, BitLocker key collection, Hudu
+sign-in, the REST API, ConnectWise RMM, Microsoft 365 and Bitdefender GravityZone sync, BitLocker key collection, Hudu
 and CSV import, per-client exports, encrypted backups with verified restore, in-app updates, a
 read-only client portal, a browser extension, and Docker or Windows hosting. The
 [changelog](CHANGELOG.md) lists what each release added.

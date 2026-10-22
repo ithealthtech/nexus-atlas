@@ -10,7 +10,7 @@
     <title>Data and integrations · MSP Atlas manual</title>
     <meta
       name="description"
-      content="Importing from Hudu and spreadsheets, ConnectWise RMM and Microsoft 365 syncs, the BitLocker collector, and automatic password rotation."
+      content="Importing from Hudu and spreadsheets, ConnectWise RMM, Microsoft 365 and Bitdefender syncs, the BitLocker collector, and automatic password rotation."
     />
     <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
     <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
@@ -297,6 +297,56 @@
           with the reseller. Failed or unconfirmed requests are recorded in the security log; refresh before retrying an
           uncertain change.
         </p>
+        <h2 id="bitdefender-gravityzone">
+          <a class="anchor" href="#bitdefender-gravityzone">Bitdefender GravityZone</a>
+        </h2>
+        <p>
+          Atlas reads each client's endpoint protection from Bitdefender GravityZone. It's read-only: Atlas never
+          changes anything in GravityZone.
+        </p>
+        <ol class="steps">
+          <li>
+            In GravityZone, open <strong>My account → API keys</strong> and create a key with the
+            <strong>Network</strong> and <strong>Companies</strong> APIs turned on. A service API key (<strong
+              >Accounts → Service API keys</strong
+            >) works too.
+          </li>
+          <li>
+            Copy the <strong>Access URL</strong> from <strong>My account → Control Center API</strong>. It's usually
+            <code>https://cloud.gravityzone.bitdefender.com/api</code>.
+          </li>
+          <li>
+            In Atlas, enter both under <strong>Import &amp; export → Bitdefender GravityZone</strong> and choose
+            <strong>Connect</strong>. Atlas tries the key before saving it, and keeps it encrypted.
+          </li>
+          <li>
+            Link each GravityZone company to a client. A company's name is matched to a client's to suggest the link.
+          </li>
+        </ol>
+        <p>The sync runs every hour, and <strong>Sync now</strong> runs it straight away.</p>
+        <ul>
+          <li>
+            <strong>The client's overview</strong> gets a <strong>Bitdefender</strong> card. It counts endpoints that
+            are infected, need attention or are protected, and lists what needs attention first, with the reason. It
+            also lists <strong>devices without Bitdefender</strong>: devices the RMM knows about that GravityZone
+            doesn't manage, so they're likely unprotected.
+          </li>
+          <li>
+            <strong>Each device</strong> matched to a GravityZone endpoint shows its state: policy, licence, last seen,
+            agent version, risk score, signatures, and which modules are on.
+          </li>
+          <li>
+            <strong>Needs attention</strong> means the licence has expired or isn't active, the malware signatures are
+            out of date, the policy isn't applied, the endpoint is isolated, it hasn't been seen for 7 days, malware was
+            removed in the last day, or the agent is out of date.
+          </li>
+          <li>
+            <strong>Matching:</strong> endpoints are matched to the client's assets by name, host name or MAC address.
+            Turn on <strong>Add endpoints that aren't in Atlas as assets</strong> to add the rest, in the same layout
+            ConnectWise RMM uses.
+          </li>
+          <li><strong>Disconnecting</strong> deletes the key and the synced endpoint states. Assets stay.</li>
+        </ul>
         <h2 id="export"><a class="anchor" href="#export">Export</a></h2>
         <ul>
           <li>
@@ -386,6 +436,7 @@
           <li><a href="#import-a-spreadsheet-csv">Import a spreadsheet (CSV)</a></li>
           <li><a href="#connectwise-rmm">ConnectWise RMM</a></li>
           <li><a href="#microsoft-365">Microsoft 365</a></li>
+          <li><a href="#bitdefender-gravityzone">Bitdefender GravityZone</a></li>
           <li><a href="#export">Export</a></li>
           <li><a href="#bitlocker-collector">BitLocker collector</a></li>
           <li><a href="#automatic-password-rotation">Automatic password rotation</a></li>

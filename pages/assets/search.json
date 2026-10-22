@@ -570,6 +570,13 @@
   {
     "u": "manual/integrations.html",
     "p": "Data and integrations",
+    "s": "Bitdefender GravityZone",
+    "h": "bitdefender-gravityzone",
+    "t": "Atlas reads each client's endpoint protection from Bitdefender GravityZone. It's read-only: Atlas never changes anything in GravityZone. In GravityZone, open **My account → API keys** and create a key with the **Network** and **Companies** APIs turned on. A service API key (**Accounts → Service API keys**) works too. Copy the **Access URL** from **My account → Control Center API**. It's usually `https://cloud.gravityzone.bitdefender.com/api`. In Atlas, enter both under **Import & export → Bitdefender GravityZone** and choose **Connect**. Atlas tries the key before saving it, and keeps it encrypted. Link each GravityZone company to a client. A company's name is matched to a client's to suggest the link. The sync runs every hour, and **Sync now** runs it straight away. **The client's overview** gets a **Bitdefender** card. It counts endpoints that are infected, need attention or are protected, and lists what needs attention first, with the reason. It also lists **devices without Bitdefender**: devices the RMM knows about that GravityZone doesn't manage, so they're likely unprotected. **Each device** matched to a GravityZone endpoint shows its state: policy, licence, last seen, agent version, risk score, signatures, and which modules are on. **Needs attention** means the licence has expired or isn't active, the malware signatures are out of date, the policy isn't applied, the endpoint is isolated, it hasn't been seen for 7 days, malware was removed in the last day, or the agent is out of date. **Matching:** endpoints are matched to the client's assets by name, host name or MAC address. Turn on **Add endpoints that aren't in Atlas as assets** to add the rest, in the same layout ConnectWise RMM uses. **Disconnecting** deletes the key and the synced endpoint states. Assets stay."
+  },
+  {
+    "u": "manual/integrations.html",
+    "p": "Data and integrations",
     "s": "Export",
     "h": "export",
     "t": "**One client:** **Export** on the client's page. See [Clients](clients.html#export-a-client). **Everything:** System status → **Back up now** makes a full encrypted backup. See [Keeping Atlas healthy](looking-after-atlas.html#backups). **The API:** with an API key, `/api/v1/openapi.json` describes every endpoint."

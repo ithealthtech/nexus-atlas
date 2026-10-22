@@ -7,6 +7,7 @@ import { ActivityFeed } from '@/components/panels';
 import { ItemIcon } from '@/components/ItemIcon';
 import { RmmHealthCard } from '@/components/RmmHealth';
 import { ClientSecurityCard } from '@/components/CwSecurity';
+import { BitdefenderClientCard } from '@/components/Bitdefender';
 import { TrackerCard } from '@/components/Trackers';
 import { TicketDetails, TicketsCard } from '@/components/Tickets';
 import { WarrantyCard } from '@/components/Warranty';
@@ -168,6 +169,7 @@ export function ClientOverview() {
       {/* Full width, so its three charts sit side by side instead of stacking. */}
       <RmmHealthCard clientId={clientId} />
       <ClientSecurityCard clientId={clientId} />
+      <BitdefenderClientCard clientId={clientId} />
       <TrackerCard clientId={clientId} />
       <AssetStatsCard clientId={clientId} />
       <TicketsCard clientId={clientId} />

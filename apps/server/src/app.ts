@@ -58,6 +58,7 @@ import { SamlService } from './services/saml.js';
 import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
+import { BitdefenderScheduler, registerBitdefenderRoutes } from './routes/bitdefender.js';
 import { M365Scheduler, registerM365Routes } from './routes/m365.js';
 import { RotationScheduler, registerRotationRoutes } from './routes/rotation.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
@@ -122,6 +123,8 @@ export interface AppOptions {
   warrantyFetch?: typeof fetch;
   /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
   cwRmmFetch?: typeof fetch;
+  /** Replaces fetch for Bitdefender GravityZone (tests use a fake GravityZone API). */
+  bitdefenderFetch?: typeof fetch;
   /** Replaces fetch for webhook deliveries (tests use a fake receiver). */
   webhookFetch?: typeof fetch;
   /** Replaces fetch for the Microsoft 365 sync (tests use a fake Microsoft Graph). */
@@ -194,6 +197,7 @@ export async function buildApp({
   mailTransport = defaultTransport,
   huduFetch,
   cwRmmFetch,
+  bitdefenderFetch,
   warrantyFetch,
   m365Fetch,
   webhookFetch,
@@ -244,6 +248,7 @@ export async function buildApp({
   const logged = (f?: typeof fetch) => f && requestLog.wrap(f);
   huduFetch = logged(huduFetch);
   cwRmmFetch = logged(cwRmmFetch);
+  bitdefenderFetch = logged(bitdefenderFetch);
   warrantyFetch = logged(warrantyFetch);
   m365Fetch = logged(m365Fetch);
   breachFetch = logged(breachFetch);
@@ -915,6 +920,13 @@ export async function buildApp({
       vault,
     );
     cwRmm.start();
+    const bitdefender = new BitdefenderScheduler(
+      db,
+      settings,
+      failuresOf('Bitdefender GravityZone sync'),
+      bitdefenderFetch,
+    );
+    bitdefender.start();
     const m365 = new M365Scheduler(db, settings, failuresOf('Microsoft 365 sync'), m365Fetch);
     m365.start();
     const rotations = new RotationScheduler(db, rotation, failuresOf('Password rotation'));
@@ -929,6 +941,7 @@ export async function buildApp({
       backups.stop();
       sends.stop();
       cwRmm.stop();
+      bitdefender.stop();
       m365.stop();
       rotations.stop();
       await requestLog.stop();
@@ -988,6 +1001,7 @@ export async function buildApp({
     publicUrl: config.PUBLIC_URL,
     vault,
   });
+  registerBitdefenderRoutes(app, { db, authed, recent, settings, bitdefenderFetch });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
   const webhooks = new WebhookService(db, vaultKeys, config.publicOrigin, logged(webhookFetch));
   registerWebhookRoutes(app, { authed, recent, webhooks });

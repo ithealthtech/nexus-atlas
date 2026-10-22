@@ -28,7 +28,7 @@ export interface ApiKeyView {
 }
 
 // ---------- imports ----------
-export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy', 'cw-rmm', 'm365'] as const;
+export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy', 'cw-rmm', 'm365', 'bitdefender'] as const;
 export type ImportSource = (typeof IMPORT_SOURCES)[number];
 export interface ImportCounts {
   created: number;

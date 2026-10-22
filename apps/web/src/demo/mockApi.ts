@@ -1,6 +1,9 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  bitdefenderHealth,
+  type BitdefenderEndpointView,
+  type BitdefenderView,
   REPORT_INFO,
   reportDefinitionSchema,
   type ReportDefinition,
@@ -3001,6 +3004,107 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
   return cwView();
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
+
+// ---------- Bitdefender GravityZone: connected, with sample endpoints for the first client ----------
+let bitdefender: BitdefenderView | null = {
+  accessUrl: 'https://cloud.gravityzone.bitdefender.com/api',
+  hasKey: true,
+  autoSync: true,
+  lastSyncAt: ago(25),
+  options: { createAssets: false },
+};
+const bdMap = new Map<string, { action: 'link'; clientId: string } | { action: 'skip' }>([
+  ['gz1', { action: 'link', clientId: db.clients[0]!.id }],
+]);
+const bdCompanies = () => db.clients.map((c, i) => ({ id: `gz${i + 1}`, name: c.name }));
+const bdEndpoint = (name: string, facts: Partial<BitdefenderEndpointView> = {}): BitdefenderEndpointView => {
+  const asset = db.assets.find((a) => a.name === name && a.clientId === db.clients[0]!.id);
+  const base = {
+    id: `bd-${name}`,
+    name,
+    assetId: asset?.id ?? null,
+    assetName: asset?.name ?? null,
+    os: name.includes('DC') ? 'Windows Server 2022' : 'Windows 11 Pro',
+    ip: '',
+    online: true,
+    lastSeenAt: ago(30),
+    infected: false,
+    detection: false,
+    signaturesOutdated: false,
+    productOutdated: false,
+    licence: 'active' as const,
+    policyName: name.includes('DC') ? 'Servers' : 'Workstations',
+    policyApplied: true,
+    isolated: false,
+    riskScore: 18,
+    riskImpact: 'Low',
+    modules: ['advancedThreatControl', 'antimalware', 'edrSensor', 'firewall'],
+    productVersion: '7.9.12.402',
+    syncedAt: ago(25),
+    ...facts,
+  };
+  return { ...base, ...bitdefenderHealth(base) };
+};
+const BD_SAMPLE: BitdefenderEndpointView[] = [
+  bdEndpoint('HDG-WS-02', { infected: true, detection: true, riskScore: 71, riskImpact: 'High' }),
+  bdEndpoint('HDG-WS-04', { signaturesOutdated: true, lastSeenAt: ago(9 * 24 * 60), online: false }),
+  bdEndpoint('HDG-RECEPTION', { licence: 'expired', policyApplied: false }),
+  bdEndpoint('HDG-DC-01', { riskScore: 9 }),
+  ...['HDG-WS-03', 'HDG-WS-05', 'HDG-WS-06', 'HDG-WS-07', 'HDG-LT-01', 'HDG-LT-02'].map((n) => bdEndpoint(n)),
+];
+on('GET', '/integrations/bitdefender', () => bitdefender);
+on('PUT', '/integrations/bitdefender', (_m, b) => {
+  if (!bitdefender && !b.apiKey) throw new MockError(400, 'Enter the API key.');
+  bitdefender = {
+    accessUrl: String(b.accessUrl || 'https://cloud.gravityzone.bitdefender.com/api'),
+    hasKey: true,
+    autoSync: b.autoSync !== false,
+    lastSyncAt: bitdefender?.lastSyncAt ?? null,
+    options: bitdefender?.options ?? { createAssets: false },
+  };
+  return { ...bitdefender, companies: bdCompanies().length };
+});
+on('DELETE', '/integrations/bitdefender', () => ((bitdefender = null), bdMap.clear(), { ok: true }));
+on('PUT', '/integrations/bitdefender/options', (_m, b) => {
+  if (!bitdefender) throw new MockError(400, 'Connect Bitdefender GravityZone first.');
+  bitdefender.options = { createAssets: b.createAssets === true };
+  return bitdefender;
+});
+const bdView = () =>
+  bdCompanies().map((c) => {
+    const m = bdMap.get(c.id);
+    const linked = m?.action === 'link' ? db.clients.find((x) => x.id === m.clientId) : undefined;
+    return {
+      id: c.id,
+      name: c.name,
+      action: m?.action === 'skip' ? ('skip' as const) : linked ? ('link' as const) : null,
+      clientId: linked?.id ?? null,
+      clientName: linked?.name ?? null,
+      suggestedClientId: m ? null : (db.clients.find((x) => x.name === c.name)?.id ?? null),
+    };
+  });
+on('GET', '/integrations/bitdefender/companies', () => bdView());
+on('PUT', '/integrations/bitdefender/companies', (_m, b) => {
+  for (const m of b.mappings as { companyId: string; action: string; clientId?: string }[]) {
+    if (m.action === 'clear') bdMap.delete(m.companyId);
+    else if (m.action === 'skip') bdMap.set(m.companyId, { action: 'skip' });
+    else if (m.action === 'link' && m.clientId) bdMap.set(m.companyId, { action: 'link', clientId: m.clientId });
+    else if (m.action === 'create') notInDemo('Creating clients from GravityZone');
+  }
+  return bdView();
+});
+on('POST', '/integrations/bitdefender/sync', () => notInDemo('Syncing from a real GravityZone'));
+on('GET', '/clients/:id/bitdefender', (m) => {
+  const linked = !!bitdefender && [...bdMap.values()].some((x) => x.action === 'link' && x.clientId === m[1]);
+  // The sample endpoints belong to the first client.
+  const endpoints = linked && m[1] === db.clients[0]!.id ? BD_SAMPLE : [];
+  const counts = { infected: 0, attention: 0, protected: 0 };
+  for (const e of endpoints) counts[e.health]++;
+  return { linked, syncedAt: endpoints.length ? ago(25) : null, counts, endpoints, missing: [] };
+});
+on('GET', '/assets/:id/bitdefender', (m) => ({
+  endpoint: (bitdefender && BD_SAMPLE.find((e) => e.assetId === m[1])) || null,
+}));
 on('POST', '/assets/detect-manufacturers', () => ({ checked: 3, filled: 2 }));
 // Password rotation: policies can be edited; rotations need a real ConnectWise RMM.
 let rotationSettings = { enabled: false, scriptId: '' };

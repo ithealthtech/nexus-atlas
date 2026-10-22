@@ -1152,6 +1152,48 @@ export const rmmDeviceStatus = pgTable(
   ],
 );
 
+// Each managed Bitdefender GravityZone endpoint of a linked company, as the last sync read it, and the asset it was
+// matched to (by name or MAC address). A copy of GravityZone's state: endpoints gone from GravityZone are deleted.
+export const bitdefenderEndpoints = pgTable(
+  'bitdefender_endpoints',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    endpointId: text('endpoint_id').notNull(),
+    companyId: text('company_id').notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    os: text('os').notNull().default(''),
+    ip: text('ip').notNull().default(''),
+    macs: jsonb('macs').$type<string[]>().notNull().default([]),
+    online: boolean('online'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    infected: boolean('infected').notNull().default(false),
+    detection: boolean('detection').notNull().default(false),
+    signaturesOutdated: boolean('signatures_outdated'),
+    productOutdated: boolean('product_outdated'),
+    licence: text('licence').notNull().default('unknown'),
+    policyName: text('policy_name').notNull().default(''),
+    policyApplied: boolean('policy_applied'),
+    isolated: boolean('isolated').notNull().default(false),
+    riskScore: integer('risk_score'),
+    riskImpact: text('risk_impact').notNull().default(''),
+    modules: jsonb('modules').$type<string[]>().notNull().default([]),
+    productVersion: text('product_version').notNull().default(''),
+    updatedAt: updated(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.endpointId] }),
+    index('bitdefender_endpoints_client').on(t.orgId, t.clientId),
+    index('bitdefender_endpoints_asset').on(t.assetId),
+    check('bitdefender_endpoints_licence_check', sql`${t.licence} in ('active','expired','pending','none','unknown')`),
+  ],
+);
+
 // One row per client per day with that day's RMM health counts (RmmHealthCounts), written after each sync, for the
 // trend lines. The day's last sync wins.
 export const rmmHealthSnapshots = pgTable(
