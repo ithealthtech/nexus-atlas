@@ -21,3 +21,4 @@ export * from './licenses.js';
 export * from './reports.js';
 export * from './health.js';
 export * from './smart-paste.js';
+export * from './wifi.js';

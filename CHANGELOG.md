@@ -93,6 +93,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Paste it straight into the Name box and Smart paste opens on its own.
   - Fields that already have a value are shown with what would change, and are left alone unless you tick them.
   - The text is read in the browser and never sent.
+- **Wi-Fi join codes.** A Wi-Fi password now has a **Join this network** card: a QR code that phones scan with their camera to join, with no typing. **Print** makes a guest card with the network name, the code and the password, ready to frame. The password is revealed the usual way (recorded, with a reason where required), and the code hides again after a minute. WEP, open and hidden networks are supported, and Wi-Fi entries call their username **Network name**.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.

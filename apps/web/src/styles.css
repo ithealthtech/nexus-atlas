@@ -460,3 +460,16 @@ html[data-nav='subtle'] .top-nav-link[aria-current='page'] {
   font-size: 0.8125rem;
   font-weight: 500;
 }
+
+/* A card printed on its own, such as a Wi-Fi code: everything else is left off the page while it prints. */
+.print-card {
+  display: none;
+}
+@media print {
+  html.printing-card body > :not(#print-card) {
+    display: none !important;
+  }
+  html.printing-card .print-card {
+    display: block;
+  }
+}

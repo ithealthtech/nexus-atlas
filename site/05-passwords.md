@@ -45,6 +45,17 @@ Every reveal, copy, change and share appears under **Access history** on the ent
 
 Atlas warns you when a password is weak or already used elsewhere.
 
+## A Wi-Fi password's join code
+
+A password in the **Wi-Fi** category shows its username as the **Network name**, and has a **Join this network** card underneath: a code that phones scan with their camera to join without typing the password.
+
+Choose **Show the code**. The password is revealed the usual way: it's recorded in the access history, and a reason is asked for where the client requires one. The code appears beside the network's details. Change the **Security** setting for a WEP or open network, and tick **Hidden network** for one that doesn't broadcast its name, so phones know to look for it.
+
+- **Print** prints a card on its own, with the network name, the code and (unless you untick it) the password underneath, ready to frame for a waiting room.
+- **PNG** downloads the code as a picture.
+
+Like a shown password, the code hides again after a minute.
+
 ## Change a password and its history
 
 Edit the entry and enter the new password. The old one moves to **Previous passwords**, with when it changed, so you can still find it if the change didn't take everywhere.
