@@ -2,6 +2,16 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Bitdefender GravityZone.** Connect GravityZone under **Import & export** with an API key from your own console, and link its companies to clients. Atlas reads each client's endpoint protection every hour. It's read-only, and the key is kept encrypted.
+  - **A Bitdefender card on the client's overview** counts infected, needing attention and protected endpoints. It lists what needs attention first, with the reason: an expired licence, out-of-date signatures, a policy not applied, not seen for a week, and so on.
+  - **Devices without Bitdefender:** devices the RMM knows about that GravityZone doesn't manage, so they're likely unprotected.
+  - **Each device** shows its Bitdefender state, policy, licence, agent version, risk score and modules.
+  - **Matching:** endpoints are matched to assets by name, host name or MAC address. Optionally, the rest are added as assets.
+
 ## [2.0.0] - 2026-10-22
 
 The Landmark Update brings expanded reporting, client health scores, a refreshed workspace, and Atlas for Windows 1.0. See [the upgrade guide](docs/UPGRADING-2.0.md) before updating.

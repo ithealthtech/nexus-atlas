@@ -302,6 +302,13 @@
       "when": 1792592471182,
       "tag": "0042_client_health",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792653806364,
+      "tag": "0043_bitdefender_endpoints",
+      "breakpoints": true
     }
   ]
 }

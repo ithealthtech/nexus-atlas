@@ -1,18 +1,17 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { eq, sql } from 'drizzle-orm';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { m365LinkSchema, m365SyncOptionsSchema, type Actor } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
-import { actorFor } from '../identity/service.js';
 import { gdapClient, GdapService, registerGdapRoutes } from './m365-gdap.js';
 import type { IdentityService } from '../identity/service.js';
 import type { KeyProvider } from '../crypto/keys.js';
 import { ClientService } from '../services/clients.js';
 import { ImportRun } from '../services/importers/common.js';
 import { runM365Sync, tenantLinks } from '../services/integrations/m365.js';
-import type { SettingsService } from '../services/settings.js';
-import { Repeating, type ErrorLog } from '../services/repeating.js';
+import type { SettingsService, StoredM365 } from '../services/settings.js';
+import type { ErrorLog } from '../services/repeating.js';
+import { ConnectedSyncScheduler } from '../services/sync-scheduler.js';
 import { securityEvent } from '../services/security-log.js';
 
 const SYNC_EVERY = 6 * 3_600_000;
@@ -217,46 +216,16 @@ export function registerM365Routes(
 }
 
 /** Runs each organization's Microsoft 365 sync every few hours, as the administrator who connected it. */
-export class M365Scheduler {
-  private readonly schedule = new Repeating(() => this.tick());
-
-  constructor(
-    private readonly db: Database,
-    private readonly settings: SettingsService,
-    private readonly log: ErrorLog,
-    private readonly fetcher?: typeof fetch,
-  ) {}
-
-  start(intervalMs = 15 * 60_000) {
-    this.schedule.start(intervalMs, this.log);
-  }
-
-  stop() {
-    this.schedule.stop();
-  }
-
-  async tick(now = Date.now()) {
-    const orgs = await this.db
-      .select({ id: schema.orgs.id })
-      .from(schema.orgs)
-      .where(sql`${schema.orgs.settings} ? 'm365'`);
-    const started: Promise<void>[] = [];
-    for (const { id } of orgs) {
-      const saved = await this.settings.m365(id);
-      if (!saved?.autoSync || !Object.keys(saved.tenants).length) continue;
-      if (saved.lastSyncAt && now - Date.parse(saved.lastSyncAt) < SYNC_EVERY - 5 * 60_000) continue;
-      const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, saved.connectedBy));
-      if (!user || user.disabled || (user.role !== 'owner' && user.role !== 'admin')) {
-        this.log(new Error(`Microsoft 365 sync skipped for org ${id}: the connecting administrator can't run it.`));
-        continue;
-      }
-      try {
-        started.push((await startSync(this.db, this.settings, actorFor(user), this.fetcher, this.log)).done);
-      } catch (error) {
-        // Another import is running; try again next tick.
-        if (!(error instanceof HttpError && error.status === 409)) this.log(error);
-      }
-    }
-    await Promise.all(started);
+export class M365Scheduler extends ConnectedSyncScheduler<StoredM365> {
+  constructor(db: Database, settings: SettingsService, log: ErrorLog, fetcher?: typeof fetch) {
+    super(db, log, {
+      product: 'Microsoft 365',
+      settingsKey: 'm365',
+      every: SYNC_EVERY,
+      checkEvery: 15 * 60_000,
+      load: (orgId) => settings.m365(orgId),
+      ready: (saved) => Object.keys(saved.tenants).length > 0,
+      start: (actor) => startSync(db, settings, actor, fetcher, log),
+    });
   }
 }

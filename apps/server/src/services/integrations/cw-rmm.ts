@@ -9,7 +9,7 @@ import { endpointLayout, isEndpointName } from '../endpoint-layout.js';
 import { LayoutService } from '../layouts.js';
 import { contacts as contactService, locations } from '../people.js';
 import { Scope } from '../scope.js';
-import type { SettingsService, StoredCwRmm } from '../settings.js';
+import type { StoredCwRmm } from '../settings.js';
 import { ImportRun } from '../importers/common.js';
 import { detectManufacturer } from '../manufacturer.js';
 import type { WarrantyLookup } from '../warranty-lookup.js';
@@ -415,19 +415,22 @@ async function saveStatus(
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-/** RMM companies with the decision for each, and a same-name Atlas client to suggest. */
+/** What to do with each company of an integration (ConnectWise RMM, Bitdefender): link it to a client, or skip it. */
+export type CompanyMap = Record<string, { action: 'link'; clientId: string } | { action: 'skip' }>;
+
+/** An integration's companies with the decision for each, and a same-name Atlas client to suggest. */
 export async function companiesWithMapping(
   db: Database,
   actor: Actor,
-  client: CwRmmClient,
-  saved: StoredCwRmm,
+  companies: { id: string; name: string }[],
+  map: CompanyMap,
 ): Promise<CwRmmCompany[]> {
   const clients = await new ClientService(db).list(actor);
   const byId = new Map(clients.map((c) => [c.id, c]));
   const byName = new Map(clients.map((c) => [norm(c.name), c.id]));
-  return (await client.companies())
+  return companies
     .map((c) => {
-      const m = saved.map[c.id];
+      const m = map[c.id];
       const linked = m?.action === 'link' ? byId.get(m.clientId) : undefined;
       return {
         id: c.id,
@@ -441,21 +444,21 @@ export async function companiesWithMapping(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Saves decisions; 'create' makes the Atlas client now so the next sync has somewhere to go. */
-export async function saveMapping(
+/** Applies the admin's decisions to a company map; 'create' makes the Atlas client now, so the next sync has a home. */
+export async function mapCompanies(
   db: Database,
   actor: Actor,
-  settings: SettingsService,
-  client: CwRmmClient,
+  companies: { id: string; name: string }[],
+  current: CompanyMap,
   input: unknown,
-) {
+  product: string,
+): Promise<CompanyMap> {
   const body = cwRmmMappingSchema.parse(input);
-  const saved = (await settings.cwRmm(actor.orgId))!;
-  const names = new Map((await client.companies()).map((c) => [c.id, c.name]));
+  const names = new Map(companies.map((c) => [c.id, c.name]));
   const clients = new ClientService(db);
-  const map = { ...saved.map };
+  const map = { ...current };
   for (const m of body.mappings) {
-    if (!names.has(m.companyId)) throw new HttpError(400, 'That company is not in ConnectWise RMM.');
+    if (!names.has(m.companyId)) throw new HttpError(400, `That company is not in ${product}.`);
     if (m.action === 'clear') delete map[m.companyId];
     else if (m.action === 'skip') map[m.companyId] = { action: 'skip' };
     else if (m.action === 'create') {
@@ -467,7 +470,7 @@ export async function saveMapping(
       map[m.companyId] = { action: 'link', clientId: m.clientId };
     }
   }
-  await settings.patchCwRmm(actor.orgId, { map });
+  return map;
 }
 
 /**

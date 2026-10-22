@@ -23,3 +23,4 @@ export * from './health.js';
 export * from './smart-paste.js';
 export * from './wifi.js';
 export * from './setup.js';
+export * from './bitdefender.js';

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
   atLeast,
@@ -12,7 +12,6 @@ import {
 } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
-import { actorFor } from '../identity/service.js';
 import type { StoredCwRmm } from '../services/settings.js';
 import { ImportRun } from '../services/importers/common.js';
 import {
@@ -21,7 +20,7 @@ import {
   deviceLayout,
   runCwRmmSync,
   LINK_SCOPES,
-  saveMapping,
+  mapCompanies,
   TICKET_NOTE_SCOPES,
   TICKET_SCOPES,
 } from '../services/integrations/cw-rmm.js';
@@ -46,7 +45,8 @@ import type { VaultService } from '../services/vault.js';
 import { AssetService } from '../services/assets.js';
 import { LayoutService } from '../services/layouts.js';
 import { runBitlockerSync } from '../services/integrations/cw-bitlocker.js';
-import { Repeating, type ErrorLog } from '../services/repeating.js';
+import type { ErrorLog } from '../services/repeating.js';
+import { ConnectedSyncScheduler } from '../services/sync-scheduler.js';
 import { securityEvent } from '../services/security-log.js';
 
 const HOUR = 3_600_000;
@@ -170,13 +170,15 @@ export function registerIntegrationRoutes(
   app.get('/api/integrations/cw-rmm/companies', authed, async (req) => {
     const actor = admin(req);
     const { saved, client } = await clientFor(actor.orgId);
-    return companiesWithMapping(db, actor, client, saved);
+    return companiesWithMapping(db, actor, await client.companies(), saved.map);
   });
   app.put('/api/integrations/cw-rmm/companies', authed, async (req) => {
     const actor = admin(req);
     const { saved, client } = await clientFor(actor.orgId);
-    await saveMapping(db, actor, settings, client, req.body);
-    return companiesWithMapping(db, actor, client, { ...saved, ...(await settings.cwRmm(actor.orgId))! });
+    const companies = await client.companies();
+    const map = await mapCompanies(db, actor, companies, saved.map, req.body, 'ConnectWise RMM');
+    await settings.patchCwRmm(actor.orgId, { map });
+    return companiesWithMapping(db, actor, companies, map);
   });
   app.put('/api/integrations/cw-rmm/options', authed, async (req) => {
     const actor = admin(req);
@@ -328,63 +330,24 @@ export function registerIntegrationRoutes(
   });
 }
 
-/** Runs each organization's sync about hourly, as the administrator who connected it. */
-export class CwRmmScheduler {
-  private readonly schedule = new Repeating(() => this.tick());
-
+/** Runs each organization's ConnectWise RMM sync about hourly, as the administrator who connected it. */
+export class CwRmmScheduler extends ConnectedSyncScheduler<StoredCwRmm> {
   constructor(
-    private readonly db: Database,
-    private readonly settings: SettingsService,
-    private readonly log: ErrorLog,
-    private readonly fetcher?: typeof fetch,
-    private readonly warranty?: WarrantyLookup,
-    private readonly publicUrl?: string,
-    private readonly vault?: VaultService,
-  ) {}
-
-  start(intervalMs = 10 * 60_000) {
-    this.schedule.start(intervalMs, this.log);
-  }
-
-  stop() {
-    this.schedule.stop();
-  }
-
-  async tick(now = Date.now()) {
-    const orgs = await this.db
-      .select({ id: schema.orgs.id })
-      .from(schema.orgs)
-      .where(sql`${schema.orgs.settings} ? 'cwRmm'`);
-    const started: Promise<void>[] = [];
-    for (const { id } of orgs) {
-      const saved = await this.settings.cwRmm(id);
-      if (!saved?.autoSync) continue;
-      if (saved.lastSyncAt && now - Date.parse(saved.lastSyncAt) < HOUR - 5 * 60_000) continue;
-      const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, saved.connectedBy));
-      if (!user || user.disabled || (user.role !== 'owner' && user.role !== 'admin')) {
-        this.log(new Error(`ConnectWise RMM sync skipped for org ${id}: the connecting administrator can't run it.`));
-        continue;
-      }
-      try {
-        started.push(
-          (
-            await startSync(
-              this.db,
-              this.settings,
-              actorFor(user),
-              this.fetcher,
-              this.log,
-              this.warranty,
-              this.publicUrl,
-              this.vault,
-            )
-          ).done,
-        );
-      } catch (error) {
-        // Another import is running; try again next tick.
-        if (!(error instanceof HttpError && error.status === 409)) this.log(error);
-      }
-    }
-    await Promise.all(started);
+    db: Database,
+    settings: SettingsService,
+    log: ErrorLog,
+    fetcher?: typeof fetch,
+    warranty?: WarrantyLookup,
+    publicUrl?: string,
+    vault?: VaultService,
+  ) {
+    super(db, log, {
+      product: 'ConnectWise RMM',
+      settingsKey: 'cwRmm',
+      every: HOUR,
+      checkEvery: 10 * 60_000,
+      load: (orgId) => settings.cwRmm(orgId),
+      start: (actor) => startSync(db, settings, actor, fetcher, log, warranty, publicUrl, vault),
+    });
   }
 }

@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
+  bitdefenderConnectionSchema,
+  bitdefenderSyncOptionsSchema,
+  type BitdefenderSyncOptions,
+  type BitdefenderView,
   brandingSchema,
   cwRmmConnectionSchema,
   m365ConnectionSchema,
@@ -79,6 +83,7 @@ interface StoredSettings {
   notifications?: NotificationSettings;
   auditCheckpoint?: AuditCheckpoint;
   cwRmm?: StoredCwRmm;
+  bitdefender?: StoredBitdefender;
   /** A pending "erase all data" request, during its waiting period. */
   erase?: EraseRequest;
   health?: PasswordHealthSettings & { lastRunAt?: string };
@@ -184,6 +189,23 @@ export interface StoredCwRmm {
   /** ConnectWise company id → what to do with it. */
   map: Record<string, { action: 'link'; clientId: string } | { action: 'skip' }>;
 }
+/** Bitdefender GravityZone as stored: the API key is sealed with the master key. */
+export interface StoredBitdefender {
+  accessUrl: string;
+  keySealed: string;
+  /**
+   * How the key signs in: personal keys (My account) use HTTP Basic, service keys (Accounts → Service API keys) the
+   * X-API-Key header. Found when the connection is tested.
+   */
+  auth: 'basic' | 'header';
+  autoSync: boolean;
+  /** The administrator who connected it; scheduled syncs run as them. */
+  connectedBy: string;
+  lastSyncAt: string | null;
+  options?: BitdefenderSyncOptions;
+  /** GravityZone company id → what to do with it. */
+  map: Record<string, { action: 'link'; clientId: string } | { action: 'skip' }>;
+}
 /** Email settings ready to send with (secrets decrypted). */
 export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientSecretSealed'> {
   password: string;
@@ -192,6 +214,7 @@ export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientS
 
 const entraAad = (orgId: string) => `org|${orgId}|entra`;
 const cwAad = (orgId: string) => `org|${orgId}|cw-rmm`;
+const bitdefenderAad = (orgId: string) => `org|${orgId}|bitdefender`;
 const m365Aad = (orgId: string) => `org|${orgId}|m365`;
 const gdapAad = (orgId: string) => `org|${orgId}|m365|gdap`;
 const smtpAad = (orgId: string) => `org|${orgId}|smtp`;
@@ -279,6 +302,11 @@ export class SettingsService {
         });
       if (stored.cwRmm)
         await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
+      if (stored.bitdefender)
+        await this.put(id, 'bitdefender', {
+          ...stored.bitdefender,
+          keySealed: reseal(stored.bitdefender.keySealed, bitdefenderAad(id))!,
+        });
       if (stored.siem?.secretSealed)
         await this.put(id, 'siem', { ...stored.siem, secretSealed: reseal(stored.siem.secretSealed, siemAad(id)) });
     }
@@ -523,6 +551,59 @@ export class SettingsService {
     await this.db
       .update(schema.orgs)
       .set({ settings: sql`${schema.orgs.settings} - 'cwRmm'` })
+      .where(eq(schema.orgs.id, orgId));
+  }
+
+  /** Bitdefender GravityZone connection with the API key decrypted, or null when not connected. */
+  async bitdefender(orgId: string): Promise<(StoredBitdefender & { apiKey: string }) | null> {
+    const saved = (await this.load(orgId)).bitdefender;
+    return saved
+      ? { ...saved, map: saved.map ?? {}, apiKey: open(this.keys, saved.keySealed, bitdefenderAad(orgId)) }
+      : null;
+  }
+
+  async bitdefenderView(orgId: string): Promise<BitdefenderView | null> {
+    const saved = (await this.load(orgId)).bitdefender;
+    return saved
+      ? {
+          accessUrl: saved.accessUrl,
+          hasKey: true,
+          autoSync: saved.autoSync,
+          lastSyncAt: saved.lastSyncAt,
+          options: bitdefenderSyncOptionsSchema.parse(saved.options ?? {}),
+        }
+      : null;
+  }
+
+  /** Saves a connection already tested with `auth`; a missing key keeps the saved one. */
+  async saveBitdefender(orgId: string, userId: string, input: unknown, auth: StoredBitdefender['auth']) {
+    const body = bitdefenderConnectionSchema.parse(input);
+    const current = await this.bitdefender(orgId);
+    const key = body.apiKey ?? current?.apiKey;
+    if (!key) throw new HttpError(400, 'Enter the API key.', undefined, { apiKey: 'Enter the API key.' });
+    await this.put(orgId, 'bitdefender', {
+      accessUrl: body.accessUrl,
+      keySealed: seal(this.keys, key, bitdefenderAad(orgId)),
+      auth,
+      autoSync: body.autoSync,
+      connectedBy: userId,
+      lastSyncAt: current?.lastSyncAt ?? null,
+      options: current?.options,
+      map: current?.map ?? {},
+    } satisfies StoredBitdefender);
+  }
+
+  /** Updates the mapping, options or last-sync time without touching the key. */
+  async patchBitdefender(orgId: string, patch: Partial<Pick<StoredBitdefender, 'map' | 'lastSyncAt' | 'options'>>) {
+    const saved = (await this.load(orgId)).bitdefender;
+    if (!saved) throw new HttpError(400, 'Connect Bitdefender GravityZone first.');
+    await this.put(orgId, 'bitdefender', { ...saved, ...patch });
+  }
+
+  async forgetBitdefender(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${schema.orgs.settings} - 'bitdefender'` })
       .where(eq(schema.orgs.id, orgId));
   }
 

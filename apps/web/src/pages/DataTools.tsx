@@ -23,6 +23,7 @@ import { parseCsv } from '@/lib/csv';
 import { useLayouts } from '@/lib/queries';
 import { formatDateTime } from '@/lib/format';
 import { CwRmmSync } from './CwRmm';
+import { BitdefenderSync } from './Bitdefender';
 import { M365Sync } from './M365';
 import { ScreenConnectSettingsCard } from './ScreenConnect';
 import { HuduImportChoices } from './ImportChoices';
@@ -34,6 +35,7 @@ const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
   csv: 'CSV',
   'cw-rmm': 'ConnectWise RMM',
   m365: 'Microsoft 365',
+  bitdefender: 'Bitdefender GravityZone',
 };
 const KIND_LABELS: Record<string, string> = {
   clients: 'Clients',
@@ -610,11 +612,12 @@ export function DataTools() {
       <PageHeader
         eyebrow="Administration"
         title="Import & export"
-        description="Sync devices and tickets from ConnectWise and tenants from Microsoft 365, set where Connect opens ScreenConnect, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
+        description="Sync devices and tickets from ConnectWise, tenants from Microsoft 365 and endpoint protection from Bitdefender, set where Connect opens ScreenConnect, and bring in documentation from Hudu or spreadsheets. Export a single client from its page."
       />
       <PageSections>
         <CwRmmSync />
         <M365Sync />
+        <BitdefenderSync />
         <ScreenConnectSettingsCard />
         <HuduImport />
         <CsvImport />
