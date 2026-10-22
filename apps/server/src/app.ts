@@ -88,6 +88,7 @@ import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
 import type { ErrorLog } from './services/repeating.js';
 import { registerLicenseRoutes } from './routes/licenses.js';
+import { securityEvent } from './services/security-log.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -929,7 +930,7 @@ export async function buildApp({
   app.put('/api/branding', { ...authed, bodyLimit: 3 * 1024 * 1024 }, async (req) => {
     requireAdmin(actorOf(req));
     const saved = await settings.saveBranding(actorOf(req).orgId, req.body);
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actorOf(req).orgId,
       userId: actorOf(req).id,
       actor: actorOf(req).name,

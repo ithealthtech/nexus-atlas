@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, Copy, Download } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { saveText } from '@/lib/download';
 
 /** Shows new recovery codes once, with copy and save-to-file options. */
 export function RecoveryCodes({
@@ -45,9 +46,7 @@ export function RecoveryCodes({
           variant="secondary"
           size="sm"
           onClick={() => {
-            const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-            Object.assign(document.createElement('a'), { href: url, download: 'atlas-recovery-codes.txt' }).click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            saveText(text, 'atlas-recovery-codes.txt');
           }}
         >
           <Download /> Save as file

@@ -13,6 +13,7 @@ import { ImportRun } from '../services/importers/common.js';
 import { runM365Sync, tenantLinks } from '../services/integrations/m365.js';
 import type { SettingsService } from '../services/settings.js';
 import { Repeating, type ErrorLog } from '../services/repeating.js';
+import { securityEvent } from '../services/security-log.js';
 
 const SYNC_EVERY = 6 * 3_600_000;
 
@@ -80,12 +81,12 @@ export function registerM365Routes(
     return req.session!.actor;
   };
   const event = (req: FastifyRequest, action: string, detail = '') =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: req.session!.actor.orgId,
       userId: req.session!.actor.id,
       actor: req.session!.actor.name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip: req.ip,
     });
   const connected = async (orgId: string) => {

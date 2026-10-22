@@ -1,5 +1,6 @@
 import type { ApiError as ApiErrorBody } from '@atlas/shared';
 import { DEMO } from './demo';
+import { saveBlob, saveText } from './download';
 
 export class ApiError extends Error {
   constructor(
@@ -47,10 +48,7 @@ export function api<T>(path: string, options: { method?: string; body?: unknown 
 export function download(path: string, filename: string): Promise<void> {
   return withReauth(async () => {
     if (DEMO) {
-      const text = String(await request(path, {}));
-      const href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
-      Object.assign(document.createElement('a'), { href, download: filename }).click();
-      setTimeout(() => URL.revokeObjectURL(href), 1000);
+      saveText(String(await request(path, {})), filename, 'text/csv');
       return;
     }
     const response = await fetch(`/api${path}`, { credentials: 'same-origin' });
@@ -58,14 +56,11 @@ export function download(path: string, filename: string): Promise<void> {
       const data = (await response.json().catch(() => null)) as ApiErrorBody | null;
       throw new ApiError(response.status, data?.error ?? 'The download failed.', data?.code);
     }
-    const url = URL.createObjectURL(await response.blob());
     // Prefer the server's file name (for example the client's name and the date).
     const disposition = response.headers.get('content-disposition') ?? '';
     const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
     const named = encoded ? decodeURIComponent(encoded) : /filename="([^"]+)"/.exec(disposition)?.[1];
-    const link = Object.assign(document.createElement('a'), { href: url, download: named ?? filename });
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveBlob(await response.blob(), named ?? filename);
   });
 }
 

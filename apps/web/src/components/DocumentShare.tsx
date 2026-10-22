@@ -6,6 +6,7 @@ import { Badge, Button, Dialog, Field, Select, Skeleton, useToast } from '@/comp
 import { api } from '@/lib/api';
 import { DEMO } from '@/lib/demo';
 import { formatDate, formatDateTime } from '@/lib/format';
+import { useAction } from '@/lib/actions';
 
 // The demo runs on hash addresses, so its links need the hash to open.
 const linkOf = (share: DocumentShareView) => (DEMO ? share.url.replace('/kb/', '/#/kb/') : share.url);
@@ -26,18 +27,7 @@ export function DocumentShareDialog({
     queryFn: () => api<DocumentShareView[]>(`/documents/${documentId}/shares`),
   });
   const [expires, setExpires] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
-  const act = async (name: string, work: () => Promise<unknown>) => {
-    setBusy(name);
-    try {
-      await work();
-      await shares.refetch();
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setBusy(null);
-    }
-  };
+  const { busy, act } = useAction({ toast: true, after: () => shares.refetch() });
   const copy = (share: DocumentShareView) =>
     navigator.clipboard.writeText(linkOf(share)).then(() => toast('Link copied.'));
   const active = (shares.data ?? []).filter((s) => s.status === 'active');

@@ -1,12 +1,13 @@
 import { createReadStream } from 'node:fs';
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import type { BackupRunView } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import type { BackupService } from '../backup/service.js';
 import { isUuid } from '../services/scope.js';
 import { HttpError } from '../errors.js';
 import type { StatusService } from '../services/status.js';
+import { securityEvent } from '../services/security-log.js';
 
 /** The system status page and backups (administrators only). */
 export function registerOpsRoutes(
@@ -26,12 +27,12 @@ export function registerOpsRoutes(
     return actor;
   };
   const event = (req: FastifyRequest, action: string, detail: string) =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: req.session!.actor.orgId,
       userId: req.session!.actor.id,
       actor: req.session!.actor.name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip: req.ip,
     });
 

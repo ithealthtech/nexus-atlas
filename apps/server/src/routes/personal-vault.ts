@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { HttpError } from '../errors.js';
 import type { PersonalVaultService } from '../services/personal-vault.js';
 import { Scope } from '../services/scope.js';
+import { securityEvent } from '../services/security-log.js';
 
 type Params = { id: string };
 
@@ -37,7 +38,7 @@ export function registerPersonalVaultRoutes(
     recent(req);
     const { filename, csv } = await personal.export(scope);
     const { actor } = req.session!;
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,

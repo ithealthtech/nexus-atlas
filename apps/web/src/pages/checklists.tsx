@@ -26,6 +26,7 @@ import { cn } from '@/lib/cn';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { useClient } from '@/lib/queries';
 import { useActor } from '@/lib/session';
+import { saveText } from '@/lib/download';
 
 const useChecklists = (client?: string) =>
   useQuery({
@@ -560,12 +561,8 @@ export function RunPage() {
     }
   };
   const download = () => {
-    const url = URL.createObjectURL(new Blob([runMarkdown(run)], { type: 'text/markdown' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${run.title.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'checklist'}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const name = run.title.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'checklist';
+    saveText(runMarkdown(run), `${name}.md`, 'text/markdown');
   };
 
   return (

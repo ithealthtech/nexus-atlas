@@ -438,7 +438,7 @@ export class VaultService {
       actorName: scope.actor.name,
       action,
       reason,
-      ip: ip.slice(0, 64),
+      ip,
     });
   }
 
@@ -1118,7 +1118,7 @@ export class VaultService {
           actorId: scope.actor.id,
           actorName: scope.actor.name,
           action: `Attached file “${filename}”`,
-          ip: ip.slice(0, 64),
+          ip,
         });
         await recordActivity(tx, scope.actor, {
           clientId: p.clientId,
@@ -1199,7 +1199,7 @@ export class VaultService {
         actorId: scope.actor.id,
         actorName: scope.actor.name,
         action: `Removed file “${row.filename}”`,
-        ip: ip.slice(0, 64),
+        ip,
       });
       await recordActivity(tx, scope.actor, {
         clientId: p.clientId,
@@ -1594,7 +1594,7 @@ export async function openShare(
     passwordName: item?.name ?? 'Deleted password',
     actorName: 'Share link recipient',
     action: `Opened a share link (view ${row.views} of ${row.maxViews})`,
-    ip: ip.slice(0, 64),
+    ip,
   });
   return { ciphertext: row.ciphertext, remainingViews: row.maxViews - row.views };
 }

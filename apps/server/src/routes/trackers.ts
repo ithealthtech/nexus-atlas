@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { schema, type Database } from '@atlas/db';
+import type { Database } from '@atlas/db';
 import { ROLE_INFO, TRACKER_FILTERS, TRACKER_KINDS, type TrackerFilter, type TrackerKind } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import { HttpError } from '../errors.js';
 import { Scope, isUuid } from '../services/scope.js';
 import type { SettingsService } from '../services/settings.js';
 import type { TrackerService } from '../services/trackers.js';
+import { securityEvent } from '../services/security-log.js';
 
 /** How many domains and hosts one "Check now" looks at. */
 const CHECK_NOW_LIMIT = 50;
@@ -79,7 +80,7 @@ export function registerTrackerRoutes(
     requireAdmin(actor);
     recent(req);
     const saved = await settings.saveTrackers(actor.orgId, req.body);
-    await db.insert(schema.securityEvents).values({
+    await securityEvent(db, {
       orgId: actor.orgId,
       userId: actor.id,
       actor: actor.name,

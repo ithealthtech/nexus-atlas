@@ -15,6 +15,7 @@ import type { FileStorage } from './storage.js';
 import type { VaultService } from './vault.js';
 import { cleanRichText } from './richtext.js';
 import { LicenseService } from './licenses.js';
+import { securityEvent } from './security-log.js';
 
 const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024;
 const safeName = (s: string) =>
@@ -166,7 +167,7 @@ export async function exportClient(
         ? 'WARNING: this file contains decrypted passwords. Store it encrypted and delete it when done.\n'
         : 'Passwords are listed without their secrets.\n'),
   );
-  await db.insert(schema.securityEvents).values({
+  await securityEvent(db, {
     orgId: actor.orgId,
     userId: actor.id,
     actor: actor.name,

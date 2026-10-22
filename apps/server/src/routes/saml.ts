@@ -9,6 +9,7 @@ import type { IdentityService } from '../identity/service.js';
 import type { SamlService } from '../services/saml.js';
 import { isUuid } from '../services/scope.js';
 import type { SettingsService } from '../services/settings.js';
+import { securityEvent } from '../services/security-log.js';
 
 const REQUEST_COOKIE = 'atlas_saml';
 
@@ -47,12 +48,12 @@ export async function registerSamlRoutes(
   };
   const actorOf = (req: FastifyRequest) => req.session!.actor;
   const event = (req: FastifyRequest, action: string, detail = '') =>
-    db.insert(schema.securityEvents).values({
+    securityEvent(db, {
       orgId: actorOf(req).orgId,
       userId: actorOf(req).id,
       actor: actorOf(req).name,
       action,
-      detail: detail.slice(0, 300),
+      detail,
       ip: req.ip,
     });
   const back = (reply: FastifyReply, outcome?: Outcome) => {

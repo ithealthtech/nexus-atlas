@@ -39,6 +39,7 @@ import {
   type SessionContext,
 } from './service.js';
 import { DEVICE_LIMITS } from './devices.js';
+import { securityEvent } from '../services/security-log.js';
 
 export const DEVICE_DAYS = 30;
 const RESET_MS = 60 * 60_000;
@@ -362,7 +363,7 @@ export class AccountSecurity {
         .where(eq(schema.users.id, user.id));
       await tx.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
       await endDeviceSessions(tx, user.id);
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,
@@ -461,7 +462,7 @@ export class AccountSecurity {
       // Registering the first second factor completes this session's MFA, like confirming TOTP does.
       if (firstFactor)
         await tx.update(schema.sessions).set({ mfaVerified: true }).where(eq(schema.sessions.tokenHash, context.hash));
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,
@@ -490,7 +491,7 @@ export class AccountSecurity {
         .returning();
       if (!hasMfa(updated!))
         await tx.update(schema.users).set({ recoveryCodes: [] }).where(eq(schema.users.id, user.id));
-      await tx.insert(schema.securityEvents).values({
+      await securityEvent(tx, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,
