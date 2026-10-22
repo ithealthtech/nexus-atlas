@@ -6,6 +6,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Smart paste for assets.** Run `ipconfig /all`, `systeminfo` or `Get-ComputerInfo` on a Windows computer (`system_profiler` on a Mac, `hostnamectl` on Linux), and paste the output into a new asset.
+  - Atlas fills in the name, hostname, IP and MAC address, manufacturer, model, serial number, operating system, and whether it's a server, laptop or workstation.
+  - Paste it straight into the Name box and Smart paste opens on its own.
+  - Fields that already have a value are shown with what would change, and are left alone unless you tick them.
+  - The text is read in the browser and never sent.
 - **Security posture report.** A new built-in report under Reports. For each client it shows the following:
   - **Passwords** with problems: breached, weak, reused, rotation overdue, expired, or unchanged for a year.
   - **Devices** that are offline or unprotected.
