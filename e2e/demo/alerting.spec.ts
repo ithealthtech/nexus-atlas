@@ -41,10 +41,30 @@ test('email and Teams templates and rule previews work without sending', async (
   await expect(page.getByRole('region', { name: 'Email preview' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Run preview', exact: true }).click();
   await expect(page.getByText('Conditions do not match', { exact: true })).toBeVisible();
+  await page.getByLabel('Version note', { exact: true }).fill('Approve certificate reminders');
+  await page.getByRole('button', { name: 'Publish saved drafts', exact: true }).click();
+  await page.getByRole('button', { name: 'View version 1', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Published version 1', exact: true })).toBeVisible();
+  await page.getByLabel('Email message', { exact: true }).fill('A newer draft');
+  await expect(page.getByRole('button', { name: 'Publish saved drafts', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save drafts', exact: true })).toBeDisabled();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: 'Restore version 1 to drafts', exact: true }).click();
+  await expect(
+    page.getByText('Version restored to drafts. Review selections before publishing again.', { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel('Template library', { exact: true }).selectOption({ label: 'Certificate reminder' });
+  await expect(page.getByLabel('Email message', { exact: true })).toHaveValue(
+    'Please review {{itemName}}. Due in {{daysRemaining}} days.',
+  );
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
+      while (await page.getByRole('button', { name: 'Dismiss', exact: true }).count())
+        await page.getByRole('button', { name: 'Dismiss', exact: true }).first().click();
+      await page.evaluate(() => window.scrollTo(0, 0));
       const { violations } = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
         .exclude('[data-demo-badge]')

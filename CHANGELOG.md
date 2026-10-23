@@ -2,6 +2,14 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Alert template and rule versions.** Publish a fixed copy of saved email and Teams drafts with a change note,
+  browse previous versions, and restore one to drafts. Concurrent changes are protected and sensitive actions
+  are recorded in the security log. Publishing does not yet activate automatic delivery.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

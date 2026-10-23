@@ -1744,6 +1744,30 @@ export const reportDeliveries = pgTable(
   ],
 );
 
+// Published snapshots are append-only through the API. Draft edits never mutate these versions.
+export const alertVersions = pgTable(
+  'alert_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    version: integer('version').notNull(),
+    draftRevision: bigint('draft_revision', { mode: 'number' }).notNull(),
+    workspace: jsonb('workspace').notNull(),
+    note: text('note').notNull(),
+    publishedBy: text('published_by').notNull(),
+    publisherId: uuid('publisher_id').references(() => users.id, { onDelete: 'set null' }),
+    publishedAt: created(),
+  },
+  (t) => [
+    uniqueIndex('alert_versions_org_version').on(t.orgId, t.version),
+    uniqueIndex('alert_versions_org_revision').on(t.orgId, t.draftRevision),
+    check('alert_versions_positive_version', sql`${t.version} > 0`),
+    check('alert_versions_nonnegative_revision', sql`${t.draftRevision} >= 0`),
+  ],
+);
+
 export const teamsPosts = pgTable(
   'teams_posts',
   {
