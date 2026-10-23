@@ -86,15 +86,21 @@ export class AlertPreviewService {
         const actor = actorFor(user);
         const recipient = new Scope(this.db, actor);
         const access =
-          !user.disabled && ROLE_INFO[actor.role].staff && (await recipient.level(sample.clientId)) !== 'none';
+          sample.clientId !== null &&
+          !user.disabled &&
+          ROLE_INFO[actor.role].staff &&
+          (await recipient.level(sample.clientId)) !== 'none';
         destinations.push({
           label: `Email: ${user.name} (${user.email})`,
           ready: configured && access,
-          detail: !access
-            ? 'Recipient cannot read this client.'
-            : configured
-              ? 'Configured; no email sent.'
-              : 'Set up email in Connections.',
+          detail:
+            sample.clientId === null
+              ? 'Choose a client to check this recipient’s access.'
+              : !access
+                ? 'Recipient cannot read this client.'
+                : configured
+                  ? 'Configured; no email sent.'
+                  : 'Set up email in Connections.',
         });
       }
     }

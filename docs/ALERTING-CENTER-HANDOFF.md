@@ -8,6 +8,8 @@ prepared on PR #289. Implementation commit `8c8ea7af97245113eb21cba8a7698b9cfeb5
 database browser test. Historical pending/failure notes below are superseded by this result. Validate the release
 commit, merge PR #289, run the existing Release workflow on main, and verify the published assets. This release
 contains the draft workspace; publishing rules and automatic delivery remain the next milestone.
+Release review also corrected email destination readiness for a null/synthetic sample client: it now requires a
+real client before checking access. A database regression test covers configured email with and without a client.
 
 Draft PR: [#289 — Add shared email and Teams alert drafts and previews](https://github.com/ithealthtech/nexus-atlas/pull/289).
 Initial implementation commit: `fd8b52616306ea2e1559de7154f38b514fac5c5c`. Continue this branch/PR; do not merge or release

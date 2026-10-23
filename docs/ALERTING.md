@@ -35,6 +35,7 @@ Examples use a fictional date of June 1, 2030, plus the selected days remaining;
 Previews never send email, post to Teams, or look up real passwords. The destination checks use saved email and
 Teams configuration and each staff member's current client access. They do not contact Microsoft or verify that
 credentials still work. A matching rule with a destination marked **Ready** is still a draft.
+Choose a real example client before the preview can report an email recipient as ready.
 
 If another administrator saves drafts first, your save is rejected to protect their work. Copy any edits you need
 to keep, reload, and apply them to the latest drafts. Unsaved edits are lost when you leave or reload the page.

@@ -121,6 +121,28 @@ describe('alerting draft API', () => {
     ).toBe(404);
     expect((await owner.call('GET', BASE)).data.revision).toBe(0);
   });
+  it('requires a real sample client before reporting recipient readiness', async () => {
+    const configured = await owner.call('PUT', '/api/settings/email', {
+      enabled: true,
+      method: 'smtp',
+      host: 'smtp.example.test',
+      fromAddress: 'alerts@atlas.test',
+    });
+    expect(configured.status, JSON.stringify(configured.data)).toBe(200);
+    const rule = { ...draftRule(), clientIds: [], teams: false };
+    for (const selected of [null, clientId]) {
+      const response = await owner.call('POST', BASE + '/preview', {
+        template: workspace.templates[0],
+        rule,
+        sample: { kind: 'expiration', clientId: selected, itemKind: 'asset', daysRemaining: 14, severity: 'warning' },
+      });
+      expect(response.status, JSON.stringify(response.data)).toBe(200);
+      expect(response.data.destinations[0].ready).toBe(selected !== null);
+      if (selected === null) expect(response.data.destinations[0].detail).toContain('Choose a client');
+    }
+    expect(t.outbox).toEqual([]);
+    expect(calls).toEqual([]);
+  });
   it('rejects disabled recipients and checks real recipient access in a dry run', async () => {
     const password = 'temporary draft pass 1234';
     const otherId = (await owner.call('POST', '/api/clients', { name: 'Other client' })).data.id;
