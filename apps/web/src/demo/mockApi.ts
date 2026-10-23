@@ -1,6 +1,12 @@
 // In-browser stand-in for the Atlas API, used only by the clickable demo build.
 // State lives in memory: reloading the page starts over with the sample data.
 import {
+  alertWorkspaceSchema,
+  alertPreviewSchema,
+  alertSampleValues,
+  defaultAlertWorkspace,
+  matchAlertRule,
+  renderAlertTemplate,
   bitdefenderHealth,
   type BitdefenderEndpointView,
   type BitdefenderView,
@@ -4077,6 +4083,43 @@ on('DELETE', '/integrations/teams', () => {
   return { ok: true };
 });
 on('GET', '/integrations/teams/deliveries', () => []);
+let alertWorkspace = defaultAlertWorkspace();
+on('GET', '/settings/alerting', () => alertWorkspace);
+on('PUT', '/settings/alerting', (_m, b) => {
+  const body = alertWorkspaceSchema.parse(b);
+  if (body.revision !== alertWorkspace.revision)
+    throw new MockError(409, 'Another administrator saved these drafts. Reload before saving.');
+  alertWorkspace = { ...body, revision: body.revision + 1 };
+  event('Alert drafts saved');
+  return alertWorkspace;
+});
+on('POST', '/settings/alerting/preview', (_m, b) => {
+  const { template, rule, sample } = alertPreviewSchema.parse(b);
+  const name = sample.clientId ? find(db.clients, sample.clientId, 'Client').name : 'Example client';
+  const values = alertSampleValues(sample, name, 'https://atlas.example/expirations');
+  const destinations = [];
+  for (const id of rule?.emailUserIds ?? []) {
+    const user = find(users, id, 'User');
+    destinations.push({
+      label: `Email: ${user.name} (${user.email})`,
+      ready: false,
+      detail: 'Demo only; no email sent.',
+    });
+  }
+  if (rule?.teams) {
+    const mapping = demoTeams.mappings.find((m) => m.clientId === sample.clientId);
+    destinations.push({
+      label: mapping ? `Teams: ${mapping.channelName}` : 'Teams: client channel',
+      ready: !!mapping,
+      detail: 'Demo only; no post sent.',
+    });
+  }
+  return {
+    ...renderAlertTemplate(template, values),
+    ...(rule ? matchAlertRule(rule, sample) : { matched: true, reasons: ['Template preview only'] }),
+    destinations,
+  };
+});
 on('GET', '/clients/:id/teams', (m) => ({
   name: find(db.clients, m[1]!, 'Client').name + ' — Team discussion',
   canWrite: true,

@@ -93,6 +93,7 @@ import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl 
 import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerTeamsRoutes } from './routes/teams.js';
+import { registerAlertingRoutes } from './routes/alerting.js';
 import { TeamsSettingsStore } from './services/teams/settings.js';
 import { TeamsGraph } from './services/teams/graph.js';
 import { TeamsAlerts } from './services/teams/alerts.js';
@@ -1052,6 +1053,14 @@ export async function buildApp({
   });
 
   const teamsSettings = new TeamsSettingsStore(db, keys);
+  registerAlertingRoutes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    teams: teamsSettings,
+    publicOrigin: config.publicOrigin,
+  });
   const teamsGraph = new TeamsGraph(teamsSettings, teamsFetch);
   const teamsAlerts = new TeamsAlerts(db, {
     settings: teamsSettings,

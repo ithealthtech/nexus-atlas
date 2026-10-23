@@ -41,6 +41,7 @@ import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
 import { Groups } from '@/pages/Groups';
 import { ApiKeysPage, EmailAlertsPage, MonitoringPage, SignInPage } from '@/pages/Settings';
+import { AlertingPage } from '@/pages/Alerting';
 import { Theme } from '@/pages/Theme';
 import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
@@ -293,6 +294,7 @@ const routes = [
     },
   }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/email', component: adminOnly(EmailAlertsPage) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/alerting', component: adminOnly(AlertingPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/teams', component: adminOnly(TeamsSettingsPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/monitoring', component: adminOnly(MonitoringPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/sign-in', component: adminOnly(SignInPage) }),
