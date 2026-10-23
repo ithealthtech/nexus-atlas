@@ -2,6 +2,10 @@
 
 Last updated: 2026-10-22. Branch: `feature/alerting-center`, based on `origin/main` after release 2.1.1.
 
+Draft PR: [#289 — Add shared email and Teams alert drafts and previews](https://github.com/ithealthtech/nexus-atlas/pull/289).
+Initial implementation commit: `fd8b52616306ea2e1559de7154f38b514fac5c5c`. Continue this branch/PR; do not merge or release
+without a new owner request. Check the latest PR head and CI before editing.
+
 ## Owner's request and decisions
 
 Start expanding Email & alerts into one alerting center for **email and Microsoft Teams together**. Provide granular
@@ -57,8 +61,13 @@ describe drafts or previews as live automated delivery before the workers are wi
 - Fixed a discovered cache issue: successful saves now update React Query so navigating back does not initialize
   the editor from an older cached draft. The browser test covers this. An initial browser locator included an
   exact checkbox name despite its help text; the locator now matches the accessible name correctly.
-- Remaining before checkpoint: copy inspected screenshots, rerun affected checks, open a draft PR, and address CI
-  findings. Update this paragraph with the PR URL, commit, and final CI state once available.
+- Inspected screenshots are committed in `docs/screenshots/alerting-center/`, including a fresh main-page image.
+- Draft PR #289 is open and attached to the Codex task. CI is running. The initial run was
+  [39876258581](https://github.com/ithealthtech/nexus-atlas/actions/runs/39876258581); the logging follow-up starts a
+  newer run, so use the PR's latest checks rather than assuming the first run is current.
+- Final privacy review: added `alerting` to private request-log paths so verbose diagnostics cannot store custom
+  messages or previews. Existing request-log redaction tests now cover both new endpoints.
+- Remaining before calling the checkpoint verified: address any CI failures and record the result below.
 
 ### Explicitly not wired yet
 
