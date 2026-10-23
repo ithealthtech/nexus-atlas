@@ -1,8 +1,10 @@
-import { ALERT_KINDS, ALERT_KIND_LABELS, type AlertKind } from '@atlas/shared';
+import { useState } from 'react';
+import { ALERT_KINDS, ALERT_KIND_LABELS, ALERT_PRESETS, type AlertKind } from '@atlas/shared';
 import { Button, Card, CardHeader, Field, Select } from '@/components/ui';
 import type { AlertEditor } from './useAlertEditor';
 
 export function Library({ editor: e }: { editor: AlertEditor }) {
+  const [presetId, setPresetId] = useState(ALERT_PRESETS[0]!.id);
   return (
     <Card>
       <CardHeader
@@ -10,6 +12,27 @@ export function Library({ editor: e }: { editor: AlertEditor }) {
         description={`${e.workspace.rules.length} draft rules · ${e.workspace.templates.length} templates`}
       />
       <div className="space-y-4 p-5">
+        <Field label="Ready-made Teams template" help={ALERT_PRESETS.find((p) => p.id === presetId)?.description}>
+          {(p) => (
+            <Select {...p} value={presetId} onChange={(event) => setPresetId(event.target.value)}>
+              {ALERT_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Button
+          variant="secondary"
+          disabled={e.workspace.templates.length >= 100}
+          onClick={() => e.addPreset(presetId)}
+        >
+          Use template
+        </Button>
+        <p className="text-xs text-muted">
+          Creates an editable copy with an email companion. Review, preview and save before using it in a rule.
+        </p>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Template library">
             {(p) => (

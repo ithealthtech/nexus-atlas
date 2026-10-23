@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ALERT_KIND_LABELS,
+  ALERT_PRESETS,
   ALERT_ITEM_KINDS,
   ALERT_SEVERITIES,
   alertWorkspaceSchema,
@@ -89,6 +90,19 @@ export function useAlertEditor(initial: AlertWorkspace) {
     selectTemplate(next.id);
     setSample((s) => ({ ...s, kind }));
   };
+  const addPreset = (id: string) => {
+    const preset = ALERT_PRESETS.find((p) => p.id === id);
+    if (!preset || workspace.templates.length >= 100) return;
+    const next = { ...preset.template, id: crypto.randomUUID() };
+    setWorkspace((w) => ({ ...w, templates: [...w.templates, next] }));
+    selectTemplate(next.id);
+    setSample((s) => ({
+      ...s,
+      kind: next.kind,
+      itemKind: next.kind === 'review' ? 'document' : next.kind === 'breach' ? 'password' : 'asset',
+      severity: ['breach', 'infection'].includes(next.kind) ? 'critical' : 'warning',
+    }));
+  };
   const addRule = () => {
     if (!template) return;
     const next = newRule(template, actor.id);
@@ -148,6 +162,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
     selectTemplate,
     selectRule,
     addTemplate,
+    addPreset,
     addRule,
     removeRule,
     removeTemplate,
