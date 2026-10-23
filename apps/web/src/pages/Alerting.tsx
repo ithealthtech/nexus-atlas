@@ -1,4 +1,6 @@
 import { Link } from '@tanstack/react-router';
+import { useState } from 'react';
+import { Versions } from '@/components/alerting/Versions';
 import { useQuery } from '@tanstack/react-query';
 import type { AlertWorkspace } from '@atlas/shared';
 import { Badge, Button, Card, FormError, PageHeader, Skeleton } from '@/components/ui';
@@ -38,11 +40,13 @@ export function AlertingPage() {
 
 function AlertStudio({ initial }: { initial: AlertWorkspace }) {
   const e = useAlertEditor(initial);
+  const [publishing, setPublishing] = useState(false);
   const clients = useClients();
   const users = useUsers();
   return (
-    <fieldset disabled={!!e.busy} className="max-w-5xl min-w-0 space-y-6">
+    <fieldset disabled={!!e.busy || publishing} className="max-w-5xl min-w-0 space-y-6">
       <legend className="sr-only">Alert drafts</legend>
+      <Versions editor={e} lock={setPublishing} />
       <Library editor={e} />
       <FormError message={clients.error?.message ?? users.error?.message} />
       {e.rule && clients.data && users.data && (

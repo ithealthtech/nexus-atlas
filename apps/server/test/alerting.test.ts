@@ -39,6 +39,60 @@ describe('alerting draft API', () => {
     emailUserIds: [ownerId],
     teams: true,
   });
+  it('publishes immutable snapshots, serializes competing publishers and restores with a fresh revision', async () => {
+    workspace.rules.push(draftRule());
+    const saved = await owner.call('PUT', BASE, workspace);
+    expect(saved.status).toBe(200);
+    const body = { revision: 1, lastVersion: 0, note: 'First approved rules' };
+    const responses = await Promise.all([
+      owner.call('POST', BASE + '/publish', body),
+      owner.call('POST', BASE + '/publish', body),
+    ]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+    const first = await owner.call('GET', BASE + '/versions/1');
+    expect(first.data.workspace).toEqual(saved.data);
+    expect(first.headers['cache-control']).toBe('no-store');
+    const edited = {
+      ...saved.data,
+      templates: saved.data.templates.map((t: { name: string }) => ({ ...t, name: 'Changed draft' })),
+    };
+    expect((await owner.call('PUT', BASE, edited)).status).toBe(200);
+    expect((await owner.call('GET', BASE + '/versions/1')).data).toEqual(first.data);
+    expect((await owner.call('POST', BASE + '/publish', { ...body, lastVersion: 1 })).status).toBe(409);
+    expect((await owner.call('POST', BASE + '/versions/1/restore', { revision: 1 })).status).toBe(409);
+    const restored = await owner.call('POST', BASE + '/versions/1/restore', { revision: 2 });
+    expect(restored.status).toBe(200);
+    expect(restored.data).toEqual({ ...saved.data, revision: 3 });
+    expect((await owner.call('POST', BASE + '/publish', { ...body, revision: 3, lastVersion: 1 })).status).toBe(200);
+    expect(
+      (await owner.call('GET', BASE + '/versions')).data.versions.map((v: { version: number }) => v.version),
+    ).toEqual([2, 1]);
+    expect((await owner.call('GET', BASE + '/versions?beforeVersion=2')).data.versions).toHaveLength(1);
+    expect((await owner.call('POST', BASE + '/publish', { ...body, revision: 3, lastVersion: 2 })).status).toBe(409);
+    expect(t.outbox).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(await t.handle.db.select().from(schema.teamsDeliveries)).toEqual([]);
+  });
+  it('rechecks references at publication and isolates another organization’s version history', async () => {
+    workspace.rules.push(draftRule());
+    expect((await owner.call('PUT', BASE, workspace)).status).toBe(200);
+    await t.handle.db.delete(schema.clients).where(eq(schema.clients.id, clientId));
+    expect(
+      (await owner.call('POST', BASE + '/publish', { revision: 1, lastVersion: 0, note: 'Deleted selection' })).status,
+    ).toBe(404);
+    const [foreign] = await t.handle.db.insert(schema.orgs).values({ name: 'Foreign' }).returning();
+    await t.handle.db.insert(schema.alertVersions).values({
+      orgId: foreign!.id,
+      version: 1,
+      draftRevision: 0,
+      workspace,
+      note: 'Private',
+      publishedBy: 'Foreign owner',
+    });
+    expect((await owner.call('GET', BASE + '/versions')).data.versions).toEqual([]);
+    expect((await owner.call('GET', BASE + '/versions/1')).status).toBe(404);
+    expect((await owner.call('POST', BASE + '/versions/1/restore', { revision: 1 })).status).toBe(404);
+  });
   it('stores drafts atomically, preserves existing settings and rejects stale simultaneous saves', async () => {
     await owner.call('PUT', '/api/settings/notifications', {
       alertDays: [7],
@@ -185,6 +239,10 @@ describe('alerting draft API', () => {
       ['GET', BASE, undefined],
       ['PUT', BASE, workspace],
       ['POST', BASE + '/preview', {}],
+      ['GET', BASE + '/versions', undefined],
+      ['GET', BASE + '/versions/1', undefined],
+      ['POST', BASE + '/publish', {}],
+      ['POST', BASE + '/versions/1/restore', {}],
     ] as const)
       expect((await b.call(method, path, body)).status).toBe(403);
     const csrf = owner.csrf;
@@ -205,5 +263,9 @@ describe('alerting draft API', () => {
     await t.handle.db.update(schema.sessions).set({ reauthAt: new Date(0) });
     const stale = await owner.call('PUT', BASE, workspace);
     expect([stale.status, stale.data.code]).toEqual([403, 'reauth']);
+    for (const path of ['/publish', '/versions/1/restore']) {
+      const response = await owner.call('POST', BASE + path, {});
+      expect([response.status, response.data.code]).toEqual([403, 'reauth']);
+    }
   });
 });

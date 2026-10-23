@@ -42,8 +42,23 @@ to keep, reload, and apply them to the latest drafts. Unsaved edits are lost whe
 Deleted clients and unavailable staff remain visible in a saved rule so you can remove their selections before
 saving again.
 
+## Publish and restore versions
+
+After saving and previewing your drafts, enter a **Version note** and choose **Publish saved drafts**.
+This keeps a fixed copy of all templates and rules, with who published it and when. Later draft edits do not
+change that copy. **View version** shows its messages and rule summaries; **Older versions** loads earlier history.
+
+**Restore version … to drafts** replaces saved drafts after confirmation and creates a new draft revision.
+Save any unsaved edits first. Review restored selections: a client may have been deleted or a recipient disabled
+since publication. Correct unavailable selections before publishing again. Concurrent changes are rejected;
+reload drafts or refresh version history before retrying.
+
+Publishing and restoring do not activate new delivery. Current email and Teams alerts still use their existing
+settings. Versions are retained with the organization’s configuration and included in database backups. Keep
+passwords and other secrets out of templates and version notes.
+
 ## Coming next
 
-Publishing and version history, a shared delivery queue and history, explicit migration from current alert
+A shared delivery queue and history, explicit migration from current alert
 settings, recipient groups, client overrides with precedence, test sends, schedules and digests, and escalation
 are separate implementation steps. None are activated by saving drafts in this checkpoint.

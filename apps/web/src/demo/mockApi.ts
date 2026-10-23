@@ -2,6 +2,9 @@
 // State lives in memory: reloading the page starts over with the sample data.
 import {
   alertWorkspaceSchema,
+  publishAlertsSchema,
+  restoreAlertsSchema,
+  type AlertVersion,
   alertPreviewSchema,
   alertSampleValues,
   defaultAlertWorkspace,
@@ -4084,6 +4087,48 @@ on('DELETE', '/integrations/teams', () => {
 });
 on('GET', '/integrations/teams/deliveries', () => []);
 let alertWorkspace = defaultAlertWorkspace();
+const alertVersions: AlertVersion[] = [];
+on('GET', '/settings/alerting/versions', (_m, _b, query) => {
+  const before = Number(query.get('beforeVersion')) || Infinity;
+  const rows = alertVersions.filter((v) => v.version < before).toReversed();
+  return {
+    latestVersion: alertVersions.length,
+    versions: rows.slice(0, 50).map(({ workspace: _workspace, ...summary }) => summary),
+    nextBeforeVersion: rows.length > 50 ? rows[49]!.version : null,
+  };
+});
+on('GET', '/settings/alerting/versions/:version', (m) => {
+  const version = alertVersions.find((v) => v.version === Number(m[1]));
+  if (!version) throw new MockError(404, 'Published version not found.');
+  return version;
+});
+on('POST', '/settings/alerting/publish', (_m, b) => {
+  const body = publishAlertsSchema.parse(b);
+  if (body.revision !== alertWorkspace.revision || body.lastVersion !== alertVersions.length)
+    throw new MockError(409, 'Drafts or published versions changed. Reload before publishing.');
+  if (alertVersions.some((v) => v.draftRevision === body.revision))
+    throw new MockError(409, 'These saved drafts are already published.');
+  const version: AlertVersion = {
+    version: alertVersions.length + 1,
+    draftRevision: body.revision,
+    note: body.note,
+    publishedBy: 'Alex Rivera',
+    publishedAt: new Date().toISOString(),
+    templateCount: alertWorkspace.templates.length,
+    ruleCount: alertWorkspace.rules.length,
+    workspace: structuredClone(alertWorkspace),
+  };
+  alertVersions.push(version);
+  return version;
+});
+on('POST', '/settings/alerting/versions/:version/restore', (m, b) => {
+  const body = restoreAlertsSchema.parse(b);
+  if (body.revision !== alertWorkspace.revision) throw new MockError(409, 'Drafts changed. Reload before restoring.');
+  const version = alertVersions.find((v) => v.version === Number(m[1]));
+  if (!version) throw new MockError(404, 'Published version not found.');
+  alertWorkspace = { ...structuredClone(version.workspace), revision: body.revision + 1 };
+  return alertWorkspace;
+});
 on('GET', '/settings/alerting', () => alertWorkspace);
 on('PUT', '/settings/alerting', (_m, b) => {
   const body = alertWorkspaceSchema.parse(b);

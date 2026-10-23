@@ -58,6 +58,14 @@ export function useAlertEditor(initial: AlertWorkspace) {
   const previewBody = template ? { template, ...(rule ? { rule } : {}), sample } : null;
   const previewKey = JSON.stringify(previewBody);
   const dirty = JSON.stringify(workspace) !== saved;
+  const replaceWorkspace = (next: AlertWorkspace) => {
+    setWorkspace(next);
+    setSaved(JSON.stringify(next));
+    queries.setQueryData(['alerting'], next);
+    setTemplateId(next.templates[0]?.id ?? '');
+    setRuleId('');
+    setPreview(null);
+  };
   const changeTemplate = (next: AlertTemplate) =>
     setWorkspace((w) => ({ ...w, templates: w.templates.map((t) => (t.id === next.id ? next : t)) }));
   const changeRule = (next: AlertRule) =>
@@ -123,6 +131,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
     });
   return {
     workspace,
+    replaceWorkspace,
     template,
     rule,
     ruleId,
