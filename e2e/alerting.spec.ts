@@ -40,16 +40,16 @@ test('alert drafts persist and a stale editor cannot overwrite another administr
     await page.reload();
     await expect(page.getByLabel('Template name', { exact: true })).toHaveValue('Saved elsewhere');
     const client = (await owner.call('POST', '/api/clients', { name: 'Temporary client' })).data;
-    const user = (
-      await owner.call('POST', '/api/users', {
-        email: 'temporary@atlas.test',
-        name: 'Temporary technician',
-        role: 'technician',
-        allClients: 'read',
-        password: 'temporary alert staff 1234',
-        grants: [],
-      })
-    ).data;
+    const created = await owner.call('POST', '/api/users', {
+      email: 'temporary@atlas.test',
+      name: 'Temporary technician',
+      role: 'technician',
+      allClients: 'read',
+      password: 'copper lantern orbit 1234',
+      grants: [],
+    });
+    expect(created.status, JSON.stringify(created.data)).toBe(201);
+    const user = created.data;
     const draft = (await owner.call('GET', '/api/settings/alerting')).data as AlertWorkspace;
     draft.rules[0]!.clientIds = [client.id];
     draft.rules[0]!.emailUserIds.push(user.id);

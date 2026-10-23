@@ -38,6 +38,8 @@ credentials still work. A matching rule with a destination marked **Ready** is s
 
 If another administrator saves drafts first, your save is rejected to protect their work. Copy any edits you need
 to keep, reload, and apply them to the latest drafts. Unsaved edits are lost when you leave or reload the page.
+Deleted clients and unavailable staff remain visible in a saved rule so you can remove their selections before
+saving again.
 
 ## Coming next
 

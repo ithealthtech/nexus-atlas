@@ -13,8 +13,8 @@ rules, custom templates, previews/tests, client overrides, recipients, schedules
 note current so Claude can continue when Codex reaches its usage limit. This is implementation authorization;
 opening a PR is appropriate, but this task does not authorize merging or publishing another release.
 
-- Start with administrator-managed settings and per-client overrides. Ownership preferences beyond this remain
-  open; do not assume client self-service is authorized.
+- Initial assumption: administrator-managed drafts. Per-client overrides are planned, not implemented. Ownership
+  preferences beyond this remain open; do not assume client self-service is authorized.
 - Preserve every existing feature and setting, including SMTP/Graph email, Teams account connection and mappings,
   current alert days, weekly digest, audit retention, and transactional email.
 - Use existing email delivery and the connected Microsoft Teams account. **Do not add an Azure Bot, paid hosting,
@@ -35,6 +35,21 @@ opening a PR is appropriate, but this task does not authorize merging or publish
 
 The first implementation checkpoint is a safe template library and rule drafting/preview foundation. Do not
 describe drafts or previews as live automated delivery before the workers are wired and tested.
+
+### Planned capabilities still to carry forward
+
+- Overview of active/paused rules, failed deliveries, and connection health. Keep existing settings reachable.
+- Visual templates with headings, tables, buttons, branding/footer, internal/client-facing variants, conditional
+  overdue/resolved sections and digest rows. Clone starters, preview, test-send, publish versions and roll back.
+- Staff groups, assigned technicians, approved client contacts and mapped channels. Workspace defaults and
+  explicit client overrides with documented precedence and deduplication when rules overlap.
+- Immediate alerts, milestone reminders, schedules/digests, local business hours, quiet hours, holidays and time
+  zones. Routine digest preferences must be separate from urgent alerts.
+- Repeat limits, acknowledgements, escalation, resolution follow-up, snoozing, paused clients and maintenance
+  windows. Preserve existing Teams resolution threads.
+- Explain why an alert fired and why recipients were chosen; per-recipient/channel outcomes and retries. Test
+  sends need explicit destinations, permission checks and audit entries; unknown write outcomes need special
+  handling to avoid duplicates. These are future capabilities, not enabled by the current draft workspace.
 
 ## Current implementation status
 
@@ -74,6 +89,11 @@ describe drafts or previews as live automated delivery before the workers are wi
   Linux services, Windows build and Windows client. The audience-recovery follow-up still needs its own latest CI
   result recorded. The request-log redaction unit test also passed locally (100 local standalone tests in total).
 - Remaining before calling the checkpoint verified: address any CI failures and record the result below.
+- Run [39877563536](https://github.com/ithealthtech/nexus-atlas/actions/runs/39877563536), code commit
+  `7260d2e63da510a003ccd1708dd5be9bd36c5854`: seven jobs passed; the browser test failed in its added recovery
+  fixture because the password contained the test account's email name. Account creation was rejected, so an
+  undefined recipient ID led to a 400. The fixture now uses a valid password and asserts account creation succeeds
+  before proceeding. Local `checkPassword` validation and lint passed; the follow-up CI run must verify recovery.
 
 ### Explicitly not wired yet
 
