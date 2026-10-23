@@ -45,16 +45,17 @@ function AlertStudio({ initial }: { initial: AlertWorkspace }) {
       <legend className="sr-only">Alert drafts</legend>
       <Library editor={e} />
       <FormError message={clients.error?.message ?? users.error?.message} />
-      {e.rule && (
+      {e.rule && clients.data && users.data && (
         <RuleEditor
           key={e.rule.id}
           rule={e.rule}
           templates={e.workspace.templates}
-          clients={clients.data ?? []}
-          users={users.data ?? []}
+          clients={clients.data}
+          users={users.data}
           change={e.changeRule}
         />
       )}
+      {e.rule && (clients.isLoading || users.isLoading) && <Skeleton className="h-80" />}
       {e.template && <TemplateEditor key={e.template.id} template={e.template} change={e.changeTemplate} />}
       <FormError message={e.error} />
       <div className="flex flex-wrap items-center gap-4">

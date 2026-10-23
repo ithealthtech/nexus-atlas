@@ -2,13 +2,13 @@ import { useState } from 'react';
 import {
   ALERT_ITEM_KINDS,
   ALERT_SEVERITIES,
-  ROLE_INFO,
   type AlertRule,
   type AlertTemplate,
   type ClientSummary,
   type UserView,
 } from '@atlas/shared';
 import { Card, CardHeader, Checkbox, Field, Input, Select } from '@/components/ui';
+import { Audience } from './Audience';
 
 function toggle<T>(items: T[], item: T) {
   return items.includes(item) ? items.filter((v) => v !== item) : [...items, item];
@@ -58,22 +58,7 @@ export function RuleEditor({
             </Select>
           )}
         </Field>
-        <fieldset className="space-y-3">
-          <legend className="mb-2 text-sm font-semibold text-text">Clients</legend>
-          <p className="text-xs text-muted">
-            No selection means all clients. Select clients for a more specific draft.
-          </p>
-          <div className="grid max-h-48 gap-3 overflow-auto sm:grid-cols-2">
-            {clients.map((c) => (
-              <Checkbox
-                key={c.id}
-                label={c.name}
-                checked={rule.clientIds.includes(c.id)}
-                onChange={() => change({ ...rule, clientIds: toggle(rule.clientIds, c.id) })}
-              />
-            ))}
-          </div>
-        </fieldset>
+        <Audience rule={rule} clients={clients} users={users} change={change} />
         <fieldset>
           <legend className="mb-3 text-sm font-semibold text-text">Item types</legend>
           <div className="flex flex-wrap gap-4">
@@ -124,22 +109,6 @@ export function RuleEditor({
             />
           </>
         )}
-        <fieldset className="space-y-3">
-          <legend className="mb-2 text-sm font-semibold text-text">Email recipients</legend>
-          <p className="text-xs text-muted">Active staff members. The preview checks each person's client access.</p>
-          <div className="grid max-h-48 gap-3 overflow-auto sm:grid-cols-2">
-            {users
-              .filter((u) => !u.disabled && ROLE_INFO[u.role].staff)
-              .map((u) => (
-                <Checkbox
-                  key={u.id}
-                  label={u.name}
-                  checked={rule.emailUserIds.includes(u.id)}
-                  onChange={() => change({ ...rule, emailUserIds: toggle(rule.emailUserIds, u.id) })}
-                />
-              ))}
-          </div>
-        </fieldset>
         <Checkbox
           label="Microsoft Teams client channel"
           description="Uses this client's saved Teams mapping and connected account."

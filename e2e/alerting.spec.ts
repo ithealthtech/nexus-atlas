@@ -1,4 +1,7 @@
 import { resolve } from 'node:path';
+import { eq } from 'drizzle-orm';
+import { schema } from '@atlas/db';
+import type { AlertWorkspace } from '@atlas/shared';
 import { test, expect } from '@playwright/test';
 import { setupOwner, startApp } from '../apps/server/test/helpers';
 
@@ -36,6 +39,31 @@ test('alert drafts persist and a stale editor cannot overwrite another administr
     await expect(page.getByRole('alert')).toContainText('Another administrator saved these drafts');
     await page.reload();
     await expect(page.getByLabel('Template name', { exact: true })).toHaveValue('Saved elsewhere');
+    const client = (await owner.call('POST', '/api/clients', { name: 'Temporary client' })).data;
+    const user = (
+      await owner.call('POST', '/api/users', {
+        email: 'temporary@atlas.test',
+        name: 'Temporary technician',
+        role: 'technician',
+        allClients: 'read',
+        password: 'temporary alert staff 1234',
+        grants: [],
+      })
+    ).data;
+    const draft = (await owner.call('GET', '/api/settings/alerting')).data as AlertWorkspace;
+    draft.rules[0]!.clientIds = [client.id];
+    draft.rules[0]!.emailUserIds.push(user.id);
+    expect((await owner.call('PUT', '/api/settings/alerting', draft)).status).toBe(200);
+    await t.handle.db.delete(schema.clients).where(eq(schema.clients.id, client.id));
+    await t.handle.db.update(schema.users).set({ disabled: true }).where(eq(schema.users.id, user.id));
+    await page.reload();
+    await page.getByLabel('Draft rule', { exact: true }).selectOption(draft.rules[0]!.id);
+    await page.getByRole('checkbox', { name: 'Unavailable client 1 — remove selection', exact: true }).uncheck();
+    await page
+      .getByRole('checkbox', { name: 'Temporary technician (unavailable — remove selection)', exact: true })
+      .uncheck();
+    await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
+    await expect(page.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
   } finally {
     await context.close();
     await t.close();

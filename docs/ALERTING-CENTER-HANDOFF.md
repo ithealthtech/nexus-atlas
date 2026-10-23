@@ -67,6 +67,12 @@ describe drafts or previews as live automated delivery before the workers are wi
   newer run, so use the PR's latest checks rather than assuming the first run is current.
 - Final privacy review: added `alerting` to private request-log paths so verbose diagnostics cannot store custom
   messages or previews. Existing request-log redaction tests now cover both new endpoints.
+- Draft audience selections remain visible when a client is deleted or a staff member becomes ineligible, so
+  administrators can remove the stale selection and save again. The database browser test covers this recovery.
+- CI run [39876464703](https://github.com/ithealthtech/nexus-atlas/actions/runs/39876464703) passed **all eight jobs**
+  for commit `0cac8484dd378f51999050dec6b31b875a60c022`, including PostgreSQL 16/17, both browser suites, Docker,
+  Linux services, Windows build and Windows client. The audience-recovery follow-up still needs its own latest CI
+  result recorded. The request-log redaction unit test also passed locally (100 local standalone tests in total).
 - Remaining before calling the checkpoint verified: address any CI failures and record the result below.
 
 ### Explicitly not wired yet
