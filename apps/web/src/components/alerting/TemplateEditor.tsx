@@ -25,9 +25,24 @@ export function TemplateEditor({ template, change }: { template: AlertTemplate; 
     <Card>
       <CardHeader
         title="Template editor"
-        description={`${ALERT_KIND_LABELS[template.kind]} · plain text, with safe fields`}
+        description={`${ALERT_KIND_LABELS[template.kind]} · messages with safe fields`}
       />
       <div className="space-y-4 p-5">
+        <Field
+          label="Teams formatting"
+          help="Formatted messages support ## headings, **bold**, - list items and a web address on its own line. Raw HTML is displayed as text."
+        >
+          {(p) => (
+            <Select
+              {...p}
+              value={template.teamsFormat ?? 'text'}
+              onChange={(e) => change({ ...template, teamsFormat: e.target.value as 'text' | 'formatted' })}
+            >
+              <option value="text">Plain text</option>
+              <option value="formatted">Formatted message</option>
+            </Select>
+          )}
+        </Field>
         <Field label="Template name">
           {(p) => (
             <Input

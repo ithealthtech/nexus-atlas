@@ -87,3 +87,38 @@ test('email and Teams templates and rule previews work without sending', async (
   await expect(page.getByRole('button', { name: 'Save drafts', exact: true })).toBeDisabled();
   expect(errors).toEqual([]);
 });
+
+test('ready-made Teams templates create editable copies with formatted previews', async ({ page }) => {
+  await signIn(page);
+  await open(page, '/admin/alerting');
+  await page.getByLabel('Ready-made Teams template', { exact: true }).selectOption('breach-detailed');
+  await page.getByRole('button', { name: 'Use template', exact: true }).click();
+  await expect(page.getByLabel('Teams formatting', { exact: true })).toHaveValue('formatted');
+  await expect(page.getByLabel('Template name', { exact: true })).toHaveValue('Password breach alert — detailed');
+  await page.getByRole('button', { name: 'Run preview', exact: true }).click();
+  const preview = page.getByRole('region', { name: 'Teams preview', exact: true });
+  await expect(preview.locator('strong').first()).toHaveText('Password breach alert');
+  await expect(preview.getByRole('link', { name: 'Open in Atlas', exact: true })).toHaveAttribute(
+    'href',
+    'https://atlas.example/expirations',
+  );
+  await expect(preview).toContainText('Coordinate in this thread');
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.setViewportSize({ width: colorScheme === 'light' ? 1440 : 390, height: 1000 });
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+          .exclude('[data-demo-badge]')
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+    await preview.screenshot({ path: `test-results/teams-template-${colorScheme}.png` });
+  }
+  await page.getByLabel('Teams message', { exact: true }).fill('## Custom title\n**Client:** {{clientName}}');
+  await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
+  await expect(page.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Use template', exact: true }).click();
+  await expect(page.getByLabel('Teams message', { exact: true })).toContainText('Coordinate in this thread');
+});

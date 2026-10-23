@@ -1,5 +1,22 @@
 # Alerting center — handoff for Claude
 
+## Teams template continuation
+
+Current branch: `feature/teams-template-library`, based on `feature/alerting-publishing` (PR #290).
+PR #290 passed all eight CI jobs on commit 91fb773 and remains unmerged. This feature must target that branch
+until its prerequisite merges. The owner requested preformatted templates using Teams capabilities.
+Added eight detailed/compact presets, editable copy selection, safe formatted previews and optional Graph HTML
+formatting for messages. Existing templates/posts remain plain by default. No bot, service or dependency added.
+Read `alert-presets.ts` and `teams-format.ts` in shared code. Raw HTML and field values are escaped before markup.
+The delivery worker still does not read custom templates: future adapters must pass the template format through
+to TeamsGraph.notify, and must preserve queue privacy, access checks and uncertain-outcome handling.
+No live client messages were sent. Forty focused shared/Teams tests, production/demo builds, typecheck, lint,
+formatting, extension packaging, site check and duplication check passed locally. Both headless browser scenarios
+reported passing, including formatted previews, copy isolation and WCAG checks; the local Edge runner is slow
+to finish cleanup. CI must verify the full database/browser suites. Screenshots are under
+`docs/screenshots/alerting-center/teams-template-*.png`. Open a separate PR targeting `feature/alerting-publishing`;
+do not merge or release without the owner’s request.
+
 ## Current continuation — 2026-10-23
 
 This section supersedes the historical branch, release and next-step instructions below.

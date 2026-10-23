@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { schema } from '@atlas/db';
-import { ROLE_INFO, type TeamsPost, type TeamsPostPage, teamsPostSchema } from '@atlas/shared';
+import { ROLE_INFO, type TeamsPost, type TeamsPostPage, teamsPostSchema, formattedTeamsHtml } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import { type Scope, isUuid } from '../scope.js';
 import { securityEvent } from '../security-log.js';
@@ -8,6 +8,10 @@ import type { TeamsSettingsStore } from './settings.js';
 import { TeamsClient, TeamsRequestError } from './client.js';
 
 const segment = (value: string) => encodeURIComponent(value);
+export const teamsMessageBody = (content: string, format?: 'text' | 'formatted') =>
+  format === 'formatted'
+    ? { contentType: 'html', content: formattedTeamsHtml(content) }
+    : { contentType: 'text', content };
 export interface GraphMessage {
   id: string;
   body?: { content?: string; contentType?: string };
@@ -57,6 +61,7 @@ export class TeamsGraph {
     destination: { teamId: string; channelId: string },
     content: string,
     parentMessageId?: string,
+    format?: 'text' | 'formatted',
   ) {
     const mapping = await this.mapping(scope, clientId, true);
     if (
@@ -66,7 +71,7 @@ export class TeamsGraph {
       throw new HttpError(409, 'The Teams destination changed. Check the saved client mapping.');
     const path = this.base(destination) + (parentMessageId ? `/${segment(parentMessageId)}/replies` : '');
     const message = (await this.client.request(scope.actor.orgId, path, 'POST', {
-      body: { contentType: 'text', content },
+      body: teamsMessageBody(content, format),
     })) as GraphMessage | null;
     if (!message || typeof message.id !== 'string' || !message.id)
       throw new TeamsRequestError('uncertain', 'Teams did not return a message ID. Check the channel before retrying.');
@@ -126,10 +131,10 @@ export class TeamsGraph {
   }
   async create(scope: Scope, clientId: string, input: unknown, ip: string, parentId?: string) {
     const mapping = await this.mapping(scope, clientId, true);
-    const { content } = teamsPostSchema.parse(input);
+    const { content, format } = teamsPostSchema.parse(input);
     const path = this.base(mapping) + (parentId ? `/${segment(parentId)}/replies` : '');
     const message = (await this.client.request(scope.actor.orgId, path, 'POST', {
-      body: { contentType: 'text', content },
+      body: teamsMessageBody(content, format),
     })) as GraphMessage;
     await scope.db.insert(schema.teamsPosts).values({
       orgId: scope.actor.orgId,
@@ -152,7 +157,7 @@ export class TeamsGraph {
   }
   async edit(scope: Scope, clientId: string, id: string, input: unknown, ip: string, parentId?: string) {
     const mapping = await this.mapping(scope, clientId, true);
-    const { content } = teamsPostSchema.parse(input);
+    const { content, format } = teamsPostSchema.parse(input);
     const [owned] = await scope.db
       .select()
       .from(schema.teamsPosts)
@@ -169,7 +174,7 @@ export class TeamsGraph {
       );
     if (!owned) throw new HttpError(404, 'Only your own Atlas-created Teams posts can be edited here.');
     const path = this.base(mapping) + (parentId ? `/${segment(parentId)}/replies` : '') + `/${segment(id)}`;
-    await this.client.request(scope.actor.orgId, path, 'PATCH', { body: { contentType: 'text', content } });
+    await this.client.request(scope.actor.orgId, path, 'PATCH', { body: teamsMessageBody(content, format) });
     await securityEvent(scope.db, {
       orgId: scope.actor.orgId,
       userId: scope.actor.id,

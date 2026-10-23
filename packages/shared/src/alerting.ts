@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TEAMS_ALERT_KINDS, TEAMS_ALERT_LABELS } from './teams.js';
+import { formattedTeamsHtml } from './teams-format.js';
 
 export const ALERT_KINDS = TEAMS_ALERT_KINDS;
 export const ALERT_KIND_LABELS = TEAMS_ALERT_LABELS;
@@ -49,6 +50,7 @@ export const alertTemplateSchema = z.object({
   emailSubject: templateText(200).refine((v) => !/[\r\n]/.test(v), 'The subject must be a single line.'),
   emailBody: templateText(12000),
   teamsBody: templateText(12000),
+  teamsFormat: z.enum(['text', 'formatted']).optional(),
 });
 export type AlertTemplate = z.infer<typeof alertTemplateSchema>;
 export const ALERT_ITEM_KINDS = ['asset', 'document', 'password'] as const;
@@ -154,6 +156,7 @@ export const alertPreviewSchema = z
       ctx.addIssue({ code: 'custom', path: ['rule'], message: 'The rule and template must use the same alert type.' });
   });
 export interface AlertPreview {
+  teamsHtml?: string;
   emailSubject: string;
   emailBody: string;
   teamsBody: string;
@@ -169,10 +172,12 @@ export function renderAlertTemplate(template: AlertTemplate, values: AlertValues
     if (result.length > max) throw new Error('The rendered message is too long. Shorten the template.');
     return result;
   };
+  const teamsBody = render(template.teamsBody, 12000);
   return {
+    ...(template.teamsFormat === 'formatted' ? { teamsHtml: formattedTeamsHtml(teamsBody) } : {}),
     emailSubject: render(template.emailSubject, 300).replace(/[\r\n]+/g, ' '),
     emailBody: render(template.emailBody, 20000),
-    teamsBody: render(template.teamsBody, 12000),
+    teamsBody,
   };
 }
 

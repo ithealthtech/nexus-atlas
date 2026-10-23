@@ -9,6 +9,18 @@ connection, Teams channel mappings, and Teams delivery history.
 
 ## Create a template
 
+For a ready-made message, select **Ready-made Teams template** and choose **Use template**. Eight presets cover
+expirations, document reviews, password breaches and confirmed infections, each in detailed and compact form.
+Detailed versions contain key facts, next steps and a request to coordinate in the thread; compact versions suit
+busy channels. Each includes a separate email companion. Using a preset creates an editable copy and never
+overwrites another template. Preview its fields and select recipients when creating a rule.
+
+**Teams formatting → Formatted message** supports `## headings`, `**bold text**`, `- list items` and a web address
+on its own line, displayed as an **Open in Atlas** link. HTML supplied in messages or field values is escaped.
+The preview approximates the layout; Teams clients control their own appearance. Existing templates default to
+plain text. Thread prompts are instructions for people, not automatic acknowledgments or escalation actions.
+These templates remain drafts until saved/published, and custom automatic delivery is still a future step.
+
 1. Choose **New template alert type**, then **New template**. The four types are expirations, document reviews,
    password breaches, and confirmed infections.
 2. Name the template. Write the email subject, email message, and Teams message separately.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { teamsSettingsSchema, teamsInfectionSchema } from '@atlas/shared';
-import { teamsText } from '../src/services/teams/graph.js';
+import { teamsText, teamsMessageBody } from '../src/services/teams/graph.js';
 import { teamsReminder, teamsLocalHour } from '../src/services/teams/alerts.js';
 import { API_ROUTES } from '../src/services/api-keys.js';
 import { isPrivatePath, isPrivateTeamsUrl } from '../src/services/request-log.js';
@@ -8,6 +8,13 @@ import { TeamsClient } from '../src/services/teams/client.js';
 import { HttpError } from '../src/errors.js';
 
 describe('Teams input and rendering', () => {
+  it('sends opted-in formatting as escaped Graph HTML while preserving plain messages', () => {
+    expect(teamsMessageBody('## Heading\n**Client:** <untrusted>', 'formatted')).toEqual({
+      contentType: 'html',
+      content: '<p><strong>Heading</strong></p><p><strong>Client:</strong> &lt;untrusted&gt;</p>',
+    });
+    expect(teamsMessageBody('## Heading')).toEqual({ contentType: 'text', content: '## Heading' });
+  });
   it('defaults to a disabled connection, security alerts, daily digests and expiry milestones', () => {
     const result = teamsSettingsSchema.parse({});
     expect(result.enabled).toBe(false);

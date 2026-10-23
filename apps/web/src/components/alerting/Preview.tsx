@@ -8,6 +8,7 @@ import {
   type ClientSummary,
 } from '@atlas/shared';
 import { Badge, Button, Card, CardHeader, Field, Input, Select } from '@/components/ui';
+import { FormattedMessage } from '@/components/teams/FormattedMessage';
 
 export function Preview({
   sample,
@@ -143,7 +144,11 @@ export function Preview({
             </section>
             <section aria-label="Teams preview" className="rounded-md border border-border p-4">
               <h3 className="text-sm font-semibold text-text">Teams preview</h3>
-              <p className="mt-3 text-sm break-words whitespace-pre-wrap text-text-2">{result.teamsBody}</p>
+              {result.teamsHtml !== undefined ? (
+                <FormattedMessage content={result.teamsBody} />
+              ) : (
+                <p className="mt-3 text-sm break-words whitespace-pre-wrap text-text-2">{result.teamsBody}</p>
+              )}
             </section>
           </div>
         ) : (
