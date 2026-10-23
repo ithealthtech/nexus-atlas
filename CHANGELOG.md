@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-10-23
+
+### Added
+
+- **Alerting center draft workspace.** Administrators can create separate email and Teams messages with safe fields, draft rules for clients, reminder days, item types, severities and staff recipients, and preview messages and rule conditions without sending anything. Open it from **Email & alerts → Open alerting center**. Drafts are saved with conflict protection. Existing automatic alerts continue using their current settings; activating these drafts will follow in a later update. See [Alerting center](docs/ALERTING.md).
+
 ## [2.1.1] - 2026-10-22
 
 ### Fixed

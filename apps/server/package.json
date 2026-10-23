@@ -1,6 +1,6 @@
 {
   "name": "@atlas/server",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -14,8 +14,8 @@
     "perf": "tsx test/perf.bench.ts"
   },
   "dependencies": {
-    "@atlas/db": "2.1.1",
-    "@atlas/shared": "2.1.1",
+    "@atlas/db": "2.2.0",
+    "@atlas/shared": "2.2.0",
     "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.2",
     "@fastify/static": "^10.1.4",

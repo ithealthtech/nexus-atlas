@@ -41,6 +41,7 @@ const PAGES = [
   '/admin/security',
   '/admin/vault-policies',
   '/admin/email',
+  '/admin/alerting',
   '/admin/monitoring',
   '/admin/sign-in',
   '/admin/api-keys',

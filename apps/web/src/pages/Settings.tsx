@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Info, Mail, Send, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
@@ -756,6 +757,13 @@ export function EmailAlertsPage() {
         description="How Atlas sends email, who hears about expiring items, and how long logs are kept."
       />
       <PageSections>
+        <Card className="space-y-2 p-5">
+          <h2 className="text-[15px] font-semibold text-text">Alerting center</h2>
+          <p className="text-sm text-muted">Create custom email and Teams templates and test draft rules.</p>
+          <Link to="/admin/alerting" className="text-sm font-semibold text-primary hover:underline">
+            Open alerting center
+          </Link>
+        </Card>
         {email.data ? (
           <EmailSettings key={JSON.stringify(email.data)} current={email.data} />
         ) : (

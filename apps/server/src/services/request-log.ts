@@ -37,6 +37,7 @@ const JWT = /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g;
 // Incoming requests whose bodies carry vault secrets or sign-in material: only the method, path, and status are kept.
 // Matched by path segment, so client-scoped routes (/api/clients/:id/passwords) count too.
 const PRIVATE_SEGMENTS = new Set([
+  'alerting',
   'teams',
   'passwords',
   'password-folders',
