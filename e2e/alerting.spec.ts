@@ -58,10 +58,18 @@ test('alert drafts persist and a stale editor cannot overwrite another administr
     await t.handle.db.update(schema.users).set({ disabled: true }).where(eq(schema.users.id, user.id));
     await page.reload();
     await page.getByLabel('Draft rule', { exact: true }).selectOption(draft.rules[0]!.id);
-    await page.getByRole('checkbox', { name: 'Unavailable client 1 — remove selection', exact: true }).uncheck();
-    await page
-      .getByRole('checkbox', { name: 'Temporary technician (unavailable — remove selection)', exact: true })
-      .uncheck();
+    const unavailableClient = page.getByRole('checkbox', {
+      name: 'Unavailable client 1 — remove selection',
+      exact: true,
+    });
+    await unavailableClient.click();
+    await expect(unavailableClient).toHaveCount(0);
+    const unavailableUser = page.getByRole('checkbox', {
+      name: 'Temporary technician (unavailable — remove selection)',
+      exact: true,
+    });
+    await unavailableUser.click();
+    await expect(unavailableUser).toHaveCount(0);
     await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
     await expect(page.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
   } finally {

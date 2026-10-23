@@ -6,6 +6,19 @@ Draft PR: [#289 — Add shared email and Teams alert drafts and previews](https:
 Initial implementation commit: `fd8b52616306ea2e1559de7154f38b514fac5c5c`. Continue this branch/PR; do not merge or release
 without a new owner request. Check the latest PR head and CI before editing.
 
+Implementation checkpoint: `7260d2e63da510a003ccd1708dd5be9bd36c5854`; subsequent commits fix and strengthen the
+database browser test. Latest completed verification:
+[CI 39879157999](https://github.com/ithealthtech/nexus-atlas/actions/runs/39879157999): **seven jobs passed**, with
+only the new recovery browser scenario failing. A trace-driven test fix is now included; **check the newest PR
+head's CI first**. Codex usage was above 90% at this checkpoint. All changes are on the same draft PR #289.
+
+The browser failure was not solved by increasing timeouts: Playwright's `uncheck()` waited for a control that
+React removed immediately once the unavailable selection was cleared. The trace shows the click completed,
+the UI changed correctly, and the post-click checkbox-state check never returned. The test now clicks and
+explicitly asserts the unavailable client/staff control disappears, then saves. This still needs CI confirmation.
+Downloaded failure artifacts: `../alerting-ci-708/`; extracted trace: `../alerting-trace-708/` (outside the repo).
+The earlier invalid-password fixture is already fixed, with an explicit account-creation assertion.
+
 ## Owner's request and decisions
 
 Start expanding Email & alerts into one alerting center for **email and Microsoft Teams together**. Provide granular
@@ -63,8 +76,7 @@ describe drafts or previews as live automated delivery before the workers are wi
   the current org and staff/client access. Previews use synthetic item data and never call a delivery provider.
 - Added `/admin/alerting`, linked from Email & alerts: template library/editor, rule editor, and previews of both
   email and Teams messages. Editors clear stale preview results and prevent changes during a request.
-- Demo support and tests are being validated. One initial unit assertion used a value too short to exceed the
-  message limit; corrected the fixture. Initial type errors were fixed by reusing `actorFor`.
+- Demo support, template/rule unit tests, real database API tests and browser tests are included.
 - Local validation: production and demo builds, extension packaging, lint, typecheck, whole-repo Prettier, site
   generation check, duplicate scan (0.87%, limit 1%), and 99 standalone tests passed. The browser flow passes with
   WCAG 2.2 AA scans in light/dark at 1440 and 390 pixels. Tested safe field insertion, both message previews,
