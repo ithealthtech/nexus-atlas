@@ -1,10 +1,17 @@
 # Alerting center — handoff for Claude
 
-Last updated: 2026-10-22. Branch: `feature/alerting-center`, based on `origin/main` after release 2.1.1.
+Last updated: 2026-10-23. Branch: `feature/alerting-center`, based on `origin/main` after release 2.1.1.
+
+Current release status: Tyler explicitly requested **merge and release** on 2026-10-23. Version 2.2.0 is being
+prepared on PR #289. Implementation commit `8c8ea7af97245113eb21cba8a7698b9cfeb5335c` passed all eight jobs in
+[CI 39880146311](https://github.com/ithealthtech/nexus-atlas/actions/runs/39880146311), including the corrected
+database browser test. Historical pending/failure notes below are superseded by this result. Validate the release
+commit, merge PR #289, run the existing Release workflow on main, and verify the published assets. This release
+contains the draft workspace; publishing rules and automatic delivery remain the next milestone.
 
 Draft PR: [#289 — Add shared email and Teams alert drafts and previews](https://github.com/ithealthtech/nexus-atlas/pull/289).
 Initial implementation commit: `fd8b52616306ea2e1559de7154f38b514fac5c5c`. Continue this branch/PR; do not merge or release
-without a new owner request. Check the latest PR head and CI before editing.
+without an owner request (now granted for 2.2.0 above). Check the latest PR head and CI before editing.
 
 Implementation checkpoint: `7260d2e63da510a003ccd1708dd5be9bd36c5854`; subsequent commits fix and strengthen the
 database browser test. Latest completed verification:
@@ -24,7 +31,7 @@ The earlier invalid-password fixture is already fixed, with an explicit account-
 Start expanding Email & alerts into one alerting center for **email and Microsoft Teams together**. Provide granular
 rules, custom templates, previews/tests, client overrides, recipients, schedules, and delivery history. Keep this
 note current so Claude can continue when Codex reaches its usage limit. This is implementation authorization;
-opening a PR is appropriate, but this task does not authorize merging or publishing another release.
+the subsequent 2026-10-23 instruction authorizes merging this PR and publishing version 2.2.0.
 
 - Initial assumption: administrator-managed drafts. Per-client overrides are planned, not implemented. Ownership
   preferences beyond this remain open; do not assume client self-service is authorized.
