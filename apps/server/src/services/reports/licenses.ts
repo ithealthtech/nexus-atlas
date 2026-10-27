@@ -18,6 +18,7 @@ export const licenses: Collector = async (report) => {
       `${l.currency} ${((l.unitCostCents * l.seats) / 100).toFixed(2)} / ${l.billingCycle}`,
       l.renewalDate ?? 'Not recorded',
     ]),
+    rows.map((l) => `/clients/${l.clientId}/licenses`),
   );
   if (report.definition.includeMicrosoft) await microsoftSeats(report);
   else report.warn('Microsoft 365 inventory was excluded from this snapshot.');

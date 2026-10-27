@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Report rows open their record.** In a report on screen, a device, asset, document or subscription's name opens its page in Atlas, and a client's name opens the client. This covers Asset inventory, Documentation health, Endpoint health, the Security posture device table and tracked subscriptions. Links shared with a client, PDFs and CSVs are unchanged, since clients can't open those pages.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

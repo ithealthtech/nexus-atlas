@@ -149,7 +149,8 @@ export class ReportShareService {
       client: snapshot.clients[0]?.name ?? '',
       generatedAt: snapshot.generatedAt,
       expiresAt: shared.expiresAt.toISOString(),
-      sections: snapshot.sections,
+      // Row links point into Atlas, which the client can't open; they're left out.
+      sections: snapshot.sections.map(({ links: _links, ...section }) => section),
       warnings: snapshot.warnings,
       sources: snapshot.sources,
     };

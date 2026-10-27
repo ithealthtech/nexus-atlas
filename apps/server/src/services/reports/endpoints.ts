@@ -15,5 +15,6 @@ export const endpoints: Collector = async (report) => {
       e.protection ?? 'Unknown',
       iso(e.updatedAt),
     ]),
+    devices.map((e) => `/assets/${e.assetId}`),
   );
 };

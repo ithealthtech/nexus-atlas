@@ -6,6 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import {
   REPORT_KINDS,
+  REPORT_LINK,
   compareReportSections,
   previousReportRun,
   reportDefinitionSchema,
@@ -13,6 +14,7 @@ import {
   reportSectionGroups,
   reportSelectionSchema,
   selectReportSection,
+  type ReportSection,
   type ReportSnapshot,
 } from '@atlas/shared';
 import { staticKeyProvider } from '../src/crypto/keys.js';
@@ -648,6 +650,25 @@ describe('private client reports', () => {
     expect(whole.statusCode).toBe(200);
     expect(whole.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
   });
+  it('links each row to its record on screen, never in what the client is sent', async () => {
+    await seed();
+    const made = await generate('assets');
+    const inventory = (made.data.snapshot.sections as ReportSection[]).find((s) => s.title === 'Asset inventory')!;
+    expect(inventory.links).toHaveLength(inventory.rows.length);
+    expect(inventory.links!.every((l) => !!l && REPORT_LINK.test(l) && l.startsWith('/assets/'))).toBe(true);
+    // The link opens the asset in that row.
+    const first = await owner.call('GET', `/api${inventory.links![0]}`);
+    expect(first.data.name).toBe(inventory.rows[0]![1]);
+    const docs = (await generate('documentation')).data.snapshot.sections[0] as ReportSection;
+    expect(docs.links!.every((l) => l?.startsWith('/documents/'))).toBe(true);
+
+    const link = await owner.call('POST', `/api/reports/runs/${made.data.id}/shares`, { expiresDays: 7 });
+    const token = link.data.url.split('/').pop() as string;
+    const shared = (await t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}` })).json();
+    expect(JSON.stringify(shared)).not.toContain('/assets/');
+    expect(shared.sections[0].links).toBeUndefined();
+  });
+
   it('adds chosen asset fields to the inventory, never long text or fields that no longer exist', async () => {
     await seed();
     await t.handle.db

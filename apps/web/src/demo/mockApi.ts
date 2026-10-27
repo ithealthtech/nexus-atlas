@@ -1360,33 +1360,33 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
       );
     }
   } else if (definition.kind === 'assets') {
+    const chosen = assets.filter((a) => definition.clientIds.includes(a.clientId));
     sections.push({
       title: 'Asset inventory',
       columns: ['Client', 'Asset', 'Type', 'Status', 'Last updated'],
-      rows: assets
-        .filter((a) => definition.clientIds.includes(a.clientId))
-        .map((a) => [
-          name(a.clientId),
-          a.name,
-          db.layouts.find((l) => l.id === a.layoutId)?.name ?? '',
-          a.status[0]!.toUpperCase() + a.status.slice(1),
-          day(a.updatedAt),
-        ]),
+      links: chosen.map((a) => `/assets/${a.id}`),
+      rows: chosen.map((a) => [
+        name(a.clientId),
+        a.name,
+        db.layouts.find((l) => l.id === a.layoutId)?.name ?? '',
+        a.status[0]!.toUpperCase() + a.status.slice(1),
+        day(a.updatedAt),
+      ]),
     });
   } else if (definition.kind === 'documentation') {
+    const chosen = documents.filter((d) => d.clientId && definition.clientIds.includes(d.clientId));
     sections.push({
       title: 'Documentation health',
       columns: ['Client', 'Article', 'Status', 'Review due', 'Last updated', 'Attention'],
-      rows: documents
-        .filter((d) => d.clientId && definition.clientIds.includes(d.clientId))
-        .map((d) => [
-          name(d.clientId),
-          d.title,
-          d.status === 'needs_review' ? 'Outdated' : d.status[0]!.toUpperCase() + d.status.slice(1),
-          day(d.reviewDate),
-          day(d.updatedAt),
-          d.status === 'needs_review' ? 'Review overdue' : 'No date-based issue detected',
-        ]),
+      links: chosen.map((d) => `/documents/${d.id}`),
+      rows: chosen.map((d) => [
+        name(d.clientId),
+        d.title,
+        d.status === 'needs_review' ? 'Outdated' : d.status[0]!.toUpperCase() + d.status.slice(1),
+        day(d.reviewDate),
+        day(d.updatedAt),
+        d.status === 'needs_review' ? 'Review overdue' : 'No date-based issue detected',
+      ]),
     });
   } else {
     // The other reports read sources the demo doesn't have (RMM, tickets, password health): a summary per client.
