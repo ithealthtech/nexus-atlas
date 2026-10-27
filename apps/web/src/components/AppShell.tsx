@@ -45,6 +45,7 @@ import {
   ShieldCheck,
   Star,
   Sun,
+  Keyboard,
   Sparkles,
   UserCircle,
   Users,
@@ -55,6 +56,7 @@ import {
 } from 'lucide-react';
 import type { MenuStyle } from '@atlas/shared';
 import { CommandPalette } from '@/components/CommandPalette';
+import { KeyboardShortcuts, SHOW_SHORTCUTS } from '@/components/KeyboardShortcuts';
 import { Avatar, Drawer } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
@@ -160,6 +162,9 @@ function UserMenu({
               </Link>
             </Menu.Item>
           )}
+          <Menu.Item className={item} onSelect={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))}>
+            <Keyboard /> Keyboard shortcuts
+          </Menu.Item>
           <Menu.Separator className="my-1 h-px bg-border" />
           <Menu.Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted">Theme</Menu.Label>
           <Menu.RadioGroup value={theme} onValueChange={(v) => choose(v as Theme)}>
@@ -869,6 +874,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {navigation()}
       </Drawer>
       <CommandPalette open={searching} onOpenChange={setSearching} />
+      <KeyboardShortcuts onSearch={() => setSearching(true)} />
     </div>
   );
 }

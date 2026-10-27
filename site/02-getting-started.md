@@ -113,4 +113,11 @@ For each client, a person's access is one of **No access**, **Read**, **Edit**, 
 
 - **Tab** from the top of any page reaches **Skip to content** first.
 - **Ctrl+K** opens search anywhere. **Esc** closes dialogs and menus, and focus returns to where you were.
+- **?** shows every keyboard shortcut. It's also under **Keyboard shortcuts** in your account menu.
+- **/** opens search too.
+- **g** then a letter goes straight to a page:
+  - **g o** Overview, **g c** Clients and **g a** Assets;
+  - **g d** Documents, **g p** Passwords and **g r** Reports;
+  - **g e** Expirations, and for administrators **g u** People and access.
+- Shortcuts never act while you're typing in a field.
 - Every screen is tested against WCAG 2.2 AA in light and dark, and at phone width.

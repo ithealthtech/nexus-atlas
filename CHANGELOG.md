@@ -2,6 +2,15 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Keyboard shortcuts.** Press **?** anywhere to see them all; they're also under **Keyboard shortcuts** in the account menu.
+  - **/** opens search, as Ctrl+K (⌘K) does.
+  - **g** then a letter goes straight to a page: **g c** Clients, **g a** Assets, **g d** Documents, **g p** Passwords, **g r** Reports, **g e** Expirations, **g o** Overview, and **g u** People and access for administrators.
+  - Shortcuts never act while you're typing in a field or a window is open.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
