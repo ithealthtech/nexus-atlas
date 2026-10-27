@@ -45,6 +45,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 - **Password check before restricted reveals.** Revealing or copying a restricted password, or one of its old versions, in the browser asks you to confirm your password if you haven't in the last 10 minutes.
 ### Added
 
+- **Compliance evidence pack.** **Security log → Compliance evidence pack** downloads one zip for SOC 2 auditors or insurers: the security log's integrity check (run as the pack is made), the security log itself, every account's two-factor status, the vault policies, and each client's latest signed-off access review as a PDF, with a summary of which clients are due.
 - **Access reviews.** Administrators can review who can open a client from the **Access review** card on its overview: everyone with access is listed with their role, level, where the access comes from, two-factor status and last sign-in. **Keep** or **Remove** each person (removing takes away direct access at once), then sign it off with your name. Signed-off reviews download as a PDF for auditors and insurers, and the card says when a review is due (every 90 days). Every step is in the security log.
 - **"Still accurate?" verification for documents.** A **Verify** button on any document records that someone checked it and it's still right, and the document shows a badge such as "Verified 12 days ago by Alex". Verifying isn't an edit: the version and "last updated" stay as they were.
   - A document marked **Needs review** goes back to **Current**.
