@@ -80,6 +80,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Atlas for Windows: Windows Hello for restricted passwords.** Showing, copying, or saving a file from a restricted password asks for Windows Hello every time, whatever the app's Windows Hello settings.
+### Added
+
+- **Site visit.** **Site visit** on a client opens one screen made for a phone: the client's notes and opening hours, each location's address (opens in maps), phone and access notes, the people to ask with tap-to-call, Wi-Fi passwords to copy, and the internet provider with its support number and circuit.
 
 ## [2.2.0] - 2026-10-23
 

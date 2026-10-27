@@ -237,7 +237,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
       title: 'Clients',
       icon: Building2,
       to: '/clients',
-      paths: ['/clients'],
+      paths: ['/clients', '/visit'],
       groups: [{ items: [{ to: '/clients', label: 'All clients', exact: true, icon: Building2 }] }],
     },
     {
