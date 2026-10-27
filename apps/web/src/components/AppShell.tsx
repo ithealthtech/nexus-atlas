@@ -55,6 +55,7 @@ import {
 } from 'lucide-react';
 import type { MenuStyle } from '@atlas/shared';
 import { CommandPalette } from '@/components/CommandPalette';
+import { HoverPeek } from '@/components/HoverPeek';
 import { Avatar, Drawer } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
@@ -869,6 +870,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {navigation()}
       </Drawer>
       <CommandPalette open={searching} onOpenChange={setSearching} />
+      <HoverPeek />
     </div>
   );
 }

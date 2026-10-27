@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Hover previews.** Rest the mouse on a link to an asset or document, anywhere in Atlas, and a small card shows what it is: an asset's type, client, status and key fields, or a document's client, status and opening words, with when and by whom it was last updated.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
