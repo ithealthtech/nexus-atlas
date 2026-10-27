@@ -6,6 +6,7 @@ import {
   folderSchema,
   updateDocumentSchema,
   atLeast,
+  DOCUMENT_REVIEW_DAYS,
   type DocumentSummary,
   type DocumentView,
   type FolderView,
@@ -27,21 +28,24 @@ type Snapshot = {
   folderId: string | null;
 };
 const editor = alias(schema.users, 'doc_editor');
+const verifier = alias(schema.users, 'doc_verifier');
 const conflict = () =>
   new HttpError(409, 'Someone else changed this document. Reload to see their changes before saving.', 'conflict');
 
 export class DocumentService {
   private select(scope: Scope) {
     return scope.db
-      .select({ d: schema.documents, clientName: schema.clients.name, editor: editor.name })
+      .select({ d: schema.documents, clientName: schema.clients.name, editor: editor.name, verifier: verifier.name })
       .from(schema.documents)
       .leftJoin(schema.clients, eq(schema.clients.id, schema.documents.clientId))
-      .leftJoin(editor, eq(editor.id, schema.documents.updatedBy));
+      .leftJoin(editor, eq(editor.id, schema.documents.updatedBy))
+      .leftJoin(verifier, eq(verifier.id, schema.documents.verifiedBy));
   }
   private summary(r: {
     d: typeof schema.documents.$inferSelect;
     clientName: string | null;
     editor: string | null;
+    verifier: string | null;
   }): DocumentSummary {
     return {
       id: r.d.id,
@@ -55,6 +59,8 @@ export class DocumentService {
       archived: r.d.archived,
       updatedAt: r.d.updatedAt.toISOString(),
       updatedByName: r.editor,
+      verifiedAt: r.d.verifiedAt?.toISOString() ?? null,
+      verifiedByName: r.d.verifiedAt ? r.verifier : null,
     };
   }
 
@@ -199,6 +205,39 @@ export class DocumentService {
         entityType: 'document',
         entityId: id,
         title: next.title,
+      });
+    });
+    return this.get(scope, id);
+  }
+
+  /**
+   * Records that someone checked the document and it's still accurate. It isn't an edit: the version and "last
+   * updated" stay. A document marked for review goes back to current, and a review date moves DOCUMENT_REVIEW_DAYS
+   * ahead so the reminder comes round again.
+   */
+  async verify(scope: Scope, id: string, now = new Date()): Promise<DocumentView> {
+    const { row } = await this.load(scope, id);
+    await scope.require(row.d.clientId, 'edit', 'Document');
+    if (row.d.archived) throw new HttpError(400, 'Restore the document before verifying it.');
+    const nextReview = row.d.reviewDate
+      ? new Date(now.getTime() + DOCUMENT_REVIEW_DAYS * 86_400_000).toISOString().slice(0, 10)
+      : null;
+    await scope.db.transaction(async (tx) => {
+      await tx
+        .update(schema.documents)
+        .set({
+          verifiedAt: now,
+          verifiedBy: scope.actor.id,
+          ...(row.d.status === 'needs_review' ? { status: 'current' } : {}),
+          ...(nextReview ? { reviewDate: nextReview } : {}),
+        })
+        .where(eq(schema.documents.id, id));
+      await recordActivity(tx, scope.actor, {
+        clientId: row.d.clientId,
+        action: 'Verified',
+        entityType: 'document',
+        entityId: id,
+        title: row.d.title,
       });
     });
     return this.get(scope, id);

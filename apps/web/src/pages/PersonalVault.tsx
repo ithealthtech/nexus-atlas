@@ -49,7 +49,7 @@ import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import { useClients } from '@/lib/queries';
 import { copySecret, usePasswordFolders } from '@/lib/vault';
-import { Generator, StrengthMeter } from '@/pages/vault';
+import { Generator, StrengthMeter } from '@/components/vault/Generator';
 
 const KEY = ['personal-vault'];
 export const usePersonalVaultStatus = (enabled: boolean) =>

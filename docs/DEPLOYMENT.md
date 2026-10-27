@@ -103,7 +103,7 @@ In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run res
 
 ## Ubuntu or Debian without Docker
 
-`deploy/linux/install-atlas.sh` installs everything on Ubuntu 22.04 or 24.04, or Debian 12: Node.js 22 (NodeSource), PostgreSQL 16 (PGDG), and Caddy. It then builds Atlas and runs it as a systemd service. The same script works for every release: by default it installs the **newest published release**, so these commands never need a version number.
+`deploy/linux/install-atlas.sh` installs everything on Ubuntu 22.04 or 24.04, or Debian 12: Node.js 24 (NodeSource), PostgreSQL 16 (PGDG), and Caddy. It then builds Atlas and runs it as a systemd service. The same script works for every release: by default it installs the **newest published release**, so these commands never need a version number.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
@@ -119,6 +119,19 @@ sudo bash install-atlas.sh --public-url https://atlas.example.com
 - **Upgrading:** from **Updates** in Atlas (below), or run `sudo atlas-install` (the installed copy of this script) to move to the newest release. Settings, key, and database are kept.
 - If the install-media (`cdrom`) apt source is still active, the script comments it out, since it breaks `apt-get update`.
 
+### Moving to Node.js 24
+
+Node.js 22 stops getting security fixes on **30 April 2027**, and **System status** warns from six months before. Servers installed with the script from Atlas 2.2 on get Node.js 24; an older server keeps Node.js 22 until you move it, since updates never change the runtime underneath Atlas. To move one, first choose **System status → Back up now** in Atlas, then:
+
+```bash
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
+sudo apt-get update && sudo apt-get install -y nodejs
+sudo atlas-install           # rebuilds Atlas on the new runtime and restarts it
+```
+
+`node -v` should then print `v24`, and **System status** stops warning. Docker images use Node.js 24 from Atlas 2.2, so a Docker server moves with its next update. On Windows Server, install Node.js 24 LTS from [nodejs.org](https://nodejs.org) over the old one, then run `npm ci` and `npm run build` in the Atlas folder and restart the service.
+
 ### Updating from Atlas
 
 **Administration → Updates** lists published releases on GitHub that are newer than the running version (`ATLAS_UPDATE_REPO`, default `ithealthtech/nexus-atlas`), with their release notes. Every administrator can see the page. On servers installed with the Linux script, an administrator can also install a release from it. That needs a fresh password confirmation and is recorded in the security log.
@@ -129,7 +142,7 @@ Atlas never gets root rights. The steps are:
 2. The `msp-atlas-updater.path` unit starts `/usr/local/sbin/atlas-updater` as root.
 3. The updater treats the request as untrusted. It accepts only a `vX.Y.Z` tag that exists on the repository.
 4. It takes a backup, then runs `atlas-install --version <tag>`.
-5. If the install fails after the code was swapped, it puts the previous code back and restarts Atlas. Database migrations are not rolled back; use the pre-update backup for that.
+5. If the install fails after the code was swapped (including when the new version doesn't answer `/readyz`), it puts the previous code back. If the new version had already applied database migrations (the count in `drizzle.__drizzle_migrations` changed, read with `psql`), it restores the pre-update backup with `restore.js --replace` before restarting the previous version. It then checks the previous version answers. The status message on the Updates page says which of these happened. Without `psql` it can't tell, and the message names the backup to restore if needed.
 6. It writes progress to `status.json`, and the full log to `last-update.log`, in `/var/lib/msp-atlas-updater`. The Updates page reads the status.
 
 Other installations, such as Docker or Windows, see the Updates page read-only and update the way they were deployed.
@@ -150,7 +163,7 @@ The helper that knows these actions arrives with the release that has the Servic
 
 ## Windows Server
 
-1. Install [Node.js 22 or 24 LTS](https://nodejs.org) and PostgreSQL 16 or 17, and create an empty database and user for Atlas.
+1. Install [Node.js 24 LTS](https://nodejs.org) (22 still works until it stops getting security fixes) and PostgreSQL 16 or 17, and create an empty database and user for Atlas.
 2. Extract the Windows package from the GitHub release (`msp-atlas-<version>-windows.zip`, already built, with a `.sha256` checksum beside it) to, for example, `C:\Program Files\MSP Atlas`. From source instead: copy the repository there and run `npm ci` and `npm run build`.
 3. From an elevated PowerShell prompt:
    ```powershell

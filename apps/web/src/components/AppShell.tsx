@@ -45,6 +45,7 @@ import {
   ShieldCheck,
   Star,
   Sun,
+  Keyboard,
   Sparkles,
   UserCircle,
   Users,
@@ -55,6 +56,8 @@ import {
 } from 'lucide-react';
 import type { MenuStyle } from '@atlas/shared';
 import { CommandPalette } from '@/components/CommandPalette';
+import { KeyboardShortcuts, SHOW_SHORTCUTS } from '@/components/KeyboardShortcuts';
+import { HoverPeek } from '@/components/HoverPeek';
 import { Avatar, Drawer } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
@@ -160,6 +163,9 @@ function UserMenu({
               </Link>
             </Menu.Item>
           )}
+          <Menu.Item className={item} onSelect={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))}>
+            <Keyboard /> Keyboard shortcuts
+          </Menu.Item>
           <Menu.Separator className="my-1 h-px bg-border" />
           <Menu.Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted">Theme</Menu.Label>
           <Menu.RadioGroup value={theme} onValueChange={(v) => choose(v as Theme)}>
@@ -231,8 +237,15 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
       title: 'Clients',
       icon: Building2,
       to: '/clients',
-      paths: ['/clients'],
-      groups: [{ items: [{ to: '/clients', label: 'All clients', exact: true, icon: Building2 }] }],
+      paths: ['/clients', '/visit', '/health'],
+      groups: [
+        {
+          items: [
+            { to: '/clients', label: 'All clients', exact: true, icon: Building2 },
+            ...(actor.isStaff ? [{ to: '/health', label: 'Health map', icon: HeartPulse }] : []),
+          ],
+        },
+      ],
     },
     {
       id: 'docs',
@@ -329,6 +342,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
           items: [
             { to: '/admin/setup', label: 'Set up Atlas', icon: ListChecks },
             { to: '/admin/email', label: 'Email & alerts', icon: Mail },
+            { to: '/admin/teams', label: 'Microsoft Teams', icon: Mail },
             { to: '/admin/monitoring', label: 'Monitoring', icon: Gauge },
             { to: '/admin/sign-in', label: 'Sign-in', icon: LogIn },
             { to: '/admin/api-keys', label: 'API keys', icon: KeySquare },
@@ -868,6 +882,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         {navigation()}
       </Drawer>
       <CommandPalette open={searching} onOpenChange={setSearching} />
+      <KeyboardShortcuts onSearch={() => setSearching(true)} />
+      <HoverPeek />
     </div>
   );
 }

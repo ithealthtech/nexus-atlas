@@ -84,6 +84,15 @@ Documents are runbooks, procedures, how-tos and notes. They live in a client's *
 5. Optionally set **Review by**. Atlas reminds you on the Expirations page when the date comes, so procedures don't quietly go out of date.
 6. Choose **Save**.
 
+### Still accurate? Verify it
+
+When you've checked a document and it's still right, choose **Verify**. The document shows **Verified 12 days ago by Alex**, so the next person knows it can be trusted.
+
+- **Verifying isn't an edit:** the version and "last updated" stay as they were.
+- **Needs review clears:** a document marked **Needs review** goes back to **Current**.
+- **The review comes round again:** if it has a **Review by** date, that date moves six months ahead, so the reminder repeats.
+- **Stale documents are marked:** one that hasn't been verified or edited for six months shows **Not verified**, or **Last verified** in amber. The documentation health report lists them too.
+
 ### The knowledge base
 
 **Docs → Knowledge base** is your team's own library: procedures, standards and how-tos that aren't about one client. Client accounts never see it. **New folder** keeps it organized.

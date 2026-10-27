@@ -12,7 +12,7 @@ import { runM365Sync, tenantLinks } from '../services/integrations/m365.js';
 import type { SettingsService, StoredM365 } from '../services/settings.js';
 import type { ErrorLog } from '../services/repeating.js';
 import { ConnectedSyncScheduler } from '../services/sync-scheduler.js';
-import { securityEvent } from '../services/security-log.js';
+import { requestEvent } from '../services/security-log.js';
 
 const SYNC_EVERY = 6 * 3_600_000;
 
@@ -45,8 +45,9 @@ async function startSync(
     });
   })
     .then(async () => {
-      await run.flush('done');
+      // The job reads "done" last, once everything the sync writes is written.
       await settings.patchM365(actor.orgId, { lastSyncAt: new Date().toISOString() });
+      await run.flush('done');
     })
     .catch(async (error) => {
       run.note(error instanceof HttpError ? error.message : 'The sync stopped unexpectedly.');
@@ -79,15 +80,7 @@ export function registerM365Routes(
     requireAdmin(req.session!.actor);
     return req.session!.actor;
   };
-  const event = (req: FastifyRequest, action: string, detail = '') =>
-    securityEvent(db, {
-      orgId: req.session!.actor.orgId,
-      userId: req.session!.actor.id,
-      actor: req.session!.actor.name,
-      action,
-      detail,
-      ip: req.ip,
-    });
+  const event = (req: FastifyRequest, action: string, detail = '') => requestEvent(db, req, action, detail);
   const connected = async (orgId: string) => {
     const saved = await settings.m365(orgId);
     if (!saved) throw new HttpError(400, 'Connect Microsoft 365 first.');

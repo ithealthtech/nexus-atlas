@@ -242,7 +242,14 @@ export interface ReportSection {
   part?: string;
   columns: string[];
   rows: string[][];
+  /**
+   * The Atlas page for each row (same order as `rows`), opened from the row's name in the second column. In-app only
+   * (see REPORT_LINK); never part of a link shared with the client, an export or a PDF.
+   */
+  links?: (string | null)[];
 }
+/** The pages a report row may link to: an asset, a document, or a client (and its tabs). */
+export const REPORT_LINK = /^\/(?:assets|documents|clients)\/[0-9a-f-]{36}(?:\/[a-z-]+)?$/;
 export interface ReportSnapshot {
   schemaVersion: 1;
   organization: string;
@@ -268,6 +275,15 @@ export interface ReportRunDetail extends ReportRunView {
 }
 
 // ---------- sharing a report by link ----------
+/** A report the MSP shared with a client, as the client's own people see it in their portal. */
+export interface PortalReport {
+  clientId: string;
+  title: string;
+  sharedAt: string;
+  expiresAt: string;
+  /** The share link's token: the portal opens the same page the link does. */
+  token: string;
+}
 export const createReportShareSchema = z.object({
   /** Days until the link stops working. Report links always expire. */
   expiresDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
@@ -448,13 +464,23 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     // A device's state; a health trend's "Online" holds counts ("35 → 38"), which aren't a problem in themselves.
     if (column === 'Online') return value === 'Offline' || value === 'Unknown';
     if (column === 'Protection') return !['running', 'protected', 'healthy'].includes(value.toLowerCase());
+    // Bitdefender's state for an endpoint, or an RMM device GravityZone doesn't manage.
+    if (column === 'Bitdefender') return ['Infected', 'Needs attention', 'Not managed'].includes(value);
     // A blocked Microsoft 365 account matters while it still holds licenses; a licensed one needs a usage location.
     if (column === 'Status' && section.columns.includes('Licenses'))
       return value === 'Blocked' && count(row[section.columns.indexOf('Licenses')]) > 0;
     if (column === 'Usage location') return !value && count(row[section.columns.indexOf('Licenses')]) > 0;
+    // An enabled member without a second factor; guests sign in with their own organization's MFA.
+    if (column === 'MFA')
+      return (
+        value === 'Not registered' &&
+        row[section.columns.indexOf('Status')] === 'Enabled' &&
+        row[section.columns.indexOf('Type')] !== 'Guest'
+      );
     // A licensed account with no activity in the period.
     if (column === 'Active') return value === 'No';
-    if (['Blocked & licensed', 'No usage location', 'Inactive'].includes(column)) return Number(value) > 0;
+    if (['Blocked & licensed', 'No usage location', 'Inactive', 'Without MFA'].includes(column))
+      return Number(value) > 0;
     if (column === 'Status')
       return ['overdue', 'outdated', 'inactive', 'suspended', 'warning', 'expired', 'expiring soon'].includes(
         value.toLowerCase(),
@@ -462,7 +488,18 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (['Reviews overdue', 'Offline', 'Protection missing / stopped', 'Unknown protection'].includes(column))
       return Number(value) > 0 || value === 'Not available';
     if (column === 'Available') return Number(value) <= 0;
-    if (['Password issues', 'Breached', 'Not encrypted', 'Rotation failing'].includes(column)) return Number(value) > 0;
+    if (
+      [
+        'Password issues',
+        'Breached',
+        'Not encrypted',
+        'Rotation failing',
+        'Bitdefender infected',
+        'Bitdefender attention',
+        'Without Bitdefender',
+      ].includes(column)
+    )
+      return Number(value) > 0;
     if (column === 'Issues') return value !== '';
     if (column === 'Encryption') return value === 'Not encrypted' || value === 'Unknown';
     if (column === 'Last result') return value === 'Failed';

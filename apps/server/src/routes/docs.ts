@@ -17,6 +17,7 @@ import { RelationService } from '../services/relations.js';
 import { Scope, isUuid } from '../services/scope.js';
 import { search } from '../services/search.js';
 import { TemplateService } from '../services/templates.js';
+import type { MailService } from '../services/mail.js';
 import type { FileStorage } from '../services/storage.js';
 
 type Params = { id: string };
@@ -41,6 +42,8 @@ export function registerDocumentationRoutes(
     /** Wrong shared-article links per address. */
     articleLimiter: { check(key: string): void; fail(key: string): void };
     warranty?: WarrantyLookup;
+    /** Tells the team about starter and leaver requests. */
+    mail?: MailService;
   },
 ) {
   const { db, authed } = deps;
@@ -133,6 +136,9 @@ export function registerDocumentationRoutes(
   app.get<{ Params: Params }>('/api/documents/:id', authed, async (req) => documents.get(scopeOf(req), req.params.id));
   app.patch<{ Params: Params }>('/api/documents/:id', authed, async (req) =>
     documents.update(scopeOf(req), req.params.id, req.body),
+  );
+  app.post<{ Params: Params }>('/api/documents/:id/verify', authed, async (req) =>
+    documents.verify(scopeOf(req), req.params.id),
   );
   app.post<{ Params: Params }>('/api/documents/:id/archive', authed, async (req) =>
     documents.setArchived(scopeOf(req), req.params.id, archiveSchema.parse(req.body).archived),
@@ -263,6 +269,40 @@ export function registerDocumentationRoutes(
   app.post<{ Params: Params }>('/api/clients/:id/checklist-runs', authed, async (req, reply) =>
     reply.status(201).send(await checklists.start(scopeOf(req), req.params.id, req.body)),
   );
+  // Requests from a client tell the team by email. A courtesy: the checklist is already waiting, so a mail failure
+  // doesn't fail the request.
+  const tellTeam = async (
+    req: FastifyRequest,
+    scope: Scope,
+    clientId: string,
+    made: { title: string },
+    line: string,
+  ) => {
+    const { mail } = deps;
+    const org = req.session!.organization;
+    if (!mail || !(await mail.enabled(org.id))) return;
+    for (const to of await checklists.teamEmails(scope, clientId))
+      await mail
+        .send(org.id, org.name, {
+          to,
+          subject: made.title,
+          paragraphs: [`${scope.actor.name} asked for this. ${line}`],
+          action: { label: 'Open checklists', url: `${deps.publicOrigin}/clients/${clientId}/checklists` },
+        })
+        .catch((err: unknown) => req.log.warn({ err }, 'request email failed'));
+  };
+  app.post<{ Params: Params }>('/api/clients/:id/people-requests', authed, async (req, reply) => {
+    const scope = scopeOf(req);
+    const made = await checklists.request(scope, req.params.id, req.body);
+    await tellTeam(req, scope, req.params.id, made, 'The checklist is in Atlas, due on the day.');
+    return reply.status(201).send(made);
+  });
+  app.post<{ Params: Params }>('/api/clients/:id/change-requests', authed, async (req, reply) => {
+    const scope = scopeOf(req);
+    const made = await checklists.changeRequest(scope, req.params.id, req.body);
+    await tellTeam(req, scope, req.params.id, made, 'The checklist is in Atlas.');
+    return reply.status(201).send(made);
+  });
   app.get<{ Params: Params }>('/api/checklist-runs/:id', authed, async (req) =>
     checklists.run(scopeOf(req), req.params.id),
   );

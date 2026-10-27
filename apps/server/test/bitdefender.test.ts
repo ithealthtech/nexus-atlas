@@ -22,6 +22,8 @@ function fakeGravityZone() {
           { id: 'e2', name: 'HDG-WS-02', fqdn: 'hdg-ws-02.harbor.local', macs: ['aabbccddee02'] },
           { id: 'e3', name: 'RECEPTION', fqdn: 'reception.harbor.local', macs: ['3c:52:82:1a:2b:3c'] },
           { id: 'e4', name: 'SPARE-LAPTOP', fqdn: '', macs: [] },
+          // Another company's endpoint, which a partner-level listing can include.
+          { id: 'e5', name: 'NLA-STRAY', fqdn: '', macs: [] },
         ],
       ],
       ['g2', [{ id: 'n1', name: 'NLA-WS-01', macs: [] }]],
@@ -74,7 +76,18 @@ function fakeGravityZone() {
         },
       ],
       ['n1', { name: 'NLA-WS-01', state: 1, lastSeen: new Date().toISOString(), agent: { licensed: 1 } }],
+      ['e5', { name: 'NLA-STRAY', companyId: 'g2', state: 1, agent: { licensed: 1 } }],
     ]),
+  };
+  // A partner's tree: Harbor directly under it, Northline in a company folder, Cedar Ridge under a sub-partner.
+  const children: Record<string, { companies: Json[]; partners: Json[]; folders: Json[] }> = {
+    p0: {
+      companies: [{ id: 'g1', name: 'Harbor Dental Group' }],
+      partners: [{ id: 'p1', name: 'Coastal Reseller' }],
+      folders: [{ id: 'f1', name: 'Architects' }],
+    },
+    f1: { companies: [{ id: 'g2', name: 'Northline Architecture' }], partners: [], folders: [] },
+    p1: { companies: [{ id: 'g3', name: 'Cedar Ridge Credit Union' }], partners: [], folders: [] },
   };
   const reply = (id: unknown, body: Json, status = 200) =>
     new Response(JSON.stringify({ jsonrpc: '2.0', id, ...body }), {
@@ -90,17 +103,25 @@ function fakeGravityZone() {
     if (!basic && headers['x-api-key'] !== SERVICE) return reply(request.id, {}, 401);
     if (url.hostname !== 'cloud.gravityzone.bitdefender.com') return reply(request.id, {}, 404);
     const api = url.pathname.replace(/^\/api\/v1\.[01]\/jsonrpc\//, '');
-    if (api === 'network' && request.method === 'getCompaniesList')
-      return state.partner
-        ? reply(request.id, {
-            result: [
-              { id: 'g1', name: 'Harbor Dental Group' },
-              { id: 'g2', name: 'Northline Architecture' },
-            ],
-          })
-        : reply(request.id, { error: { code: -32601, message: 'Method not found' } });
+    if (api === 'network' && ['getCompaniesList', 'getCompanyFoldersList'].includes(request.method)) {
+      // A company's own key isn't allowed the partner methods.
+      if (!state.partner) return reply(request.id, { error: { code: -32000, message: 'Not allowed' } }, 403);
+      const node = children[String(request.params.parentId)];
+      const partnersOnly = (request.params.filters as Json | undefined)?.companyType === 0;
+      return reply(request.id, {
+        result: !node
+          ? []
+          : request.method === 'getCompanyFoldersList'
+            ? node.folders
+            : partnersOnly
+              ? node.partners
+              : [...node.companies, ...node.partners],
+      });
+    }
     if (api === 'companies' && request.method === 'getCompanyDetails')
-      return reply(request.id, { result: { id: 'g1', name: 'Harbor Dental Group' } });
+      return reply(request.id, {
+        result: state.partner ? { id: 'p0', name: 'IT Done Right' } : { id: 'g1', name: 'Harbor Dental Group' },
+      });
     if (api === 'network' && request.method === 'getEndpointsList') {
       expect(url.pathname).toContain('/v1.1/');
       const all = state.endpoints.get(String(request.params.parentId)) ?? [];
@@ -208,7 +229,16 @@ describe('Bitdefender GravityZone', () => {
 
     const ok = await owner.call('PUT', '/api/integrations/bitdefender', { accessUrl: URL_, apiKey: SERVICE });
     expect(ok.status).toBe(200);
-    expect(ok.data).toMatchObject({ accessUrl: URL_, hasKey: true, companies: 2 });
+    // The partner itself, Harbor (directly under it), Northline (in a folder), the sub-partner and its customer.
+    expect(ok.data).toMatchObject({ accessUrl: URL_, hasKey: true, companies: 5 });
+    const tree = (await owner.call('GET', '/api/integrations/bitdefender/companies')).data as { name: string }[];
+    expect(tree.map((c) => c.name)).toEqual([
+      'Cedar Ridge Credit Union',
+      'Coastal Reseller',
+      'Harbor Dental Group',
+      'IT Done Right',
+      'Northline Architecture',
+    ]);
     expect(JSON.stringify(ok.data)).not.toContain(SERVICE);
     const stored = await t.handle.db.execute(sql`select settings::text as s from orgs`);
     expect(JSON.stringify(stored.rows)).not.toContain(SERVICE);
@@ -284,6 +314,39 @@ describe('Bitdefender GravityZone', () => {
       riskScore: 12,
       modules: ['antimalware', 'edrSensor', 'firewall'],
     });
+
+    // Reports: the endpoint and security reports carry Bitdefender for a linked client.
+    const run = (kind: string) =>
+      owner.call('POST', '/api/reports/runs', {
+        kind,
+        title: `${kind} report`,
+        clientIds: [harbor],
+        withinDays: 90,
+        includeMicrosoft: false,
+      });
+    type Section = { title: string; columns: string[]; rows: string[][] };
+    const sections = (await run('endpoints')).data.snapshot.sections as Section[];
+    expect(sections.find((s) => s.title === 'Endpoint health')!.columns).toContain('Bitdefender');
+    const bd = sections.find((s) => s.title === 'Bitdefender endpoints')!;
+    expect(bd.rows.map((r) => [r[1], r[2]])).toEqual([
+      ['HDG-WS-02', 'Infected'],
+      ['Front desk PC', 'Needs attention'],
+      ['hdg-dc-01', 'Protected'],
+      ['SPARE-LAPTOP', 'Protected'],
+    ]);
+    const seats = sections.find((s) => s.title === 'Bitdefender licences')!.rows[0]!;
+    expect(seats[1]).toBe('4');
+    expect(Number(seats[2]) + Number(seats[3]) + Number(seats[4])).toBe(4);
+    expect(seats[5]).toBe('0');
+    const overview = ((await run('security')).data.snapshot.sections as Section[]).find(
+      (s) => s.title === 'Security overview',
+    )!;
+    const col = (name: string) => overview.rows[0]![overview.columns.indexOf(name)];
+    expect([col('Bitdefender infected'), col('Bitdefender attention'), col('Without Bitdefender')]).toEqual([
+      '1',
+      '1',
+      '0',
+    ]);
 
     // A technician without access to the client sees nothing of it.
     await owner.call('POST', '/api/users', {

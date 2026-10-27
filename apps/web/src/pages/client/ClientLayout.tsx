@@ -56,6 +56,7 @@ import { HealthBadge } from '@/components/ClientHealth';
 import { ReviewPackButton } from '@/components/ReviewPack';
 import { TRACKER, useTrackers } from '@/components/Trackers';
 import { ClientForm, statusTone } from '../Clients';
+import { SiteVisitButton } from '../SiteVisit';
 
 const SECTION_LABELS: Record<ClientSection, string> = {
   assets: 'Assets',
@@ -68,6 +69,7 @@ const SECTION_LABELS: Record<ClientSection, string> = {
   reports: 'Reports',
   map: 'Map',
   activity: 'Activity',
+  teams: 'Teams',
 };
 
 // The sections a technician opens most stay in the bar; the rest, and the trackers, are under More.
@@ -85,6 +87,7 @@ const SECTION_ICONS: Record<ClientSection | '', LucideIcon> = {
   reports: FileText,
   map: MapIcon,
   activity: Activity,
+  teams: Users,
 };
 
 export function ClientLayout() {
@@ -117,6 +120,7 @@ export function ClientLayout() {
   const base = `/clients/${clientId}`;
   const visible = (['', ...CLIENT_SECTIONS] as const)
     .filter((s) => s === '' || !prefs?.hiddenSections.includes(s))
+    .filter((s) => s !== 'teams' || actor.isStaff)
     .filter((s) => s !== 'passwords' || client.access === 'edit_passwords' || !actor.isStaff);
   const primary = visible.filter((s) => PRIMARY_SECTIONS.has(s));
   const more = visible.filter((s): s is ClientSection => !PRIMARY_SECTIONS.has(s));
@@ -168,6 +172,7 @@ export function ClientLayout() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
+          {actor.isStaff && <SiteVisitButton clientId={client.id} />}
           {actor.isStaff && <ReviewPackButton clientId={client.id} clientName={client.name} />}
           {actor.isStaff && <ExportButton clientId={client.id} canIncludePasswords={actor.isAdmin} />}
           {atLeast(client.access, 'edit') && (

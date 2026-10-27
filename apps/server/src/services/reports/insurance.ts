@@ -1,9 +1,11 @@
 import { and, eq } from 'drizzle-orm';
+import type { BitdefenderClientView } from '@atlas/shared';
 import { schema } from '@atlas/db';
 import { AssetStatsService } from '../asset-stats.js';
 import { dmarcPolicy, type DmarcPolicy } from '../dmarc.js';
 import { RmmHealthService } from '../rmm-health.js';
 import { DAY, dateValue, newest, type Collector } from './context.js';
+import { mfaCoverage } from './microsoft.js';
 import { encryptionOf, passwords } from './security.js';
 
 export type InsuranceAnswer = 'Yes' | 'Partly' | 'No' | 'Not evidenced';
@@ -13,6 +15,13 @@ const SEVERITY: Record<InsuranceAnswer, number> = { No: 0, Partly: 1, 'Not evide
 /** What one client's answers are worked out from. Null where Atlas has nothing to go on, never "fine". */
 export interface InsuranceFacts {
   devices: { total: number; protected: number; current: number; staleDays: number } | null;
+  /**
+   * Bitdefender GravityZone, for a linked client: endpoints it manages, those with an active licence, still infected,
+   * and RMM devices it doesn't manage. Left out (or null) for clients not linked.
+   */
+  bitdefender?: { endpoints: number; licensed: number; infected: number; missing: number } | null;
+  /** Enabled member accounts in the client's Microsoft 365 tenant, and those registered for MFA; null when not read. */
+  mfa?: { accounts: number; registered: number } | null;
   /** Machines the BitLocker collector reported on, and those fully encrypted. */
   encryption: { reported: number; encrypted: number };
   os: { devices: number; endOfSupport: number } | null;
@@ -41,6 +50,16 @@ export interface InsuranceRow {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Yes when all are good, Partly when most (80%+) are, No otherwise. */
+/** A linked client's Bitdefender evidence, or null when it isn't linked. */
+function bitdefenderFacts(view: BitdefenderClientView | undefined): InsuranceFacts['bitdefender'] {
+  if (!view) return null;
+  return {
+    endpoints: view.endpoints.length,
+    licensed: view.endpoints.filter((e) => e.licence === 'active').length,
+    infected: view.counts.infected,
+    missing: view.missing.length,
+  };
+}
 const share = (good: number, total: number): InsuranceAnswer =>
   good === total ? 'Yes' : good / total >= 0.8 ? 'Partly' : 'No';
 const INCIDENT_PLAN = /\bincident\b.*\b(response|plan)\b|\bbreach response\b|\bcyber ?incident\b/i;
@@ -55,18 +74,61 @@ export function insuranceAnswers(f: InsuranceFacts, today: string): InsuranceRow
   const add = (question: string, answer: InsuranceAnswer, evidence: string, source: string, action = '') =>
     rows.push({ question, answer, evidence, source, action: answer === 'Yes' ? '' : action });
 
-  add(
-    'Is multi-factor authentication enforced for email and remote access?',
-    'Not evidenced',
-    f.globalAdmins
-      ? 'The Microsoft 365 tenant is synced, but MFA enforcement is not read through GDAP.'
-      : 'Atlas does not read MFA enforcement.',
-    'Not tracked in Atlas',
-    'Confirm MFA covers every user and all remote access (Conditional Access or Security Defaults), and keep a screenshot for the application.',
-  );
+  const m = f.mfa;
+  if (m?.accounts) {
+    const missing = m.accounts - m.registered;
+    const answer = share(m.registered, m.accounts);
+    add(
+      'Is multi-factor authentication enforced for email and remote access?',
+      // Registration shows people can use MFA, not that sign-in requires it: never more than Partly on its own.
+      answer === 'Yes' ? 'Partly' : answer,
+      `${m.registered} of ${plural(m.accounts, 'enabled account')} ${m.registered === 1 ? 'is' : 'are'} registered for MFA in Microsoft 365. Whether sign-in requires it (Security Defaults or Conditional Access) isn't read.`,
+      'Microsoft 365 (GDAP)',
+      [
+        missing && `Have the ${plural(missing, 'account')} without MFA register a second factor.`,
+        'Confirm sign-in requires MFA for every user and all remote access (Conditional Access or Security Defaults), and keep a screenshot for the application.',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
+  } else
+    add(
+      'Is multi-factor authentication enforced for email and remote access?',
+      'Not evidenced',
+      f.globalAdmins
+        ? 'The Microsoft 365 tenant is synced, but its MFA registration could not be read through GDAP.'
+        : 'Atlas does not read MFA enforcement.',
+      'Not tracked in Atlas',
+      'Confirm MFA covers every user and all remote access (Conditional Access or Security Defaults), and keep a screenshot for the application.',
+    );
 
   const d = f.devices;
-  if (d?.total)
+  const b = f.bitdefender;
+  if (b && b.endpoints + b.missing > 0) {
+    const all = b.endpoints + b.missing;
+    const answer = share(b.licensed, all);
+    add(
+      'Is endpoint protection (EDR or antivirus) running on every device?',
+      // A device still infected is protection that isn't working: never a plain Yes.
+      b.infected && answer === 'Yes' ? 'Partly' : answer,
+      [
+        `${b.licensed} of ${plural(all, 'device')} run Bitdefender with an active licence.`,
+        b.missing &&
+          `${plural(b.missing, 'RMM device')} ${b.missing === 1 ? "isn't" : "aren't"} managed in GravityZone.`,
+        b.infected && `${plural(b.infected, 'endpoint')} ${b.infected === 1 ? 'is' : 'are'} still infected.`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      'Bitdefender GravityZone',
+      [
+        b.missing && `Install Bitdefender on the ${plural(b.missing, 'device')} without it.`,
+        b.endpoints - b.licensed > 0 && `Renew or activate ${plural(b.endpoints - b.licensed, 'licence')}.`,
+        b.infected && `Clean the ${plural(b.infected, 'infected endpoint')}.`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
+  } else if (d?.total)
     add(
       'Is endpoint protection (EDR or antivirus) running on every device?',
       share(d.protected, d.total),
@@ -246,6 +308,8 @@ export const insurance: Collector = async (report) => {
   const pw = await passwords(report);
 
   const rmm = await new RmmHealthService(settings).report(scope);
+  const bitdefender = await report.bitdefender();
+  const mfa = await mfaCoverage(report);
   report.source('ConnectWise RMM', 'Endpoint protection and check-ins from the last RMM sync.', rmm.updatedAt);
   const stats = await new AssetStatsService(settings).report(scope);
   const machines = await report.db
@@ -310,6 +374,8 @@ export const insurance: Collector = async (report) => {
               staleDays: rmm.staleDays,
             }
           : null,
+        bitdefender: bitdefenderFacts(bitdefender.get(c.id)),
+        mfa: mfa.get(c.id) ?? null,
         encryption: {
           reported: encryption.length,
           encrypted: encryption.filter((m) => encryptionOf(m.volumes) === 'Encrypted').length,

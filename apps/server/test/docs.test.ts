@@ -329,6 +329,45 @@ describe('documentation', () => {
     expect((await owner.call('GET', `/api/documents/${created.id}`)).data.folderId).toBeNull();
   });
 
+  it('verifies a document as still accurate: not an edit, and the review comes round again', async () => {
+    const created = (
+      await owner.call('POST', '/api/documents', {
+        clientId: harbor,
+        title: 'Backup runbook',
+        content: doc('Check the NAS'),
+        status: 'needs_review',
+        reviewDate: '2026-01-15',
+      })
+    ).data;
+    expect(created).toMatchObject({ verifiedAt: null, verifiedByName: null });
+    const verified = (await owner.call('POST', `/api/documents/${created.id}/verify`, {})).data;
+    expect(verified.verifiedAt).toBeTruthy();
+    expect(verified.verifiedByName).toBeTruthy();
+    // Back to current, the review date six months on, and no new version: nothing in it changed.
+    expect(verified.status).toBe('current');
+    expect(verified.reviewDate).toBe(new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10));
+    expect(verified.version).toBe(created.version);
+    const activity = (await owner.call('GET', `/api/activity?client=${harbor}&limit=5`)).data;
+    expect(JSON.stringify(activity)).toContain('Verified');
+
+    // Someone who can only read the client sees the badge but can't vouch for the document.
+    const reader = await person(
+      'reader@atlas.test',
+      'copper lantern field 12',
+      {
+        role: 'technician',
+        allClients: 'none',
+        grants: [{ clientId: harbor, level: 'read' }],
+      },
+      true,
+    );
+    expect((await reader.call('GET', `/api/documents/${created.id}`)).data.verifiedAt).toBe(verified.verifiedAt);
+    expect((await reader.call('POST', `/api/documents/${created.id}/verify`, {})).status).toBe(403);
+    // An archived document isn't verified until it's restored.
+    await owner.call('POST', `/api/documents/${created.id}/archive`, { archived: true });
+    expect((await owner.call('POST', `/api/documents/${created.id}/verify`, {})).status).toBe(400);
+  });
+
   it('links items within a client, and MSP articles to client items', async () => {
     const asset = (
       await owner.call('POST', `/api/clients/${harbor}/assets`, {

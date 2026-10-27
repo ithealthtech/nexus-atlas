@@ -19,6 +19,36 @@ export const checklistSchema = z.object({
 });
 export const updateChecklistSchema = checklistSchema.omit({ clientId: true }).partial();
 
+/**
+ * Someone joining or leaving a client, asked for by anyone who can see the client (client accounts included). It
+ * starts the matching onboarding or offboarding checklist for the team.
+ */
+export const peopleRequestSchema = z.object({
+  kind: z.enum(['starter', 'leaver']),
+  name: z.string().trim().min(1, 'Enter their name.').max(120),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose their first or last day.'),
+  details: z.string().trim().max(2000).default(''),
+});
+
+/** Anything else a client asks the team to change, from its portal. It starts a short checklist for the team. */
+export const changeRequestSchema = z.object({
+  summary: z.string().trim().min(1, 'Say what you need changed.').max(150),
+  details: z.string().trim().max(2000).default(''),
+  /** When it's needed by, if there's a date. */
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-31.')
+    .nullable()
+    .default(null),
+});
+/** The steps of a change request's checklist. */
+export const CHANGE_REQUEST_STEPS = [
+  'Request reviewed, and anything unclear asked about',
+  'Change made',
+  'Documentation in Atlas updated',
+  'Client told it is done',
+];
+
 export const startRunSchema = z
   .object({
     checklistId: z.string().uuid().optional(),

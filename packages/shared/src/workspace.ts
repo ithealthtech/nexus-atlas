@@ -27,6 +27,7 @@ export const DASHBOARD_WIDGETS = [
   'asset-stats',
   'health',
   'favorites',
+  'pinned-reports',
   'recent-clients',
   'activity',
   'setup',
@@ -34,6 +35,7 @@ export const DASHBOARD_WIDGETS = [
   'coming-up',
   'domains',
   'warranty',
+  'team-pulse',
 ] as const;
 export type DashboardWidget = (typeof DASHBOARD_WIDGETS)[number];
 export const DASHBOARD_WIDGET_INFO: Record<
@@ -55,6 +57,11 @@ export const DASHBOARD_WIDGET_INFO: Record<
     description: 'Clients, documents, assets, and passwords you starred.',
     area: 'main',
   },
+  'pinned-reports': {
+    label: 'Pinned reports',
+    description: 'Report templates you pinned, a click from running.',
+    area: 'main',
+  },
   'recent-clients': { label: 'Recently updated clients', description: 'The last five clients changed.', area: 'main' },
   activity: { label: 'Recent activity', description: 'The latest changes you can see.', area: 'main' },
   setup: { label: 'Get set up', description: 'First steps, until they are done.', area: 'side' },
@@ -62,6 +69,11 @@ export const DASHBOARD_WIDGET_INFO: Record<
   'coming-up': { label: 'Coming up', description: 'Anything expiring or due in 30 days.', area: 'side' },
   domains: { label: 'Domains and SSL', description: 'Domains and certificates expiring in 90 days.', area: 'side' },
   warranty: { label: 'Warranties', description: 'Assets by warranty status.', area: 'side' },
+  'team-pulse': {
+    label: 'Team pulse',
+    description: 'What each person on the team changed this month, and their stale documents. Administrators only.',
+    area: 'side',
+  },
 };
 
 /** Client workspace sections a person can hide. The overview always shows. */
@@ -76,6 +88,7 @@ export const CLIENT_SECTIONS = [
   'reports',
   'map',
   'activity',
+  'teams',
 ] as const;
 export type ClientSection = (typeof CLIENT_SECTIONS)[number];
 
@@ -111,7 +124,33 @@ export type WorkspacePrefs = Omit<z.infer<typeof workspacePrefsSchema>, 'menu'> 
   menu: MenuStyle;
   /** The newest "What's new" this person has seen or put away (see WHATS_NEW). Set through its own route. */
   seenWhatsNew?: string;
+  /** Report templates pinned to the dashboard, in the order pinned. Set through its own route. */
+  pinnedReports?: string[];
+  /** How each list is sorted, grouped, and which columns it shows. Set through its own route. */
+  listViews?: Partial<Record<ListName, ListViewPrefs>>;
 };
+
+/** How many report templates one person can pin. */
+export const MAX_PINNED_REPORTS = 8;
+export const pinReportSchema = z.object({ templateId: z.string().uuid(), pinned: z.boolean() });
+
+// ---------- saved list views ----------
+/** The lists whose sort, grouping, and columns each person keeps. */
+export const LIST_NAMES = ['assets', 'documents', 'passwords'] as const;
+export type ListName = (typeof LIST_NAMES)[number];
+/**
+ * One list's saved view. Each list checks the values it reads and falls back to its default, so a view saved by
+ * a newer or older version never breaks the page.
+ */
+export const listViewSchema = z.object({
+  sort: z.string().max(20).optional(),
+  group: z.string().max(20).optional(),
+  /** Extra columns by asset layout key: the layout's field keys, in order. */
+  columns: z.record(z.string().max(60), z.array(z.string().max(40)).max(8)).optional(),
+});
+export type ListViewPrefs = z.infer<typeof listViewSchema>;
+/** Most extra columns a list shows at once. */
+export const MAX_LIST_COLUMNS = 6;
 
 /** The release the What's new page describes. A person who hasn't seen it gets a card on their dashboard. */
 export const WHATS_NEW = '2.0';
@@ -144,7 +183,46 @@ export function resolveWorkspace(saved: unknown): WorkspacePrefs {
   ] as ClientSection[];
   const menu = MENU_STYLES.includes(raw.menu as MenuStyle) ? (raw.menu as MenuStyle) : DEFAULT_WORKSPACE.menu;
   const whatsNew = typeof raw.seenWhatsNew === 'string' ? { seenWhatsNew: raw.seenWhatsNew } : {};
-  return { widgets, hiddenSections, menu, ...whatsNew };
+  const pins = Array.isArray(raw.pinnedReports)
+    ? [...new Set(raw.pinnedReports.filter((id): id is string => typeof id === 'string'))].slice(0, MAX_PINNED_REPORTS)
+    : [];
+  const views: WorkspacePrefs['listViews'] = {};
+  const savedViews = (raw.listViews && typeof raw.listViews === 'object' ? raw.listViews : {}) as Record<
+    string,
+    unknown
+  >;
+  for (const name of LIST_NAMES) {
+    const parsed = listViewSchema.safeParse(savedViews[name]);
+    if (parsed.success) views[name] = parsed.data;
+  }
+  return {
+    widgets,
+    hiddenSections,
+    menu,
+    ...whatsNew,
+    ...(pins.length ? { pinnedReports: pins } : {}),
+    ...(Object.keys(views).length ? { listViews: views } : {}),
+  };
+}
+
+// ---------- team pulse ----------
+/** A document nobody has edited for this long counts as stale, for the team pulse. */
+export const STALE_DOCUMENT_DAYS = 180;
+/** How much each person on the team has documented lately, for administrators. */
+export interface TeamPulse {
+  days: number;
+  people: {
+    id: string;
+    name: string;
+    /** Changes recorded in the activity feed in the last `days` days, and in the `days` before that. */
+    changes: number;
+    previous: number;
+    /** Clients they changed something for. */
+    clients: number;
+    /** Current documents they last edited that haven't been touched in STALE_DOCUMENT_DAYS: theirs to review. */
+    stale: number;
+    lastSignInAt: string | null;
+  }[];
 }
 
 // ---------- client workspace ----------

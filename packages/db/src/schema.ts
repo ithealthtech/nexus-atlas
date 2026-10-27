@@ -593,6 +593,9 @@ export const documents = pgTable(
     reviewDate: date('review_date', { mode: 'string' }),
     version: integer('version').notNull().default(1),
     archived: boolean('archived').notNull().default(false),
+    // The last time someone confirmed the document is still accurate ("Verify"), and who; not a content change.
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    verifiedBy: uuid('verified_by').references(() => users.id, { onDelete: 'set null' }),
     createdBy: createdBy(),
     updatedBy: updatedBy(),
     createdAt: created(),
@@ -1742,4 +1745,86 @@ export const reportDeliveries = pgTable(
     check('report_deliveries_status_check', sql`${t.status} in ('sent','failed')`),
     check('report_deliveries_trigger_check', sql`${t.trigger} in ('schedule','manual','resend')`),
   ],
+);
+
+export const teamsPosts = pgTable(
+  'teams_posts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    teamId: text('team_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id').notNull(),
+    parentId: text('parent_id').notNull().default(''),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('teams_posts_message').on(t.orgId, t.teamId, t.channelId, t.messageId)],
+);
+
+export const teamsDeliveries = pgTable(
+  'teams_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    eventKey: text('event_key').notNull(),
+    rootKey: text('root_key'),
+    kind: text('kind').notNull(),
+    teamId: text('team_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    text: text('text').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    error: text('error').notNull().default(''),
+    conversationId: text('conversation_id'),
+    activityId: text('activity_id'),
+    // Kept separate from the legacy bot IDs so an upgrade never reuses a bot thread as a Graph message.
+    graphMessageId: text('graph_message_id'),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    uniqueIndex('teams_deliveries_event').on(t.orgId, t.eventKey, t.teamId, t.channelId),
+    index('teams_deliveries_due').on(t.status, t.nextAttemptAt),
+    check('teams_deliveries_status', sql`${t.status} in ('pending','sending','sent','failed','uncertain')`),
+    check('teams_deliveries_kind', sql`${t.kind} in ('expiration','review','breach','infection')`),
+  ],
+);
+
+// Access reviews: a dated record that someone checked who can open a client, kept as evidence. The people and
+// their access are captured when the review starts, so the record shows what was reviewed even after access changes.
+export const accessReviews = pgTable(
+  'access_reviews',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // Each person with access when the review started, and the reviewer's decision on them.
+    items: jsonb('items').notNull(),
+    startedBy: uuid('started_by').references(() => users.id, { onDelete: 'set null' }),
+    startedByName: text('started_by_name').notNull(),
+    // Set when the reviewer signs it off; a signed-off review no longer changes.
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    signedBy: uuid('signed_by').references(() => users.id, { onDelete: 'set null' }),
+    signedName: text('signed_name'),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [index('access_reviews_client').on(t.orgId, t.clientId, t.createdAt)],
 );

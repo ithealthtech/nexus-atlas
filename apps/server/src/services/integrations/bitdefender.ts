@@ -26,6 +26,11 @@ const MIN_GAP_MS = 125;
 const MAX_RETRIES = 3;
 const PER_PAGE = 1000;
 const MAX_PAGES = 20;
+/** How deep company folders and sub-partners are followed, and how many companies are listed at most. */
+const MAX_DEPTH = 6;
+const MAX_COMPANIES = 5000;
+/** Errors that mean a partner-only method isn't available to this key or account. */
+const NOT_PARTNER = [-32601, -32602, -32002, -32001, -32000];
 
 // Bitdefender's text is someone else's: control characters are dropped and the length capped.
 // eslint-disable-next-line no-control-regex
@@ -124,7 +129,7 @@ export class BitdefenderClient {
       const code = typeof body?.error?.code === 'number' ? body.error.code : null;
       if ((response.status === 429 || code === -32003) && attempt < MAX_RETRIES) {
         const after = Number(response.headers.get('retry-after'));
-        await sleep(Math.min(Number.isFinite(after) && after > 0 ? after * 1000 : 2000 * (attempt + 1), 30_000));
+        await sleep(Math.min(Number.isFinite(after) && after > 0 ? after * 1000 : 2000 * (attempt + 1), 65_000));
         continue;
       }
       if (response.status === 401 || response.status === 403 || code === -32001)
@@ -139,24 +144,47 @@ export class BitdefenderClient {
     }
   }
 
+  /** A partner-only listing; an account or key without it gets an empty list rather than an error. */
+  private async partnerList(method: string, params: Json): Promise<Json[]> {
+    try {
+      return listOf(await this.call('network', method, params));
+    } catch (error) {
+      if (error instanceof BitdefenderError && NOT_PARTNER.includes(error.rpcCode ?? 0)) return [];
+      throw error;
+    }
+  }
+
   /**
-   * The companies the key can see: a partner's customer companies, or a single company's own. An account with no
-   * customers (or a key without the partner methods) is treated as its own one company.
+   * The companies the key can see. A partner's customers can sit directly under it, in company folders, or under
+   * sub-partners (resellers), so Atlas walks all three. The key's own company comes first: a partner's own computers
+   * live there, and for a single company's key it's the only one.
    */
   async companies(): Promise<{ id: string; name: string }[]> {
-    let list: Json[] = [];
-    try {
-      list = listOf(await this.call('network', 'getCompaniesList'));
-    } catch (error) {
-      if (!(error instanceof BitdefenderError) || ![-32601, -32602, -32002].includes(error.rpcCode ?? 0)) throw error;
+    const own = ((await this.call('companies', 'getCompanyDetails')) ?? {}) as Json;
+    const ownId = clean(own.id, 100);
+    const found = new Map<string, string>();
+    if (ownId) found.set(ownId, clean(own.name, 200) || 'Your company');
+    const queue: { parentId: string; depth: number }[] = [{ parentId: ownId, depth: 0 }];
+    const visited = new Set<string>();
+    while (queue.length && found.size < MAX_COMPANIES) {
+      const { parentId, depth } = queue.shift()!;
+      if (visited.has(parentId)) continue;
+      visited.add(parentId);
+      const params: Json = parentId ? { parentId } : {};
+      for (const c of await this.partnerList('getCompaniesList', params)) {
+        const id = clean(c.id, 100);
+        if (id && !found.has(id)) found.set(id, clean(c.name, 200) || 'Unnamed company');
+      }
+      if (depth >= MAX_DEPTH) continue;
+      const folders = await this.partnerList('getCompanyFoldersList', params);
+      // Sub-partners (company type 0) have customers of their own.
+      const partners = await this.partnerList('getCompaniesList', { ...params, filters: { companyType: 0 } });
+      for (const next of [...folders, ...partners]) {
+        const id = clean(next.id, 100);
+        if (id && !visited.has(id)) queue.push({ parentId: id, depth: depth + 1 });
+      }
     }
-    if (!list.length) {
-      const own = (await this.call('companies', 'getCompanyDetails')) as Json | null;
-      if (own?.id) list = [own];
-    }
-    return list
-      .map((c) => ({ id: clean(c.id, 100), name: clean(c.name, 200) || 'Unnamed company' }))
-      .filter((c) => c.id);
+    return [...found].map(([id, name]) => ({ id, name }));
   }
 
   /** Every managed endpoint under a company, in all its groups. */
@@ -336,6 +364,9 @@ export async function runBitdefenderSync(
         if (error instanceof BitdefenderError && error.rpcCode === -32001) throw error;
         unread++;
       }
+      // Listing a partner's own company can reach its customers' endpoints too; each stays with its own company.
+      const owner = clean(details?.companyId, 100);
+      if (owner && owner !== companyId) continue;
       const row = endpointRow(item, details);
       // An asset an earlier sync added for this endpoint, if it's still there; otherwise one with its name or MAC.
       const earlier = await run.ref('assets', endpointId);
@@ -389,7 +420,7 @@ export async function runBitdefenderSync(
         ),
       );
     run.note(
-      `${clientName}: ${items.length} endpoint${items.length === 1 ? '' : 's'} (${tally.infected} infected, ${tally.attention} needing attention), ${matched} matched to assets${added ? `, ${added} added as assets` : ''}.${unread ? ` ${unread} endpoint${unread === 1 ? "'s" : "s'"} details couldn't be read, so only their basic facts were saved.` : ''}`,
+      `${clientName}: ${seen.length} endpoint${seen.length === 1 ? '' : 's'} (${tally.infected} infected, ${tally.attention} needing attention), ${matched} matched to assets${added ? `, ${added} added as assets` : ''}.${unread ? ` ${unread} endpoint${unread === 1 ? "'s" : "s'"} details couldn't be read, so only their basic facts were saved.` : ''}`,
     );
   }
   // Companies unlinked (or skipped) since the last sync take their endpoints with them.

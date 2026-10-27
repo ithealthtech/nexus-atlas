@@ -21,6 +21,8 @@ import { sessionKey, useActor, useSession, useSetupNeeded } from '@/lib/session'
 import { applyTheme, storedTheme } from '@/lib/theme';
 import { Dashboard } from '@/pages/Dashboard';
 import { Reports } from '@/pages/Reports';
+import { TeamsSettingsPage } from '@/pages/Teams';
+import { ClientTeams } from '@/pages/client/Teams';
 import { Clients } from '@/pages/Clients';
 import { ClientLayout } from '@/pages/client/ClientLayout';
 import { ClientLicenses } from '@/pages/client/Licenses';
@@ -35,10 +37,13 @@ import { SharedArticle } from '@/pages/SharedArticle';
 import { SharedReport } from '@/pages/SharedReport';
 import { SendPage, Sends } from '@/pages/Sends';
 import { PersonalVault } from '@/pages/PersonalVault';
+import { SiteVisit } from '@/pages/SiteVisit';
+import { HealthMap } from '@/pages/HealthMap';
 import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
 import { Groups } from '@/pages/Groups';
 import { ApiKeysPage, EmailAlertsPage, MonitoringPage, SignInPage } from '@/pages/Settings';
+import { AlertingPage } from '@/pages/Alerting';
 import { Theme } from '@/pages/Theme';
 import { Expirations } from '@/pages/Expirations';
 import { Users } from '@/pages/Users';
@@ -219,6 +224,7 @@ const clientRoutes = [
   createRoute({ getParentRoute: () => clientRoute, path: '/checklists', component: ClientChecklists }),
   createRoute({ getParentRoute: () => clientRoute, path: '/licenses', component: ClientLicenses }),
   createRoute({ getParentRoute: () => clientRoute, path: '/reports', component: Reports }),
+  createRoute({ getParentRoute: () => clientRoute, path: '/teams', component: ClientTeams }),
   createRoute({ getParentRoute: () => clientRoute, path: '/map', component: ClientRelationshipMap }),
   createRoute({ getParentRoute: () => clientRoute, path: '/activity', component: ClientActivity }),
   createRoute({ getParentRoute: () => clientRoute, path: '/trackers/domains', component: DomainTracker }),
@@ -227,7 +233,14 @@ const clientRoutes = [
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
-  createRoute({ getParentRoute: () => appRoute, path: '/reports', component: Reports }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/reports',
+    component: Reports,
+    validateSearch: (search: Record<string, unknown>) => ({
+      template: typeof search.template === 'string' ? search.template : undefined,
+    }),
+  }),
   clientRoute.addChildren(clientRoutes),
   // The old one-page monthly report, retired in 2.0: its links open the client's Reports tab.
   createRoute({
@@ -290,6 +303,8 @@ const routes = [
     },
   }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/email', component: adminOnly(EmailAlertsPage) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/alerting', component: adminOnly(AlertingPage) }),
+  createRoute({ getParentRoute: () => appRoute, path: '/admin/teams', component: adminOnly(TeamsSettingsPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/monitoring', component: adminOnly(MonitoringPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/sign-in', component: adminOnly(SignInPage) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/api-keys', component: adminOnly(ApiKeysPage) }),
@@ -307,6 +322,8 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/certificate', component: adminOnly(Certificate) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/remote-access', component: adminOnly(RemoteAccess) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
+  createRoute({ getParentRoute: () => appRoute, path: '/visit/$clientId', component: SiteVisit }),
+  createRoute({ getParentRoute: () => appRoute, path: '/health', component: HealthMap }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
   createRoute({ getParentRoute: () => appRoute, path: '/sends', component: Sends }),
   createRoute({ getParentRoute: () => appRoute, path: '/my-vault', component: PersonalVault }),

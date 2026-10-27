@@ -1,8 +1,8 @@
 import { readFile, statfs } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
-import { count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import { migrationsFolder, schema, type DatabaseHandle } from '@atlas/db';
-import type { Actor, StatusCheck, SystemStatus } from '@atlas/shared';
+import { DORMANT_DAYS, type Actor, type StatusCheck, type SystemStatus } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import type { BackupService } from '../backup/service.js';
 import type { Config } from '../config.js';
@@ -218,6 +218,49 @@ export class StatusService {
         'The security log has not been checked recently',
         'Open the security log and choose "Verify now".',
       );
+    // Access nobody uses is access nobody would notice being misused.
+    const dormantSince = new Date(now.getTime() - DORMANT_DAYS * DAY);
+    const dormantUsers = await db
+      .select({ name: schema.users.name })
+      .from(schema.users)
+      .where(
+        and(
+          eq(schema.users.orgId, actor.orgId),
+          eq(schema.users.disabled, false),
+          sql`greatest(${schema.users.createdAt}, ${schema.users.lastLoginAt}, (select max(s.last_seen_at) from sessions s where s.user_id = ${schema.users.id})) < ${dormantSince}`,
+        ),
+      )
+      .orderBy(schema.users.name);
+    if (dormantUsers.length)
+      add(
+        'dormant-users',
+        'warn',
+        dormantUsers.length === 1
+          ? `1 account hasn't been used in ${DORMANT_DAYS} days`
+          : `${dormantUsers.length} accounts haven't been used in ${DORMANT_DAYS} days`,
+        `${list(dormantUsers.map((u) => u.name))}. Disable accounts people no longer need under People.`,
+      );
+    const dormantKeys = await db
+      .select({ name: schema.apiKeys.name })
+      .from(schema.apiKeys)
+      .where(
+        and(
+          eq(schema.apiKeys.orgId, actor.orgId),
+          isNull(schema.apiKeys.revokedAt),
+          sql`(${schema.apiKeys.expiresAt} is null or ${schema.apiKeys.expiresAt} > ${now})`,
+          sql`coalesce(${schema.apiKeys.lastUsedAt}, ${schema.apiKeys.createdAt}) < ${dormantSince}`,
+        ),
+      )
+      .orderBy(schema.apiKeys.name);
+    if (dormantKeys.length)
+      add(
+        'dormant-keys',
+        'warn',
+        dormantKeys.length === 1
+          ? `1 API key hasn't been used in ${DORMANT_DAYS} days`
+          : `${dormantKeys.length} API keys haven't been used in ${DORMANT_DAYS} days`,
+        `${list(dormantKeys.map((k) => k.name))}. Revoke keys nothing uses any more under Settings → API keys.`,
+      );
     checks.push(...runtimeChecks(process.version, Number(pg!.num), now));
     if (applied < journal.entries.length)
       add('migrations', 'error', 'Database updates are pending', 'Restart Atlas to apply them.');
@@ -258,6 +301,11 @@ export class StatusService {
       background: { lastRunAt: notifier.lastRunAt?.toISOString() ?? null },
     };
   }
+}
+
+/** Names for a status message: up to five, then how many more. */
+function list(names: string[]): string {
+  return names.length > 5 ? `${names.slice(0, 5).join(', ')} and ${names.length - 5} more` : names.join(', ');
 }
 
 const rank = (level: StatusCheck['level']) => ({ ok: 0, warn: 1, error: 2 })[level];

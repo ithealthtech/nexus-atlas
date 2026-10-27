@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Override with --build-arg NODE_IMAGE=... to use a registry mirror.
-ARG NODE_IMAGE=node:22-alpine
+ARG NODE_IMAGE=node:24-alpine
 # ---- build ----
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app

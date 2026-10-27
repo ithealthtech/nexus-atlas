@@ -43,6 +43,8 @@ describe('request log redaction', () => {
     expect(isPrivatePath('/api/clients/abc/passwords')).toBe(true);
     expect(isPrivatePath('/api/passwords/abc/reveal')).toBe(true);
     expect(isPrivatePath('/api/rotation/agent/result')).toBe(true);
+    expect(isPrivatePath('/api/settings/alerting')).toBe(true);
+    expect(isPrivatePath('/api/settings/alerting/preview')).toBe(true);
     expect(isPrivatePath('/api/clients/abc')).toBe(false);
   });
 });

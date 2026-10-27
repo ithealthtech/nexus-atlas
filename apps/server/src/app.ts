@@ -83,6 +83,8 @@ import {
   type ChainProbe,
 } from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerAccessReviewRoutes } from './routes/access-reviews.js';
+import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerClientHealthRoutes } from './routes/client-health.js';
 import { ClientHealthService } from './services/client-health.js';
 import { registerSetupRoutes } from './routes/setup.js';
@@ -92,6 +94,12 @@ import { openApiSpec } from './openapi.js';
 import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl } from './services/request-log.js';
 import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
+import { registerTeamsRoutes } from './routes/teams.js';
+import { registerAlertingRoutes } from './routes/alerting.js';
+import { TeamsSettingsStore } from './services/teams/settings.js';
+import { TeamsGraph } from './services/teams/graph.js';
+import { TeamsAlerts } from './services/teams/alerts.js';
+import { ExpirationService } from './services/expirations.js';
 import type { ErrorLog } from './services/repeating.js';
 import { ReportService } from './services/reports.js';
 import { ReportShareService } from './services/report-shares.js';
@@ -129,6 +137,7 @@ export interface AppOptions {
   webhookFetch?: typeof fetch;
   /** Replaces fetch for the Microsoft 365 sync (tests use a fake Microsoft Graph). */
   m365Fetch?: typeof fetch;
+  teamsFetch?: typeof fetch;
   /** Replaces RDAP/DNS lookups for Domains assets. Tests leave it out, so nothing is looked up. */
   domainLookup?: DomainLookup;
   /** Replaces reading served certificates for the SSL tracker. Tests leave it out, so nothing is connected to. */
@@ -200,6 +209,7 @@ export async function buildApp({
   bitdefenderFetch,
   warrantyFetch,
   m365Fetch,
+  teamsFetch,
   webhookFetch,
   breachFetch,
   entraFetch,
@@ -251,6 +261,7 @@ export async function buildApp({
   bitdefenderFetch = logged(bitdefenderFetch);
   warrantyFetch = logged(warrantyFetch);
   m365Fetch = logged(m365Fetch);
+  teamsFetch = logged(teamsFetch);
   breachFetch = logged(breachFetch);
   entraFetch = logged(entraFetch);
   updateFetch = logged(updateFetch);
@@ -304,7 +315,8 @@ export async function buildApp({
       (req.method === 'GET' &&
         (path === '/api/auth/entra/callback' ||
           path === '/api/integrations/m365/consent' ||
-          path === '/api/integrations/m365/gdap/callback')) ||
+          path === '/api/integrations/m365/gdap/callback' ||
+          path === '/api/integrations/teams/callback')) ||
       isSamlReturn;
     const isPage = req.method === 'GET' && !path.startsWith('/api/');
     if (req.headers['sec-fetch-site'] === 'cross-site' && !isSsoReturn && !isPage)
@@ -748,6 +760,7 @@ export async function buildApp({
     warranty,
     publicOrigin: config.publicOrigin,
     articleLimiter: failureLimiter(30, 15 * 60_000),
+    mail,
   });
   const trackers = new TrackerService(db, settings, {
     domains,
@@ -764,6 +777,10 @@ export async function buildApp({
     storage: files,
     maxUploadBytes,
     shareLimiter: failureLimiter(30, 15 * 60_000),
+    // Browser sessions can confirm a password on the spot; apps and API keys are vetted when they're set up.
+    stepUp: (req) => {
+      if (req.session?.session.kind === 'browser') identity.requireRecentAuth(req.session);
+    },
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
   registerSetupRoutes(app, { db, authed, settings });
@@ -808,6 +825,15 @@ export async function buildApp({
   const reportSchedules = new ReportScheduleService(db, { reports, shares: reportShares, mail, settings });
   const clientHealth = new ClientHealthService(db, { settings, passwords: health, trackers });
   registerClientHealthRoutes(app, { db, authed, health: clientHealth });
+  registerAccessReviewRoutes(app, { db, authed, settings });
+  registerComplianceRoutes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    audit,
+    requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA,
+  });
   const notifier = registerAdminRoutes(app, {
     emergency,
     health,
@@ -1042,6 +1068,42 @@ export async function buildApp({
     secureCookies: config.secureCookies,
   });
 
+  const teamsSettings = new TeamsSettingsStore(db, keys);
+  registerAlertingRoutes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    teams: teamsSettings,
+    publicOrigin: config.publicOrigin,
+  });
+  const teamsGraph = new TeamsGraph(teamsSettings, teamsFetch);
+  const teamsAlerts = new TeamsAlerts(db, {
+    settings: teamsSettings,
+    graph: teamsGraph,
+    expirations: new ExpirationService(vault),
+    health,
+    publicOrigin: config.publicOrigin,
+  });
+  registerTeamsRoutes(app, {
+    db,
+    keys,
+    settings: teamsSettings,
+    graph: teamsGraph,
+    alerts: teamsAlerts,
+    identity,
+    authed,
+    recent,
+    publicOrigin: config.publicOrigin,
+    cookieName,
+    secureCookies: config.secureCookies,
+    fetcher: teamsFetch,
+  });
+  app.decorate('teamsAlerts', teamsAlerts);
+  if (config.NODE_ENV !== 'test') {
+    teamsAlerts.start((err) => app.log.error({ err }, 'Teams alert delivery'));
+    app.addHook('onClose', async () => teamsAlerts.stop());
+  }
   app.all('/api/*', async () => {
     throw new HttpError(404, 'Not found.');
   });
