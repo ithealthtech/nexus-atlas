@@ -565,6 +565,9 @@ function PortalHome() {
       {requesting && <PeopleRequestDialog clientId={requesting} onClose={() => setRequesting(null)} />}
       {changing && <ChangeRequestDialog clientId={changing} onClose={() => setChanging(null)} />}
     </div>
+  );
+}
+
 /** Report templates this person pinned on Reports, each opening there ready to run. Hidden until one is pinned. */
 function PinnedReportsCard({ ids }: { ids: string[] }) {
   const templates = useQuery({
