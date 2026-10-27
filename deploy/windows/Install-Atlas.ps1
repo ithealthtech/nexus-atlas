@@ -67,9 +67,10 @@ if ($Uninstall) {
 
 # Node.js
 $node = Get-Command node -ErrorAction SilentlyContinue
-if (-not $node) { throw 'Node.js 22 or later is required: https://nodejs.org' }
+if (-not $node) { throw 'Node.js is required. Install Node.js 24 LTS from https://nodejs.org' }
 $major = [int]((& node -p 'process.versions.node').Split('.')[0])
-if ($major -lt 22) { throw "Node.js 22 or later is required (found $major)." }
+if ($major -lt 22) { throw "Node.js 22 or later is required (found $major). Install Node.js 24 LTS from https://nodejs.org" }
+if ($major -eq 22) { Write-Warning 'Node.js 22 stops getting security fixes on 30 April 2027. Move to Node.js 24 LTS: see "Moving to Node.js 24" in docs/DEPLOYMENT.md.' }
 if (-not (Test-Path (Join-Path $AppDir 'apps\server\dist\index.js'))) {
   throw "Build Atlas first: run 'npm ci' and 'npm run build' in $AppDir."
 }

@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Node.js 24 for new installs.** The Linux install script installs Node.js 24 on new servers, and the Docker image moves to Node.js 24. Servers already on Node.js 22 keep it until you move them: see *Moving to Node.js 24* in the deployment guide. Node.js 22 stops getting security fixes on 30 April 2027.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
