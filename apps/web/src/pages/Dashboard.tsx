@@ -24,6 +24,7 @@ import {
   type DashboardArea,
   type DashboardWidget,
   type PasswordHealthReport,
+  type PortalReport,
   type WorkspacePrefs,
 } from '@atlas/shared';
 import { api } from '@/lib/api';
@@ -488,6 +489,7 @@ export function Dashboard() {
 function PortalHome() {
   const clients = useClients().data ?? [];
   const [requesting, setRequesting] = useState<string | null>(null);
+  const reports = useQuery({ queryKey: ['portal-reports'], queryFn: () => api<PortalReport[]>('/portal/reports') });
   if (!clients.length) return null;
   const links = [
     ['documents', 'Documents', FileText],
@@ -519,6 +521,31 @@ function PortalHome() {
               </li>
             ))}
           </ul>
+          {/* Reports the team shared with this client, newest first; each opens like its link does. */}
+          {reports.data?.some((r) => r.clientId === c.id) && (
+            <div className="mt-4">
+              <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Shared reports</h3>
+              <ul className="space-y-1">
+                {reports.data
+                  .filter((r) => r.clientId === c.id)
+                  .slice(0, 5)
+                  .map((r) => (
+                    <li key={r.token}>
+                      <AppLink
+                        to={`/report/${r.token}`}
+                        className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-surface-2"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <FileText className="size-4 shrink-0 text-muted" aria-hidden />
+                          <span className="truncate font-medium">{r.title}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-muted">{formatDate(r.sharedAt)}</span>
+                      </AppLink>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
         </Card>
       ))}
       {requesting && <PeopleRequestDialog clientId={requesting} onClose={() => setRequesting(null)} />}

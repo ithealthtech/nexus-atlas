@@ -268,6 +268,15 @@ export interface ReportRunDetail extends ReportRunView {
 }
 
 // ---------- sharing a report by link ----------
+/** A report the MSP shared with a client, as the client's own people see it in their portal. */
+export interface PortalReport {
+  clientId: string;
+  title: string;
+  sharedAt: string;
+  expiresAt: string;
+  /** The share link's token: the portal opens the same page the link does. */
+  token: string;
+}
 export const createReportShareSchema = z.object({
   /** Days until the link stops working. Report links always expire. */
   expiresDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),

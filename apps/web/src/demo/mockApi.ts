@@ -877,6 +877,8 @@ const find = <T extends { id: string }>(list: T[], id: string, what = 'Item') =>
 const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_passwords' });
 
 on('GET', '/reports/templates', () => []);
+// The demo signs in as staff, who see reports under Reports rather than in a client portal.
+on('GET', '/portal/reports', () => []);
 on('GET', '/reports/schedules', () => []);
 
 // Client license tracking in the clickable demo. Microsoft writes are never simulated as live changes.

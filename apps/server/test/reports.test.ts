@@ -748,9 +748,15 @@ describe('private client reports', () => {
     expect((await b.call('GET', `/api/reports/runs/${run.id}/shares`)).status).toBe(404);
     expect((await b.call('POST', `/api/reports/runs/${run.id}/shares`, {})).status).toBe(404);
     expect((await b.call('DELETE', `/api/report-shares/${made.data.id}`)).status).toBe(404);
+    // But the client's own people see what was shared with them, in their portal.
+    expect((await b.call('GET', '/api/portal/reports')).data).toEqual([
+      expect.objectContaining({ clientId, title: 'assets report', token }),
+    ]);
+    expect((await owner.call('GET', '/api/portal/reports')).data).toEqual([]);
 
     // Revoked, expired, mistyped or deleted: all look like no link at all.
     expect((await owner.call('DELETE', `/api/report-shares/${made.data.id}`)).data[0].status).toBe('revoked');
+    expect((await b.call('GET', '/api/portal/reports')).data).toEqual([]);
     expect((await open()).statusCode).toBe(404);
     expect((await t.app.inject({ method: 'GET', url: '/api/shared-reports/short' })).statusCode).toBe(404);
     const second = (await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: 30 })).data;
