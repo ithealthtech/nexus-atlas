@@ -126,11 +126,31 @@ export type WorkspacePrefs = Omit<z.infer<typeof workspacePrefsSchema>, 'menu'> 
   seenWhatsNew?: string;
   /** Report templates pinned to the dashboard, in the order pinned. Set through its own route. */
   pinnedReports?: string[];
+  /** How each list is sorted, grouped, and which columns it shows. Set through its own route. */
+  listViews?: Partial<Record<ListName, ListViewPrefs>>;
 };
 
 /** How many report templates one person can pin. */
 export const MAX_PINNED_REPORTS = 8;
 export const pinReportSchema = z.object({ templateId: z.string().uuid(), pinned: z.boolean() });
+
+// ---------- saved list views ----------
+/** The lists whose sort, grouping, and columns each person keeps. */
+export const LIST_NAMES = ['assets', 'documents', 'passwords'] as const;
+export type ListName = (typeof LIST_NAMES)[number];
+/**
+ * One list's saved view. Each list checks the values it reads and falls back to its default, so a view saved by
+ * a newer or older version never breaks the page.
+ */
+export const listViewSchema = z.object({
+  sort: z.string().max(20).optional(),
+  group: z.string().max(20).optional(),
+  /** Extra columns by asset layout key: the layout's field keys, in order. */
+  columns: z.record(z.string().max(60), z.array(z.string().max(40)).max(8)).optional(),
+});
+export type ListViewPrefs = z.infer<typeof listViewSchema>;
+/** Most extra columns a list shows at once. */
+export const MAX_LIST_COLUMNS = 6;
 
 /** The release the What's new page describes. A person who hasn't seen it gets a card on their dashboard. */
 export const WHATS_NEW = '2.0';
@@ -166,7 +186,23 @@ export function resolveWorkspace(saved: unknown): WorkspacePrefs {
   const pins = Array.isArray(raw.pinnedReports)
     ? [...new Set(raw.pinnedReports.filter((id): id is string => typeof id === 'string'))].slice(0, MAX_PINNED_REPORTS)
     : [];
-  return { widgets, hiddenSections, menu, ...whatsNew, ...(pins.length ? { pinnedReports: pins } : {}) };
+  const views: WorkspacePrefs['listViews'] = {};
+  const savedViews = (raw.listViews && typeof raw.listViews === 'object' ? raw.listViews : {}) as Record<
+    string,
+    unknown
+  >;
+  for (const name of LIST_NAMES) {
+    const parsed = listViewSchema.safeParse(savedViews[name]);
+    if (parsed.success) views[name] = parsed.data;
+  }
+  return {
+    widgets,
+    hiddenSections,
+    menu,
+    ...whatsNew,
+    ...(pins.length ? { pinnedReports: pins } : {}),
+    ...(Object.keys(views).length ? { listViews: views } : {}),
+  };
 }
 
 // ---------- team pulse ----------

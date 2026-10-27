@@ -61,6 +61,7 @@ import { WifiJoinCard } from '@/components/WifiJoin';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, relativeTime } from '@/lib/format';
+import { useListView } from '@/lib/list-views';
 import { useActor } from '@/lib/session';
 import { useClient } from '@/lib/queries';
 import { copySecret, usePassword, usePasswordAudit, usePasswordFolders, usePasswords, useReveal } from '@/lib/vault';
@@ -374,7 +375,7 @@ function BulkBar({
   );
 }
 
-// ---------- list sorting and grouping (remembered per browser) ----------
+// ---------- list sorting and grouping (kept per person, with the rest of their workspace) ----------
 type ListSort = 'name' | 'client' | 'type' | 'recent' | 'attention';
 type ListGroup = 'none' | 'client' | 'type';
 type ListView = { sort: ListSort; group: ListGroup };
@@ -385,8 +386,9 @@ const SORT_LABELS: Record<ListSort, string> = {
   recent: 'Recently changed',
   attention: 'Needs attention first',
 };
+// Before views were kept per person, this browser remembered one; it's used until a view is saved.
 const LIST_VIEW_KEY = 'atlas-password-list';
-function loadListView(): ListView {
+function legacyListView(): ListView {
   try {
     const saved = JSON.parse(localStorage.getItem(LIST_VIEW_KEY) ?? '{}') as Partial<ListView>;
     return {
@@ -395,13 +397,6 @@ function loadListView(): ListView {
     };
   } catch {
     return { sort: 'name', group: 'none' };
-  }
-}
-function saveListView(view: ListView) {
-  try {
-    localStorage.setItem(LIST_VIEW_KEY, JSON.stringify(view));
-  } catch {
-    /* Storage can be blocked; the choice still applies until the page reloads. */
   }
 }
 const typeLabel = passwordTypeLabel;
@@ -456,12 +451,13 @@ export function PasswordsView({ clientId }: { clientId?: string }) {
       ? ''
       : chosenFolder;
   const [managingFolders, setManagingFolders] = useState(false);
-  const [view, setView] = useState<ListView>(loadListView);
-  const changeView = (next: Partial<ListView>) => {
-    const merged = { ...view, ...next };
-    setView(merged);
-    saveListView(merged);
+  const [saved, saveView] = useListView('passwords');
+  const [legacy] = useState(legacyListView);
+  const view: ListView = {
+    sort: saved.sort && saved.sort in SORT_LABELS ? (saved.sort as ListSort) : legacy.sort,
+    group: saved.group === 'none' || saved.group === 'client' || saved.group === 'type' ? saved.group : legacy.group,
   };
+  const changeView = (next: Partial<ListView>) => saveView({ ...view, ...next });
   // Grouping by client makes no sense inside one client.
   const groupBy = clientId && view.group === 'client' ? 'none' : view.group;
   // Only offer the types that are actually in the list.

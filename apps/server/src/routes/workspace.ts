@@ -2,9 +2,11 @@ import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fast
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
+  LIST_NAMES,
   MAX_PINNED_REPORTS,
   ROLE_INFO,
   STALE_DOCUMENT_DAYS,
+  listViewSchema,
   pinReportSchema,
   resolveWorkspace,
   workspacePrefsSchema,
@@ -63,17 +65,25 @@ export function registerWorkspaceRoutes(
     const menu = body.menu ?? saved.menu;
     await db
       .update(schema.users)
-      .set({ workspace: { ...body, menu, seenWhatsNew: saved.seenWhatsNew, pinnedReports: saved.pinnedReports } })
+      .set({
+        workspace: {
+          ...body,
+          menu,
+          seenWhatsNew: saved.seenWhatsNew,
+          pinnedReports: saved.pinnedReports,
+          listViews: saved.listViews,
+        },
+      })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
   // Resets the dashboard and sections. The menu style is a separate choice and stays, as do what's been seen and
-  // pinned reports.
+  // pinned reports and list views.
   app.delete('/api/account/workspace', authed, async (req) => {
-    const { menu, seenWhatsNew, pinnedReports } = await prefs(actorOf(req).id);
+    const { menu, seenWhatsNew, pinnedReports, listViews } = await prefs(actorOf(req).id);
     await db
       .update(schema.users)
-      .set({ workspace: { menu, seenWhatsNew, pinnedReports } })
+      .set({ workspace: { menu, seenWhatsNew, pinnedReports, listViews } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
@@ -100,6 +110,18 @@ export function registerWorkspaceRoutes(
     await db
       .update(schema.users)
       .set({ workspace: { ...saved, pinnedReports: pinned ? [...current, templateId] : current } })
+      .where(eq(schema.users.id, actorOf(req).id));
+    return prefs(actorOf(req).id);
+  });
+
+  // One list's saved view (sort, grouping, columns), kept per person like the menu style.
+  app.put<{ Params: { list: string } }>('/api/account/list-views/:list', authed, async (req) => {
+    const list = z.enum(LIST_NAMES).parse(req.params.list);
+    const view = listViewSchema.parse(req.body);
+    const saved = await prefs(actorOf(req).id);
+    await db
+      .update(schema.users)
+      .set({ workspace: { ...saved, listViews: { ...saved.listViews, [list]: view } } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });

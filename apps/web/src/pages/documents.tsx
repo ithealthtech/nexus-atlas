@@ -49,6 +49,7 @@ import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useClient, useDocument, useDocuments, useFolders } from '@/lib/queries';
 import { formatDate, relativeTime } from '@/lib/format';
+import { useListView } from '@/lib/list-views';
 import { cn } from '@/lib/cn';
 import { FavoriteStar } from '@/components/Favorites';
 import { TemplateLibrary } from '@/components/TemplateLibrary';
@@ -138,6 +139,27 @@ const TEMPLATES: { name: string; description: string; content: RichText }[] = [
 ];
 
 // ---------------------------------------------------------------- list
+type DocumentSort = 'title' | 'updated' | 'status' | 'review';
+const DOCUMENT_SORTS: Record<DocumentSort, string> = {
+  title: 'Title',
+  updated: 'Recently updated',
+  status: 'Needs review first',
+  review: 'Review date',
+};
+const byTitle = (a: DocumentSummary, b: DocumentSummary) =>
+  a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
+function sortDocuments(docs: DocumentSummary[], sort: DocumentSort) {
+  const status = (d: DocumentSummary) => ['needs_review', 'draft', 'current'].indexOf(d.status);
+  const compare: Record<DocumentSort, (a: DocumentSummary, b: DocumentSummary) => number> = {
+    title: byTitle,
+    updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt) || byTitle(a, b),
+    status: (a, b) => status(a) - status(b) || byTitle(a, b),
+    // Soonest review first; documents without a review date last.
+    review: (a, b) => (a.reviewDate ?? '9999').localeCompare(b.reviewDate ?? '9999') || byTitle(a, b),
+  };
+  return [...docs].sort(compare[sort]);
+}
+
 export function DocumentsView({ clientId }: { clientId: string | null }) {
   const search = useSearch({ strict: false }) as { folder?: string; archived?: boolean };
   const go = useGo();
@@ -152,15 +174,20 @@ export function DocumentsView({ clientId }: { clientId: string | null }) {
   const folders = useFolders(clientId);
   const [query, setQuery] = useState('');
   const [naming, setNaming] = useState(false);
+  const [view, saveView] = useListView('documents');
+  const sort: DocumentSort = view.sort && view.sort in DOCUMENT_SORTS ? (view.sort as DocumentSort) : 'title';
   const base = clientId ? `/clients/${clientId}/documents` : '/documents';
   const rows = useMemo(
     () =>
-      (docs.data ?? []).filter(
-        (d) =>
-          (!search.folder || d.folderId === search.folder) &&
-          d.title.toLowerCase().includes(query.trim().toLowerCase()),
+      sortDocuments(
+        (docs.data ?? []).filter(
+          (d) =>
+            (!search.folder || d.folderId === search.folder) &&
+            d.title.toLowerCase().includes(query.trim().toLowerCase()),
+        ),
+        sort,
       ),
-    [docs.data, search.folder, query],
+    [docs.data, search.folder, query, sort],
   );
   const folderName = folders.data?.find((f) => f.id === search.folder)?.name;
   const newDoc = () => go('/documents/new', { client: clientId ?? undefined, folder: search.folder });
@@ -255,6 +282,16 @@ export function DocumentsView({ clientId }: { clientId: string | null }) {
             >
               {search.archived ? <ArchiveRestore /> : <Archive />} {search.archived ? 'Show active' : 'Show archived'}
             </Button>
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Sort</span>
+              <Select value={sort} onChange={(e) => saveView({ sort: e.target.value })}>
+                {Object.entries(DOCUMENT_SORTS).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    Sort: {label}
+                  </option>
+                ))}
+              </Select>
+            </label>
             {canEdit && clientId && (
               <Button onClick={newDoc}>
                 <Plus /> New document

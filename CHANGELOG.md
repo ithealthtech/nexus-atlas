@@ -74,6 +74,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Recent viewers.** A password's page says who last used it, beside when it was updated: up to three people, each with when they last viewed, copied, or filled it. The full log stays in **Access history**.
+### Added
+
+- **Saved list views.** Assets, Documents and Passwords remember how you sort them (and Passwords how you group them) on your account, not just in one browser. On Assets, choose **Columns** for any asset type to pick up to six of its fields to show.
 
 ## [2.2.0] - 2026-10-23
 
