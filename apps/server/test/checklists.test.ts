@@ -258,6 +258,26 @@ describe('checklists', () => {
     ).toBe(400);
   });
 
+  it('turns a client account’s change request into a short checklist for the team', async () => {
+    const contact = await person('manager@harbor.test', 'amber orchard gate 5', {
+      role: 'client_editor',
+      grants: [{ clientId: harbor, level: 'edit' }],
+    });
+    const sent = await contact.b.call('POST', `/api/clients/${harbor}/change-requests`, {
+      summary: 'A shared mailbox for sales',
+      details: 'sales@harbordental.test, for Dana and Jo',
+    });
+    expect(sent.status, JSON.stringify(sent.data)).toBe(201);
+    const run = (await owner.call('GET', `/api/checklist-runs/${sent.data.id}`)).data;
+    expect(run).toMatchObject({ title: 'Change request: A shared mailbox for sales', dueDate: null, assigneeId: null });
+    expect(run.steps[0].note).toBe('Requested by manager. sales@harbordental.test, for Dana and Jo');
+    expect(run.steps).toHaveLength(4);
+    expect((await contact.b.call('POST', `/api/clients/${harbor}/change-requests`, { summary: ' ' })).status).toBe(400);
+    expect(
+      (await contact.b.call('POST', `/api/clients/${northline}/change-requests`, { summary: 'Nope' })).status,
+    ).toBe(404);
+  });
+
   it('handles many ticks at once without running out of database connections', async () => {
     const run = (
       await owner.call('POST', `/api/clients/${harbor}/checklist-runs`, {

@@ -28,6 +28,7 @@ import {
   type MicrosoftLicenseView,
   remoteAccessRequestSchema,
   type RemoteAccessView,
+  CHANGE_REQUEST_STEPS,
   CHECKLIST_TEMPLATES,
   RUNBOOK_TEMPLATES,
   runbookContent,
@@ -4016,6 +4017,31 @@ on('POST', '/clients/:id/people-requests', (m, b) => {
     })),
     assigneeId: null,
     dueDate: String(b.date),
+    completedAt: null,
+    createdAt: now(),
+    createdBy: db.owner.id,
+  };
+  runs.unshift(r);
+  record('Requested', 'checklist_run', r.id, title, r.clientId);
+  return { id: r.id, title };
+});
+on('POST', '/clients/:id/change-requests', (m, b) => {
+  if (!String(b.summary ?? '').trim()) throw new MockError(400, 'Say what you need changed.');
+  const title = `Change request: ${String(b.summary)}`;
+  const r = {
+    id: uuid(),
+    clientId: m[1]!,
+    checklistId: null,
+    title,
+    steps: CHANGE_REQUEST_STEPS.map((text, i) => ({
+      id: uuid(),
+      text,
+      doneAt: null,
+      doneBy: null,
+      note: i === 0 ? String(b.details ?? '') : '',
+    })),
+    assigneeId: null,
+    dueDate: (b.date as string | null) ?? null,
     completedAt: null,
     createdAt: now(),
     createdBy: db.owner.id,

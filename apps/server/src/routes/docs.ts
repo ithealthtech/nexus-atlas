@@ -269,22 +269,38 @@ export function registerDocumentationRoutes(
   app.post<{ Params: Params }>('/api/clients/:id/checklist-runs', authed, async (req, reply) =>
     reply.status(201).send(await checklists.start(scopeOf(req), req.params.id, req.body)),
   );
+  // Requests from a client tell the team by email. A courtesy: the checklist is already waiting, so a mail failure
+  // doesn't fail the request.
+  const tellTeam = async (
+    req: FastifyRequest,
+    scope: Scope,
+    clientId: string,
+    made: { title: string },
+    line: string,
+  ) => {
+    const { mail } = deps;
+    const org = req.session!.organization;
+    if (!mail || !(await mail.enabled(org.id))) return;
+    for (const to of await checklists.teamEmails(scope, clientId))
+      await mail
+        .send(org.id, org.name, {
+          to,
+          subject: made.title,
+          paragraphs: [`${scope.actor.name} asked for this. ${line}`],
+          action: { label: 'Open checklists', url: `${deps.publicOrigin}/clients/${clientId}/checklists` },
+        })
+        .catch((err: unknown) => req.log.warn({ err }, 'request email failed'));
+  };
   app.post<{ Params: Params }>('/api/clients/:id/people-requests', authed, async (req, reply) => {
     const scope = scopeOf(req);
     const made = await checklists.request(scope, req.params.id, req.body);
-    // Email is a courtesy: the checklist is already waiting, so a mail failure doesn't fail the request.
-    const { mail } = deps;
-    const org = req.session!.organization;
-    if (mail && (await mail.enabled(org.id)))
-      for (const to of await checklists.teamEmails(scope, req.params.id))
-        await mail
-          .send(org.id, org.name, {
-            to,
-            subject: made.title,
-            paragraphs: [`${scope.actor.name} asked for this. The checklist is in Atlas, due on the day.`],
-            action: { label: 'Open checklists', url: `${deps.publicOrigin}/clients/${req.params.id}/checklists` },
-          })
-          .catch((err: unknown) => req.log.warn({ err }, 'starter/leaver email failed'));
+    await tellTeam(req, scope, req.params.id, made, 'The checklist is in Atlas, due on the day.');
+    return reply.status(201).send(made);
+  });
+  app.post<{ Params: Params }>('/api/clients/:id/change-requests', authed, async (req, reply) => {
+    const scope = scopeOf(req);
+    const made = await checklists.changeRequest(scope, req.params.id, req.body);
+    await tellTeam(req, scope, req.params.id, made, 'The checklist is in Atlas.');
     return reply.status(201).send(made);
   });
   app.get<{ Params: Params }>('/api/checklist-runs/:id', authed, async (req) =>

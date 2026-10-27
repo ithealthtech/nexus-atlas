@@ -55,6 +55,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Anyone who can edit a document can verify it.
 ### Added
 
+- **Change requests from the portal.** Client accounts can choose **Request a change** on their portal home to ask the team for anything else (a shared mailbox, a moved printer, a new door code), with details and an optional date. It starts a short checklist for the team, recorded in the activity feed.
 - **Shared reports in the client portal.** Reports your team shares with a client by link also appear on that client's portal home, under **Shared reports**, for as long as the link is live.
 - **Portal home.** Client accounts see a card for each organization on their Overview, with links to its documents, devices, people, and locations, and a **Starter or leaver** button.
 - **Starter and leaver requests.** On a client's Contacts page, anyone who can see the client, including client accounts, can choose **Starter or leaver** to tell the team someone is joining or leaving. Atlas starts the matching onboarding or offboarding checklist, due on their first or last day, with the details on the first step.
