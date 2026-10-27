@@ -4,7 +4,9 @@ import { schema } from '@atlas/db';
 import {
   ROLE_INFO,
   atLeast,
+  CHECKLIST_TEMPLATES,
   checklistSchema,
+  peopleRequestSchema,
   startRunSchema,
   tickStepSchema,
   updateChecklistSchema,
@@ -341,6 +343,47 @@ export class ChecklistService {
       title,
     });
     return this.run(scope, run!.id);
+  }
+
+  /**
+   * A new starter or a leaver, asked for by anyone who can see the client: starts the onboarding or offboarding
+   * checklist, due on their first or last day, for the team to pick up. The details go on the first step.
+   */
+  async request(scope: Scope, clientId: string, input: unknown): Promise<{ id: string; title: string }> {
+    const body = peopleRequestSchema.parse(input);
+    await scope.require(clientId, 'read', 'Client');
+    const template = CHECKLIST_TEMPLATES.find(
+      (t) => t.key === (body.kind === 'starter' ? 'user-onboarding' : 'user-offboarding'),
+    )!;
+    const title = `${body.kind === 'starter' ? 'New starter' : 'Leaver'}: ${body.name}`;
+    const note = [`Requested by ${scope.actor.name}`, body.details].filter(Boolean).join('. ').slice(0, 2000);
+    const [run] = await scope.db
+      .insert(schema.checklistRuns)
+      .values({
+        orgId: scope.actor.orgId,
+        clientId,
+        checklistId: null,
+        title,
+        steps: template.steps.map((text, i) => ({
+          id: randomUUID(),
+          text,
+          doneAt: null,
+          doneBy: null,
+          note: i === 0 ? note : '',
+        })),
+        assigneeId: null,
+        dueDate: body.date,
+        createdBy: scope.actor.id,
+      })
+      .returning();
+    await recordActivity(scope.db, scope.actor, {
+      clientId,
+      action: 'Requested',
+      entityType: 'checklist_run',
+      entityId: run!.id,
+      title,
+    });
+    return { id: run!.id, title };
   }
 
   async updateRun(scope: Scope, id: string, input: unknown): Promise<RunView> {

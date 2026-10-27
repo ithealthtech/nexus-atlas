@@ -263,6 +263,9 @@ export function registerDocumentationRoutes(
   app.post<{ Params: Params }>('/api/clients/:id/checklist-runs', authed, async (req, reply) =>
     reply.status(201).send(await checklists.start(scopeOf(req), req.params.id, req.body)),
   );
+  app.post<{ Params: Params }>('/api/clients/:id/people-requests', authed, async (req, reply) =>
+    reply.status(201).send(await checklists.request(scopeOf(req), req.params.id, req.body)),
+  );
   app.get<{ Params: Params }>('/api/checklist-runs/:id', authed, async (req) =>
     checklists.run(scopeOf(req), req.params.id),
   );

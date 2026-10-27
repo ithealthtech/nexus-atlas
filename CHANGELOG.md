@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Starter and leaver requests.** On a client's Contacts page, anyone who can see the client, including client accounts, can choose **Starter or leaver** to tell the team someone is joining or leaving. Atlas starts the matching onboarding or offboarding checklist, due on their first or last day, with the details on the first step.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

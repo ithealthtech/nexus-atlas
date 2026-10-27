@@ -19,6 +19,17 @@ export const checklistSchema = z.object({
 });
 export const updateChecklistSchema = checklistSchema.omit({ clientId: true }).partial();
 
+/**
+ * Someone joining or leaving a client, asked for by anyone who can see the client (client accounts included). It
+ * starts the matching onboarding or offboarding checklist for the team.
+ */
+export const peopleRequestSchema = z.object({
+  kind: z.enum(['starter', 'leaver']),
+  name: z.string().trim().min(1, 'Enter their name.').max(120),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose their first or last day.'),
+  details: z.string().trim().max(2000).default(''),
+});
+
 export const startRunSchema = z
   .object({
     checklistId: z.string().uuid().optional(),
