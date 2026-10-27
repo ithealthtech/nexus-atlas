@@ -720,6 +720,32 @@ describe('private client reports', () => {
       'The asset field "report-workstation:gone" no longer exists or can\'t be reported, so it was left out.',
     ]);
     expect(JSON.stringify(snapshot)).not.toContain('never-export-this');
+    // The warranty that ran out in 2020 is due for replacement now.
+    const forecast = snapshot.sections.find((s) => s.title === 'Hardware replacement forecast')!;
+    expect(forecast.columns).toHaveLength(8);
+    expect(forecast.columns.at(-2)).toBe('Over 5 years old');
+    expect(forecast.rows).toEqual([['Harbor Dental', '1', '0', '0', '0', '0', '0', '0']]);
+
+    // With a purchase date and price, old devices count too, and the cost of replacing what's due is added up.
+    await t.handle.db
+      .update(schema.assetLayouts)
+      .set({
+        fields: [
+          { key: 'renewal', label: 'Warranty', type: 'date', expires: true },
+          { key: 'purchased', label: 'Purchase date', type: 'date' },
+          { key: 'price', label: 'Purchase price', type: 'number' },
+        ],
+      })
+      .where(eq(schema.assetLayouts.key, 'report-workstation'));
+    await t.handle.db
+      .update(schema.assets)
+      .set({ fields: { renewal: '2099-01-01', purchased: '2015-06-01', price: 1250 } })
+      .where(eq(schema.assets.name, 'Office workstation'));
+    const priced = (await owner.call('POST', '/api/reports/runs', definition('assets'))).data
+      .snapshot as ReportSnapshot;
+    const costed = priced.sections.find((s) => s.title === 'Hardware replacement forecast')!;
+    expect(costed.columns.at(-1)).toBe('Replacement cost');
+    expect(costed.rows).toEqual([['Harbor Dental', '0', '0', '0', '0', '0', '1', '0', '1,250']]);
     const tooMany = Array.from({ length: 13 }, (_, i) => `report-workstation:f${i}`);
     expect(
       (await owner.call('POST', '/api/reports/runs', { ...definition('assets'), assetFields: tooMany })).status,

@@ -31,6 +31,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Bitdefender infection alerts.** When GravityZone reports an infected endpoint, staff who can see that client get an email right away (not at the morning send time), once per endpoint per day while it stays infected.
+### Added
+
+- **Hardware replacement forecast.** The asset report adds, per client, hardware already out of warranty, running out in each of the next four quarters, or more than five years past its purchase date, and what replacing it would cost where a purchase price is recorded. New installs' Configurations layout gains a **Purchase price** field; on an existing install, add a number field named Purchase price to Configurations to see costs.
 
 ## [2.2.0] - 2026-10-23
 
