@@ -1,8 +1,25 @@
 import { asc, and, eq } from 'drizzle-orm';
 import { schema } from '@atlas/db';
-import { PASSWORD_ISSUE_LABELS, ROLE_INFO, type RotationRunStatus } from '@atlas/shared';
-import { MAX_REPORT_ROWS, capped, iso, newest, onlineText, type Collector, type ReportContext } from './context.js';
-import { bitdefenderSection } from './endpoints.js';
+import {
+  LEVEL_INFO,
+  PASSWORD_ISSUE_LABELS,
+  ROLE_INFO,
+  levelRank,
+  type Role,
+  type RotationRunStatus,
+} from '@atlas/shared';
+import { actorFor, hasMfa } from '../../identity/service.js';
+import { Scope } from '../scope.js';
+import {
+  DAY,
+  MAX_REPORT_ROWS,
+  capped,
+  iso,
+  newest,
+  onlineText,
+  type Collector,
+  type ReportContext,
+} from './context.js';
 
 const ROTATION_RESULT: Record<RotationRunStatus, string> = {
   dispatched: 'In progress',
@@ -189,4 +206,48 @@ export const security: Collector = async (report) => {
       ]),
     );
   await bitdefenderSection(report);
+  await accessReview(report);
 };
+
+/** An account unused this long is flagged in the access review. */
+const DORMANT_DAYS = 60;
+
+/**
+ * Everyone with access to each chosen client, at what level, and whether they use two-factor sign-in: the list a
+ * client's access review signs off. Administrators only, since it lists the team.
+ */
+export async function accessReview(report: ReportContext) {
+  if (!ROLE_INFO[report.actor.role].admin) return;
+  const users = await report.db
+    .select()
+    .from(schema.users)
+    .where(and(eq(schema.users.orgId, report.actor.orgId), eq(schema.users.disabled, false)))
+    .orderBy(asc(schema.users.name));
+  const people = await Promise.all(
+    users.map(async (u) => ({ u, levels: await new Scope(report.db, actorFor(u)).levels() })),
+  );
+  const now = Date.parse(report.generatedAt);
+  report.section(
+    'Who has access',
+    ['Client', 'Person', 'Role', 'Access', 'Two-factor', 'Last sign-in', 'Note'],
+    report.clients.flatMap((c) =>
+      people
+        .map(({ u, levels }) => ({ u, level: levels.get(c.id) ?? 'none' }))
+        .filter((p) => p.level !== 'none')
+        .sort((a, b) => levelRank(b.level) - levelRank(a.level) || a.u.name.localeCompare(b.u.name))
+        .map(({ u, level }) => [
+          report.client(c.id),
+          `${u.name} <${u.email}>`,
+          ROLE_INFO[u.role as Role].label,
+          LEVEL_INFO[level].label,
+          hasMfa(u) ? 'Yes' : 'No',
+          iso(u.lastLoginAt) || 'Never',
+          !u.lastLoginAt
+            ? 'Has never signed in'
+            : now - u.lastLoginAt.getTime() > DORMANT_DAYS * DAY
+              ? `Inactive ${DORMANT_DAYS}+ days`
+              : '',
+        ]),
+    ),
+  );
+}

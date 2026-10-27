@@ -37,6 +37,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Documentation coverage.** The documentation report opens with each client's coverage: the percentage of seven essentials on record (a primary contact, a location, a network diagram, a backup runbook, the internet provider, admin accounts, and Wi-Fi), which are missing, and how many contacts, locations, assets, passwords, and articles it has.
+### Added
+
+- **Access review.** For administrators, the security report lists everyone with access to each client: their role, access level, two-factor status, and last sign-in. People who have never signed in, or haven't in 60 days, are flagged.
 
 ## [2.2.0] - 2026-10-23
 

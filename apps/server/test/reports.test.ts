@@ -20,7 +20,7 @@ import {
 import { staticKeyProvider } from '../src/crypto/keys.js';
 import { SettingsService } from '../src/services/settings.js';
 import { reportCsv, reportPdf } from '../src/services/report-export.js';
-import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+import { OWNER, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TENANT = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const APP = '11111111-2222-4333-8444-555555555555';
@@ -976,6 +976,16 @@ describe('private client reports', () => {
       'Password issues',
       'Device protection and encryption',
       'Automatic password rotation',
+      'Who has access',
+    ]);
+    expect(sections[4]!.rows).toContainEqual([
+      'Harbor Dental',
+      `${OWNER.name} <${OWNER.email}>`,
+      'Owner',
+      'Edit + passwords',
+      expect.any(String),
+      expect.any(String),
+      '',
     ]);
     const overview = sections[0]!;
     const cell = (name: string) => overview.rows[0]![overview.columns.indexOf(name)];
