@@ -33,9 +33,12 @@ import {
   type RemoteAccessView,
   CHANGE_REQUEST_STEPS,
   CHECKLIST_TEMPLATES,
+  GUIDE_TEMPLATES,
   STALE_DOCUMENT_DAYS,
   RUNBOOK_TEMPLATES,
+  guideTitle,
   runbookContent,
+  type RunbookBlock,
   DEFAULT_BRANDING,
   DEFAULT_VAULT_POLICY,
   PERSONAL_EXPORT_COLUMNS,
@@ -3948,9 +3951,16 @@ const templateViews = () =>
   [
     ...CHECKLIST_TEMPLATES.map((t) => ({ ...t, kind: 'checklist' as const, size: t.steps.length })),
     ...RUNBOOK_TEMPLATES.map((t) => ({ ...t, kind: 'runbook' as const, size: t.body.filter((x) => 'h' in x).length })),
-  ].map(({ key, kind, title, description, size }) => ({
+    ...GUIDE_TEMPLATES.map((t) => ({
+      ...t,
+      kind: 'guide' as const,
+      title: guideTitle(t),
+      size: t.body.filter((x) => 'h' in x).length,
+    })),
+  ].map(({ key, kind, title, description, size, ...t }) => ({
     key,
     kind,
+    ...('audience' in t && { audience: t.audience }),
     title,
     description,
     size,
@@ -3975,17 +3985,17 @@ on('POST', '/templates', (_m, b) => {
     checklists.push(c);
     addedTemplates.set(t.key, c.id);
   }
-  for (const t of RUNBOOK_TEMPLATES.filter((x) => wanted(x.key))) {
-    let folder = folders.find((f) => !f.clientId && f.name === 'Runbooks');
-    if (!folder) folders.push((folder = { id: uuid(), clientId: null, name: 'Runbooks' }));
+  const addDocument = (key: string, folderName: string, title: string, body: RunbookBlock[]) => {
+    let folder = folders.find((f) => !f.clientId && f.name === folderName);
+    if (!folder) folders.push((folder = { id: uuid(), clientId: null, name: folderName }));
     const d = {
       id: uuid(),
       clientId: null,
       folderId: folder.id,
-      title: t.title,
+      title,
       status: 'current' as const,
       reviewDate: null,
-      content: runbookContent(t.body),
+      content: runbookContent(body),
       ...meta(),
       updatedAt: now(),
       verifiedAt: null,
@@ -3993,8 +4003,11 @@ on('POST', '/templates', (_m, b) => {
     };
     documents.push(d);
     snapshot(d.id, 1, d as unknown as Json);
-    addedTemplates.set(t.key, d.id);
-  }
+    addedTemplates.set(key, d.id);
+  };
+  for (const t of RUNBOOK_TEMPLATES.filter((x) => wanted(x.key))) addDocument(t.key, 'Runbooks', t.title, t.body);
+  for (const t of GUIDE_TEMPLATES.filter((x) => wanted(x.key)))
+    addDocument(t.key, 'Atlas guides', guideTitle(t), t.body);
   return templateViews();
 });
 on('GET', '/checklist-runs', (_m, _b, q) =>

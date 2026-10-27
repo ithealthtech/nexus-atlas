@@ -297,11 +297,13 @@ describe('checklists', () => {
     expect(after.done).toBe(8);
     expect(after.completedAt).not.toBeNull();
   });
-  it('adds the built-in checklists and runbooks once, as editable copies', async () => {
-    type Template = { key: string; kind: string; title: string; addedId: string | null };
+  it('adds the built-in checklists, runbooks and guides once, as editable copies', async () => {
+    type Template = { key: string; kind: string; audience?: string; title: string; addedId: string | null };
     const library = (await owner.call('GET', '/api/templates')).data as Template[];
     expect(library.some((t) => t.kind === 'checklist')).toBe(true);
     expect(library.some((t) => t.kind === 'runbook')).toBe(true);
+    for (const audience of ['technician', 'client', 'admin'])
+      expect(library.some((t) => t.kind === 'guide' && t.audience === audience)).toBe(true);
     expect(library.every((t) => t.addedId === null)).toBe(true);
 
     const one = await owner.call('POST', '/api/templates', { keys: ['user-offboarding'] });
@@ -320,8 +322,15 @@ describe('checklists', () => {
 
     const folders = (await owner.call('GET', '/api/folders')).data as { name: string; documentCount: number }[];
     expect(folders).toEqual([
+      expect.objectContaining({
+        name: 'Atlas guides',
+        documentCount: library.filter((t) => t.kind === 'guide').length,
+      }),
       expect.objectContaining({ name: 'Runbooks', documentCount: library.filter((t) => t.kind === 'runbook').length }),
     ]);
+    const guide = all.find((t) => t.kind === 'guide' && t.audience === 'client')!;
+    expect(guide.title).toMatch(/^Client: /);
+    expect((await owner.call('GET', `/api/documents/${guide.addedId}`)).data.title).toBe(guide.title);
     const runbook = all.find((t) => t.kind === 'runbook')!;
     const doc = (await owner.call('GET', `/api/documents/${runbook.addedId}`)).data;
     expect(doc.title).toBe(runbook.title);

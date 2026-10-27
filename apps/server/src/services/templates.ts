@@ -2,8 +2,10 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import {
   CHECKLIST_TEMPLATES,
+  GUIDE_TEMPLATES,
   RUNBOOK_TEMPLATES,
   addTemplatesSchema,
+  guideTitle,
   runbookContent,
   type TemplateView,
 } from '@atlas/shared';
@@ -13,10 +15,12 @@ import type { DocumentService } from './documents.js';
 import type { Scope } from './scope.js';
 
 const RUNBOOK_FOLDER = 'Runbooks';
+const GUIDE_FOLDER = 'Atlas guides';
 
 /**
- * The built-in library of checklists and runbooks. Adding a template copies it into the MSP's own checklists or
- * knowledge base (runbooks go in a Runbooks folder), where it's edited like anything else. Which templates were
+ * The built-in library of checklists, runbooks and guides. Adding a template copies it into the MSP's own checklists
+ * or knowledge base (runbooks go in a Runbooks folder, guides in an Atlas guides folder), where it's edited like
+ * anything else. Which templates were
  * added is kept in the organization's settings, so adding again skips them while their copy still exists, even
  * if it was renamed or archived; one whose copy was deleted can be added again.
  */
@@ -69,6 +73,15 @@ export class TemplateService {
         size: t.body.filter((b) => 'h' in b).length,
         addedId: added.get(t.key) ?? null,
       })),
+      ...GUIDE_TEMPLATES.map((t) => ({
+        key: t.key,
+        kind: 'guide' as const,
+        audience: t.audience,
+        title: guideTitle(t),
+        description: t.description,
+        size: t.body.filter((b) => 'h' in b).length,
+        addedId: added.get(t.key) ?? null,
+      })),
     ];
   }
 
@@ -91,9 +104,21 @@ export class TemplateService {
     let folderId: string | null = null;
     for (const t of RUNBOOK_TEMPLATES)
       if (wanted(t.key) && !added.has(t.key)) {
-        folderId ??= await this.runbookFolder(scope);
+        folderId ??= await this.folder(scope, RUNBOOK_FOLDER);
         made[t.key] = (
           await this.documents.create(scope, { title: t.title, folderId, content: runbookContent(t.body) })
+        ).id;
+      }
+    let guideFolderId: string | null = null;
+    for (const t of GUIDE_TEMPLATES)
+      if (wanted(t.key) && !added.has(t.key)) {
+        guideFolderId ??= await this.folder(scope, GUIDE_FOLDER);
+        made[t.key] = (
+          await this.documents.create(scope, {
+            title: guideTitle(t),
+            folderId: guideFolderId,
+            content: runbookContent(t.body),
+          })
         ).id;
       }
     if (Object.keys(made).length)
@@ -106,8 +131,8 @@ export class TemplateService {
     return this.list(scope);
   }
 
-  /** The MSP knowledge base's Runbooks folder, made if it isn't there. */
-  private async runbookFolder(scope: Scope): Promise<string> {
+  /** A folder in the MSP knowledge base, made if it isn't there. */
+  private async folder(scope: Scope, name: string): Promise<string> {
     const [folder] = await scope.db
       .select({ id: schema.folders.id })
       .from(schema.folders)
@@ -115,9 +140,9 @@ export class TemplateService {
         and(
           eq(schema.folders.orgId, scope.actor.orgId),
           isNull(schema.folders.clientId),
-          eq(schema.folders.name, RUNBOOK_FOLDER),
+          eq(schema.folders.name, name),
         ),
       );
-    return folder?.id ?? (await this.documents.createFolder(scope, { name: RUNBOOK_FOLDER })).id;
+    return folder?.id ?? (await this.documents.createFolder(scope, { name })).id;
   }
 }

@@ -313,6 +313,19 @@ test.describe.serial('first run to restricted client access', () => {
     await page.keyboard.type('Disable unused services on every client firewall.');
     await page.getByRole('button', { name: 'Save document' }).click();
     await expect(page.getByText('MSP knowledge base').first()).toBeVisible();
+
+    // A client guide from the template library goes in its own Atlas guides folder.
+    await nav(page, 'Knowledge base');
+    await page.getByRole('button', { name: 'Template library' }).click();
+    const clientGuides = page.getByRole('dialog').getByRole('region', { name: 'Guides for clients' });
+    const welcome = clientGuides.getByRole('listitem').filter({ hasText: 'Client: Welcome to your IT documentation' });
+    await accessible(page);
+    await welcome.getByRole('button', { name: 'Add' }).click();
+    await welcome.getByRole('link', { name: 'Open' }).click();
+    await expect(page.getByRole('heading', { name: 'Client: Welcome to your IT documentation' })).toBeVisible();
+    await nav(page, 'Knowledge base');
+    await page.getByRole('navigation', { name: 'Folders' }).getByRole('link', { name: 'Atlas guides' }).click();
+    await expect(page.getByText('Client: Welcome to your IT documentation').first()).toBeVisible();
   });
 
   test('owner stores a password, reveals it, rotates it, and shares a one-time link', async ({ page, browser }) => {
