@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Team pulse.** Administrators get a dashboard card showing what each person on the team changed in the last seven days, against the week before, and how many clients they worked on. People with no changes show when they last signed in.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

@@ -2201,6 +2201,29 @@ on('POST', '/shares/:token/open', (m) => {
 
 // people, groups, settings, expirations, audit log
 on('GET', '/users', () => users);
+// Counted from the demo's own activity feed, by name, as the server counts by person.
+on('GET', '/workspace/team-pulse', () => {
+  const day = 86_400_000;
+  const age = (a: ActivityView) => Date.now() - Date.parse(a.createdAt);
+  return {
+    days: 7,
+    people: users
+      .filter((u) => !u.disabled && !u.role.startsWith('client'))
+      .map((u) => {
+        const mine = activity.filter((a) => a.actorName === u.name);
+        const week = mine.filter((a) => age(a) < 7 * day);
+        return {
+          id: u.id,
+          name: u.name,
+          changes: week.length,
+          previous: mine.filter((a) => age(a) >= 7 * day && age(a) < 14 * day).length,
+          clients: new Set(week.map((a) => a.clientId).filter(Boolean)).size,
+          lastSignInAt: u.lastLoginAt || null,
+        };
+      })
+      .sort((x, y) => y.changes - x.changes || x.name.localeCompare(y.name)),
+  };
+});
 on('POST', '/users', (_m, b) => {
   const u = {
     id: uuid(),

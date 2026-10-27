@@ -30,6 +30,25 @@ describe('favorites, quick notes, and workspace preferences', () => {
   }
   const layoutId = async () => (await owner.call('GET', '/api/layouts')).data[0].id as string;
 
+  it('shows administrators what each person changed this week, against last week', async () => {
+    const tess = await technician('tess@atlas.test', [{ clientId: harbor, level: 'edit' }]);
+    await tess.call('POST', `/api/clients/${harbor}/contacts`, { name: 'Dana Front Desk' });
+    // An older change counts toward the week before.
+    await t.handle.db.execute(
+      sql`insert into activity (org_id, client_id, actor_id, actor_name, action, entity_type, title, created_at)
+          select org_id, ${summit}, id, name, 'Updated', 'client', 'Summit Legal', now() - interval '10 days'
+          from users where email = 'tess@atlas.test'`,
+    );
+    const pulse = (await owner.call('GET', '/api/workspace/team-pulse')).data;
+    expect(pulse.days).toBe(7);
+    const row = pulse.people.find((p: { name: string }) => p.name === 'tess');
+    expect(row).toMatchObject({ changes: 1, previous: 1, clients: 1 });
+    expect(row.lastSignInAt).not.toBeNull();
+    // The owner made the two clients this week.
+    expect(pulse.people.find((p: { name: string }) => p.name === 'Avery Owner').changes).toBeGreaterThanOrEqual(2);
+    expect((await tess.call('GET', '/api/workspace/team-pulse')).status).toBe(403);
+  });
+
   it('keeps favorites per person and lists every kind, passwords included', async () => {
     const asset = (
       await owner.call('POST', `/api/clients/${harbor}/assets`, { layoutId: await layoutId(), name: 'FW-01' })

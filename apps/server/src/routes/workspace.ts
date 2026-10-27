@@ -1,8 +1,16 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { ROLE_INFO, resolveWorkspace, workspacePrefsSchema, type ClientCounts } from '@atlas/shared';
+import {
+  ROLE_INFO,
+  resolveWorkspace,
+  workspacePrefsSchema,
+  type ClientCounts,
+  type Role,
+  type TeamPulse,
+} from '@atlas/shared';
 import { z } from 'zod';
+import { requireAdmin } from '../authz.js';
 import { ClientService } from '../services/clients.js';
 import { FavoriteService, favoriteType } from '../services/favorites.js';
 import { Scope } from '../services/scope.js';
@@ -74,6 +82,46 @@ export function registerWorkspaceRoutes(
       .set({ workspace: { ...saved, seenWhatsNew: seen } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
+  });
+
+  // ---- team pulse: who has been documenting, this week against last ----
+  app.get('/api/workspace/team-pulse', authed, async (req): Promise<TeamPulse> => {
+    const actor = actorOf(req);
+    requireAdmin(actor);
+    const days = 7;
+    const now = Date.now();
+    const split = new Date(now - days * 86_400_000);
+    const a = schema.activity;
+    const counts = await db
+      .select({
+        actorId: a.actorId,
+        changes: sql<number>`count(*) filter (where ${a.createdAt} >= ${split})::int`,
+        previous: sql<number>`count(*) filter (where ${a.createdAt} < ${split})::int`,
+        clients: sql<number>`count(distinct ${a.clientId}) filter (where ${a.createdAt} >= ${split})::int`,
+      })
+      .from(a)
+      .where(and(eq(a.orgId, actor.orgId), gte(a.createdAt, new Date(now - 2 * days * 86_400_000))))
+      .groupBy(a.actorId);
+    const byId = new Map(counts.map((c) => [c.actorId, c]));
+    const users = await db
+      .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role, last: schema.users.lastLoginAt })
+      .from(schema.users)
+      .where(and(eq(schema.users.orgId, actor.orgId), eq(schema.users.disabled, false)));
+    const people = users
+      .filter((u) => ROLE_INFO[u.role as Role].staff)
+      .map((u) => {
+        const c = byId.get(u.id);
+        return {
+          id: u.id,
+          name: u.name,
+          changes: c?.changes ?? 0,
+          previous: c?.previous ?? 0,
+          clients: c?.clients ?? 0,
+          lastSignInAt: u.last?.toISOString() ?? null,
+        };
+      })
+      .sort((x, y) => y.changes - x.changes || x.name.localeCompare(y.name));
+    return { days, people };
   });
 
   // ---- client sections ----

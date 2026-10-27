@@ -20,6 +20,7 @@ import {
   type DashboardArea,
   type DashboardWidget,
   type PasswordHealthReport,
+  type TeamPulse,
   type WorkspacePrefs,
 } from '@atlas/shared';
 import { api } from '@/lib/api';
@@ -385,6 +386,7 @@ export function Dashboard() {
       </Card>
     ),
     warranty: <WarrantyCard />,
+    'team-pulse': actor.isAdmin ? <TeamPulseCard /> : null,
   };
 
   const shown = (prefs.data ?? DEFAULT_WORKSPACE).widgets.filter((w) => w.visible);
@@ -472,6 +474,49 @@ export function Dashboard() {
       {/* Mounted only while open, so it starts from the saved layout each time. */}
       {customizing && prefs.data && <CustomizeDashboard prefs={prefs.data} onClose={() => setCustomizing(false)} />}
     </div>
+  );
+}
+
+/** What each person on the team changed this week, against last week. Administrators only. */
+function TeamPulseCard() {
+  const { data } = useQuery({
+    queryKey: ['team-pulse'],
+    queryFn: () => api<TeamPulse>('/workspace/team-pulse'),
+    staleTime: 5 * 60_000,
+  });
+  if (!data?.people.length) return null;
+  return (
+    <Card>
+      <CardHeader title="Team pulse" description={`Changes in the last ${data.days} days, against the week before.`} />
+      <ul className="divide-y divide-border">
+        {data.people.map((p) => (
+          <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{p.name}</span>
+              <span className="block text-xs text-muted">
+                {p.changes
+                  ? `${p.clients} ${p.clients === 1 ? 'client' : 'clients'}`
+                  : p.lastSignInAt
+                    ? `Last signed in ${relativeTime(p.lastSignInAt)}`
+                    : 'Never signed in'}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 tabular-nums">
+              {p.changes}
+              {p.changes !== p.previous && (
+                <span
+                  className={cn('flex items-center text-xs', p.changes > p.previous ? 'text-success' : 'text-muted')}
+                  aria-label={`${p.previous} the week before`}
+                  title={`${p.previous} the week before`}
+                >
+                  {p.changes > p.previous ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
