@@ -17,6 +17,7 @@ import { RelationService } from '../services/relations.js';
 import { Scope, isUuid } from '../services/scope.js';
 import { search } from '../services/search.js';
 import { TemplateService } from '../services/templates.js';
+import type { MailService } from '../services/mail.js';
 import type { FileStorage } from '../services/storage.js';
 
 type Params = { id: string };
@@ -41,6 +42,8 @@ export function registerDocumentationRoutes(
     /** Wrong shared-article links per address. */
     articleLimiter: { check(key: string): void; fail(key: string): void };
     warranty?: WarrantyLookup;
+    /** Tells the team about starter and leaver requests. */
+    mail?: MailService;
   },
 ) {
   const { db, authed } = deps;
@@ -263,9 +266,24 @@ export function registerDocumentationRoutes(
   app.post<{ Params: Params }>('/api/clients/:id/checklist-runs', authed, async (req, reply) =>
     reply.status(201).send(await checklists.start(scopeOf(req), req.params.id, req.body)),
   );
-  app.post<{ Params: Params }>('/api/clients/:id/people-requests', authed, async (req, reply) =>
-    reply.status(201).send(await checklists.request(scopeOf(req), req.params.id, req.body)),
-  );
+  app.post<{ Params: Params }>('/api/clients/:id/people-requests', authed, async (req, reply) => {
+    const scope = scopeOf(req);
+    const made = await checklists.request(scope, req.params.id, req.body);
+    // Email is a courtesy: the checklist is already waiting, so a mail failure doesn't fail the request.
+    const { mail } = deps;
+    const org = req.session!.organization;
+    if (mail && (await mail.enabled(org.id)))
+      for (const to of await checklists.teamEmails(scope, req.params.id))
+        await mail
+          .send(org.id, org.name, {
+            to,
+            subject: made.title,
+            paragraphs: [`${scope.actor.name} asked for this. The checklist is in Atlas, due on the day.`],
+            action: { label: 'Open checklists', url: `${deps.publicOrigin}/clients/${req.params.id}/checklists` },
+          })
+          .catch((err: unknown) => req.log.warn({ err }, 'starter/leaver email failed'));
+    return reply.status(201).send(made);
+  });
   app.get<{ Params: Params }>('/api/checklist-runs/:id', authed, async (req) =>
     checklists.run(scopeOf(req), req.params.id),
   );
