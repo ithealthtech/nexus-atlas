@@ -1,6 +1,7 @@
 import { asc, and, eq } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import {
+  DORMANT_DAYS,
   LEVEL_INFO,
   PASSWORD_ISSUE_LABELS,
   ROLE_INFO,
@@ -20,6 +21,7 @@ import {
   type Collector,
   type ReportContext,
 } from './context.js';
+import { bitdefenderSection } from './endpoints.js';
 
 const ROTATION_RESULT: Record<RotationRunStatus, string> = {
   dispatched: 'In progress',
@@ -208,9 +210,6 @@ export const security: Collector = async (report) => {
   await bitdefenderSection(report);
   await accessReview(report);
 };
-
-/** An account unused this long is flagged in the access review. */
-const DORMANT_DAYS = 60;
 
 /**
  * Everyone with access to each chosen client, at what level, and whether they use two-factor sign-in: the list a
