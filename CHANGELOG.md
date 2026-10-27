@@ -12,6 +12,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - **Health score:** the security part counts infected endpoints (double), endpoints needing attention, and devices Bitdefender doesn't manage. Each finding opens the client's overview, where the Bitdefender card lists them.
   - **Endpoint health and Security posture reports** gain a **Bitdefender endpoints** section: every endpoint with its state, what needs attention, policy, licence and last seen, plus the RMM devices GravityZone doesn't manage. Endpoint health adds a **Bitdefender** column, and the Security overview adds infected, attention and without-Bitdefender counts. **Needs review** picks them out.
   - **Cyber insurance readiness:** "Is endpoint protection running on every device?" is answered from Bitdefender, counting active licences against every device, including the ones it doesn't manage. An infected endpoint means it's never a plain Yes.
+### Added
+
+- **MFA status from Microsoft 365.** The **Microsoft 365 accounts** report shows whether each account has registered for MFA. The summary counts enabled members without it, and **Needs review** picks them out. Guests use their own organization's MFA, so they aren't flagged.
+  - The cyber insurance readiness report's MFA question is now answered from this, with the count of accounts registered and what to do about the rest. Registration shows people can use MFA, not that sign-in requires it, so on its own it answers **Partly** at best.
+  - It needs the **AuditLog.Read.All** permission: reconnect the Microsoft 365 partner account once, and grant it in each customer's consent. It also needs a GDAP role such as Reports Reader, and Microsoft Entra ID P1 or P2 in the tenant (included in Microsoft 365 Business Premium). Without them, the report says what's missing.
 
 ## [2.2.0] - 2026-10-23
 

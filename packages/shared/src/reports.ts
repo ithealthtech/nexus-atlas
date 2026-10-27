@@ -454,9 +454,17 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (column === 'Status' && section.columns.includes('Licenses'))
       return value === 'Blocked' && count(row[section.columns.indexOf('Licenses')]) > 0;
     if (column === 'Usage location') return !value && count(row[section.columns.indexOf('Licenses')]) > 0;
+    // An enabled member without a second factor; guests sign in with their own organization's MFA.
+    if (column === 'MFA')
+      return (
+        value === 'Not registered' &&
+        row[section.columns.indexOf('Status')] === 'Enabled' &&
+        row[section.columns.indexOf('Type')] !== 'Guest'
+      );
     // A licensed account with no activity in the period.
     if (column === 'Active') return value === 'No';
-    if (['Blocked & licensed', 'No usage location', 'Inactive'].includes(column)) return Number(value) > 0;
+    if (['Blocked & licensed', 'No usage location', 'Inactive', 'Without MFA'].includes(column))
+      return Number(value) > 0;
     if (column === 'Status')
       return ['overdue', 'outdated', 'inactive', 'suspended', 'warning', 'expired', 'expiring soon'].includes(
         value.toLowerCase(),

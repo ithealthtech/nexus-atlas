@@ -9,10 +9,13 @@ import type { Collector, ReportContext } from './context.js';
  */
 export async function gdapTenants(
   report: ReportContext,
+  { quiet = false } = {},
 ): Promise<{ microsoft: M365Client; linked: { id: string; name: string; tenantId: string }[] } | null> {
   const saved = await report.settings.m365(report.actor.orgId);
-  for (const c of report.clients.filter((c) => !saved?.tenants[c.id]))
-    report.warn(`${c.name}: no Microsoft 365 tenant is linked.`);
+  // Reports that only add Microsoft evidence (quiet) don't warn about clients without a tenant.
+  if (!quiet)
+    for (const c of report.clients.filter((c) => !saved?.tenants[c.id]))
+      report.warn(`${c.name}: no Microsoft 365 tenant is linked.`);
   const linked = report.clients
     .filter((c) => saved?.tenants[c.id])
     .map((c) => ({ ...c, tenantId: saved!.tenants[c.id]!.tenantId }));
@@ -41,8 +44,21 @@ export const ACCOUNT_SUMMARY_COLUMNS = [
   'Unlicensed',
   'Blocked & licensed',
   'No usage location',
+  'Without MFA',
 ];
-export const ACCOUNT_COLUMNS = ['Client', 'Name', 'Sign-in name', 'Status', 'Type', 'Licenses', 'Usage location'];
+export const ACCOUNT_COLUMNS = [
+  'Client',
+  'Name',
+  'Sign-in name',
+  'Status',
+  'Type',
+  'Licenses',
+  'Usage location',
+  'MFA',
+];
+const MFA_TEXT = { registered: 'Registered', not_registered: 'Not registered' } as const;
+/** An enabled member account that hasn't registered a second factor; guests use their own organization's MFA. */
+const withoutMfa = (a: M365Account) => a.enabled && !a.guest && a.mfa === 'not_registered';
 
 /** One client's line in the account summary. "No usage location" counts licensed accounts only: that's when it matters. */
 export function accountSummary(client: string, accounts: M365Account[]): string[] {
@@ -58,6 +74,7 @@ export function accountSummary(client: string, accounts: M365Account[]): string[
     n((a) => a.licenses === 0),
     n((a) => !a.enabled && a.licenses > 0),
     n((a) => a.licenses > 0 && !a.usageLocation),
+    accounts.some((a) => a.mfa) ? n(withoutMfa) : 'Not read',
   ];
 }
 export const accountRow = (client: string, a: M365Account): string[] => [
@@ -68,7 +85,52 @@ export const accountRow = (client: string, a: M365Account): string[] => [
   a.guest ? 'Guest' : 'Member',
   String(a.licenses),
   a.usageLocation,
+  a.mfa ? MFA_TEXT[a.mfa] : 'Not read',
 ];
+
+/**
+ * For each client with a Microsoft 365 tenant, its enabled member accounts and how many have registered MFA. Clients
+ * without a tenant, or whose registration report couldn't be read, are left out.
+ */
+export async function mfaCoverage(
+  report: ReportContext,
+): Promise<Map<string, { accounts: number; registered: number }>> {
+  const out = new Map<string, { accounts: number; registered: number }>();
+  const found = await gdapTenants(report, { quiet: true });
+  for (const c of found?.linked ?? []) {
+    try {
+      const people = (
+        await withMfa(report, found!.microsoft, c.tenantId, c.name, await found!.microsoft.accounts(c.tenantId))
+      ).filter((a) => a.enabled && !a.guest);
+      if (!people.some((a) => a.mfa)) continue;
+      out.set(c.id, { accounts: people.length, registered: people.filter((a) => a.mfa === 'registered').length });
+      report.source(`Microsoft 365 MFA: ${c.name}`, 'MFA registration of enabled member accounts, read through GDAP.');
+    } catch (e) {
+      report.warn(`${c.name}: Microsoft 365 accounts could not be read. ${(e as Error).message}`);
+    }
+  }
+  return out;
+}
+
+/** Each account with its MFA registration, where Microsoft's report could be read; a warning says why when not. */
+export async function withMfa(
+  report: ReportContext,
+  microsoft: M365Client,
+  tenantId: string,
+  client: string,
+  accounts: M365Account[],
+): Promise<M365Account[]> {
+  try {
+    const mfa = await microsoft.mfaRegistration(tenantId);
+    return accounts.map((a) => {
+      const found = mfa.get(a.upn.toLowerCase());
+      return found ? { ...a, mfa: found.registered ? 'registered' : 'not_registered' } : a;
+    });
+  } catch (e) {
+    report.warn(`${client}: MFA registration could not be read. ${(e as Error).message}`);
+    return accounts;
+  }
+}
 
 /** Each linked tenant's accounts: who can sign in, who's a guest, and blocked accounts still holding licenses. */
 export const accounts: Collector = async (report) => {
@@ -76,10 +138,11 @@ export const accounts: Collector = async (report) => {
   const read: { client: string; accounts: M365Account[] }[] = [];
   for (const c of found?.linked ?? []) {
     try {
-      read.push({ client: c.name, accounts: await found!.microsoft.accounts(c.tenantId) });
+      const listed = await found!.microsoft.accounts(c.tenantId);
+      read.push({ client: c.name, accounts: await withMfa(report, found!.microsoft, c.tenantId, c.name, listed) });
       report.source(
         `Microsoft 365: ${c.name}`,
-        'Accounts read through GDAP: state, type, licenses, and usage location.',
+        'Accounts read through GDAP: state, type, licenses, usage location, and MFA registration.',
       );
     } catch (e) {
       report.warn(`${c.name}: Microsoft 365 accounts could not be read. ${(e as Error).message}`);

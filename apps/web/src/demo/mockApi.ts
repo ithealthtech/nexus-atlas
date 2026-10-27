@@ -1186,6 +1186,9 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
     if (definition.kind === 'accounts') {
       const licensed = (u: (typeof people)[0]) => u.skuIds.length > 0;
       const location = (u: (typeof people)[0]) => (u.name === 'Scanner' || u.name === 'Billing' ? '' : 'US');
+      // Microsoft doesn't list blocked accounts in its MFA registration report; one in four others hasn't registered.
+      const mfa = (u: (typeof people)[0], i: number) =>
+        !u.enabled ? 'Not read' : i % 4 === 1 ? 'Not registered' : 'Registered';
       sections.push(
         {
           title: 'Account summary',
@@ -1200,6 +1203,7 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
             'Unlicensed',
             'Blocked & licensed',
             'No usage location',
+            'Without MFA',
           ],
           rows: people.length
             ? [
@@ -1214,14 +1218,15 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
                   String(people.filter((u) => !licensed(u)).length),
                   String(people.filter((u) => !u.enabled && licensed(u)).length),
                   String(people.filter((u) => licensed(u) && !location(u)).length),
+                  String(people.filter((u, i) => mfa(u, i) === 'Not registered').length),
                 ],
               ]
             : [],
         },
         {
           title: 'Accounts',
-          columns: ['Client', 'Name', 'Sign-in name', 'Status', 'Type', 'Licenses', 'Usage location'],
-          rows: people.map((u) => [
+          columns: ['Client', 'Name', 'Sign-in name', 'Status', 'Type', 'Licenses', 'Usage location', 'MFA'],
+          rows: people.map((u, i) => [
             'Harbor Dental Group',
             u.name,
             u.upn,
@@ -1229,6 +1234,7 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
             'Member',
             String(u.skuIds.length),
             location(u),
+            mfa(u, i),
           ]),
         },
       );

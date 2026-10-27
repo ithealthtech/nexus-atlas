@@ -335,6 +335,10 @@ describe('private client reports', () => {
           },
         ],
       });
+    if (url.pathname === '/v1.0/reports/authenticationMethods/userRegistrationDetails')
+      return Response.json({
+        value: [{ userPrincipalName: 'Avery@harbor.example', isMfaRegistered: false, isAdmin: false }],
+      });
     if (url.pathname.startsWith('/v1.0/reports/'))
       return new Response(
         'Display Name,User Principal Name,Is Deleted,Exchange Last Activity Date,Last Activity Date\nAvery Example,avery@harbor.example,False,2026-10-20,2026-10-20\n',
