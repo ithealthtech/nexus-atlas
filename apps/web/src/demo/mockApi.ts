@@ -2734,6 +2734,7 @@ on('GET', '/client-health', (): ClientHealthSummary[] =>
         score: h.score,
         change: h.score - trend[0]!.score,
         weakest: weakest.score! < 90 ? weakest.part : null,
+        parts: Object.fromEntries(h.parts.map((p) => [p.part, p.score])) as ClientHealthSummary['parts'],
         trend: trend.map((p) => p.score),
       };
     })

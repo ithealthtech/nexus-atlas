@@ -259,6 +259,13 @@ export function ClientHealthCard() {
             ? 'Security, endpoints, documentation and renewals, scored 0–100.'
             : `Average ${average} across ${scored.length} client${scored.length === 1 ? '' : 's'}. Lowest first.`
         }
+        actions={
+          list.data?.length ? (
+            <AppLink to="/health" className="text-sm font-semibold text-primary hover:underline">
+              Health map
+            </AppLink>
+          ) : undefined
+        }
       />
       <FormError message={list.error?.message} />
       {list.isLoading ? (

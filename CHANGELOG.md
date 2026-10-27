@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Health map.** **Clients → Health map** (and a link on the Client health card) shows every client against each part of its health score (security, endpoints, documentation, renewals) as coloured cells, lowest overall first, with the 30-day change. Each cell opens the client.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

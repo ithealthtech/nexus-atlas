@@ -144,6 +144,9 @@ describe('client health for staff', () => {
     expect(list).toEqual([
       expect.objectContaining({ clientId, clientName: 'Harbor Dental', score: 50, weakest: 'documentation' }),
     ]);
+    // Each part's score, for the health map, as on the client's own page.
+    expect(Object.keys(list[0]!.parts).sort()).toEqual(['documentation', 'endpoints', 'renewals', 'security']);
+    for (const p of after.parts) expect(list[0]!.parts[p.part]).toBe(p.score);
 
     // The executive summary carries each client's score, for staff.
     const report = await owner.call('POST', '/api/reports/runs', {

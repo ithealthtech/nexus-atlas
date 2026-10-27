@@ -1,6 +1,7 @@
 import { and, asc, count, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
+  HEALTH_PARTS,
   HEALTH_PART_INFO,
   ROLE_INFO,
   type ClientHealth,
@@ -323,7 +324,8 @@ export class ClientHealthService {
       .map((list) => {
         const latest = list.at(-1)!;
         const trend = list.flatMap((r) => (r.score === null ? [] : [{ day: r.day, score: r.score }]));
-        const parts = (latest.parts as HealthPartScore[]).filter((p) => p.score !== null);
+        const all = latest.parts as HealthPartScore[];
+        const parts = all.filter((p) => p.score !== null);
         const weakest = parts.sort((a, b) => a.score! - b.score!)[0];
         return {
           clientId: latest.clientId,
@@ -331,6 +333,9 @@ export class ClientHealthService {
           score: latest.score,
           change: change(trend, latest.score),
           weakest: weakest && weakest.score! < 90 ? weakest.part : null,
+          parts: Object.fromEntries(
+            HEALTH_PARTS.map((part) => [part, all.find((p) => p.part === part)?.score ?? null]),
+          ) as ClientHealthSummary['parts'],
           trend: trend.map((p) => p.score),
         };
       })
