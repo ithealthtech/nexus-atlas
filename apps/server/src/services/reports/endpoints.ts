@@ -18,6 +18,22 @@ export const NOT_MANAGED = 'Not managed';
 export async function bitdefenderSection(report: ReportContext) {
   const linked = await report.bitdefender();
   if (!linked.size) return;
+  // Seats per client, to check against what each is billed for. Devices GravityZone doesn't manage need one too.
+  report.section(
+    'Bitdefender licences',
+    ['Client', 'Endpoints', 'Licensed', 'Expired', 'Not licensed', 'Not managed'],
+    [...linked].map(([clientId, view]) => {
+      const n = (...l: BitdefenderLicence[]) => view.endpoints.filter((e) => l.includes(e.licence)).length;
+      return [
+        report.client(clientId),
+        String(view.endpoints.length),
+        String(n('active')),
+        String(n('expired')),
+        String(n('none', 'pending', 'unknown')),
+        String(view.missing.length),
+      ];
+    }),
+  );
   report.section(
     'Bitdefender endpoints',
     ['Client', 'Endpoint', 'Bitdefender', 'Issues', 'Policy', 'Licence', 'Last seen'],
