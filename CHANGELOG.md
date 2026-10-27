@@ -43,6 +43,14 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Password check before restricted reveals.** Revealing or copying a restricted password, or one of its old versions, in the browser asks you to confirm your password if you haven't in the last 10 minutes.
+### Added
+
+- **"Still accurate?" verification for documents.** A **Verify** button on any document records that someone checked it and it's still right, and the document shows a badge such as "Verified 12 days ago by Alex". Verifying isn't an edit: the version and "last updated" stay as they were.
+  - A document marked **Needs review** goes back to **Current**.
+  - A review date moves six months ahead, so the review reminder comes round again.
+  - A document neither verified nor edited for six months shows **Not verified**, or **Last verified** in amber.
+  - The documentation health report adds a **Last verified** column, and only flags documents that haven't been verified or updated in 180 days.
+  - Anyone who can edit a document can verify it.
 
 ## [2.2.0] - 2026-10-23
 

@@ -515,7 +515,13 @@ function trackerReport(client: string | null): TrackerReport {
 
 // ---------- documentation ----------
 const assets = db.assets.map((a) => ({ ...a, ...meta() }));
-const documents = db.documents.map((d) => ({ ...d, ...meta() }));
+// The first document was verified recently, so the demo shows the badge.
+const documents = db.documents.map((d, i) => ({
+  ...d,
+  ...meta(),
+  verifiedAt: i === 0 ? ago(12 * 24 * 60) : (null as string | null),
+  verifiedByName: i === 0 ? db.owner.name : (null as string | null),
+}));
 const folders: { id: string; clientId: string | null; name: string }[] = [];
 const contacts = [...db.contacts];
 const locations = [...db.locations];
@@ -1386,7 +1392,7 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
     const chosen = documents.filter((d) => d.clientId && definition.clientIds.includes(d.clientId));
     sections.push({
       title: 'Documentation health',
-      columns: ['Client', 'Article', 'Status', 'Review due', 'Last updated', 'Attention'],
+      columns: ['Client', 'Article', 'Status', 'Review due', 'Last updated', 'Last verified', 'Attention'],
       links: chosen.map((d) => `/documents/${d.id}`),
       rows: chosen.map((d) => [
         name(d.clientId),
@@ -1394,6 +1400,7 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
         d.status === 'needs_review' ? 'Outdated' : d.status[0]!.toUpperCase() + d.status.slice(1),
         day(d.reviewDate),
         day(d.updatedAt),
+        d.verifiedAt ? day(d.verifiedAt) : 'Never',
         d.status === 'needs_review' ? 'Review overdue' : 'No date-based issue detected',
       ]),
     });
@@ -1736,6 +1743,8 @@ on('POST', '/documents', (_m, b) => {
     content: (b.content as RichText) ?? { type: 'doc', content: [] },
     ...meta(),
     updatedAt: now(),
+    verifiedAt: null,
+    verifiedByName: null,
   };
   if (!d.title) throw new MockError(400, 'Title is required.');
   documents.push(d);
@@ -1804,6 +1813,14 @@ on('PATCH', '/documents/:id', (m, b) => {
   Object.assign(d, changes, { version: d.version + 1, updatedAt: now() });
   snapshot(d.id, d.version, d as unknown as Json);
   record('Updated', 'document', d.id, d.title, d.clientId);
+  return { ...docSummary(d), content: d.content, canEdit: true };
+});
+on('POST', '/documents/:id/verify', (m) => {
+  const d = find(documents, m[1]!, 'Document');
+  d.verifiedAt = now();
+  d.verifiedByName = db.owner.name;
+  if (d.status === 'needs_review') d.status = 'current';
+  if (d.reviewDate) d.reviewDate = daysFromNow(180);
   return { ...docSummary(d), content: d.content, canEdit: true };
 });
 on('POST', '/documents/:id/archive', (m, b) => {
@@ -3888,6 +3905,8 @@ on('POST', '/templates', (_m, b) => {
       content: runbookContent(t.body),
       ...meta(),
       updatedAt: now(),
+      verifiedAt: null,
+      verifiedByName: null,
     };
     documents.push(d);
     snapshot(d.id, 1, d as unknown as Json);

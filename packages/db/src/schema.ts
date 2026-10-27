@@ -593,6 +593,9 @@ export const documents = pgTable(
     reviewDate: date('review_date', { mode: 'string' }),
     version: integer('version').notNull().default(1),
     archived: boolean('archived').notNull().default(false),
+    // The last time someone confirmed the document is still accurate ("Verify"), and who; not a content change.
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    verifiedBy: uuid('verified_by').references(() => users.id, { onDelete: 'set null' }),
     createdBy: createdBy(),
     updatedBy: updatedBy(),
     createdAt: created(),

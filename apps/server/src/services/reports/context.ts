@@ -155,6 +155,7 @@ export class ReportContext {
             status: schema.documents.status,
             reviewDate: schema.documents.reviewDate,
             updatedAt: schema.documents.updatedAt,
+            verifiedAt: schema.documents.verifiedAt,
           })
           .from(schema.documents)
           .where(

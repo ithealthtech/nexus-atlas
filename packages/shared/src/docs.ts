@@ -203,6 +203,24 @@ export interface DocumentSummary {
   archived: boolean;
   updatedAt: string;
   updatedByName: string | null;
+  /** When someone last confirmed it's still accurate ("Verify"), and who. */
+  verifiedAt: string | null;
+  verifiedByName: string | null;
+}
+
+/** Verifying a document with a review date moves that date this far ahead, so it comes round again. */
+export const DOCUMENT_REVIEW_DAYS = 180;
+
+/**
+ * How current a document is: when it was last verified or edited, whichever is later, and whether that's longer ago
+ * than DOCUMENT_REVIEW_DAYS.
+ */
+export function documentFreshness(
+  d: Pick<DocumentSummary, 'verifiedAt' | 'updatedAt'>,
+  now = Date.now(),
+): { checkedAt: string; stale: boolean } {
+  const checkedAt = d.verifiedAt && d.verifiedAt > d.updatedAt ? d.verifiedAt : d.updatedAt;
+  return { checkedAt, stale: now - Date.parse(checkedAt) > DOCUMENT_REVIEW_DAYS * 86_400_000 };
 }
 export interface DocumentView extends DocumentSummary {
   content: RichText;
