@@ -59,6 +59,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 - **Shared reports in the client portal.** Reports your team shares with a client by link also appear on that client's portal home, under **Shared reports**, for as long as the link is live.
 - **Portal home.** Client accounts see a card for each organization on their Overview, with links to its documents, devices, people, and locations, and a **Starter or leaver** button.
 - **Starter and leaver requests.** On a client's Contacts page, anyone who can see the client, including client accounts, can choose **Starter or leaver** to tell the team someone is joining or leaving. Atlas starts the matching onboarding or offboarding checklist, due on their first or last day, with the details on the first step.
+### Added
+
+- **Pinned reports.** Pin a saved report template from **Reports → Templates** and it appears in a **Pinned reports** card on your dashboard. One click opens it on Reports, set up and ready to run. Up to eight per person.
 
 ## [2.2.0] - 2026-10-23
 

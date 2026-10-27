@@ -24,8 +24,10 @@ import {
   DEFAULT_WORKSPACE,
   type DashboardArea,
   type DashboardWidget,
+  REPORT_INFO,
   type PasswordHealthReport,
   type PortalReport,
+  type ReportTemplateView,
   type WorkspacePrefs,
 } from '@atlas/shared';
 import { api } from '@/lib/api';
@@ -197,6 +199,7 @@ export function Dashboard() {
     'asset-stats': <AssetStatsCard />,
     health: <ClientHealthCard />,
     favorites: <FavoritesCard />,
+    'pinned-reports': <PinnedReportsCard ids={prefs.data?.pinnedReports ?? []} />,
     'recent-clients': (
       <Card>
         <CardHeader title="Recently updated clients" actions={moreLink('/clients', 'All clients')} />
@@ -559,6 +562,40 @@ function PortalHome() {
       {requesting && <PeopleRequestDialog clientId={requesting} onClose={() => setRequesting(null)} />}
       {changing && <ChangeRequestDialog clientId={changing} onClose={() => setChanging(null)} />}
     </div>
+/** Report templates this person pinned on Reports, each opening there ready to run. Hidden until one is pinned. */
+function PinnedReportsCard({ ids }: { ids: string[] }) {
+  const templates = useQuery({
+    queryKey: ['report-templates'],
+    queryFn: () => api<ReportTemplateView[]>('/reports/templates'),
+    enabled: ids.length > 0,
+  });
+  // A pin to a template since deleted, or no longer shared, just doesn't show.
+  const pinned = ids.flatMap((id) => templates.data?.filter((t) => t.id === id) ?? []);
+  if (!pinned.length) return null;
+  return (
+    <Card>
+      <CardHeader title="Pinned reports" description="Opens on Reports, set up and ready to run." />
+      <ul className="divide-y divide-border">
+        {pinned.map((t) => (
+          <li key={t.id}>
+            <AppLink
+              to="/reports"
+              search={{ template: t.id }}
+              className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-surface-2"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{t.name}</span>
+                <span className="block text-xs text-muted">
+                  {REPORT_INFO[t.definition.kind].name} · {t.definition.clientIds.length}{' '}
+                  {t.definition.clientIds.length === 1 ? 'client' : 'clients'}
+                </span>
+              </span>
+              <ArrowRight className="size-4 shrink-0 text-muted" aria-hidden />
+            </AppLink>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
