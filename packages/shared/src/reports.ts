@@ -242,7 +242,14 @@ export interface ReportSection {
   part?: string;
   columns: string[];
   rows: string[][];
+  /**
+   * The Atlas page for each row (same order as `rows`), opened from the row's name in the second column. In-app only
+   * (see REPORT_LINK); never part of a link shared with the client, an export or a PDF.
+   */
+  links?: (string | null)[];
 }
+/** The pages a report row may link to: an asset, a document, or a client (and its tabs). */
+export const REPORT_LINK = /^\/(?:assets|documents|clients)\/[0-9a-f-]{36}(?:\/[a-z-]+)?$/;
 export interface ReportSnapshot {
   schemaVersion: 1;
   organization: string;

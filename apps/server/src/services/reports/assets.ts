@@ -46,5 +46,6 @@ export const assets: Collector = async (report) => {
       ),
       iso(a.updatedAt),
     ]),
+    rows.map((a) => `/assets/${a.id}`),
   );
 };

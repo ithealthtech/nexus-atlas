@@ -93,8 +93,9 @@ export class ReportContext {
   warn(message: string) {
     this.snapshot.warnings.push(message);
   }
-  section(title: string, columns: string[], rows: string[][]) {
-    this.snapshot.sections.push({ title, columns, rows });
+  /** Adds a table; `links` gives each row's Atlas page (an asset, a document or a client), in the same order. */
+  section(title: string, columns: string[], rows: string[][], links?: (string | null)[]) {
+    this.snapshot.sections.push({ title, columns, rows, ...(links ? { links } : {}) });
   }
   /** The client's name, for a row that belongs to one of the report's clients. */
   client(id: string | null) {
@@ -116,6 +117,7 @@ export class ReportContext {
       const rows = capped(
         await this.db
           .select({
+            id: schema.assets.id,
             clientId: schema.assets.clientId,
             name: schema.assets.name,
             status: schema.assets.status,
@@ -147,6 +149,7 @@ export class ReportContext {
       const rows = capped(
         await this.db
           .select({
+            id: schema.documents.id,
             clientId: schema.documents.clientId,
             title: schema.documents.title,
             status: schema.documents.status,

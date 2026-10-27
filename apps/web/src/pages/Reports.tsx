@@ -36,6 +36,7 @@ import {
   MAX_REPORT_ASSET_FIELDS,
   REPORTABLE_FIELD_TYPES,
   REPORT_INFO,
+  REPORT_LINK,
   compareReportSections,
   previousReportRun,
   reportHighlights,
@@ -48,6 +49,7 @@ import {
   type ReportSelection,
   type ReportTemplateView,
 } from '@atlas/shared';
+import { AppLink } from '@/components/AppLink';
 import { ReportShareDialog } from '@/components/ReportShare';
 import { ScheduleDialog, ScheduleList } from '@/components/ReportSchedules';
 import { ReportCell, ReportHighlights, figureColumns, reportBodyCell, reportHeadCell } from '@/components/ReportTable';
@@ -854,6 +856,16 @@ function SectionTable({
     .filter(({ index: at }) => !diff || !changesOnly || added.has(at) || changed.has(at));
   const figures = figureColumns(section.columns, section.rows);
   const when = (iso: string) => new Date(iso).toLocaleString();
+  // A row's name opens its record; a client's name in the first column opens the client.
+  const clientIds = new Map(snapshot.clients.map((c) => [c.name, c.id]));
+  const linkFor = (at: number, j: number, value: string) => {
+    if (j === 1) {
+      const link = section.links?.[at];
+      return link && REPORT_LINK.test(link) ? link : null;
+    }
+    const client = j === 0 && section.columns[0] === 'Client' ? clientIds.get(value) : undefined;
+    return client ? `/clients/${client}` : null;
+  };
   return (
     <Card className="overflow-hidden">
       <PanelHeader
@@ -908,7 +920,19 @@ function SectionTable({
                               New
                             </Badge>
                           )}
-                          <ReportCell columns={section.columns} row={row} index={j} />
+                          {linkFor(at, j, row[j] ?? '') ? (
+                            <AppLink
+                              to={linkFor(at, j, row[j] ?? '')!}
+                              className={cn(
+                                'underline-offset-2 hover:underline',
+                                j === 1 && 'font-medium text-primary',
+                              )}
+                            >
+                              <ReportCell columns={section.columns} row={row} index={j} />
+                            </AppLink>
+                          ) : (
+                            <ReportCell columns={section.columns} row={row} index={j} />
+                          )}
                           {moved && (
                             <span className="mt-0.5 block text-[11px] text-muted">
                               <span className="sr-only">Previously </span>

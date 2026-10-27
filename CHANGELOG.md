@@ -18,6 +18,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - The cyber insurance readiness report's MFA question is now answered from this, with the count of accounts registered and what to do about the rest. Registration shows people can use MFA, not that sign-in requires it, so on its own it answers **Partly** at best.
   - It needs the **AuditLog.Read.All** permission: reconnect the Microsoft 365 partner account once, and grant it in each customer's consent. It also needs a GDAP role such as Reports Reader, and Microsoft Entra ID P1 or P2 in the tenant (included in Microsoft 365 Business Premium). Without them, the report says what's missing.
 - **Health score findings open the exact list.** In a client's health window, a finding about devices or warranties now opens the devices or assets behind it, in place: devices without protection running, not online, or not checked in recently, and warranties expired or expiring soon. Each one links to its page. Other findings still take you to where they're fixed.
+- **Report rows open their record.** In a report on screen, a device, asset, document or subscription's name opens its page in Atlas, and a client's name opens the client. This covers Asset inventory, Documentation health, Endpoint health, the Security posture device table and tracked subscriptions. Links shared with a client, PDFs and CSVs are unchanged, since clients can't open those pages.
 
 ## [2.2.0] - 2026-10-23
 

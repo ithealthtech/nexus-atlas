@@ -95,6 +95,7 @@ export const endpoints: Collector = async (report) => {
       ...(extra ? [bitdefender(e)] : []),
       iso(e.updatedAt),
     ]),
+    devices.map((e) => `/assets/${e.assetId}`),
   );
   await bitdefenderSection(report);
 };

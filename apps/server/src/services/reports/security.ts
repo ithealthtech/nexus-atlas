@@ -139,31 +139,40 @@ export const security: Collector = async (report) => {
     );
   // One row per machine: RMM devices with their BitLocker state, then BitLocker machines RMM doesn't know.
   const byAsset = new Map(devices.filter((d) => d.assetId).map((d) => [d.assetId!, d]));
-  const machineRows = endpoints.map((e) => {
+  // Each row with the asset it opens, so the two stay together through the sort.
+  const machineRows: { row: string[]; assetId: string | null }[] = endpoints.map((e) => {
     const disk = byAsset.get(e.assetId);
-    return [
-      report.client(e.clientId),
-      e.name,
-      onlineText(e.online),
-      e.protection ?? 'Unknown',
-      disk ? encryptionOf(disk.volumes) : 'Not reported',
-      iso(e.lastSeenAt) || 'Unknown',
-    ];
+    return {
+      row: [
+        report.client(e.clientId),
+        e.name,
+        onlineText(e.online),
+        e.protection ?? 'Unknown',
+        disk ? encryptionOf(disk.volumes) : 'Not reported',
+        iso(e.lastSeenAt) || 'Unknown',
+      ],
+      assetId: e.assetId,
+    };
   });
   const known = new Set(endpoints.map((e) => e.assetId));
   for (const d of devices.filter((d) => !d.assetId || !known.has(d.assetId)))
-    machineRows.push([
-      report.client(d.clientId),
-      d.hostname,
-      'Not in RMM',
-      'Not in RMM',
-      encryptionOf(d.volumes),
-      iso(d.collectedAt),
-    ]);
+    machineRows.push({
+      row: [
+        report.client(d.clientId),
+        d.hostname,
+        'Not in RMM',
+        'Not in RMM',
+        encryptionOf(d.volumes),
+        iso(d.collectedAt),
+      ],
+      assetId: d.assetId,
+    });
+  machineRows.sort((a, b) => a.row[0]!.localeCompare(b.row[0]!) || a.row[1]!.localeCompare(b.row[1]!));
   report.section(
     'Device protection and encryption',
     ['Client', 'Device', 'Online', 'Protection', 'Encryption', 'Last check-in'],
-    machineRows.sort((a, b) => a[0]!.localeCompare(b[0]!) || a[1]!.localeCompare(b[1]!)),
+    machineRows.map((m) => m.row),
+    machineRows.map((m) => (m.assetId ? `/assets/${m.assetId}` : null)),
   );
   if (targets)
     report.section(

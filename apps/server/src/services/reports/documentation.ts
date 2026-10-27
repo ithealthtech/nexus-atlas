@@ -20,5 +20,6 @@ export const documentation: Collector = async (report) => {
       iso(d.updatedAt),
       attention(d),
     ]),
+    documents.map((d) => `/documents/${d.id}`),
   );
 };
