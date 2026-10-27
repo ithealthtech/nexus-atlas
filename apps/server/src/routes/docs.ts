@@ -134,6 +134,9 @@ export function registerDocumentationRoutes(
   app.patch<{ Params: Params }>('/api/documents/:id', authed, async (req) =>
     documents.update(scopeOf(req), req.params.id, req.body),
   );
+  app.post<{ Params: Params }>('/api/documents/:id/verify', authed, async (req) =>
+    documents.verify(scopeOf(req), req.params.id),
+  );
   app.post<{ Params: Params }>('/api/documents/:id/archive', authed, async (req) =>
     documents.setArchived(scopeOf(req), req.params.id, archiveSchema.parse(req.body).archived),
   );

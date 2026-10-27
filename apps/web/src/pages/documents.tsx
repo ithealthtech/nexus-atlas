@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DocumentShareDialog } from '@/components/DocumentShare';
 import {
   Archive,
+  BadgeCheck,
   ArchiveRestore,
   ArrowLeft,
   BookOpen,
@@ -19,7 +20,9 @@ import {
   DOCUMENT_STATUSES,
   DOCUMENT_STATUS_LABELS,
   atLeast,
+  documentFreshness,
   type DocumentStatus,
+  type DocumentSummary,
   type DocumentView,
   type RichText,
 } from '@atlas/shared';
@@ -278,6 +281,7 @@ export function DocumentsView({ clientId }: { clientId: string | null }) {
                         Updated {relativeTime(d.updatedAt)}
                         {d.updatedByName && ` by ${d.updatedByName}`}
                         {d.reviewDate && ` · Review ${formatDate(`${d.reviewDate}T12:00:00`)}`}
+                        {d.verifiedAt && ` · Verified ${relativeTime(d.verifiedAt)}`}
                       </span>
                     </span>
                     <Badge tone={docTone[d.status]}>{DOCUMENT_STATUS_LABELS[d.status]}</Badge>
@@ -541,6 +545,21 @@ export function NewDocument() {
   );
 }
 
+/**
+ * Whether someone has confirmed the document is still accurate, and when: "Verified 12 days ago by Alex". Amber once
+ * it's gone DOCUMENT_REVIEW_DAYS without being verified or edited.
+ */
+function Verification({ doc }: { doc: Pick<DocumentSummary, 'verifiedAt' | 'verifiedByName' | 'updatedAt'> }) {
+  const { stale } = documentFreshness(doc);
+  if (!doc.verifiedAt) return stale ? <Badge tone="warning">Not verified</Badge> : null;
+  return (
+    <Badge tone={stale ? 'warning' : 'success'}>
+      {stale ? 'Last verified' : 'Verified'} {relativeTime(doc.verifiedAt)}
+      {doc.verifiedByName && ` by ${doc.verifiedByName}`}
+    </Badge>
+  );
+}
+
 // ---------------------------------------------------------------- detail
 export function DocumentPage() {
   const { documentId } = useParams({ strict: false }) as { documentId: string };
@@ -561,6 +580,15 @@ export function DocumentPage() {
       </Card>
     );
   const back = doc.clientId ? `/clients/${doc.clientId}/documents` : '/documents';
+  const verify = async () => {
+    const verified = await api<DocumentView>(`/documents/${doc.id}/verify`, { method: 'POST', body: {} });
+    await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ['documents'] })]);
+    toast(
+      verified.reviewDate && verified.reviewDate !== doc.reviewDate
+        ? `Verified. Next review ${formatDate(`${verified.reviewDate}T12:00:00`)}.`
+        : 'Verified as still accurate.',
+    );
+  };
   const archive = async () => {
     await api(`/documents/${doc.id}/archive`, { method: 'POST', body: { archived: !doc.archived } });
     await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ['documents'] })]);
@@ -613,6 +641,7 @@ export function DocumentPage() {
               status={
                 <>
                   <Badge tone={docTone[doc.status]}>{DOCUMENT_STATUS_LABELS[doc.status]}</Badge>
+                  <Verification doc={doc} />
                   {doc.archived && <Badge tone="warning">Archived</Badge>}
                 </>
               }
@@ -635,6 +664,11 @@ export function DocumentPage() {
               actions={
                 doc.canEdit && (
                   <>
+                    {!doc.archived && (
+                      <Button variant="secondary" onClick={verify} title="Confirm this document is still accurate">
+                        <BadgeCheck /> Verify
+                      </Button>
+                    )}
                     <Button variant="secondary" onClick={archive}>
                       {doc.archived ? <ArchiveRestore /> : <Archive />} {doc.archived ? 'Restore' : 'Archive'}
                     </Button>
