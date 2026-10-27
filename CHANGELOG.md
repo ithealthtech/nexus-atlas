@@ -4,14 +4,6 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
-### Changed
-
-- **Safe updates.** When an update installed from **Administration → Updates** doesn't start, Atlas already went back to the previous version. Now, if the new version had already updated the database before failing, Atlas also restores the backup it took just before the update, so the previous version gets the database it knows instead of one it doesn't understand. It then checks the previous version answers. The Updates page says which happened: the database was untouched, or the backup was restored. This protects updates from this release onwards, since an update is run by the version already installed.
-- **Node.js 24 for new installs.** The Linux install script installs Node.js 24 on new servers, and the Docker image moves to Node.js 24. Servers already on Node.js 22 keep it until you move them: see *Moving to Node.js 24* in the deployment guide. Node.js 22 stops getting security fixes on 30 April 2027.
-- **Bitdefender counts everywhere Atlas judges protection.** For clients linked to GravityZone:
-  - **Health score:** the security part counts infected endpoints (double), endpoints needing attention, and devices Bitdefender doesn't manage. Each finding opens the client's overview, where the Bitdefender card lists them.
-  - **Endpoint health and Security posture reports** gain a **Bitdefender endpoints** section: every endpoint with its state, what needs attention, policy, licence and last seen, plus the RMM devices GravityZone doesn't manage. Endpoint health adds a **Bitdefender** column, and the Security overview adds infected, attention and without-Bitdefender counts. **Needs review** picks them out.
-  - **Cyber insurance readiness:** "Is endpoint protection running on every device?" is answered from Bitdefender, counting active licences against every device, including the ones it doesn't manage. An infected endpoint means it's never a plain Yes.
 ### Added
 
 - **MFA status from Microsoft 365.** The **Microsoft 365 accounts** report shows whether each account has registered for MFA. The summary counts enabled members without it, and **Needs review** picks them out. Guests use their own organization's MFA, so they aren't flagged.
@@ -19,32 +11,16 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - It needs the **AuditLog.Read.All** permission: reconnect the Microsoft 365 partner account once, and grant it in each customer's consent. It also needs a GDAP role such as Reports Reader, and Microsoft Entra ID P1 or P2 in the tenant (included in Microsoft 365 Business Premium). Without them, the report says what's missing.
 - **Health score findings open the exact list.** In a client's health window, a finding about devices or warranties now opens the devices or assets behind it, in place: devices without protection running, not online, or not checked in recently, and warranties expired or expiring soon. Each one links to its page. Other findings still take you to where they're fixed.
 - **Report rows open their record.** In a report on screen, a device, asset, document or subscription's name opens its page in Atlas, and a client's name opens the client. This covers Asset inventory, Documentation health, Endpoint health, the Security posture device table and tracked subscriptions. Links shared with a client, PDFs and CSVs are unchanged, since clients can't open those pages.
-### Added
-
 - **Keyboard shortcuts.** Press **?** anywhere to see them all; they're also under **Keyboard shortcuts** in the account menu.
   - **/** opens search, as Ctrl+K (⌘K) does.
   - **g** then a letter goes straight to a page: **g c** Clients, **g a** Assets, **g d** Documents, **g p** Passwords, **g r** Reports, **g e** Expirations, **g o** Overview, and **g u** People and access for administrators.
   - Shortcuts never act while you're typing in a field or a window is open.
-### Added
-
 - **Dormant access alerts.** System status warns about accounts and API keys nobody has used for 60 days, naming them, and People marks inactive accounts.
-### Added
-
 - **Bitdefender infection alerts.** When GravityZone reports an infected endpoint, staff who can see that client get an email right away (not at the morning send time), once per endpoint per day while it stays infected.
-### Added
-
 - **Hardware replacement forecast.** The asset report adds, per client, hardware already out of warranty, running out in each of the next four quarters, or more than five years past its purchase date, and what replacing it would cost where a purchase price is recorded. New installs' Configurations layout gains a **Purchase price** field; on an existing install, add a number field named Purchase price to Configurations to see costs.
-### Added
-
 - **Documentation coverage.** The documentation report opens with each client's coverage: the percentage of seven essentials on record (a primary contact, a location, a network diagram, a backup runbook, the internet provider, admin accounts, and Wi-Fi), which are missing, and how many contacts, locations, assets, passwords, and articles it has.
-### Added
-
 - **Access review.** For administrators, the security report lists everyone with access to each client: their role, access level, two-factor status, and last sign-in. People who have never signed in, or haven't in 60 days, are flagged.
-### Added
-
 - **Password check before restricted reveals.** Revealing or copying a restricted password, or one of its old versions, in the browser asks you to confirm your password if you haven't in the last 10 minutes.
-### Added
-
 - **Compliance evidence pack.** **Security log → Compliance evidence pack** downloads one zip for SOC 2 auditors or insurers: the security log's integrity check (run as the pack is made), the security log itself, every account's two-factor status, the vault policies, and each client's latest signed-off access review as a PDF, with a summary of which clients are due.
 - **Access reviews.** Administrators can review who can open a client from the **Access review** card on its overview: everyone with access is listed with their role, level, where the access comes from, two-factor status and last sign-in. **Keep** or **Remove** each person (removing takes away direct access at once), then sign it off with your name. Signed-off reviews download as a PDF for auditors and insurers, and the card says when a review is due (every 90 days). Every step is in the security log.
 - **"Still accurate?" verification for documents.** A **Verify** button on any document records that someone checked it and it's still right, and the document shows a badge such as "Verified 12 days ago by Alex". Verifying isn't an edit: the version and "last updated" stay as they were.
@@ -53,45 +29,30 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - A document neither verified nor edited for six months shows **Not verified**, or **Last verified** in amber.
   - The documentation health report adds a **Last verified** column, and only flags documents that haven't been verified or updated in 180 days.
   - Anyone who can edit a document can verify it.
-### Added
-
 - **Change requests from the portal.** Client accounts can choose **Request a change** on their portal home to ask the team for anything else (a shared mailbox, a moved printer, a new door code), with details and an optional date. It starts a short checklist for the team, recorded in the activity feed.
 - **Shared reports in the client portal.** Reports your team shares with a client by link also appear on that client's portal home, under **Shared reports**, for as long as the link is live.
 - **Portal home.** Client accounts see a card for each organization on their Overview, with links to its documents, devices, people, and locations, and a **Starter or leaver** button.
 - **Starter and leaver requests.** On a client's Contacts page, anyone who can see the client, including client accounts, can choose **Starter or leaver** to tell the team someone is joining or leaving. Atlas starts the matching onboarding or offboarding checklist, due on their first or last day, with the details on the first step.
-### Added
-
 - **Pinned reports.** Pin a saved report template from **Reports → Templates** and it appears in a **Pinned reports** card on your dashboard. One click opens it on Reports, set up and ready to run. Up to eight per person.
-### Added
-
 - **Evidence pack.** On a client's **Reports** tab, **Evidence pack** downloads a zip of PDFs for that client: security posture, cyber insurance readiness, endpoint health, documentation health, asset inventory, and license utilization, plus a contents note. The reports are captured fresh and aren't added to report history.
-### Added
-
 - **Team pulse.** Administrators get a dashboard card showing what each person on the team changed in the last 30 days, against the 30 before, how many clients they worked on, and how many stale documents (untouched for 180 days) they edited last and so should review. People with no changes show when they last signed in.
-### Added
-
 - **Hover previews.** Rest the mouse on a link to an asset or document, anywhere in Atlas, and a small card shows what it is: an asset's type, client, status and key fields, or a document's client, status and opening words, with when and by whom it was last updated.
-### Added
-
 - **Recent viewers.** A password's page says who last used it, beside when it was updated: up to three people, each with when they last viewed, copied, or filled it. The full log stays in **Access history**.
-### Added
-
 - **Saved list views.** Assets, Documents and Passwords remember how you sort them (and Passwords how you group them) on your account, not just in one browser. On Assets, choose **Columns** for any asset type to pick up to six of its fields to show.
-### Added
-
 - **Atlas for Windows: Windows Hello for restricted passwords.** Showing, copying, or saving a file from a restricted password asks for Windows Hello every time, whatever the app's Windows Hello settings.
-### Added
-
 - **Site visit.** **Site visit** on a client opens one screen made for a phone: the client's notes and opening hours, each location's address (opens in maps), phone and access notes, the people to ask with tap-to-call, Wi-Fi passwords to copy, and the internet provider with its support number and circuit.
-### Added
-
 - **Health map.** **Clients → Health map** (and a link on the Client health card) shows every client against each part of its health score (security, endpoints, documentation, renewals) as coloured cells, lowest overall first, with the 30-day change. Each cell opens the client.
-### Added
-
 - **Monday client health email for owners.** Owners and administrators get one email each Monday: the average client health score and how it moved since last week, and every client that moved by 3 points or more, biggest drop first. It follows the weekly digest setting.
-### Added
-
 - **Client onboarding tracker.** Once the built-in *New client onboarding* checklist is in your library, the Clients page shows every onboarding in progress with its progress and who's on it, recently finished ones, and how many days onboarding takes on average.
+
+### Changed
+
+- **Safe updates.** When an update installed from **Administration → Updates** doesn't start, Atlas already went back to the previous version. Now, if the new version had already updated the database before failing, Atlas also restores the backup it took just before the update, so the previous version gets the database it knows instead of one it doesn't understand. It then checks the previous version answers. The Updates page says which happened: the database was untouched, or the backup was restored. This protects updates from this release onwards, since an update is run by the version already installed.
+- **Node.js 24 for new installs.** The Linux install script installs Node.js 24 on new servers, and the Docker image moves to Node.js 24. Servers already on Node.js 22 keep it until you move them: see *Moving to Node.js 24* in the deployment guide. Node.js 22 stops getting security fixes on 30 April 2027.
+- **Bitdefender counts everywhere Atlas judges protection.** For clients linked to GravityZone:
+  - **Health score:** the security part counts infected endpoints (double), endpoints needing attention, and devices Bitdefender doesn't manage. Each finding opens the client's overview, where the Bitdefender card lists them.
+  - **Endpoint health and Security posture reports** gain a **Bitdefender endpoints** section: every endpoint with its state, what needs attention, policy, licence and last seen, plus the RMM devices GravityZone doesn't manage. Endpoint health adds a **Bitdefender** column, and the Security overview adds infected, attention and without-Bitdefender counts. **Needs review** picks them out.
+  - **Cyber insurance readiness:** "Is endpoint protection running on every device?" is answered from Bitdefender, counting active licences against every device, including the ones it doesn't manage. An infected endpoint means it's never a plain Yes.
 
 ## [2.2.0] - 2026-10-23
 
