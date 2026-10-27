@@ -237,8 +237,15 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
       title: 'Clients',
       icon: Building2,
       to: '/clients',
-      paths: ['/clients', '/visit'],
-      groups: [{ items: [{ to: '/clients', label: 'All clients', exact: true, icon: Building2 }] }],
+      paths: ['/clients', '/visit', '/health'],
+      groups: [
+        {
+          items: [
+            { to: '/clients', label: 'All clients', exact: true, icon: Building2 },
+            ...(actor.isStaff ? [{ to: '/health', label: 'Health map', icon: HeartPulse }] : []),
+          ],
+        },
+      ],
     },
     {
       id: 'docs',

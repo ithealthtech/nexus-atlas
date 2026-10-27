@@ -66,6 +66,8 @@ export interface ClientHealthSummary {
   change: number | null;
   /** The part pulling the score down most, for a one-word reason. */
   weakest: HealthPart | null;
+  /** Each part's score, 0–100, or null when there was nothing to measure (for the health map). */
+  parts: Record<HealthPart, number | null>;
   /** The last 30 days, oldest first. */
   trend: number[];
 }
