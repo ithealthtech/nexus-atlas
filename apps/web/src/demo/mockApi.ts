@@ -8,6 +8,7 @@ import {
   matchAlertRule,
   renderAlertTemplate,
   bitdefenderHealth,
+  type AccessReviewView,
   type BitdefenderEndpointView,
   type BitdefenderView,
   teamsSettingsSchema,
@@ -2218,6 +2219,51 @@ on('POST', '/shares/:token/open', (m) => {
 
 // people, groups, settings, expirations, audit log
 on('GET', '/users', () => users);
+// Access reviews: everyone on the team can open every demo client, so each review lists them all.
+const accessReviews: AccessReviewView[] = [];
+on('GET', '/clients/:id/access-reviews', (m) => accessReviews.filter((r) => r.clientId === m[1]));
+on('POST', '/clients/:id/access-reviews', (m) => {
+  const client = find(db.clients, m[1]!, 'Client');
+  const open = accessReviews.find((r) => r.clientId === client.id && !r.completedAt);
+  if (open) return open;
+  const review: AccessReviewView = {
+    id: uuid(),
+    clientId: client.id,
+    clientName: client.name,
+    items: users.map((u) => ({
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      level: u.role === 'owner' ? 'edit_passwords' : (u.allClients ?? 'edit'),
+      via: [u.role === 'owner' ? 'All clients' : 'Direct'],
+      mfa: u.mfa,
+      lastLoginAt: u.lastLoginAt,
+      decision: null,
+      decidedByName: null,
+      decidedAt: null,
+    })),
+    startedByName: db.owner.name,
+    createdAt: now(),
+    completedAt: null,
+    signedName: null,
+  };
+  accessReviews.unshift(review);
+  return review;
+});
+on('POST', '/access-reviews/:id/decisions', (m, b) => {
+  const review = find(accessReviews, m[1]!, 'Access review');
+  const item = review.items.find((i) => i.userId === b.userId);
+  if (!item) throw new MockError(404, 'That person isn’t in this review.');
+  Object.assign(item, { decision: b.decision, decidedByName: db.owner.name, decidedAt: now(), stillHasAccess: false });
+  return review;
+});
+on('POST', '/access-reviews/:id/sign-off', (m, b) => {
+  const review = find(accessReviews, m[1]!, 'Access review');
+  if (review.items.some((i) => !i.decision)) throw new MockError(400, 'Keep or remove everyone first.', 'undecided');
+  Object.assign(review, { completedAt: now(), signedName: String(b.signedName ?? db.owner.name) });
+  return review;
+});
 on('POST', '/users', (_m, b) => {
   const u = {
     id: uuid(),

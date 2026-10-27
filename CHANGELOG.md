@@ -6,6 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Access reviews.** Administrators can review who can open a client from the **Access review** card on its overview: everyone with access is listed with their role, level, where the access comes from, two-factor status and last sign-in. **Keep** or **Remove** each person (removing takes away direct access at once), then sign it off with your name. Signed-off reviews download as a PDF for auditors and insurers, and the card says when a review is due (every 90 days). Every step is in the security log.
 - **"Still accurate?" verification for documents.** A **Verify** button on any document records that someone checked it and it's still right, and the document shows a badge such as "Verified 12 days ago by Alex". Verifying isn't an edit: the version and "last updated" stay as they were.
   - A document marked **Needs review** goes back to **Current**.
   - A review date moves six months ahead, so the review reminder comes round again.
