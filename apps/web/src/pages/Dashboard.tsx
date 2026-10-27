@@ -13,6 +13,7 @@ import {
   Info,
   LayoutGrid,
   MapPin,
+  MessageSquarePlus,
   Server,
   ShieldCheck,
   UserPlus,
@@ -57,6 +58,7 @@ import { AssetStatsCard, useAssetStats } from '@/components/AssetStats';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
 import { PeopleRequestDialog } from './client/people';
+import { ChangeRequestDialog } from '@/components/ChangeRequest';
 import {
   useActivity,
   useAssets,
@@ -489,6 +491,7 @@ export function Dashboard() {
 function PortalHome() {
   const clients = useClients().data ?? [];
   const [requesting, setRequesting] = useState<string | null>(null);
+  const [changing, setChanging] = useState<string | null>(null);
   const reports = useQuery({ queryKey: ['portal-reports'], queryFn: () => api<PortalReport[]>('/portal/reports') });
   if (!clients.length) return null;
   const links = [
@@ -505,9 +508,14 @@ function PortalHome() {
             <AppLink to={`/clients/${c.id}`} className="flex items-center gap-2 font-semibold hover:underline">
               <Building2 className="size-4 text-muted" aria-hidden /> {c.name}
             </AppLink>
-            <Button size="sm" variant="secondary" onClick={() => setRequesting(c.id)}>
-              <UserPlus /> Starter or leaver
-            </Button>
+            <span className="flex flex-wrap justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setChanging(c.id)}>
+                <MessageSquarePlus /> Request a change
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setRequesting(c.id)}>
+                <UserPlus /> Starter or leaver
+              </Button>
+            </span>
           </div>
           <ul className="mt-4 grid grid-cols-2 gap-2">
             {links.map(([path, label, Icon]) => (
@@ -549,6 +557,7 @@ function PortalHome() {
         </Card>
       ))}
       {requesting && <PeopleRequestDialog clientId={requesting} onClose={() => setRequesting(null)} />}
+      {changing && <ChangeRequestDialog clientId={changing} onClose={() => setChanging(null)} />}
     </div>
   );
 }
