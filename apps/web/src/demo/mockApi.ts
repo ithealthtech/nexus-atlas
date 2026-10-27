@@ -215,6 +215,9 @@ const RMM_MATCH: Record<RmmHealthFilter, (d: RmmHealthDevice) => boolean> = {
   protection_not_running: (d) => d.protection === 'not_running',
   protection_missing: (d) => d.protection === 'missing',
   protection_unknown: (d) => d.protection === null,
+  not_online: (d) => d.online !== true,
+  not_current: (d) => (rmmAge(d) ?? 99) >= 7,
+  protection_problem: (d) => d.protection !== 'running',
 };
 const rmmDevices = (client: string | null) => RMM_SAMPLE.filter((d) => !client || d.clientId === client);
 function rmmCounts(list: RmmHealthDevice[]): RmmHealthCounts {
@@ -2614,7 +2617,14 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         part: 'endpoints',
         score: 96,
         detail: '24 devices in the RMM',
-        findings: [{ text: '1 device not checked in within 7 days', gain: 1, section: '/assets' }],
+        findings: [
+          {
+            text: '1 device not checked in within 7 days',
+            gain: 1,
+            section: '/assets',
+            list: { kind: 'devices', filter: 'not_current' },
+          },
+        ],
       },
       {
         part: 'documentation',
@@ -2640,14 +2650,21 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         detail: '9 passwords, protection on 12 devices',
         findings: [
           { text: '3 of 9 passwords have issues, 1 found in a data breach', gain: 10, section: '/passwords' },
-          { text: '1 device without endpoint protection running', gain: 1, section: '/assets' },
+          {
+            text: '1 device without endpoint protection running',
+            gain: 1,
+            section: '/assets',
+            list: { kind: 'devices', filter: 'protection_problem' },
+          },
         ],
       },
       {
         part: 'endpoints',
         score: 88,
         detail: '12 devices in the RMM',
-        findings: [{ text: '1 device not online', gain: 1, section: '/assets' }],
+        findings: [
+          { text: '1 device not online', gain: 1, section: '/assets', list: { kind: 'devices', filter: 'not_online' } },
+        ],
       },
       {
         part: 'documentation',
@@ -2662,7 +2679,9 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         part: 'renewals',
         score: 75,
         detail: '6 dated items',
-        findings: [{ text: '1 warranty expired', gain: 3, section: '/assets' }],
+        findings: [
+          { text: '1 warranty expired', gain: 3, section: '/assets', list: { kind: 'warranty', filter: 'expired' } },
+        ],
       },
     ],
   },
@@ -2683,7 +2702,14 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         part: 'endpoints',
         score: 61,
         detail: '9 devices in the RMM',
-        findings: [{ text: '3 devices not checked in within 7 days', gain: 4, section: '/assets' }],
+        findings: [
+          {
+            text: '3 devices not checked in within 7 days',
+            gain: 4,
+            section: '/assets',
+            list: { kind: 'devices', filter: 'not_current' },
+          },
+        ],
       },
       {
         part: 'documentation',

@@ -41,6 +41,24 @@ const devices = (over: Partial<RmmHealthCounts>): RmmHealthCounts => ({
 const part = (h: ReturnType<typeof scoreClient>, name: string) => h.parts.find((p) => p.part === name)!;
 
 describe('client health score', () => {
+  it('gives device and warranty findings the exact list behind them', () => {
+    const h = scoreClient('c', 'Lists', {
+      ...blank(),
+      devices: devices({ online: 8, current: 7, protectionRunning: 9 }),
+      warranties: { ...none, expired: 1, soon: 2, active: 3 },
+    });
+    const lists = Object.fromEntries(h.parts.flatMap((p) => p.findings).map((f) => [f.text, f.list ?? null]));
+    expect(lists).toMatchObject({
+      '1 device without endpoint protection running': { kind: 'devices', filter: 'protection_problem' },
+      '2 devices not online': { kind: 'devices', filter: 'not_online' },
+      '3 devices not checked in within 7 days': { kind: 'devices', filter: 'not_current' },
+      '1 warranty expired': { kind: 'warranty', filter: 'expired' },
+      '2 warranties expiring soon': { kind: 'warranty', filter: 'soon' },
+    });
+    // Findings without a list still say where they're fixed.
+    expect(h.parts.flatMap((p) => p.findings).find((f) => f.text === 'No assets documented')?.list).toBeUndefined();
+  });
+
   it('leaves out what it cannot measure, rather than counting it healthy', () => {
     // A new client: only documentation can be measured, and nothing is on record yet.
     const empty = scoreClient('c', 'New client', blank());

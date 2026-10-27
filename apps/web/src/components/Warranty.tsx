@@ -33,7 +33,8 @@ function when(a: WarrantyAsset) {
   return `${date} · in ${a.daysLeft} day${a.daysLeft === 1 ? '' : 's'}`;
 }
 
-function AssetList({
+/** The assets behind a warranty chart slice or a health finding, in a drawer. */
+export function AssetList({
   filter,
   clientId,
   onClose,

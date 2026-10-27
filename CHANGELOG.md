@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Health score findings open the exact list.** In a client's health window, a finding about devices or warranties now opens the devices or assets behind it, in place: devices without protection running, not online, or not checked in recently, and warranties expired or expiring soon. Each one links to its page. Other findings still take you to where they're fixed.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

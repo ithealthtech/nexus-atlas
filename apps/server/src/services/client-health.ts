@@ -7,6 +7,7 @@ import {
   type ClientHealthDetail,
   type ClientHealthSummary,
   type HealthFinding,
+  type HealthList,
   type HealthPart,
   type HealthPartScore,
   type PasswordHealthReport,
@@ -58,13 +59,13 @@ interface Measure {
   value: number;
   weight: number;
   /** `loss` is the share of this measure (0–1) each finding costs. */
-  findings: { text: string; section: string; loss: number }[];
+  findings: { text: string; section: string; loss: number; list?: HealthList }[];
 }
 const ratio = (good: number, total: number) => (total ? good / total : 1);
-const simple = (value: number, text: string, section: string, weight = 1): Measure => ({
+const simple = (value: number, text: string, section: string, weight = 1, list?: HealthList): Measure => ({
   value,
   weight,
-  findings: value < 1 ? [{ text, section, loss: 1 - value }] : [],
+  findings: value < 1 ? [{ text, section, loss: 1 - value, ...(list ? { list } : {}) }] : [],
 });
 
 /**
@@ -91,6 +92,8 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
         ratio(devices.protectionRunning, devices.total),
         `${plural(missing, 'device')} without endpoint protection running`,
         '/assets',
+        1,
+        { kind: 'devices', filter: 'protection_problem' },
       ),
     );
   }
@@ -123,11 +126,15 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
             ratio(devices.online, devices.total),
             `${plural(devices.total - devices.online, 'device')} not online`,
             '/assets',
+            1,
+            { kind: 'devices', filter: 'not_online' },
           ),
           simple(
             ratio(devices.current, devices.total),
             `${plural(devices.total - devices.current, 'device')} not checked in within ${input.staleDays} days`,
             '/assets',
+            1,
+            { kind: 'devices', filter: 'not_current' },
           ),
         ]
       : [],
@@ -175,6 +182,7 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
                     text: `${plural(d.expired, noun, noun === 'warranty' ? 'warranties' : undefined)} expired`,
                     section,
                     loss: d.expired / tracked,
+                    ...(noun === 'warranty' ? { list: { kind: 'warranty' as const, filter: 'expired' as const } } : {}),
                   },
                 ]
               : []),
@@ -184,6 +192,7 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
                     text: `${plural(d.soon, noun, noun === 'warranty' ? 'warranties' : undefined)} expiring soon`,
                     section,
                     loss: d.soon / 2 / tracked,
+                    ...(noun === 'warranty' ? { list: { kind: 'warranty' as const, filter: 'soon' as const } } : {}),
                   },
                 ]
               : []),
@@ -214,6 +223,7 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
       m.findings.map((f) => ({
         text: f.text,
         section: f.section,
+        ...(f.list ? { list: f.list } : {}),
         gain: Math.max(1, Math.round(((f.loss * m.weight) / w) * 100 * share)),
       })),
     );

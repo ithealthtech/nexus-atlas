@@ -184,6 +184,9 @@ export class RmmHealthService {
       protection_not_running: (r) => r.protection === 'not_running',
       protection_missing: (r) => r.protection === 'missing',
       protection_unknown: (r) => r.protection === null,
+      not_online: (r) => r.online !== true,
+      not_current: (r) => freshness(r.lastSeen, staleDays, veryStaleDays, now) !== 'current',
+      protection_problem: (r) => r.protection !== 'running',
     };
     return (await this.rows(scope, opts.clientId))
       .filter(match[filter])

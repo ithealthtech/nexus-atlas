@@ -438,6 +438,10 @@ export const RMM_HEALTH_FILTERS = [
   'protection_not_running',
   'protection_missing',
   'protection_unknown',
+  // Together, for a health score finding: offline or unknown, not checked in recently, protection not running.
+  'not_online',
+  'not_current',
+  'protection_problem',
 ] as const;
 export type RmmHealthFilter = (typeof RMM_HEALTH_FILTERS)[number];
 export interface RmmHealthDevice {
