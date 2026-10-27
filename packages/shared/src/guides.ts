@@ -60,7 +60,7 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
           'Clients: the client directory and each client’s workspace.',
           'Documentation: Assets, the Knowledge base and Checklists.',
           'Password Vault: Passwords, My vault, Password health and Send.',
-          'Press Ctrl+K anywhere to search everything you can see.',
+          'Press Ctrl+K anywhere to search everything you can see, or ? to see every keyboard shortcut.',
         ],
       },
       { h: 'What your access means' },
@@ -230,6 +230,7 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
           'On the client’s Passwords tab, copy the username, password or one-time code straight from the row.',
           'The eye shows the password; Copy password clears the clipboard after 30 seconds.',
           'If Atlas asks Why do you need this password?, give the ticket number.',
+          'A restricted password asks you to confirm your own password first if you haven’t in the last 10 minutes. Atlas for Windows asks for Windows Hello every time.',
           'The six-digit one-time code updates live for accounts with an authenticator.',
         ],
       },
@@ -436,6 +437,138 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
     ],
   },
 
+  {
+    key: 'guide-tech-site-visit',
+    audience: 'technician',
+    title: 'Work on site with Site visit',
+    description: 'One phone screen with the address, door notes, people, Wi-Fi and internet line for a client.',
+    body: [
+      {
+        p: 'Before you drive out, open the client and choose Site visit at the top of their page. It puts what you need on site on one screen made for a phone, so you aren’t clicking through tabs in a car park.',
+      },
+      { h: 'What it shows' },
+      {
+        ul: [
+          'Notes: the client’s quick notes and opening hours.',
+          'Getting there and getting in: each location’s address (tap it to open maps), its phone number and the notes kept with it, such as door codes, alarm instructions and parking.',
+          'People on site: primary contacts first, with tap-to-call numbers.',
+          'Wi-Fi: the client’s Wi-Fi passwords. Copy is a normal reveal, so it may ask why and it’s recorded. Tap the network name for the join QR code.',
+          'Internet: the provider, its support number, the circuit and account numbers, from the Internet / WAN assets.',
+        ],
+      },
+      { h: 'Make it useful for the next visit' },
+      {
+        ul: [
+          'Put door codes, alarm steps and where the comms cupboard is in the location’s Notes.',
+          'Mark the main contact and the main site as Primary.',
+          'Document the internet line as an Internet / WAN asset with its support phone number.',
+          'Store the Wi-Fi as a password with the type Wi-Fi.',
+        ],
+      },
+    ],
+  },
+  {
+    key: 'guide-tech-verify-documents',
+    audience: 'technician',
+    title: 'Keep documents current with Verify',
+    description: 'Confirming a document is still right, review dates, and what coverage means.',
+    body: [
+      {
+        p: 'A document nobody has checked in a year is a guess. Verify records that you read it and it’s still right, without editing it, so the next person can trust it.',
+      },
+      { h: 'Verify a document' },
+      {
+        ol: [
+          'Open the document and read it against what you know is true today.',
+          'If something has changed, choose Edit and fix it. Saving counts as a check.',
+          'If it’s still right, choose Verify. The badge changes to Verified today by you.',
+        ],
+      },
+      {
+        p: 'Verifying isn’t an edit: the version and Last updated stay. A document marked Needs review goes back to Current, and a review date moves six months ahead so the reminder comes round again.',
+      },
+      { h: 'What the badges mean' },
+      {
+        ul: [
+          'Verified 12 days ago by Alex: someone checked it recently.',
+          'Last verified in amber, or Not verified: nobody has checked or edited it for six months. It’s worth a read.',
+        ],
+      },
+      { h: 'Coverage' },
+      {
+        p: 'The Documentation health report opens with each client’s coverage: how many of seven essentials are on record (a primary contact, a location, a network diagram, a backup runbook, the internet provider, admin accounts and Wi-Fi) and which are missing. Fill the gaps when you’re next working on that client.',
+      },
+    ],
+  },
+  {
+    key: 'guide-tech-requests',
+    audience: 'technician',
+    title: 'Handle starter, leaver and change requests',
+    description: 'What a request from a client looks like, and working it through to done.',
+    body: [
+      {
+        p: 'Clients and the team can ask for work from inside Atlas. Each request starts a checklist for that client, so nothing lives only in someone’s inbox.',
+      },
+      { h: 'Where requests come from' },
+      {
+        ul: [
+          'Starter or leaver, on a client’s Contacts tab or a client’s own portal home. It starts New starter: name or Leaver: name, using the user onboarding or offboarding checklist, due on their first or last day.',
+          'Request a change, on a client’s portal home. It starts Change request: what they asked for, with four short steps.',
+          'Who asked, and their details, are on the first step. Everyone on the team who can edit that client gets an email.',
+        ],
+      },
+      { h: 'Work a request' },
+      {
+        ol: [
+          'Open Checklists, or the client’s Checklists tab. New requests are unassigned.',
+          'Assign it to yourself so the rest of the team knows it’s taken.',
+          'Read the first step’s note, and ask the client about anything unclear before you start.',
+          'Tick each step as you go, with a short note where it helps the next person.',
+          'For a leaver, rotate any shared passwords they knew and archive their contact.',
+        ],
+      },
+      {
+        p: 'When the last step is ticked the checklist is complete, and it stays in the client’s history.',
+      },
+    ],
+  },
+  {
+    key: 'guide-tech-faster',
+    audience: 'technician',
+    title: 'Move faster: shortcuts, previews and saved views',
+    description: 'Keyboard shortcuts, hover previews, list views that remember you, and pinned reports.',
+    body: [
+      { p: 'Small things that add up over a day in Atlas.' },
+      { h: 'Keyboard shortcuts' },
+      {
+        ul: [
+          'Press ? anywhere to see them all.',
+          '/ opens search, as Ctrl+K does.',
+          'g then a letter goes to a page: g c Clients, g a Assets, g d Documents, g p Passwords, g r Reports, g e Expirations, g o Overview.',
+          'Shortcuts never fire while you’re typing in a field.',
+        ],
+      },
+      { h: 'Hover previews' },
+      {
+        p: 'Rest the mouse on a link to an asset or document, anywhere in Atlas, and a card shows what it is: the asset’s type, client and key fields, or the document’s first lines. It tells similar names apart without opening each one.',
+      },
+      { h: 'Lists that remember you' },
+      {
+        ul: [
+          'Assets, Documents and Passwords keep your Sort (and Passwords your grouping) on your account, on any computer.',
+          'On Assets, pick a type such as Configurations, then Columns, to choose up to six of its fields to show.',
+        ],
+      },
+      { h: 'Pinned reports' },
+      {
+        p: 'In Reports → Templates, the pin beside a saved template puts it on your dashboard. One click opens it ready to run.',
+      },
+      { h: 'Who used a password last' },
+      {
+        p: 'A password’s page says who last used it, beside when it was updated. The full record is in Access history.',
+      },
+    ],
+  },
   // ---------- clients ----------
   {
     key: 'guide-client-welcome',
@@ -666,7 +799,7 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
       { h: 'Open and download' },
       {
         ul: [
-          'Open the link to see the report, every section as it was captured.',
+          'Open the link to see the report, every section as it was captured. If you sign in to Atlas, reports shared with you are also listed on your Overview under Shared reports.',
           'Download the whole report, or one section, as a PDF.',
           'The link works for a set time (7, 30 or 90 days), and your provider can turn it off.',
         ],
@@ -688,6 +821,42 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
     ],
   },
 
+  {
+    key: 'guide-client-requests',
+    audience: 'client',
+    title: 'Ask for a new starter, a leaver or a change',
+    description: 'Telling your IT provider about people joining or leaving, or anything else you need, from Atlas.',
+    body: [
+      {
+        p: 'You can ask your IT provider for work straight from Atlas. It goes to their team as a checklist, so it isn’t lost in an inbox, and you have a record of when you asked.',
+      },
+      { h: 'Someone is joining or leaving' },
+      {
+        ol: [
+          'Sign in to Atlas. Your Overview has a card for your organization.',
+          'Choose Starter or leaver.',
+          'Choose Someone is joining or Someone is leaving, then enter their name and first or last day.',
+          'Under Details, add their job title, manager, what they need access to, or what should happen to their email and files.',
+          'Choose Send request.',
+        ],
+      },
+      {
+        p: 'Tell your provider as early as you can. A leaver’s access should end at the agreed time, not days later.',
+      },
+      { h: 'Anything else' },
+      {
+        ol: [
+          'Choose Request a change on your organization’s card.',
+          'Say what you need, such as a shared mailbox for sales, a printer moved or a door code changed.',
+          'Add the details and, if there’s a deadline, the date it’s needed by.',
+          'Choose Send request.',
+        ],
+      },
+      {
+        p: 'For anything urgent, such as a suspected break-in to an account, call your provider as well.',
+      },
+    ],
+  },
   // ---------- administrators ----------
   {
     key: 'guide-admin-setup',
@@ -929,7 +1098,7 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
       { h: 'System status' },
       {
         ul: [
-          'Admin → System status: the last good backup, the next one, and any red rows with their reason.',
+          'Admin → System status: the last good backup, the next one, and any red rows with their reason. Accounts and API keys unused for 60 days are listed here too.',
           'Disk space for the data and backup folders.',
           'Email and the master key in use.',
         ],
@@ -958,6 +1127,7 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
         ul: [
           'Download a backup and check it can be read with npm run backup -w @atlas/server -- verify <file>.',
           'Review People & access for leavers and over-wide access.',
+          'Start an access review for any client whose Access review card says Due.',
           'Note when the Microsoft app registration secrets used for email and sign-in expire, and renew them in time.',
         ],
       },
@@ -1076,6 +1246,99 @@ export const GUIDE_TEMPLATES: GuideTemplate[] = [
       },
       {
         p: 'Messages name the event, who did it, the client and the item, never its contents. Leave Assets unticked on a webhook that posts to a chat channel; an RMM sync changes many at once.',
+      },
+    ],
+  },
+  {
+    key: 'guide-admin-access-review',
+    audience: 'admin',
+    title: 'Run a client access review',
+    description: 'Checking who can open a client every quarter, removing what isn’t needed, and signing it off.',
+    body: [
+      {
+        p: 'Insurers and auditors increasingly ask who can see a client’s data, and when someone last checked. An access review answers both, and the signed PDF is the evidence.',
+      },
+      { h: 'Run a review' },
+      {
+        ol: [
+          'Open the client. The Access review card on its Overview says when it was last signed off, and Due if that was more than 90 days ago.',
+          'Choose Start review. Atlas lists everyone who can open the client now, with their role, access level, where the access comes from (Direct, a group, or All clients), two-factor status and last sign-in.',
+          'Choose Keep or Remove for each person. Remove takes away their direct access at once.',
+          'If someone still has access through a group or the all-clients level, the card says so. Change that under People & access, since it affects other clients too.',
+          'Type your name under Signed off by and choose Sign off.',
+        ],
+      },
+      { h: 'Afterwards' },
+      {
+        ul: [
+          'PDF beside a signed-off review downloads it for the client’s file or their insurer.',
+          'A signed-off review can’t be changed. Start a new one next quarter.',
+          'Every step, including each removal, is in the security log.',
+          'The security report’s Who has access section gives the same list at any time, without a sign-off.',
+        ],
+      },
+    ],
+  },
+  {
+    key: 'guide-admin-evidence',
+    audience: 'admin',
+    title: 'Prepare evidence for an auditor or insurer',
+    description: 'The client evidence pack, the compliance evidence pack, and the insurance readiness report.',
+    body: [
+      {
+        p: 'Atlas can put together most of what an auditor or a cyber insurer asks for. Run these the week before you need them, and fix what they find first.',
+      },
+      { h: 'For one client' },
+      {
+        ul: [
+          'On the client’s Reports tab, Evidence pack downloads a zip of PDFs: security posture, cyber insurance readiness, endpoint health, documentation health, asset inventory and licence utilization.',
+          'The Cyber insurance readiness report answers the usual questionnaire (MFA, endpoint protection, encryption, backups and so on) with the evidence for each answer and what to do where it’s No.',
+          'Sign off an access review first, so the pack shows current access.',
+        ],
+      },
+      { h: 'For your whole organization' },
+      {
+        ol: [
+          'Open Admin → Security log.',
+          'Choose Compliance evidence pack and confirm your password.',
+          'The zip holds an integrity check of the security log, run as it’s made; the security log itself; every account’s two-factor status; your vault policies; and each client’s latest signed-off access review, with a summary of which are due.',
+        ],
+      },
+      {
+        p: 'Read the README first: it sums up the log check, two-factor coverage and access reviews in a line each. Passwords and document contents are never included.',
+      },
+    ],
+  },
+  {
+    key: 'guide-admin-portfolio',
+    audience: 'admin',
+    title: 'Watch your portfolio: health map, team pulse and the Monday email',
+    description: 'Seeing every client and the team at a glance, and what Atlas tells you without asking.',
+    body: [
+      { p: 'A few views show where to spend the week, without opening every client.' },
+      { h: 'Health map' },
+      {
+        p: 'Clients → Health map shows every client against each part of its health score: security, endpoints, documentation and renewals. The lowest is at the top, and red cells are where to start. Select a cell to open the client.',
+      },
+      { h: 'Team pulse' },
+      {
+        p: 'The Team pulse card on your dashboard shows what each person changed in the last 30 days, against the 30 before, and how many stale documents (untouched for six months) each of them edited last. Use it to share out review work, not to rank people.',
+      },
+      { h: 'What arrives by email' },
+      {
+        ul: [
+          'Monday morning: the average client health score, how it moved, and every client that moved by 3 points or more. Owners and administrators get it while the weekly digest is on.',
+          'Straight away: an email when Bitdefender reports an infected endpoint at a client you can see.',
+          'When someone asks: starter, leaver and change requests go to everyone who can edit that client.',
+        ],
+      },
+      { h: 'Keep access tidy' },
+      {
+        ul: [
+          'System status warns about accounts and API keys nobody has used for 60 days, and People & access marks inactive accounts.',
+          'Disable leavers’ accounts, and revoke keys nothing uses.',
+          'The Client onboarding card on the Clients page shows each new client’s onboarding checklist and how long onboarding takes on average.',
+        ],
       },
     ],
   },
