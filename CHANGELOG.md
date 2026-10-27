@@ -86,6 +86,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Health map.** **Clients → Health map** (and a link on the Client health card) shows every client against each part of its health score (security, endpoints, documentation, renewals) as coloured cells, lowest overall first, with the 30-day change. Each cell opens the client.
+### Added
+
+- **Monday client health email for owners.** Owners and administrators get one email each Monday: the average client health score and how it moved since last week, and every client that moved by 3 points or more, biggest drop first. It follows the weekly digest setting.
 
 ## [2.2.0] - 2026-10-23
 

@@ -11,6 +11,7 @@ import {
   type HealthList,
   type HealthPart,
   type HealthPartScore,
+  type HealthWeek,
   type PasswordHealthReport,
   type RmmHealthCounts,
   type TrackerReport,
@@ -315,6 +316,31 @@ export class ClientHealthService {
       .from(t)
       .where(and(eq(t.orgId, orgId), eq(t.day, dayOf(Date.now())), clientId ? eq(t.clientId, clientId) : undefined));
     if (!row?.updatedAt || Date.now() - new Date(row.updatedAt).getTime() > FRESH_MS) await this.record(orgId);
+  }
+
+  /** Every client's latest score and its score a week before, for the owners' Monday email. */
+  async week(orgId: string, now = Date.now()): Promise<HealthWeek[]> {
+    const t = schema.clientHealth;
+    const rows = await this.db
+      .select({ clientId: t.clientId, day: t.day, score: t.score, name: schema.clients.name })
+      .from(t)
+      .innerJoin(schema.clients, eq(schema.clients.id, t.clientId))
+      .where(and(eq(t.orgId, orgId), gte(t.day, dayOf(now - 14 * DAY))))
+      .orderBy(asc(t.day));
+    const weekAgo = dayOf(now - 7 * DAY);
+    const byClient = new Map<string, HealthWeek>();
+    for (const r of rows) {
+      const entry = byClient.get(r.clientId) ?? {
+        clientId: r.clientId,
+        clientName: r.name,
+        score: null,
+        previous: null,
+      };
+      entry.score = r.score;
+      if (r.day <= weekAgo) entry.previous = r.score;
+      byClient.set(r.clientId, entry);
+    }
+    return [...byClient.values()];
   }
 
   /** One client's score, what lowers it, and its trend. Staff only. */
