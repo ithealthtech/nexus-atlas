@@ -44,8 +44,9 @@ describe('favorites, quick notes, and workspace preferences', () => {
     const row = pulse.people.find((p: { name: string }) => p.name === 'tess');
     expect(row).toMatchObject({ changes: 1, previous: 1, clients: 1 });
     expect(row.lastSignInAt).not.toBeNull();
-    // The owner made the two clients this week.
-    expect(pulse.people.find((p: { name: string }) => p.name === 'Avery Owner').changes).toBeGreaterThanOrEqual(2);
+    // Everyone on the team is listed, the busiest first, including people with nothing this week.
+    expect(pulse.people[0].name).toBe('tess');
+    expect(pulse.people.map((p: { name: string }) => p.name)).toContain('Avery Owner');
     expect((await tess.call('GET', '/api/workspace/team-pulse')).status).toBe(403);
   });
 

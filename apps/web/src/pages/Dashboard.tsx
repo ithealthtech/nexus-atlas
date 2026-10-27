@@ -506,10 +506,14 @@ function TeamPulseCard() {
               {p.changes !== p.previous && (
                 <span
                   className={cn('flex items-center text-xs', p.changes > p.previous ? 'text-success' : 'text-muted')}
-                  aria-label={`${p.previous} the week before`}
                   title={`${p.previous} the week before`}
                 >
-                  {p.changes > p.previous ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
+                  {p.changes > p.previous ? (
+                    <ArrowUp className="size-3" aria-hidden />
+                  ) : (
+                    <ArrowDown className="size-3" aria-hidden />
+                  )}
+                  <span className="sr-only">, {p.previous} the week before</span>
                 </span>
               )}
             </span>
