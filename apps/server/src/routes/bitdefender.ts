@@ -35,8 +35,9 @@ async function startSync(
   const run = await ImportRun.start(db, actor, 'bitdefender');
   const done = runBitdefenderSync(db, actor, BitdefenderClient.for(saved, fetcher), run, saved)
     .then(async () => {
-      await run.flush('done');
+      // The job reads "done" last, once everything the sync writes is written.
       await settings.patchBitdefender(actor.orgId, { lastSyncAt: new Date().toISOString() });
+      await run.flush('done');
     })
     .catch(async (error) => {
       run.note(error instanceof HttpError ? error.message : 'The sync stopped unexpectedly.');
