@@ -19,6 +19,12 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - It needs the **AuditLog.Read.All** permission: reconnect the Microsoft 365 partner account once, and grant it in each customer's consent. It also needs a GDAP role such as Reports Reader, and Microsoft Entra ID P1 or P2 in the tenant (included in Microsoft 365 Business Premium). Without them, the report says what's missing.
 - **Health score findings open the exact list.** In a client's health window, a finding about devices or warranties now opens the devices or assets behind it, in place: devices without protection running, not online, or not checked in recently, and warranties expired or expiring soon. Each one links to its page. Other findings still take you to where they're fixed.
 - **Report rows open their record.** In a report on screen, a device, asset, document or subscription's name opens its page in Atlas, and a client's name opens the client. This covers Asset inventory, Documentation health, Endpoint health, the Security posture device table and tracked subscriptions. Links shared with a client, PDFs and CSVs are unchanged, since clients can't open those pages.
+### Added
+
+- **Keyboard shortcuts.** Press **?** anywhere to see them all; they're also under **Keyboard shortcuts** in the account menu.
+  - **/** opens search, as Ctrl+K (⌘K) does.
+  - **g** then a letter goes straight to a page: **g c** Clients, **g a** Assets, **g d** Documents, **g p** Passwords, **g r** Reports, **g e** Expirations, **g o** Overview, and **g u** People and access for administrators.
+  - Shortcuts never act while you're typing in a field or a window is open.
 
 ## [2.2.0] - 2026-10-23
 
