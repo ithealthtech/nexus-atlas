@@ -14,7 +14,7 @@ revision and latest published version and rejects duplicate publication. Restori
 preserving unavailable selections for repair; publishing revalidates references. All mutations require recent
 administrator authentication and create security events without logging message contents.
 
-New migration: `0046_cooing_beast.sql`, generated with `npm run db:generate`; never modify released migrations.
+New migration: `0048_alert_versions.sql` (generated as 0046 before #298 and #324 took 0046 and 0047, then regenerated with the same SQL after them); never modify released migrations.
 Read `packages/shared/src/alert-publications.ts`, `apps/server/src/services/alerting/versions.ts`, and
 `apps/web/src/components/alerting/Versions.tsx`. The server routes, demo and alerting tests are extended.
 Local build, demo build, typecheck, lint, formatting, extension packaging, site check, duplicate scan (0.86%),
