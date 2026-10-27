@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Recent viewers.** A password's page says who last used it, beside when it was updated: up to three people, each with when they last viewed, copied, or filled it. The full log stays in **Access history**.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

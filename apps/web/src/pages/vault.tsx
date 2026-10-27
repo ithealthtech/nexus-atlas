@@ -63,7 +63,7 @@ import { cn } from '@/lib/cn';
 import { formatDate, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { useClient } from '@/lib/queries';
-import { copySecret, usePassword, usePasswordFolders, usePasswords, useReveal } from '@/lib/vault';
+import { copySecret, usePassword, usePasswordAudit, usePasswordFolders, usePasswords, useReveal } from '@/lib/vault';
 import { rotationOverdue, expired } from '@/components/vault/status';
 import { strengthTone } from '@/components/vault/Generator';
 import { PasswordDialog } from '@/components/vault/PasswordDialog';
@@ -918,6 +918,29 @@ export function AllPasswords() {
 
 // ---------------------------------------------------------------- detail
 
+/** Audit actions that show or hand out the secret: viewing, copying, or filling it in a browser. */
+const SEEN = /^(Revealed|Viewed|Copied|Filled)/;
+
+/**
+ * Who used this password last, right where it opens (the full log is in Access history below): the three most
+ * recent people, each with their latest time.
+ */
+function RecentViewers({ id }: { id: string }) {
+  const { data } = usePasswordAudit(id);
+  const latest = new Map<string, string>();
+  for (const a of data ?? []) if (SEEN.test(a.action) && !latest.has(a.actorName)) latest.set(a.actorName, a.createdAt);
+  if (!latest.size) return null;
+  return (
+    <>
+      {' · Last used by '}
+      {[...latest]
+        .slice(0, 3)
+        .map(([name, at]) => `${name} ${relativeTime(at)}`)
+        .join(', ')}
+    </>
+  );
+}
+
 export function PasswordDetail() {
   const { passwordId } = useParams({ strict: false }) as { passwordId: string };
   const { data: item, isLoading, error, refetch } = usePassword(passwordId);
@@ -969,6 +992,7 @@ export function PasswordDetail() {
           <>
             Updated {relativeTime(item.updatedAt)}
             {item.updatedByName && ` by ${item.updatedByName}`}
+            {actor.isStaff && <RecentViewers id={item.id} />}
           </>
         }
         actions={
