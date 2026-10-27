@@ -334,6 +334,10 @@ describe('Bitdefender GravityZone', () => {
       ['hdg-dc-01', 'Protected'],
       ['SPARE-LAPTOP', 'Protected'],
     ]);
+    const seats = sections.find((s) => s.title === 'Bitdefender licences')!.rows[0]!;
+    expect(seats[1]).toBe('4');
+    expect(Number(seats[2]) + Number(seats[3]) + Number(seats[4])).toBe(4);
+    expect(seats[5]).toBe('0');
     const overview = ((await run('security')).data.snapshot.sections as Section[]).find(
       (s) => s.title === 'Security overview',
     )!;
