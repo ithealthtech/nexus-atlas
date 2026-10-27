@@ -21,6 +21,18 @@ public class HelloPolicyTests
     }
 
     [Fact]
+    public void A_restricted_password_asks_every_time_whatever_the_settings()
+    {
+        var hello = new HelloPolicy(new FakeTimeProvider());
+        hello.Verified();
+        Assert.False(hello.SecretNeedsCheckFor(restricted: false));
+        Assert.True(hello.SecretNeedsCheckFor(restricted: true));
+        hello.Apply(new AppSettings { HelloForSecrets = false });
+        Assert.False(hello.SecretNeedsCheckFor(restricted: false));
+        Assert.True(hello.SecretNeedsCheckFor(restricted: true));
+    }
+
+    [Fact]
     public void Every_time_means_every_time()
     {
         var hello = new HelloPolicy(new FakeTimeProvider());

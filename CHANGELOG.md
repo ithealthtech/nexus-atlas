@@ -77,6 +77,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Saved list views.** Assets, Documents and Passwords remember how you sort them (and Passwords how you group them) on your account, not just in one browser. On Assets, choose **Columns** for any asset type to pick up to six of its fields to show.
+### Added
+
+- **Atlas for Windows: Windows Hello for restricted passwords.** Showing, copying, or saving a file from a restricted password asks for Windows Hello every time, whatever the app's Windows Hello settings.
 
 ## [2.2.0] - 2026-10-23
 
