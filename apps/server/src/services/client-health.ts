@@ -1,20 +1,24 @@
 import { and, asc, count, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
+  HEALTH_PARTS,
   HEALTH_PART_INFO,
   ROLE_INFO,
   type ClientHealth,
   type ClientHealthDetail,
   type ClientHealthSummary,
   type HealthFinding,
+  type HealthList,
   type HealthPart,
   type HealthPartScore,
+  type HealthWeek,
   type PasswordHealthReport,
   type RmmHealthCounts,
   type TrackerReport,
 } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { actorFor } from '../identity/service.js';
+import { clientEndpoints } from './integrations/bitdefender.js';
 import { RmmHealthService } from './rmm-health.js';
 import { Scope } from './scope.js';
 import type { SettingsService } from './settings.js';
@@ -43,6 +47,11 @@ export interface HealthInputs {
   staleDays: number;
   /** Devices whose BitLocker state the collector reported, and those with a volume not encrypted. */
   encryption: { reported: number; unprotected: number };
+  /**
+   * Bitdefender GravityZone, for a client linked to it: the endpoints it manages, those infected or needing attention,
+   * and RMM devices it doesn't manage. Missing or null when the client isn't linked.
+   */
+  bitdefender?: { endpoints: number; infected: number; attention: number; missing: number } | null;
   documents: { total: number; overdue: number };
   primaryContact: boolean;
   locations: number;
@@ -58,13 +67,13 @@ interface Measure {
   value: number;
   weight: number;
   /** `loss` is the share of this measure (0–1) each finding costs. */
-  findings: { text: string; section: string; loss: number }[];
+  findings: { text: string; section: string; loss: number; list?: HealthList }[];
 }
 const ratio = (good: number, total: number) => (total ? good / total : 1);
-const simple = (value: number, text: string, section: string, weight = 1): Measure => ({
+const simple = (value: number, text: string, section: string, weight = 1, list?: HealthList): Measure => ({
   value,
   weight,
-  findings: value < 1 ? [{ text, section, loss: 1 - value }] : [],
+  findings: value < 1 ? [{ text, section, loss: 1 - value, ...(list ? { list } : {}) }] : [],
 });
 
 /**
@@ -91,6 +100,8 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
         ratio(devices.protectionRunning, devices.total),
         `${plural(missing, 'device')} without endpoint protection running`,
         '/assets',
+        1,
+        { kind: 'devices', filter: 'protection_problem' },
       ),
     );
   }
@@ -102,12 +113,36 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
         '/assets',
       ),
     );
+  const bd = input.bitdefender;
+  if (bd && bd.endpoints + bd.missing > 0) {
+    // Its findings point at the client's overview, where the Bitdefender card lists each endpoint and device.
+    if (bd.endpoints) {
+      // Malware still on a machine counts double: it's the one thing here that is already a breach.
+      security.push(
+        simple(
+          ratio(bd.endpoints - bd.infected, bd.endpoints),
+          `${plural(bd.infected, 'endpoint')} still infected, per Bitdefender`,
+          '',
+          2,
+        ),
+        simple(
+          ratio(bd.endpoints - bd.attention, bd.endpoints),
+          `${plural(bd.attention, 'Bitdefender endpoint')} needing attention`,
+          '',
+        ),
+      );
+    }
+    security.push(
+      simple(ratio(bd.endpoints, bd.endpoints + bd.missing), `${plural(bd.missing, 'device')} without Bitdefender`, ''),
+    );
+  }
   parts.push({
     part: 'security',
     detail: [
       pw.total && plural(pw.total, 'password'),
       devices?.total && `protection on ${plural(devices.total, 'device')}`,
       encryption.reported && `BitLocker on ${encryption.reported}`,
+      bd?.endpoints && `Bitdefender on ${bd.endpoints}`,
     ]
       .filter(Boolean)
       .join(', '),
@@ -123,11 +158,15 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
             ratio(devices.online, devices.total),
             `${plural(devices.total - devices.online, 'device')} not online`,
             '/assets',
+            1,
+            { kind: 'devices', filter: 'not_online' },
           ),
           simple(
             ratio(devices.current, devices.total),
             `${plural(devices.total - devices.current, 'device')} not checked in within ${input.staleDays} days`,
             '/assets',
+            1,
+            { kind: 'devices', filter: 'not_current' },
           ),
         ]
       : [],
@@ -175,6 +214,7 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
                     text: `${plural(d.expired, noun, noun === 'warranty' ? 'warranties' : undefined)} expired`,
                     section,
                     loss: d.expired / tracked,
+                    ...(noun === 'warranty' ? { list: { kind: 'warranty' as const, filter: 'expired' as const } } : {}),
                   },
                 ]
               : []),
@@ -184,6 +224,7 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
                     text: `${plural(d.soon, noun, noun === 'warranty' ? 'warranties' : undefined)} expiring soon`,
                     section,
                     loss: d.soon / 2 / tracked,
+                    ...(noun === 'warranty' ? { list: { kind: 'warranty' as const, filter: 'soon' as const } } : {}),
                   },
                 ]
               : []),
@@ -214,6 +255,7 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
       m.findings.map((f) => ({
         text: f.text,
         section: f.section,
+        ...(f.list ? { list: f.list } : {}),
         gain: Math.max(1, Math.round(((f.loss * m.weight) / w) * 100 * share)),
       })),
     );
@@ -276,6 +318,31 @@ export class ClientHealthService {
     if (!row?.updatedAt || Date.now() - new Date(row.updatedAt).getTime() > FRESH_MS) await this.record(orgId);
   }
 
+  /** Every client's latest score and its score a week before, for the owners' Monday email. */
+  async week(orgId: string, now = Date.now()): Promise<HealthWeek[]> {
+    const t = schema.clientHealth;
+    const rows = await this.db
+      .select({ clientId: t.clientId, day: t.day, score: t.score, name: schema.clients.name })
+      .from(t)
+      .innerJoin(schema.clients, eq(schema.clients.id, t.clientId))
+      .where(and(eq(t.orgId, orgId), gte(t.day, dayOf(now - 14 * DAY))))
+      .orderBy(asc(t.day));
+    const weekAgo = dayOf(now - 7 * DAY);
+    const byClient = new Map<string, HealthWeek>();
+    for (const r of rows) {
+      const entry = byClient.get(r.clientId) ?? {
+        clientId: r.clientId,
+        clientName: r.name,
+        score: null,
+        previous: null,
+      };
+      entry.score = r.score;
+      if (r.day <= weekAgo) entry.previous = r.score;
+      byClient.set(r.clientId, entry);
+    }
+    return [...byClient.values()];
+  }
+
   /** One client's score, what lowers it, and its trend. Staff only. */
   async forClient(scope: Scope, clientId: string, days = 90): Promise<ClientHealthDetail> {
     if (!ROLE_INFO[scope.actor.role].staff) throw new HttpError(404, 'Client not found.');
@@ -323,7 +390,8 @@ export class ClientHealthService {
       .map((list) => {
         const latest = list.at(-1)!;
         const trend = list.flatMap((r) => (r.score === null ? [] : [{ day: r.day, score: r.score }]));
-        const parts = (latest.parts as HealthPartScore[]).filter((p) => p.score !== null);
+        const all = latest.parts as HealthPartScore[];
+        const parts = all.filter((p) => p.score !== null);
         const weakest = parts.sort((a, b) => a.score! - b.score!)[0];
         return {
           clientId: latest.clientId,
@@ -331,6 +399,9 @@ export class ClientHealthService {
           score: latest.score,
           change: change(trend, latest.score),
           weakest: weakest && weakest.score! < 90 ? weakest.part : null,
+          parts: Object.fromEntries(
+            HEALTH_PARTS.map((part) => [part, all.find((p) => p.part === part)?.score ?? null]),
+          ) as ClientHealthSummary['parts'],
           trend: trend.map((p) => p.score),
         };
       })
@@ -387,6 +458,21 @@ export class ClientHealthService {
 
     const rmm = await new RmmHealthService(this.deps.settings).report(scope);
     for (const c of rmm.clients) each(c.clientId, (i) => ((i.devices = c.counts), (i.staleDays = rmm.staleDays)));
+
+    // Bitdefender, for each client linked to a GravityZone company.
+    const links = (await this.deps.settings.bitdefenderLinks(orgId)) ?? {};
+    for (const m of Object.values(links)) {
+      if (m.action !== 'link' || !inputs.has(m.clientId)) continue;
+      const view = await clientEndpoints(db, orgId, m.clientId, true, now);
+      each(m.clientId, (i) => {
+        i.bitdefender = {
+          endpoints: view.endpoints.length,
+          infected: view.counts.infected,
+          attention: view.counts.attention,
+          missing: view.missing.length,
+        };
+      });
+    }
 
     const warranty = await new WarrantyService(this.deps.settings).report(scope);
     for (const c of warranty.clients) each(c.clientId, (i) => (i.warranties = dated(c.counts)));

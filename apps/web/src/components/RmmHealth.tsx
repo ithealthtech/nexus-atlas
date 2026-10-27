@@ -42,9 +42,13 @@ const DEVICE_LIST_TITLES: Record<RmmHealthFilter, string> = {
   protection_not_running: 'Protection not running',
   protection_missing: 'No endpoint protection',
   protection_unknown: 'Protection not reported',
+  not_online: 'Devices not online',
+  not_current: 'Devices not checked in recently',
+  protection_problem: 'Devices without protection running',
 };
 
-function DeviceList({
+/** The devices behind a chart slice or a health finding, in a drawer. */
+export function DeviceList({
   filter,
   clientId,
   onClose,

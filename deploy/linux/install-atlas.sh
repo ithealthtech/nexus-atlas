@@ -129,11 +129,13 @@ if ! dpkg -s postgresql-16 >/dev/null 2>&1; then
 fi
 systemctl enable --now postgresql
 
-log "Node.js 22 (NodeSource repository)"
+# New servers get Node.js 24 (supported to April 2028). A server that already runs Node.js 22 keeps it, so an update
+# never swaps the runtime underneath Atlas; System status says when to move, and the manual says how.
+log "Node.js (NodeSource repository)"
 if ! command -v node >/dev/null || [[ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]]; then
   install -d -m 0755 /etc/apt/keyrings
   curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
-  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
   apt-get update -q
   apt-get install -yq nodejs
 fi

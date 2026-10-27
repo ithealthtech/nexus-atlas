@@ -44,6 +44,7 @@ Only the Atlas address and preferences (`%LOCALAPPDATA%\Atlas for Windows\settin
 - HTTPS with the Windows certificate store, and no option to accept an untrusted certificate. Plain HTTP is accepted only for a server on the same computer (development).
 - Secrets aren't logged, the app shows no exception details, and it opts out of Windows Error Reporting so crash dumps aren't uploaded.
 - It uses only the versioned REST API (`/api/v1`) as you, so Atlas's permissions and audit apply unchanged.
+- Showing, copying, or saving a file from a **restricted** password asks for Windows Hello every time (where it's set up), even within the usual few minutes and even with "Ask before showing passwords" turned off. The website asks for your password again in the same place.
 - The update link comes from your own Atlas and is opened only if it is an `https://` address.
 
 ## Layout

@@ -9,17 +9,27 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  FileText,
   Info,
   LayoutGrid,
+  MapPin,
+  MessageSquarePlus,
   Server,
   ShieldCheck,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import {
   DASHBOARD_WIDGET_INFO,
   DEFAULT_WORKSPACE,
   type DashboardArea,
   type DashboardWidget,
+  REPORT_INFO,
   type PasswordHealthReport,
+  type PortalReport,
+  type ReportTemplateView,
+  STALE_DOCUMENT_DAYS,
+  type TeamPulse,
   type WorkspacePrefs,
 } from '@atlas/shared';
 import { api } from '@/lib/api';
@@ -51,6 +61,8 @@ import { WarrantyCard } from '@/components/Warranty';
 import { AssetStatsCard, useAssetStats } from '@/components/AssetStats';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
+import { PeopleRequestDialog } from './client/people';
+import { ChangeRequestDialog } from '@/components/ChangeRequest';
 import {
   useActivity,
   useAssets,
@@ -189,6 +201,7 @@ export function Dashboard() {
     'asset-stats': <AssetStatsCard />,
     health: <ClientHealthCard />,
     favorites: <FavoritesCard />,
+    'pinned-reports': <PinnedReportsCard ids={prefs.data?.pinnedReports ?? []} />,
     'recent-clients': (
       <Card>
         <CardHeader title="Recently updated clients" actions={moreLink('/clients', 'All clients')} />
@@ -385,6 +398,7 @@ export function Dashboard() {
       </Card>
     ),
     warranty: <WarrantyCard />,
+    'team-pulse': actor.isAdmin ? <TeamPulseCard /> : null,
   };
 
   const shown = (prefs.data ?? DEFAULT_WORKSPACE).widgets.filter((w) => w.visible);
@@ -435,6 +449,7 @@ export function Dashboard() {
           <p className="text-sm whitespace-pre-line text-text-2">{branding.portalWelcome}</p>
         </Card>
       )}
+      {!actor.isStaff && <PortalHome />}
       {totals.length > 0 && <div className="mb-5">{totals}</div>}
       {main.length + side.length > 0 ? (
         <div
@@ -472,6 +487,177 @@ export function Dashboard() {
       {/* Mounted only while open, so it starts from the saved layout each time. */}
       {customizing && prefs.data && <CustomizeDashboard prefs={prefs.data} onClose={() => setCustomizing(false)} />}
     </div>
+  );
+}
+
+/**
+ * What a client account comes to Atlas for, one card per organization they can see: their documentation, and a
+ * way to tell the team someone is joining or leaving.
+ */
+function PortalHome() {
+  const clients = useClients().data ?? [];
+  const [requesting, setRequesting] = useState<string | null>(null);
+  const [changing, setChanging] = useState<string | null>(null);
+  const reports = useQuery({ queryKey: ['portal-reports'], queryFn: () => api<PortalReport[]>('/portal/reports') });
+  if (!clients.length) return null;
+  const links = [
+    ['documents', 'Documents', FileText],
+    ['assets', 'Devices and assets', Server],
+    ['contacts', 'People', Users],
+    ['locations', 'Locations', MapPin],
+  ] as const;
+  return (
+    <div className="mb-7 grid gap-5 md:grid-cols-2">
+      {clients.map((c) => (
+        <Card key={c.id} className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <AppLink to={`/clients/${c.id}`} className="flex items-center gap-2 font-semibold hover:underline">
+              <Building2 className="size-4 text-muted" aria-hidden /> {c.name}
+            </AppLink>
+            <span className="flex flex-wrap justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setChanging(c.id)}>
+                <MessageSquarePlus /> Request a change
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setRequesting(c.id)}>
+                <UserPlus /> Starter or leaver
+              </Button>
+            </span>
+          </div>
+          <ul className="mt-4 grid grid-cols-2 gap-2">
+            {links.map(([path, label, Icon]) => (
+              <li key={path}>
+                <AppLink
+                  to={`/clients/${c.id}/${path}`}
+                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-surface-2"
+                >
+                  <Icon className="size-4 text-muted" aria-hidden /> {label}
+                </AppLink>
+              </li>
+            ))}
+          </ul>
+          {/* Reports the team shared with this client, newest first; each opens like its link does. */}
+          {reports.data?.some((r) => r.clientId === c.id) && (
+            <div className="mt-4">
+              <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Shared reports</h3>
+              <ul className="space-y-1">
+                {reports.data
+                  .filter((r) => r.clientId === c.id)
+                  .slice(0, 5)
+                  .map((r) => (
+                    <li key={r.token}>
+                      <AppLink
+                        to={`/report/${r.token}`}
+                        className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-surface-2"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <FileText className="size-4 shrink-0 text-muted" aria-hidden />
+                          <span className="truncate font-medium">{r.title}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-muted">{formatDate(r.sharedAt)}</span>
+                      </AppLink>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      ))}
+      {requesting && <PeopleRequestDialog clientId={requesting} onClose={() => setRequesting(null)} />}
+      {changing && <ChangeRequestDialog clientId={changing} onClose={() => setChanging(null)} />}
+    </div>
+  );
+}
+
+/** Report templates this person pinned on Reports, each opening there ready to run. Hidden until one is pinned. */
+function PinnedReportsCard({ ids }: { ids: string[] }) {
+  const templates = useQuery({
+    queryKey: ['report-templates'],
+    queryFn: () => api<ReportTemplateView[]>('/reports/templates'),
+    enabled: ids.length > 0,
+  });
+  // A pin to a template since deleted, or no longer shared, just doesn't show.
+  const pinned = ids.flatMap((id) => templates.data?.filter((t) => t.id === id) ?? []);
+  if (!pinned.length) return null;
+  return (
+    <Card>
+      <CardHeader title="Pinned reports" description="Opens on Reports, set up and ready to run." />
+      <ul className="divide-y divide-border">
+        {pinned.map((t) => (
+          <li key={t.id}>
+            <AppLink
+              to="/reports"
+              search={{ template: t.id }}
+              className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-surface-2"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{t.name}</span>
+                <span className="block text-xs text-muted">
+                  {REPORT_INFO[t.definition.kind].name} · {t.definition.clientIds.length}{' '}
+                  {t.definition.clientIds.length === 1 ? 'client' : 'clients'}
+                </span>
+              </span>
+              <ArrowRight className="size-4 shrink-0 text-muted" aria-hidden />
+            </AppLink>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/** What each person on the team changed this month, against the month before, and their stale documents. */
+function TeamPulseCard() {
+  const { data } = useQuery({
+    queryKey: ['team-pulse'],
+    queryFn: () => api<TeamPulse>('/workspace/team-pulse'),
+    staleTime: 5 * 60_000,
+  });
+  if (!data?.people.length) return null;
+  return (
+    <Card>
+      <CardHeader
+        title="Team pulse"
+        description={`Changes in the last ${data.days} days, against the ${data.days} before. Stale: documents they edited last, untouched for ${STALE_DOCUMENT_DAYS} days.`}
+      />
+      <ul className="divide-y divide-border">
+        {data.people.map((p) => (
+          <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{p.name}</span>
+              <span className="block text-xs text-muted">
+                {p.changes
+                  ? `${p.clients} ${p.clients === 1 ? 'client' : 'clients'}`
+                  : p.lastSignInAt
+                    ? `Last signed in ${relativeTime(p.lastSignInAt)}`
+                    : 'Never signed in'}
+                {p.stale > 0 && (
+                  <span className="text-warning">
+                    {' '}
+                    · {p.stale} stale {p.stale === 1 ? 'document' : 'documents'}
+                  </span>
+                )}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 tabular-nums">
+              {p.changes}
+              {p.changes !== p.previous && (
+                <span
+                  className={cn('flex items-center text-xs', p.changes > p.previous ? 'text-success' : 'text-muted')}
+                  title={`${p.previous} the week before`}
+                >
+                  {p.changes > p.previous ? (
+                    <ArrowUp className="size-3" aria-hidden />
+                  ) : (
+                    <ArrowDown className="size-3" aria-hidden />
+                  )}
+                  <span className="sr-only">, {p.previous} the week before</span>
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

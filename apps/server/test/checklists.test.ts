@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+import { OWNER, enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TEMP = 'temporary pass 1234';
 
@@ -210,6 +210,72 @@ describe('checklists', () => {
 
     expect((await owner.call('DELETE', `/api/checklist-runs/${oneOff.data.id}`)).status).toBe(200);
     expect((await owner.call('GET', `/api/checklist-runs/${oneOff.data.id}`)).status).toBe(404);
+  });
+
+  it('turns a starter or leaver request from a client account into the onboarding checklist', async () => {
+    const contact = await person('office@harbor.test', 'copper lantern field 4', {
+      role: 'client_viewer',
+      grants: [{ clientId: harbor, level: 'read' }],
+    });
+    // With email set up, the team hears about it.
+    await owner.call('PUT', '/api/settings/email', {
+      enabled: true,
+      preset: 'custom',
+      host: 'smtp.example.test',
+      port: 587,
+      security: 'starttls',
+      username: 'atlas',
+      password: 'smtp-secret-4471',
+      fromAddress: 'atlas@example.test',
+      fromName: 'Atlas',
+    });
+    const sent = await contact.b.call('POST', `/api/clients/${harbor}/people-requests`, {
+      kind: 'starter',
+      name: 'Jordan Lee',
+      date: '2026-11-03',
+      details: 'Hygienist; needs the imaging software',
+    });
+    expect(sent.status, JSON.stringify(sent.data)).toBe(201);
+    expect(sent.data.title).toBe('New starter: Jordan Lee');
+    expect(t.outbox.map((m) => [m.to, m.subject])).toContainEqual([OWNER.email, 'New starter: Jordan Lee']);
+    expect(t.outbox.some((m) => m.to === 'office@harbor.test')).toBe(false);
+    const run = (await owner.call('GET', `/api/checklist-runs/${sent.data.id}`)).data;
+    expect(run).toMatchObject({ clientId: harbor, dueDate: '2026-11-03', assigneeId: null });
+    expect(run.steps[0].note).toBe('Requested by office. Hygienist; needs the imaging software');
+    expect(run.steps.length).toBeGreaterThan(5);
+    // Only for clients they can see, and the date is required.
+    expect(
+      (
+        await contact.b.call('POST', `/api/clients/${northline}/people-requests`, {
+          kind: 'leaver',
+          name: 'X',
+          date: '2026-11-03',
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await contact.b.call('POST', `/api/clients/${harbor}/people-requests`, { kind: 'leaver', name: 'X' })).status,
+    ).toBe(400);
+  });
+
+  it('turns a client account’s change request into a short checklist for the team', async () => {
+    const contact = await person('manager@harbor.test', 'amber orchard gate 5', {
+      role: 'client_editor',
+      grants: [{ clientId: harbor, level: 'edit' }],
+    });
+    const sent = await contact.b.call('POST', `/api/clients/${harbor}/change-requests`, {
+      summary: 'A shared mailbox for sales',
+      details: 'sales@harbordental.test, for Dana and Jo',
+    });
+    expect(sent.status, JSON.stringify(sent.data)).toBe(201);
+    const run = (await owner.call('GET', `/api/checklist-runs/${sent.data.id}`)).data;
+    expect(run).toMatchObject({ title: 'Change request: A shared mailbox for sales', dueDate: null, assigneeId: null });
+    expect(run.steps[0].note).toBe('Requested by manager. sales@harbordental.test, for Dana and Jo');
+    expect(run.steps).toHaveLength(4);
+    expect((await contact.b.call('POST', `/api/clients/${harbor}/change-requests`, { summary: ' ' })).status).toBe(400);
+    expect(
+      (await contact.b.call('POST', `/api/clients/${northline}/change-requests`, { summary: 'Nope' })).status,
+    ).toBe(404);
   });
 
   it('handles many ticks at once without running out of database connections', async () => {

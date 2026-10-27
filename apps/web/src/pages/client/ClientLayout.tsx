@@ -56,6 +56,7 @@ import { HealthBadge } from '@/components/ClientHealth';
 import { ReviewPackButton } from '@/components/ReviewPack';
 import { TRACKER, useTrackers } from '@/components/Trackers';
 import { ClientForm, statusTone } from '../Clients';
+import { SiteVisitButton } from '../SiteVisit';
 
 const SECTION_LABELS: Record<ClientSection, string> = {
   assets: 'Assets',
@@ -171,6 +172,7 @@ export function ClientLayout() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
+          {actor.isStaff && <SiteVisitButton clientId={client.id} />}
           {actor.isStaff && <ReviewPackButton clientId={client.id} clientName={client.name} />}
           {actor.isStaff && <ExportButton clientId={client.id} canIncludePasswords={actor.isAdmin} />}
           {atLeast(client.access, 'edit') && (

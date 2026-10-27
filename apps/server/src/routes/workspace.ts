@@ -1,8 +1,22 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { ROLE_INFO, resolveWorkspace, workspacePrefsSchema, type ClientCounts } from '@atlas/shared';
+import {
+  LIST_NAMES,
+  MAX_PINNED_REPORTS,
+  ROLE_INFO,
+  STALE_DOCUMENT_DAYS,
+  listViewSchema,
+  pinReportSchema,
+  resolveWorkspace,
+  workspacePrefsSchema,
+  type ClientCounts,
+  type Role,
+  type TeamPulse,
+} from '@atlas/shared';
 import { z } from 'zod';
+import { requireAdmin } from '../authz.js';
+import { HttpError } from '../errors.js';
 import { ClientService } from '../services/clients.js';
 import { FavoriteService, favoriteType } from '../services/favorites.js';
 import { Scope } from '../services/scope.js';
@@ -51,16 +65,25 @@ export function registerWorkspaceRoutes(
     const menu = body.menu ?? saved.menu;
     await db
       .update(schema.users)
-      .set({ workspace: { ...body, menu, seenWhatsNew: saved.seenWhatsNew } })
+      .set({
+        workspace: {
+          ...body,
+          menu,
+          seenWhatsNew: saved.seenWhatsNew,
+          pinnedReports: saved.pinnedReports,
+          listViews: saved.listViews,
+        },
+      })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
-  // Resets the dashboard and sections. The menu style is a separate choice and stays, as does what's been seen.
+  // Resets the dashboard and sections. The menu style is a separate choice and stays, as do what's been seen and
+  // pinned reports and list views.
   app.delete('/api/account/workspace', authed, async (req) => {
-    const { menu, seenWhatsNew } = await prefs(actorOf(req).id);
+    const { menu, seenWhatsNew, pinnedReports, listViews } = await prefs(actorOf(req).id);
     await db
       .update(schema.users)
-      .set({ workspace: { menu, seenWhatsNew } })
+      .set({ workspace: { menu, seenWhatsNew, pinnedReports, listViews } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
@@ -74,6 +97,88 @@ export function registerWorkspaceRoutes(
       .set({ workspace: { ...saved, seenWhatsNew: seen } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
+  });
+
+  // Pins a report template to the dashboard, or unpins it. Only the person's own pins change; the template itself
+  // is checked when the dashboard lists it, so a pin to one since deleted or unshared simply doesn't show.
+  app.post('/api/account/pinned-reports', authed, async (req) => {
+    const { templateId, pinned } = pinReportSchema.parse(req.body);
+    const saved = await prefs(actorOf(req).id);
+    const current = (saved.pinnedReports ?? []).filter((id) => id !== templateId);
+    if (pinned && current.length >= MAX_PINNED_REPORTS)
+      throw new HttpError(400, `You can pin up to ${MAX_PINNED_REPORTS} reports. Unpin one first.`);
+    await db
+      .update(schema.users)
+      .set({ workspace: { ...saved, pinnedReports: pinned ? [...current, templateId] : current } })
+      .where(eq(schema.users.id, actorOf(req).id));
+    return prefs(actorOf(req).id);
+  });
+
+  // One list's saved view (sort, grouping, columns), kept per person like the menu style.
+  app.put<{ Params: { list: string } }>('/api/account/list-views/:list', authed, async (req) => {
+    const list = z.enum(LIST_NAMES).parse(req.params.list);
+    const view = listViewSchema.parse(req.body);
+    const saved = await prefs(actorOf(req).id);
+    await db
+      .update(schema.users)
+      .set({ workspace: { ...saved, listViews: { ...saved.listViews, [list]: view } } })
+      .where(eq(schema.users.id, actorOf(req).id));
+    return prefs(actorOf(req).id);
+  });
+
+  // ---- team pulse: who has been documenting, this week against last ----
+  app.get('/api/workspace/team-pulse', authed, async (req): Promise<TeamPulse> => {
+    const actor = actorOf(req);
+    requireAdmin(actor);
+    const days = 30;
+    const now = Date.now();
+    const split = new Date(now - days * 86_400_000);
+    const a = schema.activity;
+    const counts = await db
+      .select({
+        actorId: a.actorId,
+        changes: sql<number>`count(*) filter (where ${a.createdAt} >= ${split})::int`,
+        previous: sql<number>`count(*) filter (where ${a.createdAt} < ${split})::int`,
+        clients: sql<number>`count(distinct ${a.clientId}) filter (where ${a.createdAt} >= ${split})::int`,
+      })
+      .from(a)
+      .where(and(eq(a.orgId, actor.orgId), gte(a.createdAt, new Date(now - 2 * days * 86_400_000))))
+      .groupBy(a.actorId);
+    const byId = new Map(counts.map((c) => [c.actorId, c]));
+    // Who owns stale documents: whoever edited a current document last, when that was long ago.
+    const d = schema.documents;
+    const staleRows = await db
+      .select({ userId: d.updatedBy, n: sql<number>`count(*)::int` })
+      .from(d)
+      .where(
+        and(
+          eq(d.orgId, actor.orgId),
+          eq(d.archived, false),
+          lt(d.updatedAt, new Date(now - STALE_DOCUMENT_DAYS * 86_400_000)),
+        ),
+      )
+      .groupBy(d.updatedBy);
+    const stale = new Map(staleRows.map((r) => [r.userId, r.n]));
+    const users = await db
+      .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role, last: schema.users.lastLoginAt })
+      .from(schema.users)
+      .where(and(eq(schema.users.orgId, actor.orgId), eq(schema.users.disabled, false)));
+    const people = users
+      .filter((u) => ROLE_INFO[u.role as Role].staff)
+      .map((u) => {
+        const c = byId.get(u.id);
+        return {
+          id: u.id,
+          name: u.name,
+          changes: c?.changes ?? 0,
+          previous: c?.previous ?? 0,
+          clients: c?.clients ?? 0,
+          stale: stale.get(u.id) ?? 0,
+          lastSignInAt: u.last?.toISOString() ?? null,
+        };
+      })
+      .sort((x, y) => y.changes - x.changes || x.name.localeCompare(y.name));
+    return { days, people };
   });
 
   // ---- client sections ----

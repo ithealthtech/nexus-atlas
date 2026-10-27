@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Mail, MapPin, Pencil, Phone, Plus, Star, Trash2, User } from 'lucide-react';
+import { Mail, MapPin, Pencil, Phone, Plus, Star, Trash2, User, UserPlus } from 'lucide-react';
 import { atLeast, type ContactView, type LocationView } from '@atlas/shared';
 import {
   Badge,
@@ -12,6 +12,7 @@ import {
   Field,
   FormError,
   Input,
+  Select,
   Skeleton,
   Textarea,
   useToast,
@@ -25,6 +26,71 @@ function useClientAccess() {
   const { clientId } = useParams({ strict: false }) as { clientId: string };
   const client = useClient(clientId).data;
   return { clientId, canEdit: atLeast(client?.access ?? 'none', 'edit') };
+}
+
+/** Asks the team to set up someone new, or remove someone leaving. Anyone who can see the client can ask. */
+export function PeopleRequestDialog({ clientId, onClose }: { clientId: string; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api(`/clients/${clientId}/people-requests`, {
+        method: 'POST',
+        body: Object.fromEntries(new FormData(e.currentTarget)),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['activity'] });
+      toast('Request sent to the team.');
+      onClose();
+    } catch (err) {
+      setError(err as ApiError);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      title="Starter or leaver"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="people-request" loading={busy}>
+            Send request
+          </Button>
+        </>
+      }
+    >
+      <form id="people-request" onSubmit={submit} className="space-y-4" noValidate>
+        <Field label="Request">
+          {(p) => (
+            <Select {...p} name="kind" defaultValue="starter">
+              <option value="starter">Someone is joining</option>
+              <option value="leaver">Someone is leaving</option>
+            </Select>
+          )}
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Name" error={error?.fields?.name}>
+            {(p) => <Input {...p} name="name" required autoFocus maxLength={120} />}
+          </Field>
+          <Field label="First or last day" error={error?.fields?.date}>
+            {(p) => <Input {...p} name="date" type="date" required />}
+          </Field>
+        </div>
+        <Field label="Details" help="Job title, manager, what they need access to, or what to do with their files.">
+          {(p) => <Textarea {...p} name="details" rows={4} maxLength={2000} />}
+        </Field>
+        <FormError message={error && !error.fields ? error.message : null} />
+      </form>
+    </Drawer>
+  );
 }
 
 type Kind = 'contacts' | 'locations';
@@ -150,17 +216,24 @@ export function ClientContacts() {
   const { clientId, canEdit } = useClientAccess();
   const { data, isLoading } = useContacts(clientId);
   const [editing, setEditing] = useState<ContactView | 'new' | null>(null);
+  const [requesting, setRequesting] = useState(false);
   const remove = useRemove('contacts', clientId);
   return (
     <Card>
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
         <h2 className="font-semibold">Contacts</h2>
-        {canEdit && (
-          <Button size="sm" onClick={() => setEditing('new')}>
-            <Plus /> Add contact
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setRequesting(true)}>
+            <UserPlus /> Starter or leaver
           </Button>
-        )}
+          {canEdit && (
+            <Button size="sm" onClick={() => setEditing('new')}>
+              <Plus /> Add contact
+            </Button>
+          )}
+        </div>
       </div>
+      {requesting && <PeopleRequestDialog clientId={clientId} onClose={() => setRequesting(false)} />}
       {isLoading ? (
         <Skeleton className="m-5 h-24" />
       ) : !data?.length ? (

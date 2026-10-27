@@ -37,6 +37,8 @@ import { SharedArticle } from '@/pages/SharedArticle';
 import { SharedReport } from '@/pages/SharedReport';
 import { SendPage, Sends } from '@/pages/Sends';
 import { PersonalVault } from '@/pages/PersonalVault';
+import { SiteVisit } from '@/pages/SiteVisit';
+import { HealthMap } from '@/pages/HealthMap';
 import { ReasonProvider } from '@/lib/vault';
 import { ReauthProvider } from '@/components/Reauth';
 import { Groups } from '@/pages/Groups';
@@ -231,7 +233,14 @@ const clientRoutes = [
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
-  createRoute({ getParentRoute: () => appRoute, path: '/reports', component: Reports }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/reports',
+    component: Reports,
+    validateSearch: (search: Record<string, unknown>) => ({
+      template: typeof search.template === 'string' ? search.template : undefined,
+    }),
+  }),
   clientRoute.addChildren(clientRoutes),
   // The old one-page monthly report, retired in 2.0: its links open the client's Reports tab.
   createRoute({
@@ -313,6 +322,8 @@ const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/admin/certificate', component: adminOnly(Certificate) }),
   createRoute({ getParentRoute: () => appRoute, path: '/admin/remote-access', component: adminOnly(RemoteAccess) }),
   createRoute({ getParentRoute: () => appRoute, path: '/expirations', component: Expirations }),
+  createRoute({ getParentRoute: () => appRoute, path: '/visit/$clientId', component: SiteVisit }),
+  createRoute({ getParentRoute: () => appRoute, path: '/health', component: HealthMap }),
   createRoute({ getParentRoute: () => appRoute, path: '/password-health', component: PasswordHealth }),
   createRoute({ getParentRoute: () => appRoute, path: '/sends', component: Sends }),
   createRoute({ getParentRoute: () => appRoute, path: '/my-vault', component: PersonalVault }),

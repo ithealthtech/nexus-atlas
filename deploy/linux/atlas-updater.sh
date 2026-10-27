@@ -25,6 +25,11 @@ REPO="https://github.com/ithealthtech/nexus-atlas.git"
 TAG=""
 REQUESTED_BY=""
 REQUESTED_AT=""
+# Set before an update installs: the backup it took, and how many database migrations had been applied, so a failed
+# update can tell whether the new version already changed the database (and put the backup back if it did).
+BACKUP_FILE=""
+MIGRATIONS_BEFORE=""
+ROLLBACK_NOTE=""
 
 status() { # state message [finished]
   local tmp
@@ -39,13 +44,36 @@ status() { # state message [finished]
   mv -f "$tmp" "$STATUS"
 }
 
-# Puts the previous code back if the installer swapped it in and then failed or was stopped.
+# How many database migrations have been applied; empty when that can't be asked (no psql, or no database URL).
+migration_count() {
+  local url
+  url="$(grep -E '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+  [[ -n "$url" ]] && command -v psql >/dev/null 2>&1 || return 0
+  { psql "$url" -tAqc 'select count(*) from drizzle.__drizzle_migrations' 2>/dev/null || true; } | tr -d '[:space:]'
+}
+
+# Puts the previous code back if the installer swapped it in and then failed or was stopped. If the new version had
+# already migrated the database, the backup taken just before the update is restored too, so the previous version
+# gets the database it knows. ROLLBACK_NOTE says what happened, for the status Atlas shows.
 rollback() {
-  if [[ -d "$APP_DIR.old" ]]; then
-    rm -rf "$APP_DIR.failed"; mv "$APP_DIR" "$APP_DIR.failed" 2>/dev/null || true
-    mv "$APP_DIR.old" "$APP_DIR"
-    systemctl restart msp-atlas || true
+  [[ -d "$APP_DIR.old" ]] || return 0
+  systemctl stop msp-atlas || true
+  rm -rf "$APP_DIR.failed"; mv "$APP_DIR" "$APP_DIR.failed" 2>/dev/null || true
+  mv "$APP_DIR.old" "$APP_DIR"
+  local after
+  after="$(migration_count)"
+  if [[ -z "$MIGRATIONS_BEFORE" || -z "$after" ]]; then
+    ROLLBACK_NOTE=" Atlas couldn't check whether the new version changed the database. If the previous version misbehaves, restore ${BACKUP_FILE:-the backup taken before the update} (Keeping Atlas healthy, Restore a backup)."
+  elif [[ "$after" == "$MIGRATIONS_BEFORE" ]]; then
+    ROLLBACK_NOTE=" The database wasn't changed."
+  elif [[ -n "$BACKUP_FILE" && -f "$BACKUP_FILE" ]] \
+    && (cd "$APP_DIR" && runuser -u atlas -- node --env-file="$ENV_FILE" apps/server/dist/cli/restore.js "$BACKUP_FILE" --replace) >> "$LOG" 2>&1; then
+    ROLLBACK_NOTE=" The new version had already updated the database, so the backup taken just before the update was restored. Anything changed in Atlas while the update was being prepared was lost."
+  else
+    ROLLBACK_NOTE=" The new version had already updated the database, and restoring ${BACKUP_FILE:-the backup taken before the update} failed. Restore it by hand (Keeping Atlas healthy, Restore a backup). See $LOG."
   fi
+  systemctl restart msp-atlas || true
+  atlas_ready 30 || ROLLBACK_NOTE+=" The previous version isn't answering either: check the server."
 }
 
 # Whatever ends this run (an error, the systemd timeout, a signal), it never leaves status.json saying
@@ -57,7 +85,7 @@ on_exit() {
   rm -rf "$WORK"
   if [[ -n "$PHASE" && -z "$DONE" ]]; then
     [[ "$PHASE" == install ]] && rollback
-    status failed "The update to $TAG stopped before it finished (exit $code), so the previous version was kept. See $LOG." \
+    status failed "The update to $TAG stopped before it finished (exit $code), so the previous version was kept.$ROLLBACK_NOTE See $LOG." \
       "$(date -u +%FT%TZ)" || true
   fi
 }
@@ -309,16 +337,21 @@ git ls-remote --exit-code --tags "$REPO" "refs/tags/$TAG" >/dev/null 2>&1 \
 PHASE=backup
 status running "Backing up before updating to $TAG."
 : > "$LOG"; chmod 0640 "$LOG"; chown root:atlas "$LOG"
-if ! (cd "$APP_DIR" && runuser -u atlas -- node --env-file="$ENV_FILE" apps/server/dist/cli/backup.js) >> "$LOG" 2>&1; then
+if ! BACKUP_OUT="$(cd "$APP_DIR" && runuser -u atlas -- node --env-file="$ENV_FILE" apps/server/dist/cli/backup.js 2>&1)"; then
+  echo "$BACKUP_OUT" >> "$LOG"
   fail "The backup before updating failed, so nothing was changed. See $LOG."
 fi
+echo "$BACKUP_OUT" >> "$LOG"
+# "Wrote /var/lib/msp-atlas/backups/….atlasbak (… rows, … files, … bytes)."
+BACKUP_FILE="$(sed -n 's/^Wrote \(.*\.atlasbak\) (.*/\1/p' <<<"$BACKUP_OUT" | tail -n 1)"
+MIGRATIONS_BEFORE="$(migration_count)"
 
 PHASE=install
 status running "Installing $TAG. Atlas restarts when it's ready."
 if ! "$INSTALLER" --version "$TAG" --repo "$REPO" >> "$LOG" 2>&1; then
   # The installer only swaps code after a successful build; if it got that far, put the old code back.
   rollback
-  fail "Updating to $TAG failed; the previous version is running. Last lines: $(tail -n 5 "$LOG" | tr '\n' ' ' | cut -c1-600)"
+  fail "Atlas $TAG didn't install or start, so Atlas went back to the previous version.$ROLLBACK_NOTE Last lines: $(tail -n 5 "$LOG" | tr '\n' ' ' | cut -c1-600)"
 fi
 DONE=1
 status succeeded "Atlas $TAG is installed and running." "$(date -u +%FT%TZ)"

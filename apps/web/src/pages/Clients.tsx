@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { OnboardingCard } from '@/components/Onboarding';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Building2, Plus, Search } from 'lucide-react';
 import { LEVEL_INFO, type ClientSummary } from '@atlas/shared';
@@ -178,6 +179,7 @@ export function Clients() {
           )
         }
       />
+      {actor.isStaff && <OnboardingCard />}
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
           <label className="relative min-w-56 flex-1">

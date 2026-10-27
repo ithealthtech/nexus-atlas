@@ -25,6 +25,37 @@ const answer = (rows: ReturnType<typeof insuranceAnswers>, start: string) =>
   rows.find((r) => r.question.startsWith(start))!;
 
 describe('cyber insurance answers', () => {
+  it('answers endpoint protection from Bitdefender where the client is linked', () => {
+    const protection = (bitdefender: InsuranceFacts['bitdefender']) =>
+      answer(insuranceAnswers(facts({ bitdefender }), TODAY), 'Is endpoint protection');
+    const gaps = protection({ endpoints: 10, licensed: 9, infected: 1, missing: 2 });
+    expect(gaps).toMatchObject({ answer: 'No', source: 'Bitdefender GravityZone' });
+    expect(gaps.evidence).toBe(
+      "9 of 12 devices run Bitdefender with an active licence. 2 RMM devices aren't managed in GravityZone. 1 endpoint is still infected.",
+    );
+    expect(gaps.action).toBe(
+      'Install Bitdefender on the 2 devices without it. Renew or activate 1 licence. Clean the 1 infected endpoint.',
+    );
+    // Every device covered, but one still infected: never a plain Yes.
+    expect(protection({ endpoints: 10, licensed: 10, infected: 1, missing: 0 }).answer).toBe('Partly');
+    expect(protection({ endpoints: 10, licensed: 10, infected: 0, missing: 0 }).answer).toBe('Yes');
+    // Not linked: the RMM's answer, as before.
+    expect(protection(null).source).toBe('ConnectWise RMM');
+  });
+
+  it('answers MFA from Microsoft 365 registration, never more than Partly on registration alone', () => {
+    const mfa = (m: InsuranceFacts['mfa']) =>
+      answer(insuranceAnswers(facts({ mfa: m }), TODAY), 'Is multi-factor authentication');
+    const all = mfa({ accounts: 20, registered: 20 });
+    expect(all).toMatchObject({ answer: 'Partly', source: 'Microsoft 365 (GDAP)' });
+    expect(all.evidence).toContain('20 of 20 enabled accounts are registered for MFA');
+    expect(all.action).not.toContain('register a second factor');
+    const gaps = mfa({ accounts: 20, registered: 12 });
+    expect(gaps.answer).toBe('No');
+    expect(gaps.action).toContain('Have the 8 accounts without MFA register a second factor.');
+    expect(mfa(null).answer).toBe('Not evidenced');
+  });
+
   it('answers Yes only with evidence, and never counts what Atlas cannot see as Yes', () => {
     const rows = insuranceAnswers(facts(), TODAY);
     expect(rows.map((r) => r.answer)).toEqual([

@@ -440,6 +440,41 @@ describe('groups, expirations, and the audit log', () => {
     expect(sent.filter((s) => s.startsWith(OWNER.email))).toEqual([`${OWNER.email}|Expiring soon: 1 item`]);
     await notifier.tick(new Date('2026-09-28T12:00:00')); // Monday: weekly digest
     expect(sent.some((s) => s === `${OWNER.email}|Weekly expirations digest: 1 item`)).toBe(true);
+
+    // An infected endpoint is emailed straight away, once a day, to everyone who can see the client.
+    await t.handle.db.execute(
+      sql`insert into bitdefender_endpoints (org_id, endpoint_id, company_id, client_id, name, infected)
+          select org_id, 'ep-1', 'co-1', id, 'HD-FRONT-01', true from clients where id = ${harbor}`,
+    );
+    const infected = () => sent.filter((s) => s.endsWith('|Bitdefender: 1 infected endpoint'));
+    await notifier.tick(new Date('2026-09-28T13:00:00'));
+    await notifier.tick(new Date('2026-09-28T14:00:00'));
+    expect(infected()).toContain(`${OWNER.email}|Bitdefender: 1 infected endpoint`);
+    expect(infected().filter((s) => s.startsWith(OWNER.email))).toHaveLength(1);
+    await notifier.tick(new Date('2026-09-29T09:00:00'));
+    expect(infected().filter((s) => s.startsWith(OWNER.email))).toHaveLength(2);
+    // Owners and administrators get the week's client health on Monday, once.
+    const digest = new Notifier(t.handle.db, {
+      mail,
+      settings,
+      expirations: new ExpirationService(vault),
+      audit: new AuditService(t.handle.db, keys, settings),
+      clientHealth: {
+        refresh: async () => undefined,
+        week: async () => [
+          { clientId: harbor, clientName: 'Harbor Dental', score: 62, previous: 74 },
+          { clientId: harbor, clientName: 'Harbor Dental (steady)', score: 80, previous: 79 },
+        ],
+      },
+      publicOrigin: 'http://localhost',
+      sendHour: 0,
+    });
+    const monday = new Date('2026-10-05T12:00:00');
+    await digest.tick(monday);
+    await digest.tick(monday);
+    expect(sent.filter((s) => s === `${OWNER.email}|Client health this week: average 71 (down 6)`)).toHaveLength(1);
+    await digest.tick(new Date('2026-10-06T12:00:00'));
+    expect(sent.filter((s) => s.includes('Client health this week'))).toHaveLength(1);
   });
 
   it('chains security events so edits and deletions are detected', async () => {

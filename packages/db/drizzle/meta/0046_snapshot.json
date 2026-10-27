@@ -1,5 +1,5 @@
 {
-  "id": "942c2882-a688-499b-a1a7-d74736674023",
+  "id": "eebed1df-41f9-4635-bb8f-3b3fa7e91ee5",
   "prevId": "3f6b0745-ccb9-4e11-9944-32ecda10b476",
   "version": "7",
   "dialect": "postgresql",
@@ -144,154 +144,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.alert_versions": {
-      "name": "alert_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "org_id": {
-          "name": "org_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "draft_revision": {
-          "name": "draft_revision",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "workspace": {
-          "name": "workspace",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "published_by": {
-          "name": "published_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "publisher_id": {
-          "name": "publisher_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "alert_versions_org_version": {
-          "name": "alert_versions_org_version",
-          "columns": [
-            {
-              "expression": "org_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "version",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "alert_versions_org_revision": {
-          "name": "alert_versions_org_revision",
-          "columns": [
-            {
-              "expression": "org_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "draft_revision",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "alert_versions_org_id_orgs_id_fk": {
-          "name": "alert_versions_org_id_orgs_id_fk",
-          "tableFrom": "alert_versions",
-          "tableTo": "orgs",
-          "columnsFrom": [
-            "org_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "alert_versions_publisher_id_users_id_fk": {
-          "name": "alert_versions_publisher_id_users_id_fk",
-          "tableFrom": "alert_versions",
-          "tableTo": "users",
-          "columnsFrom": [
-            "publisher_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "alert_versions_positive_version": {
-          "name": "alert_versions_positive_version",
-          "value": "\"alert_versions\".\"version\" > 0"
-        },
-        "alert_versions_nonnegative_revision": {
-          "name": "alert_versions_nonnegative_revision",
-          "value": "\"alert_versions\".\"draft_revision\" >= 0"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.api_keys": {
@@ -3260,6 +3112,18 @@
           "notNull": true,
           "default": false
         },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_by": {
+          "name": "verified_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_by": {
           "name": "created_by",
           "type": "uuid",
@@ -3383,6 +3247,19 @@
           "tableTo": "folders",
           "columnsFrom": [
             "folder_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "documents_verified_by_users_id_fk": {
+          "name": "documents_verified_by_users_id_fk",
+          "tableFrom": "documents",
+          "tableTo": "users",
+          "columnsFrom": [
+            "verified_by"
           ],
           "columnsTo": [
             "id"

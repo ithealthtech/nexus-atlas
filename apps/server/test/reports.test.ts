@@ -3,9 +3,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
+import { strFromU8, unzipSync } from 'fflate';
 import { schema } from '@atlas/db';
 import {
   REPORT_KINDS,
+  REPORT_LINK,
   compareReportSections,
   previousReportRun,
   reportDefinitionSchema,
@@ -13,12 +15,13 @@ import {
   reportSectionGroups,
   reportSelectionSchema,
   selectReportSection,
+  type ReportSection,
   type ReportSnapshot,
 } from '@atlas/shared';
 import { staticKeyProvider } from '../src/crypto/keys.js';
 import { SettingsService } from '../src/services/settings.js';
 import { reportCsv, reportPdf } from '../src/services/report-export.js';
-import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+import { OWNER, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TENANT = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const APP = '11111111-2222-4333-8444-555555555555';
@@ -335,6 +338,10 @@ describe('private client reports', () => {
           },
         ],
       });
+    if (url.pathname === '/v1.0/reports/authenticationMethods/userRegistrationDetails')
+      return Response.json({
+        value: [{ userPrincipalName: 'Avery@harbor.example', isMfaRegistered: false, isAdmin: false }],
+      });
     if (url.pathname.startsWith('/v1.0/reports/'))
       return new Response(
         'Display Name,User Principal Name,Is Deleted,Exchange Last Activity Date,Last Activity Date\nAvery Example,avery@harbor.example,False,2026-10-20,2026-10-20\n',
@@ -418,6 +425,32 @@ describe('private client reports', () => {
       updatedAt: new Date('2020-01-01'),
     });
   }
+  it('scores documentation coverage from the essentials on record', async () => {
+    await seed();
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
+    await owner.call('POST', `/api/clients/${clientId}/contacts`, { name: 'Dana Morales', primary: true });
+    await owner.call('POST', `/api/clients/${clientId}/assets`, {
+      layoutId: layouts.find((l) => l.key === 'internet')!.id,
+      name: 'Main line',
+      fields: { provider: 'Spectrum' },
+    });
+    await t.handle.db.insert(schema.documents).values({
+      orgId,
+      clientId,
+      title: 'Backup and restore runbook',
+      content: { type: 'doc' },
+    });
+    await owner.call('POST', `/api/clients/${clientId}/passwords`, {
+      name: 'Office Wi-Fi',
+      category: 'wifi',
+      secret: 'x',
+    });
+    const run = await owner.call('POST', '/api/reports/runs', definition('documentation'));
+    const coverage = (run.data.snapshot as ReportSnapshot).sections[0]!;
+    expect(coverage.rows[0]!.slice(0, 2)).toEqual(['Harbor Dental', '57%']);
+    expect(coverage.rows[0]!.at(-1)).toBe('Location, Network diagram, Admin accounts');
+  });
+
   it('reports domains and certificates by expiry, with the latest automatic check', async () => {
     const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
     const domainLayout = layouts.find((l) => l.key === 'domain')!.id;
@@ -648,6 +681,27 @@ describe('private client reports', () => {
     expect(whole.statusCode).toBe(200);
     expect(whole.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
   });
+  it('links each row to its record on screen, never in what the client is sent', async () => {
+    await seed();
+    const made = await generate('assets');
+    const inventory = (made.data.snapshot.sections as ReportSection[]).find((s) => s.title === 'Asset inventory')!;
+    expect(inventory.links).toHaveLength(inventory.rows.length);
+    expect(inventory.links!.every((l) => !!l && REPORT_LINK.test(l) && l.startsWith('/assets/'))).toBe(true);
+    // The link opens the asset in that row.
+    const first = await owner.call('GET', `/api${inventory.links![0]}`);
+    expect(first.data.name).toBe(inventory.rows[0]![1]);
+    const docs = (await generate('documentation')).data.snapshot.sections.find(
+      (s: ReportSection) => s.title === 'Documentation health',
+    ) as ReportSection;
+    expect(docs.links!.every((l) => l?.startsWith('/documents/'))).toBe(true);
+
+    const link = await owner.call('POST', `/api/reports/runs/${made.data.id}/shares`, { expiresDays: 7 });
+    const token = link.data.url.split('/').pop() as string;
+    const shared = (await t.app.inject({ method: 'GET', url: `/api/shared-reports/${token}` })).json();
+    expect(JSON.stringify(shared)).not.toContain('/assets/');
+    expect(shared.sections[0].links).toBeUndefined();
+  });
+
   it('adds chosen asset fields to the inventory, never long text or fields that no longer exist', async () => {
     await seed();
     await t.handle.db
@@ -695,6 +749,32 @@ describe('private client reports', () => {
       'The asset field "report-workstation:gone" no longer exists or can\'t be reported, so it was left out.',
     ]);
     expect(JSON.stringify(snapshot)).not.toContain('never-export-this');
+    // The warranty that ran out in 2020 is due for replacement now.
+    const forecast = snapshot.sections.find((s) => s.title === 'Hardware replacement forecast')!;
+    expect(forecast.columns).toHaveLength(8);
+    expect(forecast.columns.at(-2)).toBe('Over 5 years old');
+    expect(forecast.rows).toEqual([['Harbor Dental', '1', '0', '0', '0', '0', '0', '0']]);
+
+    // With a purchase date and price, old devices count too, and the cost of replacing what's due is added up.
+    await t.handle.db
+      .update(schema.assetLayouts)
+      .set({
+        fields: [
+          { key: 'renewal', label: 'Warranty', type: 'date', expires: true },
+          { key: 'purchased', label: 'Purchase date', type: 'date' },
+          { key: 'price', label: 'Purchase price', type: 'number' },
+        ],
+      })
+      .where(eq(schema.assetLayouts.key, 'report-workstation'));
+    await t.handle.db
+      .update(schema.assets)
+      .set({ fields: { renewal: '2099-01-01', purchased: '2015-06-01', price: 1250 } })
+      .where(eq(schema.assets.name, 'Office workstation'));
+    const priced = (await owner.call('POST', '/api/reports/runs', definition('assets'))).data
+      .snapshot as ReportSnapshot;
+    const costed = priced.sections.find((s) => s.title === 'Hardware replacement forecast')!;
+    expect(costed.columns.at(-1)).toBe('Replacement cost');
+    expect(costed.rows).toEqual([['Harbor Dental', '0', '0', '0', '0', '0', '1', '0', '1,250']]);
     const tooMany = Array.from({ length: 13 }, (_, i) => `report-workstation:f${i}`);
     expect(
       (await owner.call('POST', '/api/reports/runs', { ...definition('assets'), assetFields: tooMany })).status,
@@ -748,9 +828,15 @@ describe('private client reports', () => {
     expect((await b.call('GET', `/api/reports/runs/${run.id}/shares`)).status).toBe(404);
     expect((await b.call('POST', `/api/reports/runs/${run.id}/shares`, {})).status).toBe(404);
     expect((await b.call('DELETE', `/api/report-shares/${made.data.id}`)).status).toBe(404);
+    // But the client's own people see what was shared with them, in their portal.
+    expect((await b.call('GET', '/api/portal/reports')).data).toEqual([
+      expect.objectContaining({ clientId, title: 'assets report', token }),
+    ]);
+    expect((await owner.call('GET', '/api/portal/reports')).data).toEqual([]);
 
     // Revoked, expired, mistyped or deleted: all look like no link at all.
     expect((await owner.call('DELETE', `/api/report-shares/${made.data.id}`)).data[0].status).toBe('revoked');
+    expect((await b.call('GET', '/api/portal/reports')).data).toEqual([]);
     expect((await open()).statusCode).toBe(404);
     expect((await t.app.inject({ method: 'GET', url: '/api/shared-reports/short' })).statusCode).toBe(404);
     const second = (await owner.call('POST', `/api/reports/runs/${run.id}/shares`, { expiresDays: 30 })).data;
@@ -810,7 +896,25 @@ describe('private client reports', () => {
       const serialized = JSON.stringify(result.data);
       for (const hidden of ['never-export-this', 'Archived workstation', 'Other client asset'])
         expect(serialized).not.toContain(hidden);
-      if (kind === 'documentation') expect(serialized).toContain('Review overdue');
+      if (kind === 'documentation') {
+        expect(serialized).toContain('Review overdue');
+        expect(result.data.snapshot.sections[0]).toMatchObject({
+          title: 'Documentation coverage',
+          columns: ['Client', 'Coverage', 'Contacts', 'Locations', 'Assets', 'Passwords', 'Articles', 'Missing'],
+          rows: [
+            [
+              'Harbor Dental',
+              '0%',
+              '0',
+              '0',
+              '1',
+              '0',
+              '1',
+              'Primary contact, Location, Network diagram, Backup runbook, Internet provider, Admin accounts, Wi-Fi',
+            ],
+          ],
+        });
+      }
       if (kind === 'endpoints') {
         expect(serialized).toContain('Unknown');
         expect(serialized).toContain('24 hours');
@@ -838,6 +942,34 @@ describe('private client reports', () => {
         .status,
     ).toBe(400);
   });
+  it('downloads an evidence pack of PDFs for one client, without adding to report history', async () => {
+    await seed();
+    const pack = await t.app.inject({
+      method: 'GET',
+      url: `/api/reports/evidence-pack?client=${clientId}`,
+      headers: { cookie: owner.cookie },
+    });
+    expect(pack.statusCode, pack.body).toBe(200);
+    expect(pack.headers['content-type']).toBe('application/zip');
+    expect(pack.headers['content-disposition']).toContain(encodeURIComponent('Harbor Dental evidence pack'));
+    const files = unzipSync(new Uint8Array(pack.rawPayload));
+    expect(Object.keys(files).sort()).toEqual(
+      [
+        '01 Security posture.pdf',
+        '02 Cyber insurance readiness.pdf',
+        '03 Endpoint health.pdf',
+        '04 Documentation health.pdf',
+        '05 Asset inventory.pdf',
+        '06 License utilization.pdf',
+        'README.txt',
+      ].sort(),
+    );
+    expect(strFromU8(files['01 Security posture.pdf']!.subarray(0, 5))).toBe('%PDF-');
+    expect(strFromU8(files['README.txt']!)).toContain('Evidence pack for Harbor Dental');
+    expect((await owner.call('GET', '/api/reports/runs')).data).toEqual([]);
+    expect((await owner.call('GET', `/api/reports/evidence-pack?client=${randomUUID()}`)).status).toBe(404);
+  });
+
   it('reports security posture only where the reader may see passwords and rotation', async () => {
     await seed();
     expect(
@@ -881,6 +1013,16 @@ describe('private client reports', () => {
       'Password issues',
       'Device protection and encryption',
       'Automatic password rotation',
+      'Who has access',
+    ]);
+    expect(sections[4]!.rows).toContainEqual([
+      'Harbor Dental',
+      `${OWNER.name} <${OWNER.email}>`,
+      'Owner',
+      'Edit + passwords',
+      expect.any(String),
+      expect.any(String),
+      '',
     ]);
     const overview = sections[0]!;
     const cell = (name: string) => overview.rows[0]![overview.columns.indexOf(name)];

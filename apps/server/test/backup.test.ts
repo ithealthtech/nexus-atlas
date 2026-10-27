@@ -263,6 +263,26 @@ describe('backup and restore', () => {
     );
   });
 
+  it('flags accounts and API keys nobody has used for 60 days', async () => {
+    const ids = async () =>
+      (await owner.call('GET', '/api/status')).data.checks.map((c: { id: string }) => c.id) as string[];
+    expect(await ids()).not.toContain('dormant-users');
+    // Someone who last signed in two months ago. (The owner's own requests keep their session current.)
+    await t.handle.db.execute(
+      sql`insert into users (org_id, email, name, role, password_hash, created_at, last_login_at)
+          select org_id, 'gone@atlas.test', 'Gone Tech', 'technician', 'x', now() - interval '90 days', now() - interval '61 days'
+          from users where email = ${OWNER.email}`,
+    );
+    const status = (await owner.call('GET', '/api/status')).data;
+    const dormant = status.checks.find((c: { id: string }) => c.id === 'dormant-users');
+    expect(dormant.level).toBe('warn');
+    expect(dormant.detail).toContain('Gone Tech');
+    expect(dormant.detail).not.toContain(OWNER.name);
+    // A disabled account is already dealt with.
+    await t.handle.db.execute(sql`update users set disabled = true where email = 'gone@atlas.test'`);
+    expect(await ids()).not.toContain('dormant-users');
+  });
+
   it('describes backup ages in words', async () => {
     const { ago } = await import('../src/services/status.js');
     expect(ago(-5_000)).toBe('less than a minute ago');

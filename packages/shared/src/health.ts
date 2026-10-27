@@ -1,3 +1,5 @@
+import type { RmmHealthFilter, WarrantyFilter } from './data.js';
+
 // ---------- client health score ----------
 /**
  * A client's health, 0–100, from four parts weighted by how much they matter. A part with nothing to measure (no
@@ -31,7 +33,11 @@ export interface HealthFinding {
   gain: number;
   /** Where to fix it, under the client: '/passwords', '/assets', '/documents', '/contacts', and so on. */
   section: string;
+  /** The exact list behind the finding, when there is one: opened in place rather than going to the page. */
+  list?: HealthList;
 }
+/** A list a health finding can open: devices from the RMM, or assets by warranty. */
+export type HealthList = { kind: 'devices'; filter: RmmHealthFilter } | { kind: 'warranty'; filter: WarrantyFilter };
 export interface HealthPartScore {
   part: HealthPart;
   /** 0–100, or null when there was nothing to measure. */
@@ -60,8 +66,19 @@ export interface ClientHealthSummary {
   change: number | null;
   /** The part pulling the score down most, for a one-word reason. */
   weakest: HealthPart | null;
+  /** Each part's score, 0–100, or null when there was nothing to measure (for the health map). */
+  parts: Record<HealthPart, number | null>;
   /** The last 30 days, oldest first. */
   trend: number[];
+}
+
+/** A client's score now and a week ago, for the owners' Monday email. */
+export interface HealthWeek {
+  clientId: string;
+  clientName: string;
+  score: number | null;
+  /** The score about a week ago, or null without one then. */
+  previous: number | null;
 }
 
 export type HealthTone = 'success' | 'primary' | 'warning' | 'danger' | 'neutral';
