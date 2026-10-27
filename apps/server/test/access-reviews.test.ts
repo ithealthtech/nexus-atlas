@@ -29,7 +29,7 @@ describe('access reviews', () => {
     });
     expect(created.status, JSON.stringify(created.data)).toBe(201);
     const { b } = await signIn(t.app, email, TEMP);
-    await b.call('POST', '/api/account/password', { current: TEMP, next: 'review tech pass 77' });
+    await b.call('POST', '/api/account/password', { current: TEMP, next: 'copper lantern field 77' });
     await enroll(b);
     return { b, id: created.data.id as string };
   }

@@ -353,7 +353,7 @@ describe('documentation', () => {
     // Someone who can only read the client sees the badge but can't vouch for the document.
     const reader = await person(
       'reader@atlas.test',
-      'reader fresh pass 12',
+      'copper lantern field 12',
       {
         role: 'technician',
         allClients: 'none',
