@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Safe updates.** When an update installed from **Administration → Updates** doesn't start, Atlas already went back to the previous version. Now, if the new version had already updated the database before failing, Atlas also restores the backup it took just before the update, so the previous version gets the database it knows instead of one it doesn't understand. It then checks the previous version answers. The Updates page says which happened: the database was untouched, or the backup was restored. This protects updates from this release onwards, since an update is run by the version already installed.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

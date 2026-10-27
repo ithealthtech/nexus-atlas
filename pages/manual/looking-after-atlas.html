@@ -224,8 +224,11 @@ npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
         <p>
           <strong>Admin → Updates</strong> lists the published releases newer than yours, with their release notes. On
           servers set up with the Linux installer, an administrator can install one from the page: Atlas asks for your
-          password, takes a backup, installs the release, and puts the previous version back if the install fails.
-          Database changes are not rolled back; the pre-update backup covers that.
+          password, takes a backup, installs the release, and checks it starts. If it doesn't, Atlas goes back to the
+          previous version by itself. If the new version had already updated the database, Atlas also restores the
+          backup it took just before the update, so the previous version gets the database it knows. The Updates page
+          says what happened. Anything changed in Atlas while the update was being prepared (a few minutes) is lost in
+          that case.
         </p>
         <p>
           Docker and Windows installs see the page read-only, and update the way they were installed. See

@@ -297,6 +297,72 @@ missing="$(systemd-run --wait --pipe --quiet -p User=atlas -p NoNewPrivileges=tr
 grep -qx 'LoadState=not-found' <<<"$missing" || fail "a missing unit wasn't reported as not-found: $missing"
 echo "ok: a missing service is reported as not found"
 
+echo "== Updates: a release that doesn't start is rolled back, and a database it changed is restored"
+STATUS_JSON="$UPDATER_DIR/status.json"
+# A repository with the release the request names, and an installer that swaps it in but never gets it running.
+git init -q --bare /tmp/atlas-releases.git
+git init -q /tmp/atlas-release-src
+git -C /tmp/atlas-release-src -c user.email=ci@atlas.test -c user.name=CI commit -q --allow-empty -m release
+git -C /tmp/atlas-release-src tag v9.9.9
+git -C /tmp/atlas-release-src push -q /tmp/atlas-releases.git v9.9.9
+cat > /usr/local/sbin/fake-atlas-install <<'INSTALLER'
+#!/usr/bin/env bash
+# Builds "fine", swaps the code in, and (when told to) migrates the database before failing to start.
+set -e
+systemctl stop msp-atlas
+mv /opt/msp-atlas /opt/msp-atlas.old
+install -d -m 0750 -o root -g atlas /opt/msp-atlas
+if [[ -f /run/atlas-test-migrates ]]; then echo 3 > /var/lib/msp-atlas/migrations; fi
+echo "Atlas did not become ready." >&2
+exit 1
+INSTALLER
+chmod 0755 /usr/local/sbin/fake-atlas-install
+printf 'INSTALLER=/usr/local/sbin/fake-atlas-install\nREPO=/tmp/atlas-releases.git\n' > "$CONF/updater.conf"
+# The database's migration count, as psql would answer, and backup and restore commands that record what they do.
+echo 'DATABASE_URL=postgres://atlas@localhost/atlas' >> "$CONF/atlas.env"
+echo 2 > "$DATA/migrations"; chown atlas:atlas "$DATA/migrations"
+cat > /usr/local/bin/psql <<'PSQL'
+#!/usr/bin/env bash
+cat /var/lib/msp-atlas/migrations
+PSQL
+chmod 0755 /usr/local/bin/psql
+install -d -m 0750 -o root -g atlas "$APP/apps" "$APP/apps/server" "$APP/apps/server/dist" "$APP/apps/server/dist/cli"
+cat > "$APP/apps/server/dist/cli/backup.js" <<BACKUP
+require('fs').writeFileSync('$DATA/backups/atlas-20261027-080000.atlasbak', 'backup');
+console.log('Wrote $DATA/backups/atlas-20261027-080000.atlasbak (1 rows, 0 files, 6 bytes).');
+BACKUP
+cat > "$APP/apps/server/dist/cli/restore.js" <<RESTORE
+const fs = require('fs');
+fs.appendFileSync('$DATA/restored.log', process.argv.slice(2).join(' ') + '\n');
+fs.writeFileSync('$DATA/migrations', '2\n');
+RESTORE
+chown root:atlas "$APP/apps/server/dist/cli/"*.js; chmod 0640 "$APP/apps/server/dist/cli/"*.js
+update() { run "{\"tag\":\"v9.9.9\",\"requestedBy\":\"Test Admin\",\"requestedAt\":\"$(date -u +%FT%TZ)\"}" "$STATUS_JSON"; }
+failU() {
+  echo "--- status.json"; cat "$STATUS_JSON" 2>/dev/null || true; echo
+  echo "--- last-update.log"; cat "$UPDATER_DIR/last-update.log" 2>/dev/null || true
+  fail "$@"
+}
+
+touch /run/atlas-test-migrates
+expect "an update that migrated the database and didn't start" "$(update)" failed
+message="$(field "$STATUS_JSON" message)"
+grep -q 'went back to the previous version' <<<"$message" || failU "the status doesn't say it went back: $message"
+grep -q 'backup taken just before the update was restored' <<<"$message" \
+  || failU "the status doesn't say the backup was restored: $message"
+expect "the backup restored" "$(cat "$DATA/restored.log")" "$DATA/backups/atlas-20261027-080000.atlasbak --replace"
+expect "the database is back where it was" "$(tr -d '[:space:]' < "$DATA/migrations")" 2
+[[ -f "$APP/standin.js" ]] || failU "the previous code isn't back in place"
+expect "Atlas" "$(systemctl is-active msp-atlas)" active
+
+rm -f /run/atlas-test-migrates "$DATA/restored.log"
+expect "an update that didn't start or touch the database" "$(update)" failed
+message="$(field "$STATUS_JSON" message)"
+grep -q "The database wasn't changed" <<<"$message" || failU "the status doesn't say the database was untouched: $message"
+[[ ! -e "$DATA/restored.log" ]] || failU "a backup was restored though the database wasn't changed"
+expect "Atlas" "$(systemctl is-active msp-atlas)" active
+rm -f "$CONF/updater.conf" /usr/local/bin/psql
+
 echo "== The watcher is still listening after all of that"
 expect "msp-atlas-updater.path" "$(systemctl is-active msp-atlas-updater.path)" active
 
