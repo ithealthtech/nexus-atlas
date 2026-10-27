@@ -32,6 +32,12 @@ public sealed class HelloPolicy(TimeProvider time)
     public bool SecretNeedsCheck =>
         Locked || (ForSecrets && (Grace <= TimeSpan.Zero || verifiedAt is not { } at || time.GetUtcNow() - at >= Grace));
 
+    /// <summary>
+    /// Whether showing or copying this secret needs a Windows Hello check first. A restricted password always does,
+    /// whatever the settings and however recent the last check, as the website asks for the password again.
+    /// </summary>
+    public bool SecretNeedsCheckFor(bool restricted) => restricted || SecretNeedsCheck;
+
     /// <summary>Whether the app should lock itself, given how long the computer has gone without input.</summary>
     public bool ShouldLock(TimeSpan idle) => !Locked && LockAfter is { } after && idle >= after;
 

@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Atlas for Windows: Windows Hello for restricted passwords.** Showing, copying, or saving a file from a restricted password asks for Windows Hello every time, whatever the app's Windows Hello settings.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
