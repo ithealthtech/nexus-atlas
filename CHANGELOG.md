@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Site visit.** **Site visit** on a client opens one screen made for a phone: the client's notes and opening hours, each location's address (opens in maps), phone and access notes, the people to ask with tap-to-call, Wi-Fi passwords to copy, and the internet provider with its support number and circuit.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
