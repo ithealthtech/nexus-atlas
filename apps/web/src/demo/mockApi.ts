@@ -28,6 +28,7 @@ import {
   remoteAccessRequestSchema,
   type RemoteAccessView,
   CHECKLIST_TEMPLATES,
+  STALE_DOCUMENT_DAYS,
   RUNBOOK_TEMPLATES,
   runbookContent,
   DEFAULT_BRANDING,
@@ -2205,19 +2206,25 @@ on('GET', '/users', () => users);
 on('GET', '/workspace/team-pulse', () => {
   const day = 86_400_000;
   const age = (a: ActivityView) => Date.now() - Date.parse(a.createdAt);
+  const stale = (name: string) =>
+    documents.filter(
+      (d) =>
+        !d.archived && d.updatedByName === name && Date.now() - Date.parse(d.updatedAt) > STALE_DOCUMENT_DAYS * day,
+    ).length;
   return {
-    days: 7,
+    days: 30,
     people: users
       .filter((u) => !u.disabled && !u.role.startsWith('client'))
       .map((u) => {
         const mine = activity.filter((a) => a.actorName === u.name);
-        const week = mine.filter((a) => age(a) < 7 * day);
+        const week = mine.filter((a) => age(a) < 30 * day);
         return {
           id: u.id,
           name: u.name,
           changes: week.length,
-          previous: mine.filter((a) => age(a) >= 7 * day && age(a) < 14 * day).length,
+          previous: mine.filter((a) => age(a) >= 30 * day && age(a) < 60 * day).length,
           clients: new Set(week.map((a) => a.clientId).filter(Boolean)).size,
+          stale: stale(u.name),
           lastSignInAt: u.lastLoginAt || null,
         };
       })

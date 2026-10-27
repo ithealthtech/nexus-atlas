@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
   ROLE_INFO,
+  STALE_DOCUMENT_DAYS,
   resolveWorkspace,
   workspacePrefsSchema,
   type ClientCounts,
@@ -88,7 +89,7 @@ export function registerWorkspaceRoutes(
   app.get('/api/workspace/team-pulse', authed, async (req): Promise<TeamPulse> => {
     const actor = actorOf(req);
     requireAdmin(actor);
-    const days = 7;
+    const days = 30;
     const now = Date.now();
     const split = new Date(now - days * 86_400_000);
     const a = schema.activity;
@@ -103,6 +104,20 @@ export function registerWorkspaceRoutes(
       .where(and(eq(a.orgId, actor.orgId), gte(a.createdAt, new Date(now - 2 * days * 86_400_000))))
       .groupBy(a.actorId);
     const byId = new Map(counts.map((c) => [c.actorId, c]));
+    // Who owns stale documents: whoever edited a current document last, when that was long ago.
+    const d = schema.documents;
+    const staleRows = await db
+      .select({ userId: d.updatedBy, n: sql<number>`count(*)::int` })
+      .from(d)
+      .where(
+        and(
+          eq(d.orgId, actor.orgId),
+          eq(d.archived, false),
+          lt(d.updatedAt, new Date(now - STALE_DOCUMENT_DAYS * 86_400_000)),
+        ),
+      )
+      .groupBy(d.updatedBy);
+    const stale = new Map(staleRows.map((r) => [r.userId, r.n]));
     const users = await db
       .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role, last: schema.users.lastLoginAt })
       .from(schema.users)
@@ -117,6 +132,7 @@ export function registerWorkspaceRoutes(
           changes: c?.changes ?? 0,
           previous: c?.previous ?? 0,
           clients: c?.clients ?? 0,
+          stale: stale.get(u.id) ?? 0,
           lastSignInAt: u.last?.toISOString() ?? null,
         };
       })

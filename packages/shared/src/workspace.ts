@@ -65,7 +65,7 @@ export const DASHBOARD_WIDGET_INFO: Record<
   warranty: { label: 'Warranties', description: 'Assets by warranty status.', area: 'side' },
   'team-pulse': {
     label: 'Team pulse',
-    description: 'What each person on the team changed this week. Administrators only.',
+    description: 'What each person on the team changed this month, and their stale documents. Administrators only.',
     area: 'side',
   },
 };
@@ -155,6 +155,8 @@ export function resolveWorkspace(saved: unknown): WorkspacePrefs {
 }
 
 // ---------- team pulse ----------
+/** A document nobody has edited for this long counts as stale, for the team pulse. */
+export const STALE_DOCUMENT_DAYS = 180;
 /** How much each person on the team has documented lately, for administrators. */
 export interface TeamPulse {
   days: number;
@@ -166,6 +168,8 @@ export interface TeamPulse {
     previous: number;
     /** Clients they changed something for. */
     clients: number;
+    /** Current documents they last edited that haven't been touched in STALE_DOCUMENT_DAYS: theirs to review. */
+    stale: number;
     lastSignInAt: string | null;
   }[];
 }

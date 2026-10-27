@@ -20,6 +20,7 @@ import {
   type DashboardArea,
   type DashboardWidget,
   type PasswordHealthReport,
+  STALE_DOCUMENT_DAYS,
   type TeamPulse,
   type WorkspacePrefs,
 } from '@atlas/shared';
@@ -477,7 +478,7 @@ export function Dashboard() {
   );
 }
 
-/** What each person on the team changed this week, against last week. Administrators only. */
+/** What each person on the team changed this month, against the month before, and their stale documents. */
 function TeamPulseCard() {
   const { data } = useQuery({
     queryKey: ['team-pulse'],
@@ -487,7 +488,10 @@ function TeamPulseCard() {
   if (!data?.people.length) return null;
   return (
     <Card>
-      <CardHeader title="Team pulse" description={`Changes in the last ${data.days} days, against the week before.`} />
+      <CardHeader
+        title="Team pulse"
+        description={`Changes in the last ${data.days} days, against the ${data.days} before. Stale: documents they edited last, untouched for ${STALE_DOCUMENT_DAYS} days.`}
+      />
       <ul className="divide-y divide-border">
         {data.people.map((p) => (
           <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
@@ -499,6 +503,12 @@ function TeamPulseCard() {
                   : p.lastSignInAt
                     ? `Last signed in ${relativeTime(p.lastSignInAt)}`
                     : 'Never signed in'}
+                {p.stale > 0 && (
+                  <span className="text-warning">
+                    {' '}
+                    · {p.stale} stale {p.stale === 1 ? 'document' : 'documents'}
+                  </span>
+                )}
               </span>
             </span>
             <span className="flex shrink-0 items-center gap-1 tabular-nums">

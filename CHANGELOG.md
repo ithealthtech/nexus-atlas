@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **Team pulse.** Administrators get a dashboard card showing what each person on the team changed in the last seven days, against the week before, and how many clients they worked on. People with no changes show when they last signed in.
+- **Team pulse.** Administrators get a dashboard card showing what each person on the team changed in the last 30 days, against the 30 before, how many clients they worked on, and how many stale documents (untouched for 180 days) they edited last and so should review. People with no changes show when they last signed in.
 
 ## [2.2.0] - 2026-10-23
 
