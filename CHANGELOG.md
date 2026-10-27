@@ -6,6 +6,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Ready-made Teams templates.** Eight editable detailed/compact presets for expirations, reviews, breaches and
+  confirmed infections, with email companions, formatted previews, key facts, next steps and Atlas links.
+
 - **Alert template and rule versions.** Publish a fixed copy of saved email and Teams drafts with a change note,
   browse previous versions, and restore one to drafts. Concurrent changes are protected and sensitive actions
   are recorded in the security log. Publishing does not yet activate automatic delivery.

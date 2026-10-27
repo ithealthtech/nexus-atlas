@@ -77,7 +77,10 @@ export interface TeamsSettingsView extends TeamsSettings {
   hasClientSecret: boolean;
   connection: { name: string; connectedAt: string } | null;
 }
-export const teamsPostSchema = z.object({ content: z.string().trim().min(1).max(12000) });
+export const teamsPostSchema = z.object({
+  content: z.string().trim().min(1).max(12000),
+  format: z.enum(['text', 'formatted']).optional(),
+});
 export const teamsPageSchema = z.object({ cursor: z.string().max(8000).optional() });
 export const teamsInfectionSchema = z.object({
   eventId: z.string().trim().min(1).max(150),
