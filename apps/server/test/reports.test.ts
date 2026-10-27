@@ -424,6 +424,32 @@ describe('private client reports', () => {
       updatedAt: new Date('2020-01-01'),
     });
   }
+  it('scores documentation coverage from the essentials on record', async () => {
+    await seed();
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
+    await owner.call('POST', `/api/clients/${clientId}/contacts`, { name: 'Dana Morales', primary: true });
+    await owner.call('POST', `/api/clients/${clientId}/assets`, {
+      layoutId: layouts.find((l) => l.key === 'internet')!.id,
+      name: 'Main line',
+      fields: { provider: 'Spectrum' },
+    });
+    await t.handle.db.insert(schema.documents).values({
+      orgId,
+      clientId,
+      title: 'Backup and restore runbook',
+      content: { type: 'doc' },
+    });
+    await owner.call('POST', `/api/clients/${clientId}/passwords`, {
+      name: 'Office Wi-Fi',
+      category: 'wifi',
+      secret: 'x',
+    });
+    const run = await owner.call('POST', '/api/reports/runs', definition('documentation'));
+    const coverage = (run.data.snapshot as ReportSnapshot).sections[0]!;
+    expect(coverage.rows[0]!.slice(0, 2)).toEqual(['Harbor Dental', '57%']);
+    expect(coverage.rows[0]!.at(-1)).toBe('Location, Network diagram, Admin accounts');
+  });
+
   it('reports domains and certificates by expiry, with the latest automatic check', async () => {
     const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
     const domainLayout = layouts.find((l) => l.key === 'domain')!.id;
@@ -861,7 +887,25 @@ describe('private client reports', () => {
       const serialized = JSON.stringify(result.data);
       for (const hidden of ['never-export-this', 'Archived workstation', 'Other client asset'])
         expect(serialized).not.toContain(hidden);
-      if (kind === 'documentation') expect(serialized).toContain('Review overdue');
+      if (kind === 'documentation') {
+        expect(serialized).toContain('Review overdue');
+        expect(result.data.snapshot.sections[0]).toMatchObject({
+          title: 'Documentation coverage',
+          columns: ['Client', 'Coverage', 'Contacts', 'Locations', 'Assets', 'Passwords', 'Articles', 'Missing'],
+          rows: [
+            [
+              'Harbor Dental',
+              '0%',
+              '0',
+              '0',
+              '1',
+              '0',
+              '1',
+              'Primary contact, Location, Network diagram, Backup runbook, Internet provider, Admin accounts, Wi-Fi',
+            ],
+          ],
+        });
+      }
       if (kind === 'endpoints') {
         expect(serialized).toContain('Unknown');
         expect(serialized).toContain('24 hours');
