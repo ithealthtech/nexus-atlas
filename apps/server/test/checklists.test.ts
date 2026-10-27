@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
+import { OWNER, enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
 const TEMP = 'temporary pass 1234';
 
@@ -217,6 +217,18 @@ describe('checklists', () => {
       role: 'client_viewer',
       grants: [{ clientId: harbor, level: 'read' }],
     });
+    // With email set up, the team hears about it.
+    await owner.call('PUT', '/api/settings/email', {
+      enabled: true,
+      preset: 'custom',
+      host: 'smtp.example.test',
+      port: 587,
+      security: 'starttls',
+      username: 'atlas',
+      password: 'smtp-secret-4471',
+      fromAddress: 'atlas@example.test',
+      fromName: 'Atlas',
+    });
     const sent = await contact.b.call('POST', `/api/clients/${harbor}/people-requests`, {
       kind: 'starter',
       name: 'Jordan Lee',
@@ -225,6 +237,8 @@ describe('checklists', () => {
     });
     expect(sent.status, JSON.stringify(sent.data)).toBe(201);
     expect(sent.data.title).toBe('New starter: Jordan Lee');
+    expect(t.outbox.map((m) => [m.to, m.subject])).toContainEqual([OWNER.email, 'New starter: Jordan Lee']);
+    expect(t.outbox.some((m) => m.to === 'office@harbor.test')).toBe(false);
     const run = (await owner.call('GET', `/api/checklist-runs/${sent.data.id}`)).data;
     expect(run).toMatchObject({ clientId: harbor, dueDate: '2026-11-03', assigneeId: null });
     expect(run.steps[0].note).toBe('Requested by office. Hygienist; needs the imaging software');

@@ -198,6 +198,23 @@ export class ChecklistService {
     return atLeast((await clientLevels(scope.db, actor)).get(clientId) ?? 'none', 'edit');
   }
 
+  /** Email addresses of the enabled staff who can work on a client's checklists. */
+  async teamEmails(scope: Scope, clientId: string): Promise<string[]> {
+    const users = await scope.db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        role: schema.users.role,
+        allClients: schema.users.allClients,
+      })
+      .from(schema.users)
+      .where(and(eq(schema.users.orgId, scope.actor.orgId), eq(schema.users.disabled, false)));
+    const out: string[] = [];
+    for (const u of users)
+      if (ROLE_INFO[u.role as Role].staff && (await this.canWork(scope, u, clientId))) out.push(u.email);
+    return out;
+  }
+
   // ---- runs ----
   private runSelect(scope: Scope) {
     return scope.db
