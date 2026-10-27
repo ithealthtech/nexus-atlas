@@ -38,6 +38,14 @@ export interface ClientSummary {
   createdAt: string;
   updatedAt: string;
 }
+/** An account or API key nobody has used for this long is flagged as dormant, so stale access gets cleaned up. */
+export const DORMANT_DAYS = 60;
+
+/** True when an account that has signed in before hasn't for DORMANT_DAYS. */
+export function isDormant(u: Pick<UserView, 'lastLoginAt' | 'disabled'>, now = Date.now()): boolean {
+  return !u.disabled && !!u.lastLoginAt && now - Date.parse(u.lastLoginAt) > DORMANT_DAYS * 86_400_000;
+}
+
 export interface UserView {
   id: string;
   email: string;

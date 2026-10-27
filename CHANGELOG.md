@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Dormant access alerts.** System status warns about accounts and API keys nobody has used for 60 days, naming them, and People marks inactive accounts.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
