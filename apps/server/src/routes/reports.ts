@@ -128,6 +128,11 @@ export function registerReportRoutes(
       throw error;
     }
   };
+  // Reports shared with the client account's own clients, for its portal.
+  app.get('/api/portal/reports', authed, async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return shares.forPortal(scopeOf(req));
+  });
   app.get<{ Params: { token: string } }>('/api/shared-reports/:token', async (req, reply) =>
     reply.headers(publicHeaders).send(shares.shared(await opened(req, req.params.token))),
   );
