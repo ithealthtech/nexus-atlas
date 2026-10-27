@@ -47,7 +47,7 @@ import { LayoutService } from '../services/layouts.js';
 import { runBitlockerSync } from '../services/integrations/cw-bitlocker.js';
 import type { ErrorLog } from '../services/repeating.js';
 import { ConnectedSyncScheduler } from '../services/sync-scheduler.js';
-import { securityEvent } from '../services/security-log.js';
+import { requestEvent } from '../services/security-log.js';
 
 const HOUR = 3_600_000;
 
@@ -123,15 +123,7 @@ export function registerIntegrationRoutes(
     requireAdmin(req.session!.actor);
     return req.session!.actor;
   };
-  const event = (req: FastifyRequest, action: string, detail = '') =>
-    securityEvent(db, {
-      orgId: req.session!.actor.orgId,
-      userId: req.session!.actor.id,
-      actor: req.session!.actor.name,
-      action,
-      detail,
-      ip: req.ip,
-    });
+  const event = (req: FastifyRequest, action: string, detail = '') => requestEvent(db, req, action, detail);
   const clientFor = async (orgId: string) => {
     const saved = await settings.cwRmm(orgId);
     if (!saved) throw new HttpError(400, 'Connect ConnectWise RMM first.');

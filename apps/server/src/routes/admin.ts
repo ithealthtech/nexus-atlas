@@ -25,7 +25,7 @@ import { AssetStatsService } from '../services/asset-stats.js';
 import { Scope, isUuid } from '../services/scope.js';
 import type { SettingsService, SmtpConfig } from '../services/settings.js';
 import type { VaultService } from '../services/vault.js';
-import { securityEvent } from '../services/security-log.js';
+import { requestEvent } from '../services/security-log.js';
 
 type Params = { id: string };
 
@@ -83,15 +83,7 @@ export function registerAdminRoutes(
   });
 
   // ---- email and notifications ----
-  const event = (req: FastifyRequest, action: string, detail = '') =>
-    securityEvent(db, {
-      orgId: actorOf(req).orgId,
-      userId: actorOf(req).id,
-      actor: actorOf(req).name,
-      action,
-      detail,
-      ip: req.ip,
-    });
+  const event = (req: FastifyRequest, action: string, detail = '') => requestEvent(db, req, action, detail);
   app.get('/api/settings/email', authed, async (req) => settings.smtpView(admin(req)));
   app.put('/api/settings/email', authed, async (req) => {
     const orgId = admin(req);

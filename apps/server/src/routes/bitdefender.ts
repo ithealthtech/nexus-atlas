@@ -16,7 +16,7 @@ import { companiesWithMapping, deviceLayout, mapCompanies } from '../services/in
 import type { ErrorLog } from '../services/repeating.js';
 import { ConnectedSyncScheduler } from '../services/sync-scheduler.js';
 import { isUuid, Scope } from '../services/scope.js';
-import { securityEvent } from '../services/security-log.js';
+import { requestEvent } from '../services/security-log.js';
 import type { SettingsService, StoredBitdefender } from '../services/settings.js';
 
 const HOUR = 3_600_000;
@@ -66,15 +66,7 @@ export function registerBitdefenderRoutes(
     requireAdmin(req.session!.actor);
     return req.session!.actor;
   };
-  const event = (req: FastifyRequest, action: string, detail = '') =>
-    securityEvent(db, {
-      orgId: req.session!.actor.orgId,
-      userId: req.session!.actor.id,
-      actor: req.session!.actor.name,
-      action,
-      detail,
-      ip: req.ip,
-    });
+  const event = (req: FastifyRequest, action: string, detail = '') => requestEvent(db, req, action, detail);
   const clientFor = async (orgId: string) => {
     const saved = await settings.bitdefender(orgId);
     if (!saved) throw new HttpError(400, `Connect ${PRODUCT} first.`);
