@@ -64,6 +64,15 @@ export interface ClientHealthSummary {
   trend: number[];
 }
 
+/** A client's score now and a week ago, for the owners' Monday email. */
+export interface HealthWeek {
+  clientId: string;
+  clientName: string;
+  score: number | null;
+  /** The score about a week ago, or null without one then. */
+  previous: number | null;
+}
+
 export type HealthTone = 'success' | 'primary' | 'warning' | 'danger' | 'neutral';
 /** The words and colour for a score: Healthy, Good, Needs attention, At risk. */
 export function healthGrade(score: number | null): { label: string; tone: HealthTone } {

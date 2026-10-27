@@ -1,6 +1,6 @@
 import { and, eq, lt, or, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { ROLE_INFO, type ExpirationItem, type Role } from '@atlas/shared';
+import { ROLE_INFO, healthGrade, type ExpirationItem, type HealthWeek, type Role } from '@atlas/shared';
 import { actorFor } from '../identity/service.js';
 import { DEVICE_LIMITS } from '../identity/devices.js';
 import type { AuditService } from './audit.js';
@@ -46,8 +46,11 @@ export class Notifier {
       health?: { nightly(orgId: string): Promise<void> };
       /** Scheduled reports that have come due. Records each outcome on its schedule rather than throwing. */
       reports?: { runDue(orgId: string, now?: Date): Promise<void> };
-      /** Keeps each client's health score current through the day, for its trend. */
-      clientHealth?: { refresh(orgId: string): Promise<void> };
+      /** Keeps each client's health score current through the day, for its trend, and compares it week on week. */
+      clientHealth?: {
+        refresh(orgId: string): Promise<void>;
+        week(orgId: string, now?: number): Promise<HealthWeek[]>;
+      };
       publicOrigin: string;
       /** Local hour (0–23) after which the day's emails go out. */
       sendHour: number;
@@ -79,7 +82,10 @@ export class Notifier {
           await this.deps.reports?.runDue(org.id, now);
           await this.deps.clientHealth?.refresh(org.id).catch(this.log);
           await this.deps.audit.checkpoint(org.id);
-          if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
+          if (now.getHours() >= this.deps.sendHour) {
+            await this.sendForOrg(org, now);
+            await this.sendOwnerDigest(org, now).catch(this.log);
+          }
         }
         this.lastRunAt = new Date();
       } finally {
@@ -150,6 +156,59 @@ export class Notifier {
       const alertKey = `alert:${user.id}:${day}`;
       if (alerts.length && (await this.claim(alertKey, user.id)))
         await this.send(org, user.email, 'Expiring soon', alerts, window).catch(() => this.unclaim(alertKey));
+    }
+  }
+
+  /**
+   * Monday morning, to owners and administrators: how client health moved last week. Average score and its change,
+   * then each client that moved by 3 points or more, biggest drop first. Once a week, with the weekly digest setting.
+   */
+  async sendOwnerDigest(org: { id: string; name: string }, now = new Date()) {
+    if (now.getDay() !== 1 || !this.deps.clientHealth) return;
+    if (!(await this.deps.mail.enabled(org.id)) || !(await this.deps.settings.notifications(org.id)).weeklyDigest)
+      return;
+    const week = (await this.deps.clientHealth.week(org.id, now.getTime())).filter((c) => c.score !== null);
+    if (!week.length) return;
+    const users = await this.db
+      .select()
+      .from(schema.users)
+      .where(
+        and(eq(schema.users.orgId, org.id), eq(schema.users.disabled, false), eq(schema.users.notifyDigest, true)),
+      );
+    for (const user of users.filter((u) => ROLE_INFO[u.role as Role].admin)) {
+      const readable = new Set(await new Scope(this.db, actorFor(user)).readableClientIds());
+      const mine = week.filter((c) => readable.has(c.clientId));
+      if (!mine.length) continue;
+      const key = `owner-digest:${user.id}:${isoWeek(now)}`;
+      if (!(await this.claim(key, user.id))) continue;
+      const average = (list: number[]) => Math.round(list.reduce((n, s) => n + s, 0) / list.length);
+      const current = average(mine.map((c) => c.score!));
+      const before = mine.filter((c) => c.previous !== null);
+      const was = before.length ? average(before.map((c) => c.previous!)) : null;
+      const moved = mine
+        .filter((c) => c.previous !== null && Math.abs(c.score! - c.previous) >= 3)
+        .sort((a, b) => a.score! - a.previous! - (b.score! - b.previous!));
+      const signed = (n: number) => (n > 0 ? `up ${n}` : `down ${-n}`);
+      await this.deps.mail
+        .send(org.id, org.name, {
+          to: user.email,
+          subject: `Client health this week: average ${current}${was !== null && was !== current ? ` (${signed(current - was)})` : ''}`,
+          paragraphs: [
+            `Across ${mine.length} client${mine.length === 1 ? '' : 's'}, the average health score is ${current}${was === null ? '.' : was === current ? ', the same as a week ago.' : `, ${signed(current - was)} from ${was} a week ago.`}`,
+            moved.length
+              ? 'These clients moved by 3 points or more, biggest drop first.'
+              : 'No client moved by 3 points or more.',
+          ],
+          rows: moved.slice(0, 25).map((c) => ({
+            cells: [c.clientName, String(c.score), signed(c.score! - c.previous!), healthGrade(c.score).label],
+            url: `${this.deps.publicOrigin}/clients/${c.clientId}`,
+          })),
+          action: { label: 'Open Atlas', url: this.deps.publicOrigin },
+        })
+        .catch(async (err) => {
+          await this.unclaim(key);
+          throw err;
+        });
     }
   }
 

@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Monday client health email for owners.** Owners and administrators get one email each Monday: the average client health score and how it moved since last week, and every client that moved by 3 points or more, biggest drop first. It follows the weekly digest setting.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

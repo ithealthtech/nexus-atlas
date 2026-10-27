@@ -6,6 +6,7 @@ import {
   WARRANTY_FILTERS,
   isAssetStatsFilter,
   testEmailSchema,
+  type HealthWeek,
   type RmmHealthFilter,
   type WarrantyFilter,
 } from '@atlas/shared';
@@ -48,7 +49,7 @@ export function registerAdminRoutes(
     /** Scheduled reports, sent on the notifier's pass. */
     reports?: { runDue(orgId: string, now?: Date): Promise<void> };
     /** Client health scores, kept current on the notifier's pass. */
-    clientHealth?: { refresh(orgId: string): Promise<void> };
+    clientHealth?: { refresh(orgId: string): Promise<void>; week(orgId: string, now?: number): Promise<HealthWeek[]> };
     graphPermissions?: (config: SmtpConfig) => Promise<{ roles: string[]; canSend: boolean }>;
   },
 ): Notifier {
