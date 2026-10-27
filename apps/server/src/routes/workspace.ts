@@ -1,7 +1,14 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { ROLE_INFO, resolveWorkspace, workspacePrefsSchema, type ClientCounts } from '@atlas/shared';
+import {
+  LIST_NAMES,
+  ROLE_INFO,
+  listViewSchema,
+  resolveWorkspace,
+  workspacePrefsSchema,
+  type ClientCounts,
+} from '@atlas/shared';
 import { z } from 'zod';
 import { ClientService } from '../services/clients.js';
 import { FavoriteService, favoriteType } from '../services/favorites.js';
@@ -51,16 +58,17 @@ export function registerWorkspaceRoutes(
     const menu = body.menu ?? saved.menu;
     await db
       .update(schema.users)
-      .set({ workspace: { ...body, menu, seenWhatsNew: saved.seenWhatsNew } })
+      .set({ workspace: { ...body, menu, seenWhatsNew: saved.seenWhatsNew, listViews: saved.listViews } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
-  // Resets the dashboard and sections. The menu style is a separate choice and stays, as does what's been seen.
+  // Resets the dashboard and sections. The menu style is a separate choice and stays, as do what's been seen and
+  // the list views.
   app.delete('/api/account/workspace', authed, async (req) => {
-    const { menu, seenWhatsNew } = await prefs(actorOf(req).id);
+    const { menu, seenWhatsNew, listViews } = await prefs(actorOf(req).id);
     await db
       .update(schema.users)
-      .set({ workspace: { menu, seenWhatsNew } })
+      .set({ workspace: { menu, seenWhatsNew, listViews } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
@@ -72,6 +80,18 @@ export function registerWorkspaceRoutes(
     await db
       .update(schema.users)
       .set({ workspace: { ...saved, seenWhatsNew: seen } })
+      .where(eq(schema.users.id, actorOf(req).id));
+    return prefs(actorOf(req).id);
+  });
+
+  // One list's saved view (sort, grouping, columns), kept per person like the menu style.
+  app.put<{ Params: { list: string } }>('/api/account/list-views/:list', authed, async (req) => {
+    const list = z.enum(LIST_NAMES).parse(req.params.list);
+    const view = listViewSchema.parse(req.body);
+    const saved = await prefs(actorOf(req).id);
+    await db
+      .update(schema.users)
+      .set({ workspace: { ...saved, listViews: { ...saved.listViews, [list]: view } } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });

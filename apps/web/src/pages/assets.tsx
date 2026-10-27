@@ -5,6 +5,7 @@ import {
   Archive,
   ArchiveRestore,
   ClipboardPaste,
+  Columns3,
   Pencil,
   Plus,
   QrCode,
@@ -15,6 +16,8 @@ import {
 } from 'lucide-react';
 import {
   ASSET_STATUSES,
+  MAX_LIST_COLUMNS,
+  REPORTABLE_FIELD_TYPES,
   atLeast,
   type AssetView,
   type LayoutField,
@@ -26,6 +29,7 @@ import {
   Button,
   Card,
   CardHeader,
+  Checkbox,
   Dialog,
   EmptyState,
   Field,
@@ -47,6 +51,7 @@ import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { useAsset, useAssets, useClient, useClients, useLayouts } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
+import { useListView } from '@/lib/list-views';
 import { AppLink } from '@/components/AppLink';
 import { BackLink, DetailHeader } from '@/components/DetailHeader';
 import { cn } from '@/lib/cn';
@@ -304,8 +309,85 @@ function DomainRefresh({
 }
 
 // ---------------------------------------------------------------- list
-function AssetTable({ assets, layout, showClient }: { assets: AssetView[]; layout?: LayoutView; showClient: boolean }) {
-  const columns: LayoutField[] = layout ? layout.fields.filter((f) => f.showInList).slice(0, 4) : [];
+type AssetSort = 'name' | 'updated' | 'status';
+const ASSET_SORTS: Record<AssetSort, string> = { name: 'Name', updated: 'Recently updated', status: 'Status' };
+const sortAssets = (assets: AssetView[], sort: AssetSort) => {
+  const name = (a: AssetView, b: AssetView) => a.name.localeCompare(b.name, undefined, { numeric: true });
+  const status = (a: AssetView) => ASSET_STATUSES.indexOf(a.status);
+  return [...assets].sort(
+    sort === 'updated'
+      ? (a, b) => b.updatedAt.localeCompare(a.updatedAt) || name(a, b)
+      : sort === 'status'
+        ? (a, b) => status(a) - status(b) || name(a, b)
+        : name,
+  );
+};
+/** Fields that fit a column: short values only, never long text. */
+const columnFields = (layout: LayoutView) => layout.fields.filter((f) => REPORTABLE_FIELD_TYPES.includes(f.type));
+/** The columns for one layout: the person's choice, or the layout's "show in list" fields. */
+function layoutColumns(layout: LayoutView | undefined, chosen: string[] | undefined): LayoutField[] {
+  if (!layout) return [];
+  if (!chosen) return layout.fields.filter((f) => f.showInList).slice(0, 4);
+  const fields = columnFields(layout);
+  return chosen.flatMap((key) => fields.filter((f) => f.key === key)).slice(0, MAX_LIST_COLUMNS);
+}
+
+/** Choose which of a layout's fields show as columns, for this person. */
+function ColumnsDialog({
+  layout,
+  chosen,
+  onSave,
+  onClose,
+}: {
+  layout: LayoutView;
+  chosen: LayoutField[];
+  onSave: (keys: string[] | undefined) => void;
+  onClose: () => void;
+}) {
+  const [keys, setKeys] = useState(chosen.map((f) => f.key));
+  const toggle = (key: string) =>
+    setKeys((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`${layout.name} columns`}
+      description={`Choose up to ${MAX_LIST_COLUMNS}. Only you see this choice.`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onSave(undefined)}>
+            Use the layout's columns
+          </Button>
+          <Button onClick={() => onSave(keys)}>Save</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {columnFields(layout).map((f) => (
+          <Checkbox
+            key={f.key}
+            label={f.label}
+            checked={keys.includes(f.key)}
+            disabled={!keys.includes(f.key) && keys.length >= MAX_LIST_COLUMNS}
+            onChange={() => toggle(f.key)}
+          />
+        ))}
+      </div>
+    </Dialog>
+  );
+}
+
+function AssetTable({
+  assets,
+  layout,
+  columns,
+  showClient,
+}: {
+  assets: AssetView[];
+  layout?: LayoutView;
+  columns: LayoutField[];
+  showClient: boolean;
+}) {
   return (
     <div className="relative overflow-x-auto">
       <table className="w-full text-left text-sm">
@@ -329,14 +411,16 @@ function AssetTable({ assets, layout, showClient }: { assets: AssetView[]; layou
                 <AppLink to={`/assets/${a.id}`} className="flex items-center gap-3">
                   <ItemIcon type="asset" icon={a.layoutIcon} />
                   <span className="min-w-0">
-                    <span className="block font-semibold hover:underline">{a.name}</span>
+                    <span className="block font-semibold whitespace-nowrap hover:underline">{a.name}</span>
                     {!layout && <span className="block text-xs text-muted">{a.layoutName}</span>}
                     {/* On a phone the client column gives way, so the client shows here. */}
                     {showClient && <span className="block text-xs text-muted sm:hidden">{a.clientName}</span>}
                   </span>
                 </AppLink>
               </td>
-              {showClient && <td className="hidden px-5 py-3 text-text-2 sm:table-cell">{a.clientName}</td>}
+              {showClient && (
+                <td className="hidden px-5 py-3 whitespace-nowrap text-text-2 sm:table-cell">{a.clientName}</td>
+              )}
               {columns.map((c) => (
                 <td key={c.key} className="hidden max-w-56 truncate px-5 py-3 text-text-2 md:table-cell">
                   <FieldValue field={c} value={a.fields[c.key]} />
@@ -363,6 +447,9 @@ export function AssetsView({ clientId }: { clientId?: string }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
+  const [choosingColumns, setChoosingColumns] = useState(false);
+  const [view, saveView] = useListView('assets');
+  const sort: AssetSort = view.sort === 'updated' || view.sort === 'status' ? view.sort : 'name';
   const layouts = useLayouts().data ?? [];
   const client = useClient(clientId ?? '');
   const canEdit = clientId ? atLeast(client.data?.access ?? 'none', 'edit') : false;
@@ -370,13 +457,24 @@ export function AssetsView({ clientId }: { clientId?: string }) {
   const layout = layouts.find((l) => l.id === search.layout);
   const rows = useMemo(
     () =>
-      (all.data ?? []).filter(
-        (a) =>
-          (!search.layout || a.layoutId === search.layout) &&
-          `${a.name} ${a.clientName} ${JSON.stringify(a.fields)}`.toLowerCase().includes(query.trim().toLowerCase()),
+      sortAssets(
+        (all.data ?? []).filter(
+          (a) =>
+            (!search.layout || a.layoutId === search.layout) &&
+            `${a.name} ${a.clientName} ${JSON.stringify(a.fields)}`.toLowerCase().includes(query.trim().toLowerCase()),
+        ),
+        sort,
       ),
-    [all.data, search.layout, query],
+    [all.data, search.layout, query, sort],
   );
+  const columns = layoutColumns(layout, layout ? view.columns?.[layout.key] : undefined);
+  const saveColumns = (keys: string[] | undefined) => {
+    if (!layout) return;
+    const rest = { ...view.columns };
+    delete rest[layout.key];
+    saveView({ columns: keys ? { ...rest, [layout.key]: keys } : rest });
+    setChoosingColumns(false);
+  };
   const setLayout = (id?: string) =>
     navigate({ to: '.', search: (prev: Record<string, unknown>) => ({ ...prev, layout: id }) });
   const counts = new Map<string, number>();
@@ -441,6 +539,21 @@ export function AssetsView({ clientId }: { clientId?: string }) {
             >
               {search.archived ? <ArchiveRestore /> : <Archive />} {search.archived ? 'Show active' : 'Show archived'}
             </Button>
+            <label className="w-full sm:w-auto">
+              <span className="sr-only">Sort</span>
+              <Select value={sort} onChange={(e) => saveView({ sort: e.target.value })}>
+                {Object.entries(ASSET_SORTS).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    Sort: {label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {layout && columnFields(layout).length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setChoosingColumns(true)}>
+                <Columns3 /> Columns
+              </Button>
+            )}
             {clientId && !search.archived && (
               <AppLink
                 to="/assets/labels"
@@ -463,7 +576,7 @@ export function AssetsView({ clientId }: { clientId?: string }) {
               ))}
             </div>
           ) : rows.length ? (
-            <AssetTable assets={rows} layout={layout} showClient={!clientId} />
+            <AssetTable assets={rows} layout={layout} columns={columns} showClient={!clientId} />
           ) : (
             <EmptyState
               icon={Server}
@@ -488,6 +601,14 @@ export function AssetsView({ clientId }: { clientId?: string }) {
           )}
         </Card>
       </div>
+      {choosingColumns && layout && (
+        <ColumnsDialog
+          layout={layout}
+          chosen={columns}
+          onSave={saveColumns}
+          onClose={() => setChoosingColumns(false)}
+        />
+      )}
       {adding && clientId && (
         <AssetDialog clientId={clientId} layoutId={search.layout} onClose={() => setAdding(false)} />
       )}

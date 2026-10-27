@@ -230,6 +230,25 @@ describe('favorites, quick notes, and workspace preferences', () => {
     expect((await owner.call('POST', '/api/account/whats-new', { seen: '' })).status).toBe(400);
   });
 
+  it('keeps each list’s sort, grouping and columns per person, whatever else they save or reset', async () => {
+    const get = async () => (await owner.call('GET', '/api/account/workspace')).data;
+    const put = (list: string, view: unknown) => owner.call('PUT', `/api/account/list-views/${list}`, view);
+    expect((await get()).listViews).toBeUndefined();
+    await put('passwords', { sort: 'recent', group: 'client' });
+    await put('assets', { sort: 'updated', columns: { configuration: ['ip_address', 'hostname'] } });
+    await owner.call('PUT', '/api/account/workspace', { widgets: [], hiddenSections: ['map'] });
+    await owner.call('DELETE', '/api/account/workspace');
+    expect((await get()).listViews).toEqual({
+      passwords: { sort: 'recent', group: 'client' },
+      assets: { sort: 'updated', columns: { configuration: ['ip_address', 'hostname'] } },
+    });
+    // Replacing one list's view leaves the others.
+    await put('passwords', { sort: 'name' });
+    expect((await get()).listViews.passwords).toEqual({ sort: 'name' });
+    expect((await put('reports', { sort: 'name' })).status).toBe(400);
+    expect((await put('assets', { columns: { x: Array(9).fill('f') } })).status).toBe(400);
+  });
+
   it('saves dashboard cards and hidden sections per person', async () => {
     const defaults = (await owner.call('GET', '/api/account/workspace')).data;
     expect(defaults.widgets.map((w: { id: string }) => w.id)).toEqual([...DASHBOARD_WIDGETS]);

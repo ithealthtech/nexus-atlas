@@ -3984,12 +3984,17 @@ on('GET', '/admin/setup', () => ({
 }));
 on('PUT', '/account/workspace', (_m, b) => {
   const saved = resolveWorkspace(workspace);
-  workspace = { ...b, menu: b.menu ?? saved.menu, seenWhatsNew: saved.seenWhatsNew };
+  workspace = { ...b, menu: b.menu ?? saved.menu, seenWhatsNew: saved.seenWhatsNew, listViews: saved.listViews };
   return resolveWorkspace(workspace);
 });
 on('DELETE', '/account/workspace', () => {
-  const { menu, seenWhatsNew } = resolveWorkspace(workspace);
-  workspace = { menu, seenWhatsNew };
+  const { menu, seenWhatsNew, listViews } = resolveWorkspace(workspace);
+  workspace = { menu, seenWhatsNew, listViews };
+  return resolveWorkspace(workspace);
+});
+on('PUT', '/account/list-views/:list', (m, b) => {
+  const saved = resolveWorkspace(workspace);
+  workspace = { ...saved, listViews: { ...saved.listViews, [m[1]!]: b } };
   return resolveWorkspace(workspace);
 });
 on('POST', '/account/whats-new', (_m, b) => {

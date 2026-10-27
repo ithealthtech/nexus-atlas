@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Saved list views.** Assets, Documents and Passwords remember how you sort them (and Passwords how you group them) on your account, not just in one browser. On Assets, choose **Columns** for any asset type to pick up to six of its fields to show.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
