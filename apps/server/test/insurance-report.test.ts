@@ -25,6 +25,19 @@ const answer = (rows: ReturnType<typeof insuranceAnswers>, start: string) =>
   rows.find((r) => r.question.startsWith(start))!;
 
 describe('cyber insurance answers', () => {
+  it('answers MFA from Microsoft 365 registration, never more than Partly on registration alone', () => {
+    const mfa = (m: InsuranceFacts['mfa']) =>
+      answer(insuranceAnswers(facts({ mfa: m }), TODAY), 'Is multi-factor authentication');
+    const all = mfa({ accounts: 20, registered: 20 });
+    expect(all).toMatchObject({ answer: 'Partly', source: 'Microsoft 365 (GDAP)' });
+    expect(all.evidence).toContain('20 of 20 enabled accounts are registered for MFA');
+    expect(all.action).not.toContain('register a second factor');
+    const gaps = mfa({ accounts: 20, registered: 12 });
+    expect(gaps.answer).toBe('No');
+    expect(gaps.action).toContain('Have the 8 accounts without MFA register a second factor.');
+    expect(mfa(null).answer).toBe('Not evidenced');
+  });
+
   it('answers Yes only with evidence, and never counts what Atlas cannot see as Yes', () => {
     const rows = insuranceAnswers(facts(), TODAY);
     expect(rows.map((r) => r.answer)).toEqual([

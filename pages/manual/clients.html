@@ -521,8 +521,10 @@
         </p>
         <p>
           <strong>Microsoft 365 accounts</strong> lists every account in each client's linked tenant: enabled or
-          blocked, member or guest, how many licenses it holds, and its usage location. Blocked accounts that still hold
-          licenses, and licensed accounts with no usage location, are flagged.
+          blocked, member or guest, how many licenses it holds, its usage location, and whether it has registered for
+          MFA. Blocked accounts that still hold licenses, licensed accounts with no usage location, and enabled members
+          without MFA are flagged. MFA registration needs the <strong>AuditLog.Read.All</strong> permission, a GDAP role
+          that can read reports, and Microsoft Entra ID P1 or P2 in the tenant (it's in Microsoft 365 Business Premium).
         </p>
         <p>
           <strong>Microsoft 365 usage</strong> shows who uses Microsoft 365 and how, over the last 30 to 180 days

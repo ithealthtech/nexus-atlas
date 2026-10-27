@@ -104,6 +104,14 @@ export interface M365Account {
   guest: boolean;
   licenses: number;
   usageLocation: string;
+  /** Whether the account has registered a second factor; undefined when Microsoft's registration report wasn't read. */
+  mfa?: 'registered' | 'not_registered';
+}
+
+/** What Microsoft's MFA registration report says about one account, by sign-in name (lower case). */
+export interface MfaRegistration {
+  registered: boolean;
+  admin: boolean;
 }
 
 export class M365Client {
@@ -257,6 +265,32 @@ export class M365Client {
       licenses: Array.isArray(u.assignedLicenses) ? u.assignedLicenses.length : 0,
       usageLocation: typeof u.usageLocation === 'string' ? u.usageLocation : '',
     }));
+  }
+
+  /**
+   * Who has registered a second factor, from Microsoft's authentication methods registration report, by sign-in name
+   * in lower case. Needs the AuditLog.Read.All permission, a GDAP role that can read it (Reports Reader, Security
+   * Reader or Global Reader), and Microsoft Entra ID P1 or P2 in the tenant. Blocked accounts aren't listed.
+   */
+  async mfaRegistration(tenant: string): Promise<Map<string, MfaRegistration>> {
+    let rows: Json[];
+    try {
+      rows = await this.all(tenant, '/reports/authenticationMethods/userRegistrationDetails');
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status !== 400) throw error;
+      throw new HttpError(
+        400,
+        "Microsoft refused the MFA registration report. Reconnect the partner account so Atlas has the AuditLog.Read.All permission, grant it in the customer's consent, and give your GDAP group the Reports Reader role. The tenant also needs Microsoft Entra ID P1 or P2 (included in Microsoft 365 Business Premium).",
+      );
+    }
+    return new Map(
+      rows
+        .filter((r) => typeof r.userPrincipalName === 'string')
+        .map((r) => [
+          String(r.userPrincipalName).toLowerCase(),
+          { registered: r.isMfaRegistered === true, admin: r.isAdmin === true },
+        ]),
+    );
   }
 
   /**

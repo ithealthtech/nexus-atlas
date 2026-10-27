@@ -2,6 +2,14 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **MFA status from Microsoft 365.** The **Microsoft 365 accounts** report shows whether each account has registered for MFA. The summary counts enabled members without it, and **Needs review** picks them out. Guests use their own organization's MFA, so they aren't flagged.
+  - The cyber insurance readiness report's MFA question is now answered from this, with the count of accounts registered and what to do about the rest. Registration shows people can use MFA, not that sign-in requires it, so on its own it answers **Partly** at best.
+  - It needs the **AuditLog.Read.All** permission: reconnect the Microsoft 365 partner account once, and grant it in each customer's consent. It also needs a GDAP role such as Reports Reader, and Microsoft Entra ID P1 or P2 in the tenant (included in Microsoft 365 Business Premium). Without them, the report says what's missing.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
