@@ -695,6 +695,10 @@ describe('private client reports', () => {
       'The asset field "report-workstation:gone" no longer exists or can\'t be reported, so it was left out.',
     ]);
     expect(JSON.stringify(snapshot)).not.toContain('never-export-this');
+    // The warranty that ran out in 2020 is due for replacement now.
+    const forecast = snapshot.sections.find((s) => s.title === 'Hardware replacement forecast')!;
+    expect(forecast.columns).toHaveLength(7);
+    expect(forecast.rows).toEqual([['Harbor Dental', '1', '0', '0', '0', '0', '0']]);
     const tooMany = Array.from({ length: 13 }, (_, i) => `report-workstation:f${i}`);
     expect(
       (await owner.call('POST', '/api/reports/runs', { ...definition('assets'), assetFields: tooMany })).status,

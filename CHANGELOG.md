@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Hardware replacement forecast.** The asset report adds, per client, how much hardware is already out of warranty, how much runs out in each of the next four quarters, and how much has no warranty date, so replacements can be budgeted.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

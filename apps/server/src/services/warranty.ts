@@ -44,7 +44,8 @@ export function standing(
 export class WarrantyService {
   constructor(private readonly settings: SettingsService) {}
 
-  private async rows(scope: Scope, clientId?: string): Promise<Row[]> {
+  /** Every hardware asset the scope can read whose layout has a warranty date field, with that date if entered. */
+  async rows(scope: Scope, clientId?: string): Promise<Row[]> {
     const readable = await scope.readableClientIds();
     const ids = clientId ? readable.filter((id) => id === clientId) : readable;
     if (!ids.length) return [];
