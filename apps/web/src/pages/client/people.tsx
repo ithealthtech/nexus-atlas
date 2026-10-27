@@ -220,9 +220,9 @@ export function ClientContacts() {
   const remove = useRemove('contacts', clientId);
   return (
     <Card>
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
         <h2 className="font-semibold">Contacts</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => setRequesting(true)}>
             <UserPlus /> Starter or leaver
           </Button>
