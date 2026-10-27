@@ -2,7 +2,7 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.3.0] - 2026-10-27
 
 ### Added
 
@@ -46,7 +46,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 - **Hover previews.** Rest the mouse on a link to an asset or document, anywhere in Atlas, and a small card shows what it is: an asset's type, client, status and key fields, or a document's client, status and opening words, with when and by whom it was last updated.
 - **Recent viewers.** A password's page says who last used it, beside when it was updated: up to three people, each with when they last viewed, copied, or filled it. The full log stays in **Access history**.
 - **Saved list views.** Assets, Documents and Passwords remember how you sort them (and Passwords how you group them) on your account, not just in one browser. On Assets, choose **Columns** for any asset type to pick up to six of its fields to show.
-- **Atlas for Windows: Windows Hello for restricted passwords.** Showing, copying, or saving a file from a restricted password asks for Windows Hello every time, whatever the app's Windows Hello settings.
+- **Atlas for Windows 1.0.1: Windows Hello for restricted passwords.** Showing, copying, or saving a file from a restricted password asks for Windows Hello every time, whatever the app's Windows Hello settings.
 - **Site visit.** **Site visit** on a client opens one screen made for a phone: the client's notes and opening hours, each location's address (opens in maps), phone and access notes, the people to ask with tap-to-call, Wi-Fi passwords to copy, and the internet provider with its support number and circuit.
 - **Health map.** **Clients → Health map** (and a link on the Client health card) shows every client against each part of its health score (security, endpoints, documentation, renewals) as coloured cells, lowest overall first, with the 30-day change. Each cell opens the client.
 - **Monday client health email for owners.** Owners and administrators get one email each Monday: the average client health score and how it moved since last week, and every client that moved by 3 points or more, biggest drop first. It follows the weekly digest setting.

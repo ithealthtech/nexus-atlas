@@ -9,6 +9,6 @@
     <Product>Atlas for Windows</Product>
     <!-- The app's own version, raised when the app changes (not with every Atlas release). Atlas tells signed-in
          copies which version it offers: keep WINDOWS_APP_VERSION in packages/shared/src/native.ts the same. -->
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 </Project>
