@@ -68,6 +68,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Team pulse.** Administrators get a dashboard card showing what each person on the team changed in the last 30 days, against the 30 before, how many clients they worked on, and how many stale documents (untouched for 180 days) they edited last and so should review. People with no changes show when they last signed in.
+### Added
+
+- **Hover previews.** Rest the mouse on a link to an asset or document, anywhere in Atlas, and a small card shows what it is: an asset's type, client, status and key fields, or a document's client, status and opening words, with when and by whom it was last updated.
 
 ## [2.2.0] - 2026-10-23
 

@@ -57,6 +57,7 @@ import {
 import type { MenuStyle } from '@atlas/shared';
 import { CommandPalette } from '@/components/CommandPalette';
 import { KeyboardShortcuts, SHOW_SHORTCUTS } from '@/components/KeyboardShortcuts';
+import { HoverPeek } from '@/components/HoverPeek';
 import { Avatar, Drawer } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { api } from '@/lib/api';
@@ -875,6 +876,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </Drawer>
       <CommandPalette open={searching} onOpenChange={setSearching} />
       <KeyboardShortcuts onSearch={() => setSearching(true)} />
+      <HoverPeek />
     </div>
   );
 }
