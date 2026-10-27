@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
+import { strFromU8, unzipSync } from 'fflate';
 import { schema } from '@atlas/db';
 import {
   REPORT_KINDS,
@@ -939,6 +940,34 @@ describe('private client reports', () => {
         .status,
     ).toBe(400);
   });
+  it('downloads an evidence pack of PDFs for one client, without adding to report history', async () => {
+    await seed();
+    const pack = await t.app.inject({
+      method: 'GET',
+      url: `/api/reports/evidence-pack?client=${clientId}`,
+      headers: { cookie: owner.cookie },
+    });
+    expect(pack.statusCode, pack.body).toBe(200);
+    expect(pack.headers['content-type']).toBe('application/zip');
+    expect(pack.headers['content-disposition']).toContain(encodeURIComponent('Harbor Dental evidence pack'));
+    const files = unzipSync(new Uint8Array(pack.rawPayload));
+    expect(Object.keys(files).sort()).toEqual(
+      [
+        '01 Security posture.pdf',
+        '02 Cyber insurance readiness.pdf',
+        '03 Endpoint health.pdf',
+        '04 Documentation health.pdf',
+        '05 Asset inventory.pdf',
+        '06 License utilization.pdf',
+        'README.txt',
+      ].sort(),
+    );
+    expect(strFromU8(files['01 Security posture.pdf']!.subarray(0, 5))).toBe('%PDF-');
+    expect(strFromU8(files['README.txt']!)).toContain('Evidence pack for Harbor Dental');
+    expect((await owner.call('GET', '/api/reports/runs')).data).toEqual([]);
+    expect((await owner.call('GET', `/api/reports/evidence-pack?client=${randomUUID()}`)).status).toBe(404);
+  });
+
   it('reports security posture only where the reader may see passwords and rotation', async () => {
     await seed();
     expect(

@@ -215,6 +215,8 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
+  // Security, insurance, endpoint, documentation, asset and license reports for this client, as one zip of PDFs.
+  const [packing, setPacking] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [template, setTemplate] = useState<ReportTemplateView | null>(null);
   const [libraryTab, setLibraryTab] = useState<keyof typeof LIBRARY_TABS>('library');
@@ -378,6 +380,25 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
         eyebrow="Insights & reporting"
         title="Reports"
         description="Client reports from your Atlas records and Microsoft 365, ready to review, export, and share."
+        actions={
+          clientId &&
+          !DEMO && (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={packing}
+              onClick={() => {
+                setPacking(true);
+                setError(null);
+                download(`/reports/evidence-pack?client=${clientId}`, 'evidence-pack.zip')
+                  .catch((e: Error) => setError(e.message))
+                  .finally(() => setPacking(false));
+              }}
+            >
+              <Archive /> Evidence pack
+            </Button>
+          )
+        }
       />
       <FormError message={error} />
       {DEMO && (
