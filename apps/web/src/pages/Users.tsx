@@ -32,6 +32,7 @@ import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
 import { generatePassphrase, useClients, useSave, useUsers } from '@/lib/queries';
 import { formatDate } from '@/lib/format';
+import { DORMANT_DAYS, isDormant } from '@atlas/shared';
 import { accessTone } from './Clients';
 
 function accessSummary(user: UserView, clientNames: Map<string, string>) {
@@ -492,7 +493,14 @@ export function Users() {
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-muted">{formatDate(u.lastLoginAt)}</td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-muted">
+                      {formatDate(u.lastLoginAt)}
+                      {isDormant(u) && (
+                        <Badge tone="warning" className="ml-2">
+                          Inactive {DORMANT_DAYS}+ days
+                        </Badge>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 text-right">
                       <Button variant="secondary" size="sm" onClick={() => setEditing(u)}>
                         Manage

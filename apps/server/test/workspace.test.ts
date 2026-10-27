@@ -30,6 +30,32 @@ describe('favorites, quick notes, and workspace preferences', () => {
   }
   const layoutId = async () => (await owner.call('GET', '/api/layouts')).data[0].id as string;
 
+  it('shows administrators what each person changed this week, against last week', async () => {
+    const tess = await technician('tess@atlas.test', [{ clientId: harbor, level: 'edit' }]);
+    await tess.call('POST', `/api/clients/${harbor}/contacts`, { name: 'Dana Front Desk' });
+    // An older change counts toward the month before.
+    await t.handle.db.execute(
+      sql`insert into activity (org_id, client_id, actor_id, actor_name, action, entity_type, title, created_at)
+          select org_id, ${summit}, id, name, 'Updated', 'client', 'Summit Legal', now() - interval '40 days'
+          from users where email = 'tess@atlas.test'`,
+    );
+    // A document tess edited last, untouched for a year, is hers to review.
+    await t.handle.db.execute(
+      sql`insert into documents (org_id, client_id, title, content, updated_by, updated_at)
+          select org_id, ${harbor}, 'Old runbook', '{"type":"doc"}'::jsonb, id, now() - interval '365 days'
+          from users where email = 'tess@atlas.test'`,
+    );
+    const pulse = (await owner.call('GET', '/api/workspace/team-pulse')).data;
+    expect(pulse.days).toBe(30);
+    const row = pulse.people.find((p: { name: string }) => p.name === 'tess');
+    expect(row).toMatchObject({ changes: 1, previous: 1, clients: 1, stale: 1 });
+    expect(row.lastSignInAt).not.toBeNull();
+    // Everyone on the team is listed, the busiest first, including people with nothing this week.
+    expect(pulse.people[0].name).toBe('tess');
+    expect(pulse.people.map((p: { name: string }) => p.name)).toContain('Avery Owner');
+    expect((await tess.call('GET', '/api/workspace/team-pulse')).status).toBe(403);
+  });
+
   it('keeps favorites per person and lists every kind, passwords included', async () => {
     const asset = (
       await owner.call('POST', `/api/clients/${harbor}/assets`, { layoutId: await layoutId(), name: 'FW-01' })
@@ -228,6 +254,43 @@ describe('favorites, quick notes, and workspace preferences', () => {
     await owner.call('DELETE', '/api/account/workspace');
     expect(await get()).toMatchObject({ seenWhatsNew: WHATS_NEW, hiddenSections: [] });
     expect((await owner.call('POST', '/api/account/whats-new', { seen: '' })).status).toBe(400);
+  });
+
+  it('pins report templates to the dashboard, whatever else they save or reset', async () => {
+    const get = async () => (await owner.call('GET', '/api/account/workspace')).data;
+    const ids = Array.from({ length: 9 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
+    const pin = (templateId: string, pinned = true) =>
+      owner.call('POST', '/api/account/pinned-reports', { templateId, pinned });
+    expect((await pin(ids[0]!)).data.pinnedReports).toEqual([ids[0]]);
+    expect((await pin(ids[1]!)).data.pinnedReports).toEqual([ids[0], ids[1]]);
+    // Pinning again doesn't duplicate; unpinning removes it.
+    expect((await pin(ids[0]!)).data.pinnedReports).toEqual([ids[1], ids[0]]);
+    expect((await pin(ids[1]!, false)).data.pinnedReports).toEqual([ids[0]]);
+    await owner.call('PUT', '/api/account/workspace', { widgets: [], hiddenSections: ['map'] });
+    await owner.call('DELETE', '/api/account/workspace');
+    expect((await get()).pinnedReports).toEqual([ids[0]]);
+    for (const id of ids.slice(1, 8)) expect((await pin(id)).status).toBe(200);
+    expect((await pin(ids[8]!)).status).toBe(400);
+    expect((await pin('not-a-template')).status).toBe(400);
+  });
+
+  it('keeps each list’s sort, grouping and columns per person, whatever else they save or reset', async () => {
+    const get = async () => (await owner.call('GET', '/api/account/workspace')).data;
+    const put = (list: string, view: unknown) => owner.call('PUT', `/api/account/list-views/${list}`, view);
+    expect((await get()).listViews).toBeUndefined();
+    await put('passwords', { sort: 'recent', group: 'client' });
+    await put('assets', { sort: 'updated', columns: { configuration: ['ip_address', 'hostname'] } });
+    await owner.call('PUT', '/api/account/workspace', { widgets: [], hiddenSections: ['map'] });
+    await owner.call('DELETE', '/api/account/workspace');
+    expect((await get()).listViews).toEqual({
+      passwords: { sort: 'recent', group: 'client' },
+      assets: { sort: 'updated', columns: { configuration: ['ip_address', 'hostname'] } },
+    });
+    // Replacing one list's view leaves the others.
+    await put('passwords', { sort: 'name' });
+    expect((await get()).listViews.passwords).toEqual({ sort: 'name' });
+    expect((await put('reports', { sort: 'name' })).status).toBe(400);
+    expect((await put('assets', { columns: { x: Array(9).fill('f') } })).status).toBe(400);
   });
 
   it('saves dashboard cards and hidden sections per person', async () => {

@@ -802,9 +802,11 @@ export class VaultService {
       throw new HttpError(403, 'Your organization doesn’t let read-only accounts reveal passwords.', 'reveal_blocked');
   }
 
-  async reveal(scope: Scope, id: string, input: unknown, ip: string): Promise<RevealResult> {
+  /** `stepUp` runs before a restricted password is revealed, to ask for a fresh password confirmation. */
+  async reveal(scope: Scope, id: string, input: unknown, ip: string, stepUp?: () => void): Promise<RevealResult> {
     const { p, requireReason } = await this.load(scope, id, true);
     await this.requireReveal(scope);
+    if (p.restricted) stepUp?.();
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');
@@ -967,9 +969,17 @@ export class VaultService {
     return rows.map((r) => ({ id: r.id, changedByName: r.changedByName, createdAt: r.createdAt.toISOString() }));
   }
 
-  async revealHistory(scope: Scope, id: string, historyId: string, input: unknown, ip: string): Promise<RevealResult> {
+  async revealHistory(
+    scope: Scope,
+    id: string,
+    historyId: string,
+    input: unknown,
+    ip: string,
+    stepUp?: () => void,
+  ): Promise<RevealResult> {
     const { p, requireReason } = await this.load(scope, id);
     await this.requireReveal(scope);
+    if (p.restricted) stepUp?.();
     const body = revealSchema.parse(input ?? {});
     if (requireReason && !body.reason)
       throw new HttpError(400, 'This client requires a reason before revealing passwords.', 'reason_required');

@@ -1,5 +1,15 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Download, LogIn, ScrollText, Search, ShieldCheck, ShieldX, UserCog } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  Download,
+  LogIn,
+  ScrollText,
+  Search,
+  ShieldCheck,
+  ShieldX,
+  UserCog,
+} from 'lucide-react';
 import type { AuditVerification } from '@atlas/shared';
 import { Button, Card, EmptyState, FormError, Input, PageHeader, Skeleton, useToast } from '@/components/ui';
 import { api, download } from '@/lib/api';
@@ -8,6 +18,7 @@ import { useVaultAudit } from '@/lib/vault';
 import { CardHeader } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { DEMO } from '@/lib/demo';
 
 const style = (action: string) =>
   /fail|lock|block/i.test(action)
@@ -149,6 +160,8 @@ function AuditIntegrity() {
       setBusy(false);
     }
   };
+  // One zip for SOC 2 auditors or insurers; made fresh, with the log checked as it's made.
+  const [packing, setPacking] = useState(false);
   const exportLog = async (kind: 'security' | 'vault') => {
     try {
       await download(`/audit/export/${kind}`, `atlas-${kind}-log-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -169,6 +182,22 @@ function AuditIntegrity() {
             <Button variant="secondary" size="sm" onClick={() => exportLog('vault')}>
               <Download /> Password activity CSV
             </Button>
+            {!DEMO && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={packing}
+                title="The log check, the security log, two-factor status, vault policies, and each client's latest access review, for auditors and insurers"
+                onClick={() => {
+                  setPacking(true);
+                  download('/compliance/evidence-pack', 'atlas-compliance.zip')
+                    .catch((err: Error) => toast(err.message, 'error'))
+                    .finally(() => setPacking(false));
+                }}
+              >
+                <Archive /> Compliance evidence pack
+              </Button>
+            )}
           </>
         }
       />

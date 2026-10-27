@@ -83,6 +83,8 @@ import {
   type ChainProbe,
 } from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerAccessReviewRoutes } from './routes/access-reviews.js';
+import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerClientHealthRoutes } from './routes/client-health.js';
 import { ClientHealthService } from './services/client-health.js';
 import { registerSetupRoutes } from './routes/setup.js';
@@ -758,6 +760,7 @@ export async function buildApp({
     warranty,
     publicOrigin: config.publicOrigin,
     articleLimiter: failureLimiter(30, 15 * 60_000),
+    mail,
   });
   const trackers = new TrackerService(db, settings, {
     domains,
@@ -774,6 +777,10 @@ export async function buildApp({
     storage: files,
     maxUploadBytes,
     shareLimiter: failureLimiter(30, 15 * 60_000),
+    // Browser sessions can confirm a password on the spot; apps and API keys are vetted when they're set up.
+    stepUp: (req) => {
+      if (req.session?.session.kind === 'browser') identity.requireRecentAuth(req.session);
+    },
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
   registerSetupRoutes(app, { db, authed, settings });
@@ -818,6 +825,15 @@ export async function buildApp({
   const reportSchedules = new ReportScheduleService(db, { reports, shares: reportShares, mail, settings });
   const clientHealth = new ClientHealthService(db, { settings, passwords: health, trackers });
   registerClientHealthRoutes(app, { db, authed, health: clientHealth });
+  registerAccessReviewRoutes(app, { db, authed, settings });
+  registerComplianceRoutes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    audit,
+    requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA,
+  });
   const notifier = registerAdminRoutes(app, {
     emergency,
     health,

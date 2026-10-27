@@ -1,7 +1,13 @@
 import { randomBytes } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { createReportShareSchema, type ReportShareView, type ReportSnapshot, type SharedReport } from '@atlas/shared';
+import {
+  createReportShareSchema,
+  type PortalReport,
+  type ReportShareView,
+  type ReportSnapshot,
+  type SharedReport,
+} from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { isUuid, type Scope } from './scope.js';
 import { securityEvent } from './security-log.js';
@@ -115,6 +121,42 @@ export class ReportShareService {
     return this.list(scope, share.runId);
   }
 
+  /**
+   * Reports shared with a client, for that client's own people: every live link to a one-client report of a client
+   * they can see, newest first. Staff see their reports under Reports instead.
+   */
+  async forPortal(scope: Scope): Promise<PortalReport[]> {
+    if (scope.canReadGlobal) return [];
+    const readable = new Set(await scope.readableClientIds());
+    if (!readable.size) return [];
+    const rows = await scope.db
+      .select({ share: schema.reportShares, title: schema.reportRuns.title, clientIds: schema.reportRuns.clientIds })
+      .from(schema.reportShares)
+      .innerJoin(schema.reportRuns, eq(schema.reportRuns.id, schema.reportShares.runId))
+      .where(
+        and(
+          eq(schema.reportShares.orgId, scope.actor.orgId),
+          isNull(schema.reportShares.revokedAt),
+          gt(schema.reportShares.expiresAt, new Date()),
+        ),
+      )
+      .orderBy(desc(schema.reportShares.createdAt))
+      .limit(200);
+    return rows.flatMap((r) =>
+      r.clientIds.length === 1 && readable.has(r.clientIds[0]!)
+        ? [
+            {
+              clientId: r.clientIds[0]!,
+              title: r.title,
+              sharedAt: r.share.createdAt.toISOString(),
+              expiresAt: r.share.expiresAt.toISOString(),
+              token: r.share.token,
+            },
+          ]
+        : [],
+    );
+  }
+
   /** The snapshot behind a link. A revoked or expired link, or one whose report is gone, looks like no link at all. */
   async open(
     token: string,
@@ -149,7 +191,8 @@ export class ReportShareService {
       client: snapshot.clients[0]?.name ?? '',
       generatedAt: snapshot.generatedAt,
       expiresAt: shared.expiresAt.toISOString(),
-      sections: snapshot.sections,
+      // Row links point into Atlas, which the client can't open; they're left out.
+      sections: snapshot.sections.map(({ links: _links, ...section }) => section),
       warnings: snapshot.warnings,
       sources: snapshot.sources,
     };

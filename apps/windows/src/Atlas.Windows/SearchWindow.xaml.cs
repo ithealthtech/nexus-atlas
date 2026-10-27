@@ -1653,7 +1653,7 @@ public sealed partial class SearchWindow : Window
     /// </summary>
     private async Task SaveFileAsync(Row item, AttachmentInfo file, string reason = "")
     {
-        if (item.Kind == "password" && !await SecretCheckAsync("Save a password attachment"))
+        if (item.Kind == "password" && !await SecretCheckAsync("Save a password attachment", IsRestricted(item.Id)))
             return;
         if (app.Client is not { } client)
             return;
@@ -1726,7 +1726,7 @@ public sealed partial class SearchWindow : Window
 
     private async Task<string?> RevealOldAsync(string passwordId, string versionId)
     {
-        if (!await SecretCheckAsync("Show or copy an earlier password"))
+        if (!await SecretCheckAsync("Show or copy an earlier password", IsRestricted(passwordId)))
             return null;
         if (app.Client is not { } client)
             return null;
@@ -1896,11 +1896,12 @@ public sealed partial class SearchWindow : Window
 
     /// <summary>
     /// Before a password or code is shown or copied: asks for Windows Hello unless a check was passed in the last few
-    /// minutes (or Windows Hello isn't set up here). False when it didn't confirm the person.
+    /// minutes (or Windows Hello isn't set up here). A restricted password asks every time. False when it didn't
+    /// confirm the person.
     /// </summary>
-    private async Task<bool> SecretCheckAsync(string message)
+    private async Task<bool> SecretCheckAsync(string message, bool restricted = false)
     {
-        if (!helloAvailable || !hello.SecretNeedsCheck)
+        if (!helloAvailable || !hello.SecretNeedsCheckFor(restricted))
             return true;
         if (await WindowsHello.VerifyAsync(hwnd, message) is { } problem)
         {
@@ -1910,6 +1911,9 @@ public sealed partial class SearchWindow : Window
         hello.Verified();
         return true;
     }
+
+    /// <summary>Whether the password open in the window is this one, and restricted.</summary>
+    private bool IsRestricted(string passwordId) => password is { Restricted: true } open && open.Id == passwordId;
 
     /// <summary>Covers the window until Windows Hello confirms the person. Secrets on screen are hidden first.</summary>
     private void LockApp(string why)
@@ -3184,7 +3188,7 @@ public sealed partial class SearchWindow : Window
             return;
         if (field == SecretField.OneTimeCode && !entry.HasTotp)
             return;
-        if (reason.Length == 0 && !await SecretCheckAsync($"Copy the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
+        if (reason.Length == 0 && !await SecretCheckAsync($"Copy the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}", entry.Restricted))
             return;
         try
         {
@@ -3212,7 +3216,7 @@ public sealed partial class SearchWindow : Window
     {
         if (password is not { } entry || app.Client is not { } client)
             return;
-        if (reason.Length == 0 && !await SecretCheckAsync($"Show the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}"))
+        if (reason.Length == 0 && !await SecretCheckAsync($"Show the {(field == SecretField.OneTimeCode ? "code" : "password")} for {entry.Name}", entry.Restricted))
             return;
         try
         {

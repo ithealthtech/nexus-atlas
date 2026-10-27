@@ -11,6 +11,7 @@ import {
   matchAlertRule,
   renderAlertTemplate,
   bitdefenderHealth,
+  type AccessReviewView,
   type BitdefenderEndpointView,
   type BitdefenderView,
   teamsSettingsSchema,
@@ -30,7 +31,9 @@ import {
   type MicrosoftLicenseView,
   remoteAccessRequestSchema,
   type RemoteAccessView,
+  CHANGE_REQUEST_STEPS,
   CHECKLIST_TEMPLATES,
+  STALE_DOCUMENT_DAYS,
   RUNBOOK_TEMPLATES,
   runbookContent,
   DEFAULT_BRANDING,
@@ -218,6 +221,9 @@ const RMM_MATCH: Record<RmmHealthFilter, (d: RmmHealthDevice) => boolean> = {
   protection_not_running: (d) => d.protection === 'not_running',
   protection_missing: (d) => d.protection === 'missing',
   protection_unknown: (d) => d.protection === null,
+  not_online: (d) => d.online !== true,
+  not_current: (d) => (rmmAge(d) ?? 99) >= 7,
+  protection_problem: (d) => d.protection !== 'running',
 };
 const rmmDevices = (client: string | null) => RMM_SAMPLE.filter((d) => !client || d.clientId === client);
 function rmmCounts(list: RmmHealthDevice[]): RmmHealthCounts {
@@ -515,7 +521,13 @@ function trackerReport(client: string | null): TrackerReport {
 
 // ---------- documentation ----------
 const assets = db.assets.map((a) => ({ ...a, ...meta() }));
-const documents = db.documents.map((d) => ({ ...d, ...meta() }));
+// The first document was verified recently, so the demo shows the badge.
+const documents = db.documents.map((d, i) => ({
+  ...d,
+  ...meta(),
+  verifiedAt: i === 0 ? ago(12 * 24 * 60) : (null as string | null),
+  verifiedByName: i === 0 ? db.owner.name : (null as string | null),
+}));
 const folders: { id: string; clientId: string | null; name: string }[] = [];
 const contacts = [...db.contacts];
 const locations = [...db.locations];
@@ -880,6 +892,8 @@ const find = <T extends { id: string }>(list: T[], id: string, what = 'Item') =>
 const clientSummary = (c: (typeof db.clients)[0]) => ({ ...c, access: 'edit_passwords' });
 
 on('GET', '/reports/templates', () => []);
+// The demo signs in as staff, who see reports under Reports rather than in a client portal.
+on('GET', '/portal/reports', () => []);
 on('GET', '/reports/schedules', () => []);
 
 // Client license tracking in the clickable demo. Microsoft writes are never simulated as live changes.
@@ -1189,6 +1203,9 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
     if (definition.kind === 'accounts') {
       const licensed = (u: (typeof people)[0]) => u.skuIds.length > 0;
       const location = (u: (typeof people)[0]) => (u.name === 'Scanner' || u.name === 'Billing' ? '' : 'US');
+      // Microsoft doesn't list blocked accounts in its MFA registration report; one in four others hasn't registered.
+      const mfa = (u: (typeof people)[0], i: number) =>
+        !u.enabled ? 'Not read' : i % 4 === 1 ? 'Not registered' : 'Registered';
       sections.push(
         {
           title: 'Account summary',
@@ -1203,6 +1220,7 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
             'Unlicensed',
             'Blocked & licensed',
             'No usage location',
+            'Without MFA',
           ],
           rows: people.length
             ? [
@@ -1217,14 +1235,15 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
                   String(people.filter((u) => !licensed(u)).length),
                   String(people.filter((u) => !u.enabled && licensed(u)).length),
                   String(people.filter((u) => licensed(u) && !location(u)).length),
+                  String(people.filter((u, i) => mfa(u, i) === 'Not registered').length),
                 ],
               ]
             : [],
         },
         {
           title: 'Accounts',
-          columns: ['Client', 'Name', 'Sign-in name', 'Status', 'Type', 'Licenses', 'Usage location'],
-          rows: people.map((u) => [
+          columns: ['Client', 'Name', 'Sign-in name', 'Status', 'Type', 'Licenses', 'Usage location', 'MFA'],
+          rows: people.map((u, i) => [
             'Harbor Dental Group',
             u.name,
             u.upn,
@@ -1232,6 +1251,7 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
             'Member',
             String(u.skuIds.length),
             location(u),
+            mfa(u, i),
           ]),
         },
       );
@@ -1363,33 +1383,34 @@ function demoReport(definition: ReportDefinition): ReportRunDetail {
       );
     }
   } else if (definition.kind === 'assets') {
+    const chosen = assets.filter((a) => definition.clientIds.includes(a.clientId));
     sections.push({
       title: 'Asset inventory',
       columns: ['Client', 'Asset', 'Type', 'Status', 'Last updated'],
-      rows: assets
-        .filter((a) => definition.clientIds.includes(a.clientId))
-        .map((a) => [
-          name(a.clientId),
-          a.name,
-          db.layouts.find((l) => l.id === a.layoutId)?.name ?? '',
-          a.status[0]!.toUpperCase() + a.status.slice(1),
-          day(a.updatedAt),
-        ]),
+      links: chosen.map((a) => `/assets/${a.id}`),
+      rows: chosen.map((a) => [
+        name(a.clientId),
+        a.name,
+        db.layouts.find((l) => l.id === a.layoutId)?.name ?? '',
+        a.status[0]!.toUpperCase() + a.status.slice(1),
+        day(a.updatedAt),
+      ]),
     });
   } else if (definition.kind === 'documentation') {
+    const chosen = documents.filter((d) => d.clientId && definition.clientIds.includes(d.clientId));
     sections.push({
       title: 'Documentation health',
-      columns: ['Client', 'Article', 'Status', 'Review due', 'Last updated', 'Attention'],
-      rows: documents
-        .filter((d) => d.clientId && definition.clientIds.includes(d.clientId))
-        .map((d) => [
-          name(d.clientId),
-          d.title,
-          d.status === 'needs_review' ? 'Outdated' : d.status[0]!.toUpperCase() + d.status.slice(1),
-          day(d.reviewDate),
-          day(d.updatedAt),
-          d.status === 'needs_review' ? 'Review overdue' : 'No date-based issue detected',
-        ]),
+      columns: ['Client', 'Article', 'Status', 'Review due', 'Last updated', 'Last verified', 'Attention'],
+      links: chosen.map((d) => `/documents/${d.id}`),
+      rows: chosen.map((d) => [
+        name(d.clientId),
+        d.title,
+        d.status === 'needs_review' ? 'Outdated' : d.status[0]!.toUpperCase() + d.status.slice(1),
+        day(d.reviewDate),
+        day(d.updatedAt),
+        d.verifiedAt ? day(d.verifiedAt) : 'Never',
+        d.status === 'needs_review' ? 'Review overdue' : 'No date-based issue detected',
+      ]),
     });
   } else {
     // The other reports read sources the demo doesn't have (RMM, tickets, password health): a summary per client.
@@ -1730,6 +1751,8 @@ on('POST', '/documents', (_m, b) => {
     content: (b.content as RichText) ?? { type: 'doc', content: [] },
     ...meta(),
     updatedAt: now(),
+    verifiedAt: null,
+    verifiedByName: null,
   };
   if (!d.title) throw new MockError(400, 'Title is required.');
   documents.push(d);
@@ -1798,6 +1821,14 @@ on('PATCH', '/documents/:id', (m, b) => {
   Object.assign(d, changes, { version: d.version + 1, updatedAt: now() });
   snapshot(d.id, d.version, d as unknown as Json);
   record('Updated', 'document', d.id, d.title, d.clientId);
+  return { ...docSummary(d), content: d.content, canEdit: true };
+});
+on('POST', '/documents/:id/verify', (m) => {
+  const d = find(documents, m[1]!, 'Document');
+  d.verifiedAt = now();
+  d.verifiedByName = db.owner.name;
+  if (d.status === 'needs_review') d.status = 'current';
+  if (d.reviewDate) d.reviewDate = daysFromNow(180);
   return { ...docSummary(d), content: d.content, canEdit: true };
 });
 on('POST', '/documents/:id/archive', (m, b) => {
@@ -2204,6 +2235,80 @@ on('POST', '/shares/:token/open', (m) => {
 
 // people, groups, settings, expirations, audit log
 on('GET', '/users', () => users);
+// Access reviews: everyone on the team can open every demo client, so each review lists them all.
+const accessReviews: AccessReviewView[] = [];
+on('GET', '/clients/:id/access-reviews', (m) => accessReviews.filter((r) => r.clientId === m[1]));
+on('POST', '/clients/:id/access-reviews', (m) => {
+  const client = find(db.clients, m[1]!, 'Client');
+  const open = accessReviews.find((r) => r.clientId === client.id && !r.completedAt);
+  if (open) return open;
+  const review: AccessReviewView = {
+    id: uuid(),
+    clientId: client.id,
+    clientName: client.name,
+    items: users.map((u) => ({
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      level: u.role === 'owner' ? 'edit_passwords' : (u.allClients ?? 'edit'),
+      via: [u.role === 'owner' ? 'All clients' : 'Direct'],
+      mfa: u.mfa,
+      lastLoginAt: u.lastLoginAt,
+      decision: null,
+      decidedByName: null,
+      decidedAt: null,
+    })),
+    startedByName: db.owner.name,
+    createdAt: now(),
+    completedAt: null,
+    signedName: null,
+  };
+  accessReviews.unshift(review);
+  return review;
+});
+on('POST', '/access-reviews/:id/decisions', (m, b) => {
+  const review = find(accessReviews, m[1]!, 'Access review');
+  const item = review.items.find((i) => i.userId === b.userId);
+  if (!item) throw new MockError(404, 'That person isn’t in this review.');
+  Object.assign(item, { decision: b.decision, decidedByName: db.owner.name, decidedAt: now(), stillHasAccess: false });
+  return review;
+});
+on('POST', '/access-reviews/:id/sign-off', (m, b) => {
+  const review = find(accessReviews, m[1]!, 'Access review');
+  if (review.items.some((i) => !i.decision)) throw new MockError(400, 'Keep or remove everyone first.', 'undecided');
+  Object.assign(review, { completedAt: now(), signedName: String(b.signedName ?? db.owner.name) });
+  return review;
+});
+// Counted from the demo's own activity feed, by name, as the server counts by person.
+on('GET', '/workspace/team-pulse', () => {
+  const day = 86_400_000;
+  const age = (a: ActivityView) => Date.now() - Date.parse(a.createdAt);
+  const stale = (name: string) =>
+    documents.filter(
+      (d) =>
+        !d.archived && d.updatedByName === name && Date.now() - Date.parse(d.updatedAt) > STALE_DOCUMENT_DAYS * day,
+    ).length;
+  return {
+    days: 30,
+    people: users
+      .filter((u) => !u.disabled && !u.role.startsWith('client'))
+      .map((u) => {
+        const mine = activity.filter((a) => a.actorName === u.name);
+        const week = mine.filter((a) => age(a) < 30 * day);
+        return {
+          id: u.id,
+          name: u.name,
+          changes: week.length,
+          previous: mine.filter((a) => age(a) >= 30 * day && age(a) < 60 * day).length,
+          clients: new Set(week.map((a) => a.clientId).filter(Boolean)).size,
+          stale: stale(u.name),
+          lastSignInAt: u.lastLoginAt || null,
+        };
+      })
+      .sort((x, y) => y.changes - x.changes || x.name.localeCompare(y.name)),
+  };
+});
 on('POST', '/users', (_m, b) => {
   const u = {
     id: uuid(),
@@ -2617,7 +2722,14 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         part: 'endpoints',
         score: 96,
         detail: '24 devices in the RMM',
-        findings: [{ text: '1 device not checked in within 7 days', gain: 1, section: '/assets' }],
+        findings: [
+          {
+            text: '1 device not checked in within 7 days',
+            gain: 1,
+            section: '/assets',
+            list: { kind: 'devices', filter: 'not_current' },
+          },
+        ],
       },
       {
         part: 'documentation',
@@ -2643,14 +2755,21 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         detail: '9 passwords, protection on 12 devices',
         findings: [
           { text: '3 of 9 passwords have issues, 1 found in a data breach', gain: 10, section: '/passwords' },
-          { text: '1 device without endpoint protection running', gain: 1, section: '/assets' },
+          {
+            text: '1 device without endpoint protection running',
+            gain: 1,
+            section: '/assets',
+            list: { kind: 'devices', filter: 'protection_problem' },
+          },
         ],
       },
       {
         part: 'endpoints',
         score: 88,
         detail: '12 devices in the RMM',
-        findings: [{ text: '1 device not online', gain: 1, section: '/assets' }],
+        findings: [
+          { text: '1 device not online', gain: 1, section: '/assets', list: { kind: 'devices', filter: 'not_online' } },
+        ],
       },
       {
         part: 'documentation',
@@ -2665,7 +2784,9 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         part: 'renewals',
         score: 75,
         detail: '6 dated items',
-        findings: [{ text: '1 warranty expired', gain: 3, section: '/assets' }],
+        findings: [
+          { text: '1 warranty expired', gain: 3, section: '/assets', list: { kind: 'warranty', filter: 'expired' } },
+        ],
       },
     ],
   },
@@ -2686,7 +2807,14 @@ const DEMO_HEALTH: { score: number; drift: number; parts: HealthPartScore[] }[] 
         part: 'endpoints',
         score: 61,
         detail: '9 devices in the RMM',
-        findings: [{ text: '3 devices not checked in within 7 days', gain: 4, section: '/assets' }],
+        findings: [
+          {
+            text: '3 devices not checked in within 7 days',
+            gain: 4,
+            section: '/assets',
+            list: { kind: 'devices', filter: 'not_current' },
+          },
+        ],
       },
       {
         part: 'documentation',
@@ -2737,6 +2865,7 @@ on('GET', '/client-health', (): ClientHealthSummary[] =>
         score: h.score,
         change: h.score - trend[0]!.score,
         weakest: weakest.score! < 90 ? weakest.part : null,
+        parts: Object.fromEntries(h.parts.map((p) => [p.part, p.score])) as ClientHealthSummary['parts'],
         trend: trend.map((p) => p.score),
       };
     })
@@ -3859,6 +3988,8 @@ on('POST', '/templates', (_m, b) => {
       content: runbookContent(t.body),
       ...meta(),
       updatedAt: now(),
+      verifiedAt: null,
+      verifiedByName: null,
     };
     documents.push(d);
     snapshot(d.id, 1, d as unknown as Json);
@@ -3899,6 +4030,59 @@ on('POST', '/clients/:id/checklist-runs', (m, b) => {
   runs.unshift(r);
   record('Started', 'checklist_run', r.id, r.title, r.clientId);
   return runView(r);
+});
+on('POST', '/clients/:id/people-requests', (m, b) => {
+  if (!b.name || !b.date) throw new MockError(400, 'Enter their name and first or last day.');
+  const template = CHECKLIST_TEMPLATES.find(
+    (t) => t.key === (b.kind === 'leaver' ? 'user-offboarding' : 'user-onboarding'),
+  )!;
+  const title = `${b.kind === 'leaver' ? 'Leaver' : 'New starter'}: ${String(b.name)}`;
+  const r = {
+    id: uuid(),
+    clientId: m[1]!,
+    checklistId: null,
+    title,
+    steps: template.steps.map((text, i) => ({
+      id: uuid(),
+      text,
+      doneAt: null,
+      doneBy: null,
+      note: i === 0 ? String(b.details ?? '') : '',
+    })),
+    assigneeId: null,
+    dueDate: String(b.date),
+    completedAt: null,
+    createdAt: now(),
+    createdBy: db.owner.id,
+  };
+  runs.unshift(r);
+  record('Requested', 'checklist_run', r.id, title, r.clientId);
+  return { id: r.id, title };
+});
+on('POST', '/clients/:id/change-requests', (m, b) => {
+  if (!String(b.summary ?? '').trim()) throw new MockError(400, 'Say what you need changed.');
+  const title = `Change request: ${String(b.summary)}`;
+  const r = {
+    id: uuid(),
+    clientId: m[1]!,
+    checklistId: null,
+    title,
+    steps: CHANGE_REQUEST_STEPS.map((text, i) => ({
+      id: uuid(),
+      text,
+      doneAt: null,
+      doneBy: null,
+      note: i === 0 ? String(b.details ?? '') : '',
+    })),
+    assigneeId: null,
+    dueDate: (b.date as string | null) ?? null,
+    completedAt: null,
+    createdAt: now(),
+    createdBy: db.owner.id,
+  };
+  runs.unshift(r);
+  record('Requested', 'checklist_run', r.id, title, r.clientId);
+  return { id: r.id, title };
 });
 on('GET', '/checklist-runs/:id', (m) => runView(find(runs, m[1]!, 'Checklist run')));
 on('PATCH', '/checklist-runs/:id', (m, b) => {
@@ -3987,12 +4171,29 @@ on('GET', '/admin/setup', () => ({
 }));
 on('PUT', '/account/workspace', (_m, b) => {
   const saved = resolveWorkspace(workspace);
-  workspace = { ...b, menu: b.menu ?? saved.menu, seenWhatsNew: saved.seenWhatsNew };
+  workspace = {
+    ...b,
+    menu: b.menu ?? saved.menu,
+    seenWhatsNew: saved.seenWhatsNew,
+    pinnedReports: saved.pinnedReports,
+    listViews: saved.listViews,
+  };
   return resolveWorkspace(workspace);
 });
 on('DELETE', '/account/workspace', () => {
-  const { menu, seenWhatsNew } = resolveWorkspace(workspace);
-  workspace = { menu, seenWhatsNew };
+  const { menu, seenWhatsNew, pinnedReports, listViews } = resolveWorkspace(workspace);
+  workspace = { menu, seenWhatsNew, pinnedReports, listViews };
+  return resolveWorkspace(workspace);
+});
+on('POST', '/account/pinned-reports', (_m, b) => {
+  const saved = resolveWorkspace(workspace);
+  const rest = (saved.pinnedReports ?? []).filter((id) => id !== b.templateId);
+  workspace = { ...saved, pinnedReports: b.pinned ? [...rest, String(b.templateId)] : rest };
+  return resolveWorkspace(workspace);
+});
+on('PUT', '/account/list-views/:list', (m, b) => {
+  const saved = resolveWorkspace(workspace);
+  workspace = { ...saved, listViews: { ...saved.listViews, [m[1]!]: b } };
   return resolveWorkspace(workspace);
 });
 on('POST', '/account/whats-new', (_m, b) => {

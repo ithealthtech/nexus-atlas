@@ -12,7 +12,7 @@ import { HuduClient, previewHudu, runHuduImport } from '../services/importers/hu
 import type { SettingsService } from '../services/settings.js';
 import type { FileStorage } from '../services/storage.js';
 import type { VaultService } from '../services/vault.js';
-import { securityEvent } from '../services/security-log.js';
+import { requestEvent } from '../services/security-log.js';
 
 /** Imports (Hudu, CSV) and per-client exports. */
 export function registerDataRoutes(
@@ -34,15 +34,7 @@ export function registerDataRoutes(
     requireAdmin(actorOf(req));
     return actorOf(req);
   };
-  const event = (req: FastifyRequest, action: string, detail: string) =>
-    securityEvent(db, {
-      orgId: actorOf(req).orgId,
-      userId: actorOf(req).id,
-      actor: actorOf(req).name,
-      action,
-      detail,
-      ip: req.ip,
-    });
+  const event = (req: FastifyRequest, action: string, detail = '') => requestEvent(db, req, action, detail);
   const huduClient = async (orgId: string) => {
     const saved = await settings.hudu(orgId);
     if (!saved) throw new HttpError(400, 'Connect Hudu first: enter its address and an API key.');

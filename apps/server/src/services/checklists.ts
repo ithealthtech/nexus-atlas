@@ -4,7 +4,11 @@ import { schema } from '@atlas/db';
 import {
   ROLE_INFO,
   atLeast,
+  CHANGE_REQUEST_STEPS,
+  CHECKLIST_TEMPLATES,
+  changeRequestSchema,
   checklistSchema,
+  peopleRequestSchema,
   startRunSchema,
   tickStepSchema,
   updateChecklistSchema,
@@ -196,6 +200,23 @@ export class ChecklistService {
     return atLeast((await clientLevels(scope.db, actor)).get(clientId) ?? 'none', 'edit');
   }
 
+  /** Email addresses of the enabled staff who can work on a client's checklists. */
+  async teamEmails(scope: Scope, clientId: string): Promise<string[]> {
+    const users = await scope.db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        role: schema.users.role,
+        allClients: schema.users.allClients,
+      })
+      .from(schema.users)
+      .where(and(eq(schema.users.orgId, scope.actor.orgId), eq(schema.users.disabled, false)));
+    const out: string[] = [];
+    for (const u of users)
+      if (ROLE_INFO[u.role as Role].staff && (await this.canWork(scope, u, clientId))) out.push(u.email);
+    return out;
+  }
+
   // ---- runs ----
   private runSelect(scope: Scope) {
     return scope.db
@@ -341,6 +362,82 @@ export class ChecklistService {
       title,
     });
     return this.run(scope, run!.id);
+  }
+
+  /**
+   * A new starter or a leaver, asked for by anyone who can see the client: starts the onboarding or offboarding
+   * checklist, due on their first or last day, for the team to pick up. The details go on the first step.
+   */
+  /** Any other change a client asks for, from its portal: a short checklist for the team, unassigned. */
+  async changeRequest(scope: Scope, clientId: string, input: unknown): Promise<{ id: string; title: string }> {
+    const body = changeRequestSchema.parse(input);
+    await scope.require(clientId, 'read', 'Client');
+    const title = `Change request: ${body.summary}`.slice(0, 200);
+    const note = [`Requested by ${scope.actor.name}`, body.details].filter(Boolean).join('. ').slice(0, 2000);
+    const [run] = await scope.db
+      .insert(schema.checklistRuns)
+      .values({
+        orgId: scope.actor.orgId,
+        clientId,
+        checklistId: null,
+        title,
+        steps: CHANGE_REQUEST_STEPS.map((text, i) => ({
+          id: randomUUID(),
+          text,
+          doneAt: null,
+          doneBy: null,
+          note: i === 0 ? note : '',
+        })),
+        assigneeId: null,
+        dueDate: body.date,
+        createdBy: scope.actor.id,
+      })
+      .returning();
+    await recordActivity(scope.db, scope.actor, {
+      clientId,
+      action: 'Requested',
+      entityType: 'checklist_run',
+      entityId: run!.id,
+      title,
+    });
+    return { id: run!.id, title };
+  }
+
+  async request(scope: Scope, clientId: string, input: unknown): Promise<{ id: string; title: string }> {
+    const body = peopleRequestSchema.parse(input);
+    await scope.require(clientId, 'read', 'Client');
+    const template = CHECKLIST_TEMPLATES.find(
+      (t) => t.key === (body.kind === 'starter' ? 'user-onboarding' : 'user-offboarding'),
+    )!;
+    const title = `${body.kind === 'starter' ? 'New starter' : 'Leaver'}: ${body.name}`;
+    const note = [`Requested by ${scope.actor.name}`, body.details].filter(Boolean).join('. ').slice(0, 2000);
+    const [run] = await scope.db
+      .insert(schema.checklistRuns)
+      .values({
+        orgId: scope.actor.orgId,
+        clientId,
+        checklistId: null,
+        title,
+        steps: template.steps.map((text, i) => ({
+          id: randomUUID(),
+          text,
+          doneAt: null,
+          doneBy: null,
+          note: i === 0 ? note : '',
+        })),
+        assigneeId: null,
+        dueDate: body.date,
+        createdBy: scope.actor.id,
+      })
+      .returning();
+    await recordActivity(scope.db, scope.actor, {
+      clientId,
+      action: 'Requested',
+      entityType: 'checklist_run',
+      entityId: run!.id,
+      title,
+    });
+    return { id: run!.id, title };
   }
 
   async updateRun(scope: Scope, id: string, input: unknown): Promise<RunView> {

@@ -75,7 +75,8 @@ public sealed record PasswordEntry(
     string? FolderId = null,
     string? FolderName = null,
     int? RotationDays = null,
-    string? ExpiresOn = null);
+    string? ExpiresOn = null,
+    bool Restricted = false);
 
 /// <summary>A folder in a client's vault.</summary>
 public sealed record PasswordFolder(string Id, string ClientId, string Name, int Count);

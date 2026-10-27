@@ -6,9 +6,12 @@ import {
   healthGrade,
   type ClientHealthDetail,
   type ClientHealthSummary,
+  type HealthList,
   type HealthTone,
 } from '@atlas/shared';
 import { AppLink } from '@/components/AppLink';
+import { DeviceList } from '@/components/RmmHealth';
+import { AssetList } from '@/components/Warranty';
 import { Card, CardHeader, Dialog, FormError, Skeleton } from '@/components/ui';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -132,6 +135,8 @@ export function HealthBadge({ clientId }: { clientId: string }) {
   const actor = useActor();
   const health = useClientHealth(clientId, actor.isStaff);
   const [open, setOpen] = useState(false);
+  // The list behind a finding, opened from the health window (which closes, so the list has the screen).
+  const [list, setList] = useState<HealthList | null>(null);
   if (!actor.isStaff || !health.data) return null;
   const grade = healthGrade(health.data.score);
   return (
@@ -145,12 +150,56 @@ export function HealthBadge({ clientId }: { clientId: string }) {
         <span className={cn('font-semibold', TEXT[grade.tone])}>{grade.label}</span>
         <HealthChange change={health.data.change} />
       </button>
-      {open && <HealthDetail health={health.data} onClose={() => setOpen(false)} />}
+      {open && (
+        <HealthDetail
+          health={health.data}
+          onClose={() => setOpen(false)}
+          onList={(l) => {
+            setOpen(false);
+            setList(l);
+          }}
+        />
+      )}
+      <DeviceList
+        filter={list?.kind === 'devices' ? list.filter : null}
+        clientId={clientId}
+        onClose={() => setList(null)}
+      />
+      <AssetList
+        filter={list?.kind === 'warranty' ? list.filter : null}
+        clientId={clientId}
+        onClose={() => setList(null)}
+      />
     </>
   );
 }
 
-function HealthDetail({ health, onClose }: { health: ClientHealthDetail; onClose: () => void }) {
+function FindingRow({ gain, text, part }: { gain: number; text: string; part: keyof typeof HEALTH_PART_INFO }) {
+  return (
+    <>
+      <span
+        className={cn(
+          'w-10 shrink-0 text-right text-xs font-semibold tabular-nums',
+          gain ? 'text-success' : 'text-muted',
+        )}
+      >
+        {gain ? `+${gain}` : 'Check'}
+      </span>
+      <span className="min-w-0 flex-1">{text}</span>
+      <span className="text-xs text-muted">{HEALTH_PART_INFO[part].label}</span>
+    </>
+  );
+}
+
+function HealthDetail({
+  health,
+  onClose,
+  onList,
+}: {
+  health: ClientHealthDetail;
+  onClose: () => void;
+  onList: (list: HealthList) => void;
+}) {
   const grade = healthGrade(health.score);
   const findings = health.parts
     .flatMap((p) => p.findings.map((f) => ({ ...f, part: p.part })))
@@ -211,22 +260,24 @@ function HealthDetail({ health, onClose }: { health: ClientHealthDetail; onClose
             <ul className="divide-y divide-border rounded-lg border border-border">
               {findings.map((f) => (
                 <li key={`${f.part}-${f.text}`}>
-                  <AppLink
-                    to={`${base}${f.section}`}
-                    onClick={onClose}
-                    className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-surface-2"
-                  >
-                    <span
-                      className={cn(
-                        'w-10 shrink-0 text-right text-xs font-semibold tabular-nums',
-                        f.gain ? 'text-success' : 'text-muted',
-                      )}
+                  {/* A finding with a list behind it opens that list; the others go to where it's fixed. */}
+                  {f.list ? (
+                    <button
+                      type="button"
+                      onClick={() => onList(f.list!)}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface-2"
                     >
-                      {f.gain ? `+${f.gain}` : 'Check'}
-                    </span>
-                    <span className="min-w-0 flex-1">{f.text}</span>
-                    <span className="text-xs text-muted">{HEALTH_PART_INFO[f.part].label}</span>
-                  </AppLink>
+                      <FindingRow gain={f.gain} text={f.text} part={f.part} />
+                    </button>
+                  ) : (
+                    <AppLink
+                      to={`${base}${f.section}`}
+                      onClick={onClose}
+                      className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-surface-2"
+                    >
+                      <FindingRow gain={f.gain} text={f.text} part={f.part} />
+                    </AppLink>
+                  )}
                 </li>
               ))}
             </ul>
@@ -258,6 +309,13 @@ export function ClientHealthCard() {
           average === null
             ? 'Security, endpoints, documentation and renewals, scored 0–100.'
             : `Average ${average} across ${scored.length} client${scored.length === 1 ? '' : 's'}. Lowest first.`
+        }
+        actions={
+          list.data?.length ? (
+            <AppLink to="/health" className="text-sm font-semibold text-primary hover:underline">
+              Health map
+            </AppLink>
+          ) : undefined
         }
       />
       <FormError message={list.error?.message} />

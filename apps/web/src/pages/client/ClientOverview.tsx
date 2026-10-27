@@ -8,6 +8,7 @@ import { ItemIcon } from '@/components/ItemIcon';
 import { RmmHealthCard } from '@/components/RmmHealth';
 import { ClientSecurityCard } from '@/components/CwSecurity';
 import { BitdefenderClientCard } from '@/components/Bitdefender';
+import { AccessReviewCard } from '@/components/AccessReview';
 import { TrackerCard } from '@/components/Trackers';
 import { TicketDetails, TicketsCard } from '@/components/Tickets';
 import { WarrantyCard } from '@/components/Warranty';
@@ -170,6 +171,7 @@ export function ClientOverview() {
       <RmmHealthCard clientId={clientId} />
       <ClientSecurityCard clientId={clientId} />
       <BitdefenderClientCard clientId={clientId} />
+      <AccessReviewCard clientId={clientId} />
       <TrackerCard clientId={clientId} />
       <AssetStatsCard clientId={clientId} />
       <TicketsCard clientId={clientId} />

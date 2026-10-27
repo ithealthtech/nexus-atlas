@@ -315,6 +315,39 @@ describe('Bitdefender GravityZone', () => {
       modules: ['antimalware', 'edrSensor', 'firewall'],
     });
 
+    // Reports: the endpoint and security reports carry Bitdefender for a linked client.
+    const run = (kind: string) =>
+      owner.call('POST', '/api/reports/runs', {
+        kind,
+        title: `${kind} report`,
+        clientIds: [harbor],
+        withinDays: 90,
+        includeMicrosoft: false,
+      });
+    type Section = { title: string; columns: string[]; rows: string[][] };
+    const sections = (await run('endpoints')).data.snapshot.sections as Section[];
+    expect(sections.find((s) => s.title === 'Endpoint health')!.columns).toContain('Bitdefender');
+    const bd = sections.find((s) => s.title === 'Bitdefender endpoints')!;
+    expect(bd.rows.map((r) => [r[1], r[2]])).toEqual([
+      ['HDG-WS-02', 'Infected'],
+      ['Front desk PC', 'Needs attention'],
+      ['hdg-dc-01', 'Protected'],
+      ['SPARE-LAPTOP', 'Protected'],
+    ]);
+    const seats = sections.find((s) => s.title === 'Bitdefender licences')!.rows[0]!;
+    expect(seats[1]).toBe('4');
+    expect(Number(seats[2]) + Number(seats[3]) + Number(seats[4])).toBe(4);
+    expect(seats[5]).toBe('0');
+    const overview = ((await run('security')).data.snapshot.sections as Section[]).find(
+      (s) => s.title === 'Security overview',
+    )!;
+    const col = (name: string) => overview.rows[0]![overview.columns.indexOf(name)];
+    expect([col('Bitdefender infected'), col('Bitdefender attention'), col('Without Bitdefender')]).toEqual([
+      '1',
+      '1',
+      '0',
+    ]);
+
     // A technician without access to the client sees nothing of it.
     await owner.call('POST', '/api/users', {
       email: 'casey@atlas.test',

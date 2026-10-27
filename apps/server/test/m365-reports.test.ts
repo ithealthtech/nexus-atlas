@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { reportHighlights, reportNeedsAttention, type ReportDefinition, type ReportSection } from '@atlas/shared';
-import { M365Client } from '../src/services/integrations/m365.js';
+import { M365Client, type M365Account } from '../src/services/integrations/m365.js';
 import { concealed, parseCsv, usagePeriod } from '../src/services/integrations/m365-usage.js';
 import {
   ACCOUNT_COLUMNS,
@@ -115,6 +115,8 @@ describe('Microsoft 365 usage reports', () => {
       '2',
       '1',
       '1',
+      // Microsoft's MFA registration report wasn't read for these.
+      'Not read',
     ]);
     const section: ReportSection = {
       title: 'Accounts',
@@ -140,6 +142,63 @@ describe('Microsoft 365 usage reports', () => {
       ['Guests', '1'],
       ['Needs review', '3'],
     ]);
+  });
+
+  it('shows MFA registration, and flags enabled members without it', () => {
+    const people: M365Account[] = [
+      {
+        name: 'Avery',
+        upn: 'avery@h.example',
+        enabled: true,
+        guest: false,
+        licenses: 1,
+        usageLocation: 'US',
+        mfa: 'registered',
+      },
+      {
+        name: 'Blake',
+        upn: 'blake@h.example',
+        enabled: true,
+        guest: false,
+        licenses: 1,
+        usageLocation: 'US',
+        mfa: 'not_registered',
+      },
+      {
+        name: 'Casey',
+        upn: 'casey@h.example',
+        enabled: false,
+        guest: false,
+        licenses: 0,
+        usageLocation: '',
+        mfa: 'not_registered',
+      },
+      {
+        name: 'Guest',
+        upn: 'g_ext#@h.example',
+        enabled: true,
+        guest: true,
+        licenses: 0,
+        usageLocation: '',
+        mfa: 'not_registered',
+      },
+      { name: 'Unread', upn: 'new@h.example', enabled: true, guest: false, licenses: 1, usageLocation: 'US' },
+    ];
+    const section: ReportSection = {
+      title: 'Accounts',
+      columns: ACCOUNT_COLUMNS,
+      rows: people.map((a) => accountRow('H', a)),
+    };
+    expect(section.rows.map((r) => r.at(-1))).toEqual([
+      'Registered',
+      'Not registered',
+      'Not registered',
+      'Not registered',
+      'Not read',
+    ]);
+    // Only Blake: enabled, a member, and without MFA. A blocked account or a guest isn't flagged.
+    expect(section.rows.filter((r) => reportNeedsAttention(section, r)).map((r) => r[1])).toEqual(['Blake']);
+    expect(accountSummary('H', people).at(-1)).toBe('1');
   });
 
   it('builds the usage report: who was active, in which apps, and who wasn’t', () => {
