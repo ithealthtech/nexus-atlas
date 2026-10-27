@@ -29,7 +29,7 @@ function useClientAccess() {
 }
 
 /** Asks the team to set up someone new, or remove someone leaving. Anyone who can see the client can ask. */
-function PeopleRequestDialog({ clientId, onClose }: { clientId: string; onClose: () => void }) {
+export function PeopleRequestDialog({ clientId, onClose }: { clientId: string; onClose: () => void }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [error, setError] = useState<ApiError | null>(null);

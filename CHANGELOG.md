@@ -6,6 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
+- **Portal home.** Client accounts see a card for each organization on their Overview, with links to its documents, devices, people, and locations, and a **Starter or leaver** button.
 - **Starter and leaver requests.** On a client's Contacts page, anyone who can see the client, including client accounts, can choose **Starter or leaver** to tell the team someone is joining or leaving. Atlas starts the matching onboarding or offboarding checklist, due on their first or last day, with the details on the first step.
 
 ## [2.2.0] - 2026-10-23

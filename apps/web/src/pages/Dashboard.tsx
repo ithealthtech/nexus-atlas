@@ -9,10 +9,14 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  FileText,
   Info,
   LayoutGrid,
+  MapPin,
   Server,
   ShieldCheck,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import {
   DASHBOARD_WIDGET_INFO,
@@ -51,6 +55,7 @@ import { WarrantyCard } from '@/components/Warranty';
 import { AssetStatsCard, useAssetStats } from '@/components/AssetStats';
 import { useActor } from '@/lib/session';
 import { ExpiryRow } from './Expirations';
+import { PeopleRequestDialog } from './client/people';
 import {
   useActivity,
   useAssets,
@@ -435,6 +440,7 @@ export function Dashboard() {
           <p className="text-sm whitespace-pre-line text-text-2">{branding.portalWelcome}</p>
         </Card>
       )}
+      {!actor.isStaff && <PortalHome />}
       {totals.length > 0 && <div className="mb-5">{totals}</div>}
       {main.length + side.length > 0 ? (
         <div
@@ -471,6 +477,51 @@ export function Dashboard() {
       )}
       {/* Mounted only while open, so it starts from the saved layout each time. */}
       {customizing && prefs.data && <CustomizeDashboard prefs={prefs.data} onClose={() => setCustomizing(false)} />}
+    </div>
+  );
+}
+
+/**
+ * What a client account comes to Atlas for, one card per organization they can see: their documentation, and a
+ * way to tell the team someone is joining or leaving.
+ */
+function PortalHome() {
+  const clients = useClients().data ?? [];
+  const [requesting, setRequesting] = useState<string | null>(null);
+  if (!clients.length) return null;
+  const links = [
+    ['documents', 'Documents', FileText],
+    ['assets', 'Devices and assets', Server],
+    ['contacts', 'People', Users],
+    ['locations', 'Locations', MapPin],
+  ] as const;
+  return (
+    <div className="mb-7 grid gap-5 md:grid-cols-2">
+      {clients.map((c) => (
+        <Card key={c.id} className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <AppLink to={`/clients/${c.id}`} className="flex items-center gap-2 font-semibold hover:underline">
+              <Building2 className="size-4 text-muted" aria-hidden /> {c.name}
+            </AppLink>
+            <Button size="sm" variant="secondary" onClick={() => setRequesting(c.id)}>
+              <UserPlus /> Starter or leaver
+            </Button>
+          </div>
+          <ul className="mt-4 grid grid-cols-2 gap-2">
+            {links.map(([path, label, Icon]) => (
+              <li key={path}>
+                <AppLink
+                  to={`/clients/${c.id}/${path}`}
+                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-surface-2"
+                >
+                  <Icon className="size-4 text-muted" aria-hidden /> {label}
+                </AppLink>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ))}
+      {requesting && <PeopleRequestDialog clientId={requesting} onClose={() => setRequesting(null)} />}
     </div>
   );
 }
