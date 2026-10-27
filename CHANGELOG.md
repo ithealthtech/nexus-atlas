@@ -25,6 +25,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - **/** opens search, as Ctrl+K (⌘K) does.
   - **g** then a letter goes straight to a page: **g c** Clients, **g a** Assets, **g d** Documents, **g p** Passwords, **g r** Reports, **g e** Expirations, **g o** Overview, and **g u** People and access for administrators.
   - Shortcuts never act while you're typing in a field or a window is open.
+### Added
+
+- **Dormant access alerts.** System status warns about accounts and API keys nobody has used for 60 days, naming them, and People marks inactive accounts.
 
 ## [2.2.0] - 2026-10-23
 
