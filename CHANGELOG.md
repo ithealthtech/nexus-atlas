@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Access review.** For administrators, the security report lists everyone with access to each client: their role, access level, two-factor status, and last sign-in. People who have never signed in, or haven't in 60 days, are flagged.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
