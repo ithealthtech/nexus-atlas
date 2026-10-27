@@ -45,8 +45,9 @@ async function startSync(
     });
   })
     .then(async () => {
-      await run.flush('done');
+      // The job reads "done" last, once everything the sync writes is written.
       await settings.patchM365(actor.orgId, { lastSyncAt: new Date().toISOString() });
+      await run.flush('done');
     })
     .catch(async (error) => {
       run.note(error instanceof HttpError ? error.message : 'The sync stopped unexpectedly.');
