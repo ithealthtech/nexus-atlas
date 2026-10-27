@@ -7,6 +7,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Changed
 
 - **Safe updates.** When an update installed from **Administration → Updates** doesn't start, Atlas already went back to the previous version. Now, if the new version had already updated the database before failing, Atlas also restores the backup it took just before the update, so the previous version gets the database it knows instead of one it doesn't understand. It then checks the previous version answers. The Updates page says which happened: the database was untouched, or the backup was restored. This protects updates from this release onwards, since an update is run by the version already installed.
+- **Node.js 24 for new installs.** The Linux install script installs Node.js 24 on new servers, and the Docker image moves to Node.js 24. Servers already on Node.js 22 keep it until you move them: see *Moving to Node.js 24* in the deployment guide. Node.js 22 stops getting security fixes on 30 April 2027.
 
 ## [2.2.0] - 2026-10-23
 
