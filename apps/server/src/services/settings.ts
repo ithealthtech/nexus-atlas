@@ -564,6 +564,12 @@ export class SettingsService {
       : null;
   }
 
+  /** The company links alone, without opening the key, for reading synced data. */
+  async bitdefenderLinks(orgId: string): Promise<StoredBitdefender['map'] | null> {
+    const saved = (await this.load(orgId)).bitdefender;
+    return saved ? (saved.map ?? {}) : null;
+  }
+
   async bitdefenderView(orgId: string): Promise<BitdefenderView | null> {
     const saved = (await this.load(orgId)).bitdefender;
     return saved

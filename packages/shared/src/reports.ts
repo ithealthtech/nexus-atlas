@@ -448,6 +448,8 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     // A device's state; a health trend's "Online" holds counts ("35 → 38"), which aren't a problem in themselves.
     if (column === 'Online') return value === 'Offline' || value === 'Unknown';
     if (column === 'Protection') return !['running', 'protected', 'healthy'].includes(value.toLowerCase());
+    // Bitdefender's state for an endpoint, or an RMM device GravityZone doesn't manage.
+    if (column === 'Bitdefender') return ['Infected', 'Needs attention', 'Not managed'].includes(value);
     // A blocked Microsoft 365 account matters while it still holds licenses; a licensed one needs a usage location.
     if (column === 'Status' && section.columns.includes('Licenses'))
       return value === 'Blocked' && count(row[section.columns.indexOf('Licenses')]) > 0;
@@ -462,7 +464,18 @@ export function reportNeedsAttention(section: ReportSection, row: string[]): boo
     if (['Reviews overdue', 'Offline', 'Protection missing / stopped', 'Unknown protection'].includes(column))
       return Number(value) > 0 || value === 'Not available';
     if (column === 'Available') return Number(value) <= 0;
-    if (['Password issues', 'Breached', 'Not encrypted', 'Rotation failing'].includes(column)) return Number(value) > 0;
+    if (
+      [
+        'Password issues',
+        'Breached',
+        'Not encrypted',
+        'Rotation failing',
+        'Bitdefender infected',
+        'Bitdefender attention',
+        'Without Bitdefender',
+      ].includes(column)
+    )
+      return Number(value) > 0;
     if (column === 'Issues') return value !== '';
     if (column === 'Encryption') return value === 'Not encrypted' || value === 'Unknown';
     if (column === 'Last result') return value === 'Failed';

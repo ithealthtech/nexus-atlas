@@ -2,6 +2,15 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Bitdefender counts everywhere Atlas judges protection.** For clients linked to GravityZone:
+  - **Health score:** the security part counts infected endpoints (double), endpoints needing attention, and devices Bitdefender doesn't manage. Each finding opens the client's overview, where the Bitdefender card lists them.
+  - **Endpoint health and Security posture reports** gain a **Bitdefender endpoints** section: every endpoint with its state, what needs attention, policy, licence and last seen, plus the RMM devices GravityZone doesn't manage. Endpoint health adds a **Bitdefender** column, and the Security overview adds infected, attention and without-Bitdefender counts. **Needs review** picks them out.
+  - **Cyber insurance readiness:** "Is endpoint protection running on every device?" is answered from Bitdefender, counting active licences against every device, including the ones it doesn't manage. An infected endpoint means it's never a plain Yes.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

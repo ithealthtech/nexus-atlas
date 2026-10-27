@@ -1,8 +1,15 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { schema } from '@atlas/db';
-import type { PasswordHealthReport, ReportDefinition, ReportSnapshot, RotationTargetView } from '@atlas/shared';
+import type {
+  BitdefenderClientView,
+  PasswordHealthReport,
+  ReportDefinition,
+  ReportSnapshot,
+  RotationTargetView,
+} from '@atlas/shared';
 import { HttpError } from '../../errors.js';
+import { clientEndpoints } from '../integrations/bitdefender.js';
 import type { Scope } from '../scope.js';
 import type { SettingsService } from '../settings.js';
 
@@ -231,6 +238,29 @@ export class ReportContext {
         }
       }
       return rows;
+    });
+  }
+
+  /**
+   * Each chosen client linked to a Bitdefender GravityZone company: its endpoints as the last sync read them, and the
+   * RMM devices GravityZone doesn't manage. Clients that aren't linked are left out.
+   */
+  bitdefender() {
+    return this.once('bitdefender', async () => {
+      const map = (await this.settings.bitdefenderLinks(this.actor.orgId)) ?? {};
+      const linked = new Set(Object.values(map).flatMap((m) => (m.action === 'link' ? [m.clientId] : [])));
+      const out = new Map<string, BitdefenderClientView>();
+      for (const c of this.clients.filter((c) => linked.has(c.id))) {
+        const view = await clientEndpoints(this.db, this.actor.orgId, c.id, true);
+        out.set(c.id, view);
+        this.source(
+          `Bitdefender: ${c.name}`,
+          'Endpoint protection from the last GravityZone sync, and RMM devices it does not manage.',
+          view.syncedAt,
+        );
+        if (!view.syncedAt) this.warn(`${c.name}: Bitdefender is linked but hasn't been synced yet.`);
+      }
+      return out;
     });
   }
 }
