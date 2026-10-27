@@ -1,3 +1,5 @@
+import type { RmmHealthFilter, WarrantyFilter } from './data.js';
+
 // ---------- client health score ----------
 /**
  * A client's health, 0–100, from four parts weighted by how much they matter. A part with nothing to measure (no
@@ -31,7 +33,11 @@ export interface HealthFinding {
   gain: number;
   /** Where to fix it, under the client: '/passwords', '/assets', '/documents', '/contacts', and so on. */
   section: string;
+  /** The exact list behind the finding, when there is one: opened in place rather than going to the page. */
+  list?: HealthList;
 }
+/** A list a health finding can open: devices from the RMM, or assets by warranty. */
+export type HealthList = { kind: 'devices'; filter: RmmHealthFilter } | { kind: 'warranty'; filter: WarrantyFilter };
 export interface HealthPartScore {
   part: HealthPart;
   /** 0–100, or null when there was nothing to measure. */
