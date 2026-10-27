@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Client onboarding tracker.** Once the built-in *New client onboarding* checklist is in your library, the Clients page shows every onboarding in progress with its progress and who's on it, recently finished ones, and how many days onboarding takes on average.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
