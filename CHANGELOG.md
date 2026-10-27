@@ -89,6 +89,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Monday client health email for owners.** Owners and administrators get one email each Monday: the average client health score and how it moved since last week, and every client that moved by 3 points or more, biggest drop first. It follows the weekly digest setting.
+### Added
+
+- **Client onboarding tracker.** Once the built-in *New client onboarding* checklist is in your library, the Clients page shows every onboarding in progress with its progress and who's on it, recently finished ones, and how many days onboarding takes on average.
 
 ## [2.2.0] - 2026-10-23
 
