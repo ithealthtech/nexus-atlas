@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **Hardware replacement forecast.** The asset report adds, per client, how much hardware is already out of warranty, how much runs out in each of the next four quarters, and how much has no warranty date, so replacements can be budgeted.
+- **Hardware replacement forecast.** The asset report adds, per client, hardware already out of warranty, running out in each of the next four quarters, or more than five years past its purchase date, and what replacing it would cost where a purchase price is recorded. New installs' Configurations layout gains a **Purchase price** field; on an existing install, add a number field named Purchase price to Configurations to see costs.
 
 ## [2.2.0] - 2026-10-23
 

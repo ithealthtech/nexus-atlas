@@ -43,6 +43,7 @@ export const BUILT_IN_LAYOUTS: Seed[] = [
       f('location', 'Location', 'text'),
       f('management_url', 'Management URL', 'url'),
       f('purchase_date', 'Purchase date', 'date'),
+      f('purchase_price', 'Purchase price', 'number'),
       f('warranty_expires', 'Warranty expires', 'date', { expires: true }),
     ],
   },
