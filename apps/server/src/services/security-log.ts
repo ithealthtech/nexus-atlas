@@ -1,3 +1,4 @@
+import type { FastifyRequest } from 'fastify';
 import { schema, type Database } from '@atlas/db';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -14,4 +15,10 @@ export function securityEvent(db: Database | Tx, event: SecurityEvent) {
     detail: (event.detail ?? '').slice(0, 300),
     ip: (event.ip ?? '').slice(0, 64),
   });
+}
+
+/** A security-log entry for something the signed-in user just did, from this request's address. */
+export function requestEvent(db: Database | Tx, req: FastifyRequest, action: string, detail = '') {
+  const { actor } = req.session!;
+  return securityEvent(db, { orgId: actor.orgId, userId: actor.id, actor: actor.name, action, detail, ip: req.ip });
 }
