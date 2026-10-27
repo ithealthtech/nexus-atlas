@@ -53,6 +53,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - A document neither verified nor edited for six months shows **Not verified**, or **Last verified** in amber.
   - The documentation health report adds a **Last verified** column, and only flags documents that haven't been verified or updated in 180 days.
   - Anyone who can edit a document can verify it.
+### Added
+
+- **Starter and leaver requests.** On a client's Contacts page, anyone who can see the client, including client accounts, can choose **Starter or leaver** to tell the team someone is joining or leaving. Atlas starts the matching onboarding or offboarding checklist, due on their first or last day, with the details on the first step.
 
 ## [2.2.0] - 2026-10-23
 

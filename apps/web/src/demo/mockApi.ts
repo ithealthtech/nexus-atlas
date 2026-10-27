@@ -3994,6 +3994,34 @@ on('POST', '/clients/:id/checklist-runs', (m, b) => {
   record('Started', 'checklist_run', r.id, r.title, r.clientId);
   return runView(r);
 });
+on('POST', '/clients/:id/people-requests', (m, b) => {
+  if (!b.name || !b.date) throw new MockError(400, 'Enter their name and first or last day.');
+  const template = CHECKLIST_TEMPLATES.find(
+    (t) => t.key === (b.kind === 'leaver' ? 'user-offboarding' : 'user-onboarding'),
+  )!;
+  const title = `${b.kind === 'leaver' ? 'Leaver' : 'New starter'}: ${String(b.name)}`;
+  const r = {
+    id: uuid(),
+    clientId: m[1]!,
+    checklistId: null,
+    title,
+    steps: template.steps.map((text, i) => ({
+      id: uuid(),
+      text,
+      doneAt: null,
+      doneBy: null,
+      note: i === 0 ? String(b.details ?? '') : '',
+    })),
+    assigneeId: null,
+    dueDate: String(b.date),
+    completedAt: null,
+    createdAt: now(),
+    createdBy: db.owner.id,
+  };
+  runs.unshift(r);
+  record('Requested', 'checklist_run', r.id, title, r.clientId);
+  return { id: r.id, title };
+});
 on('GET', '/checklist-runs/:id', (m) => runView(find(runs, m[1]!, 'Checklist run')));
 on('PATCH', '/checklist-runs/:id', (m, b) => {
   const r = find(runs, m[1]!, 'Checklist run');

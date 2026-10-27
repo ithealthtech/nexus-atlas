@@ -212,6 +212,38 @@ describe('checklists', () => {
     expect((await owner.call('GET', `/api/checklist-runs/${oneOff.data.id}`)).status).toBe(404);
   });
 
+  it('turns a starter or leaver request from a client account into the onboarding checklist', async () => {
+    const contact = await person('office@harbor.test', 'copper lantern field 4', {
+      role: 'client_viewer',
+      grants: [{ clientId: harbor, level: 'read' }],
+    });
+    const sent = await contact.b.call('POST', `/api/clients/${harbor}/people-requests`, {
+      kind: 'starter',
+      name: 'Jordan Lee',
+      date: '2026-11-03',
+      details: 'Hygienist; needs the imaging software',
+    });
+    expect(sent.status, JSON.stringify(sent.data)).toBe(201);
+    expect(sent.data.title).toBe('New starter: Jordan Lee');
+    const run = (await owner.call('GET', `/api/checklist-runs/${sent.data.id}`)).data;
+    expect(run).toMatchObject({ clientId: harbor, dueDate: '2026-11-03', assigneeId: null });
+    expect(run.steps[0].note).toBe('Requested by office. Hygienist; needs the imaging software');
+    expect(run.steps.length).toBeGreaterThan(5);
+    // Only for clients they can see, and the date is required.
+    expect(
+      (
+        await contact.b.call('POST', `/api/clients/${northline}/people-requests`, {
+          kind: 'leaver',
+          name: 'X',
+          date: '2026-11-03',
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await contact.b.call('POST', `/api/clients/${harbor}/people-requests`, { kind: 'leaver', name: 'X' })).status,
+    ).toBe(400);
+  });
+
   it('handles many ticks at once without running out of database connections', async () => {
     const run = (
       await owner.call('POST', `/api/clients/${harbor}/checklist-runs`, {
