@@ -28,6 +28,8 @@ import {
   type PasswordHealthReport,
   type PortalReport,
   type ReportTemplateView,
+  STALE_DOCUMENT_DAYS,
+  type TeamPulse,
   type WorkspacePrefs,
 } from '@atlas/shared';
 import { api } from '@/lib/api';
@@ -396,6 +398,7 @@ export function Dashboard() {
       </Card>
     ),
     warranty: <WarrantyCard />,
+    'team-pulse': actor.isAdmin ? <TeamPulseCard /> : null,
   };
 
   const shown = (prefs.data ?? DEFAULT_WORKSPACE).widgets.filter((w) => w.visible);
@@ -592,6 +595,62 @@ function PinnedReportsCard({ ids }: { ids: string[] }) {
               </span>
               <ArrowRight className="size-4 shrink-0 text-muted" aria-hidden />
             </AppLink>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/** What each person on the team changed this month, against the month before, and their stale documents. */
+function TeamPulseCard() {
+  const { data } = useQuery({
+    queryKey: ['team-pulse'],
+    queryFn: () => api<TeamPulse>('/workspace/team-pulse'),
+    staleTime: 5 * 60_000,
+  });
+  if (!data?.people.length) return null;
+  return (
+    <Card>
+      <CardHeader
+        title="Team pulse"
+        description={`Changes in the last ${data.days} days, against the ${data.days} before. Stale: documents they edited last, untouched for ${STALE_DOCUMENT_DAYS} days.`}
+      />
+      <ul className="divide-y divide-border">
+        {data.people.map((p) => (
+          <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{p.name}</span>
+              <span className="block text-xs text-muted">
+                {p.changes
+                  ? `${p.clients} ${p.clients === 1 ? 'client' : 'clients'}`
+                  : p.lastSignInAt
+                    ? `Last signed in ${relativeTime(p.lastSignInAt)}`
+                    : 'Never signed in'}
+                {p.stale > 0 && (
+                  <span className="text-warning">
+                    {' '}
+                    · {p.stale} stale {p.stale === 1 ? 'document' : 'documents'}
+                  </span>
+                )}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 tabular-nums">
+              {p.changes}
+              {p.changes !== p.previous && (
+                <span
+                  className={cn('flex items-center text-xs', p.changes > p.previous ? 'text-success' : 'text-muted')}
+                  title={`${p.previous} the week before`}
+                >
+                  {p.changes > p.previous ? (
+                    <ArrowUp className="size-3" aria-hidden />
+                  ) : (
+                    <ArrowDown className="size-3" aria-hidden />
+                  )}
+                  <span className="sr-only">, {p.previous} the week before</span>
+                </span>
+              )}
+            </span>
           </li>
         ))}
       </ul>

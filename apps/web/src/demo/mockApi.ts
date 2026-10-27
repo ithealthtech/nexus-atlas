@@ -30,6 +30,7 @@ import {
   type RemoteAccessView,
   CHANGE_REQUEST_STEPS,
   CHECKLIST_TEMPLATES,
+  STALE_DOCUMENT_DAYS,
   RUNBOOK_TEMPLATES,
   runbookContent,
   DEFAULT_BRANDING,
@@ -2275,6 +2276,35 @@ on('POST', '/access-reviews/:id/sign-off', (m, b) => {
   if (review.items.some((i) => !i.decision)) throw new MockError(400, 'Keep or remove everyone first.', 'undecided');
   Object.assign(review, { completedAt: now(), signedName: String(b.signedName ?? db.owner.name) });
   return review;
+});
+// Counted from the demo's own activity feed, by name, as the server counts by person.
+on('GET', '/workspace/team-pulse', () => {
+  const day = 86_400_000;
+  const age = (a: ActivityView) => Date.now() - Date.parse(a.createdAt);
+  const stale = (name: string) =>
+    documents.filter(
+      (d) =>
+        !d.archived && d.updatedByName === name && Date.now() - Date.parse(d.updatedAt) > STALE_DOCUMENT_DAYS * day,
+    ).length;
+  return {
+    days: 30,
+    people: users
+      .filter((u) => !u.disabled && !u.role.startsWith('client'))
+      .map((u) => {
+        const mine = activity.filter((a) => a.actorName === u.name);
+        const week = mine.filter((a) => age(a) < 30 * day);
+        return {
+          id: u.id,
+          name: u.name,
+          changes: week.length,
+          previous: mine.filter((a) => age(a) >= 30 * day && age(a) < 60 * day).length,
+          clients: new Set(week.map((a) => a.clientId).filter(Boolean)).size,
+          stale: stale(u.name),
+          lastSignInAt: u.lastLoginAt || null,
+        };
+      })
+      .sort((x, y) => y.changes - x.changes || x.name.localeCompare(y.name)),
+  };
 });
 on('POST', '/users', (_m, b) => {
   const u = {

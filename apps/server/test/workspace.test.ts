@@ -30,6 +30,32 @@ describe('favorites, quick notes, and workspace preferences', () => {
   }
   const layoutId = async () => (await owner.call('GET', '/api/layouts')).data[0].id as string;
 
+  it('shows administrators what each person changed this week, against last week', async () => {
+    const tess = await technician('tess@atlas.test', [{ clientId: harbor, level: 'edit' }]);
+    await tess.call('POST', `/api/clients/${harbor}/contacts`, { name: 'Dana Front Desk' });
+    // An older change counts toward the month before.
+    await t.handle.db.execute(
+      sql`insert into activity (org_id, client_id, actor_id, actor_name, action, entity_type, title, created_at)
+          select org_id, ${summit}, id, name, 'Updated', 'client', 'Summit Legal', now() - interval '40 days'
+          from users where email = 'tess@atlas.test'`,
+    );
+    // A document tess edited last, untouched for a year, is hers to review.
+    await t.handle.db.execute(
+      sql`insert into documents (org_id, client_id, title, content, updated_by, updated_at)
+          select org_id, ${harbor}, 'Old runbook', '{"type":"doc"}'::jsonb, id, now() - interval '365 days'
+          from users where email = 'tess@atlas.test'`,
+    );
+    const pulse = (await owner.call('GET', '/api/workspace/team-pulse')).data;
+    expect(pulse.days).toBe(30);
+    const row = pulse.people.find((p: { name: string }) => p.name === 'tess');
+    expect(row).toMatchObject({ changes: 1, previous: 1, clients: 1, stale: 1 });
+    expect(row.lastSignInAt).not.toBeNull();
+    // Everyone on the team is listed, the busiest first, including people with nothing this week.
+    expect(pulse.people[0].name).toBe('tess');
+    expect(pulse.people.map((p: { name: string }) => p.name)).toContain('Avery Owner');
+    expect((await tess.call('GET', '/api/workspace/team-pulse')).status).toBe(403);
+  });
+
   it('keeps favorites per person and lists every kind, passwords included', async () => {
     const asset = (
       await owner.call('POST', `/api/clients/${harbor}/assets`, { layoutId: await layoutId(), name: 'FW-01' })

@@ -35,6 +35,7 @@ export const DASHBOARD_WIDGETS = [
   'coming-up',
   'domains',
   'warranty',
+  'team-pulse',
 ] as const;
 export type DashboardWidget = (typeof DASHBOARD_WIDGETS)[number];
 export const DASHBOARD_WIDGET_INFO: Record<
@@ -68,6 +69,11 @@ export const DASHBOARD_WIDGET_INFO: Record<
   'coming-up': { label: 'Coming up', description: 'Anything expiring or due in 30 days.', area: 'side' },
   domains: { label: 'Domains and SSL', description: 'Domains and certificates expiring in 90 days.', area: 'side' },
   warranty: { label: 'Warranties', description: 'Assets by warranty status.', area: 'side' },
+  'team-pulse': {
+    label: 'Team pulse',
+    description: 'What each person on the team changed this month, and their stale documents. Administrators only.',
+    area: 'side',
+  },
 };
 
 /** Client workspace sections a person can hide. The overview always shows. */
@@ -161,6 +167,26 @@ export function resolveWorkspace(saved: unknown): WorkspacePrefs {
     ? [...new Set(raw.pinnedReports.filter((id): id is string => typeof id === 'string'))].slice(0, MAX_PINNED_REPORTS)
     : [];
   return { widgets, hiddenSections, menu, ...whatsNew, ...(pins.length ? { pinnedReports: pins } : {}) };
+}
+
+// ---------- team pulse ----------
+/** A document nobody has edited for this long counts as stale, for the team pulse. */
+export const STALE_DOCUMENT_DAYS = 180;
+/** How much each person on the team has documented lately, for administrators. */
+export interface TeamPulse {
+  days: number;
+  people: {
+    id: string;
+    name: string;
+    /** Changes recorded in the activity feed in the last `days` days, and in the `days` before that. */
+    changes: number;
+    previous: number;
+    /** Clients they changed something for. */
+    clients: number;
+    /** Current documents they last edited that haven't been touched in STALE_DOCUMENT_DAYS: theirs to review. */
+    stale: number;
+    lastSignInAt: string | null;
+  }[];
 }
 
 // ---------- client workspace ----------

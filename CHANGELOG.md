@@ -65,6 +65,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Evidence pack.** On a client's **Reports** tab, **Evidence pack** downloads a zip of PDFs for that client: security posture, cyber insurance readiness, endpoint health, documentation health, asset inventory, and license utilization, plus a contents note. The reports are captured fresh and aren't added to report history.
+### Added
+
+- **Team pulse.** Administrators get a dashboard card showing what each person on the team changed in the last 30 days, against the 30 before, how many clients they worked on, and how many stale documents (untouched for 180 days) they edited last and so should review. People with no changes show when they last signed in.
 
 ## [2.2.0] - 2026-10-23
 
