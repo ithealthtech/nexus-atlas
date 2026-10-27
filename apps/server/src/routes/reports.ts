@@ -1,12 +1,14 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import type { Database } from '@atlas/db';
-import { reportSelectionSchema } from '@atlas/shared';
+import { REPORT_INFO, reportSelectionSchema, type ReportKind } from '@atlas/shared';
+import { strToU8, zipSync } from 'fflate';
 import { z } from 'zod';
 import type { ReportService } from '../services/reports.js';
 import type { ReportScheduleService } from '../services/report-schedules.js';
 import { Scope } from '../services/scope.js';
 import { reportCsv, reportPdf } from '../services/report-export.js';
 import { HttpError } from '../errors.js';
+import { requireClient } from '../authz.js';
 import type { SettingsService } from '../services/settings.js';
 import type { ReportShareService } from '../services/report-shares.js';
 import { securityEvent } from '../services/security-log.js';
@@ -102,6 +104,64 @@ export function registerReportRoutes(
         .send(content);
     },
   );
+  // ---- evidence pack: the reports an auditor or insurer asks for, for one client, in one download ----
+  const EVIDENCE: ReportKind[] = ['security', 'insurance', 'endpoints', 'documentation', 'assets', 'licenses'];
+  app.get<{ Querystring: { client?: string } }>(base + '/evidence-pack', authed, async (req, reply) => {
+    const scope = scopeOf(req);
+    const clientId = z.string().uuid().parse(req.query.client);
+    const { client } = await requireClient(db, scope.actor, clientId, 'read');
+    const brand = await deps.settings.branding(scope.actor.orgId);
+    const day = new Date().toISOString().slice(0, 10);
+    const files: Record<string, Uint8Array> = {};
+    const contents: string[] = [];
+    // One at a time: a person runs one report at once. Captured fresh, and not added to report history.
+    for (const [i, kind] of EVIDENCE.entries()) {
+      const name = REPORT_INFO[kind].name;
+      try {
+        const { snapshot } = await service.collect(scope, {
+          kind,
+          title: `${client.name} ${name.toLowerCase()}`,
+          clientIds: [clientId],
+          withinDays: 90,
+          includeMicrosoft: true,
+        });
+        const file = `${String(i + 1).padStart(2, '0')} ${name}.pdf`;
+        files[file] = await reportPdf(snapshot, 'all', {
+          name: brand.brandName,
+          logo: brand.logo,
+          accent: brand.accent,
+        });
+        contents.push(`${file}${snapshot.warnings.length ? ` (${snapshot.warnings.length} notes inside)` : ''}`);
+      } catch (error) {
+        req.log.warn({ err: error, kind }, 'evidence pack report skipped');
+        contents.push(
+          `${name}: not included (${error instanceof HttpError ? error.message : 'it could not be produced'})`,
+        );
+      }
+    }
+    files['README.txt'] = strToU8(
+      [
+        `Evidence pack for ${client.name}`,
+        `Prepared ${day} by ${scope.actor.name} from Atlas records.`,
+        '',
+        ...contents,
+        '',
+        'Each report states its sources and when they were last updated. Passwords and document contents are never included.',
+        '',
+      ].join('\r\n'),
+    );
+    await audit(req, 'Downloaded evidence pack', clientId);
+    const named = `${client.name.replace(/[\\/:*?"<>|\p{Cc}]+/gu, ' ').trim()} evidence pack ${day}.zip`;
+    return reply
+      .header('cache-control', 'no-store')
+      .header(
+        'content-disposition',
+        `attachment; filename="atlas-evidence-${day}.zip"; filename*=UTF-8''${encodeURIComponent(named)}`,
+      )
+      .type('application/zip')
+      .send(Buffer.from(zipSync(files, { level: 6 })));
+  });
+
   // ---- links to share a single-client snapshot with someone without an account ----
   app.get<{ Params: { id: string } }>(base + '/runs/:id/shares', authed, async (req, reply) => {
     reply.header('cache-control', 'no-store');

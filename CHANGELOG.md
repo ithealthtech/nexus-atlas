@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Evidence pack.** On a client's **Reports** tab, **Evidence pack** downloads a zip of PDFs for that client: security posture, cyber insurance readiness, endpoint health, documentation health, asset inventory, and license utilization, plus a contents note. The reports are captured fresh and aren't added to report history.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
