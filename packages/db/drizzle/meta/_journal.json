@@ -337,6 +337,13 @@
       "when": 1793129220066,
       "tag": "0047_access_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793136749770,
+      "tag": "0048_alert_versions",
+      "breakpoints": true
     }
   ]
 }

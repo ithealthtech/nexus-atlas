@@ -1,5 +1,38 @@
 # Alerting center — handoff for Claude
 
+## Current continuation — 2026-10-23
+
+This section supersedes the historical branch, release and next-step instructions below.
+PR #289 was merged and v2.2.0 released successfully. Do not reuse that branch.
+The owner said “lets start from the top” of the remaining roadmap, beginning with email and Teams alerting.
+
+Current branch: `feature/alerting-publishing`, from `origin/main` after v2.2.0.
+This change adds immutable published workspace snapshots, paginated history, and restoration to drafts.
+Publication captures the saved draft revision with a change note and publisher; it does not activate delivery.
+The organization row lock serializes draft saves, publishing and restoration. Publication checks both the draft
+revision and latest published version and rejects duplicate publication. Restoring creates a fresh draft revision,
+preserving unavailable selections for repair; publishing revalidates references. All mutations require recent
+administrator authentication and create security events without logging message contents.
+
+New migration: `0048_alert_versions.sql` (generated as 0046 before #298 and #324 took 0046 and 0047, then regenerated with the same SQL after them); never modify released migrations.
+Read `packages/shared/src/alert-publications.ts`, `apps/server/src/services/alerting/versions.ts`, and
+`apps/web/src/components/alerting/Versions.tsx`. The server routes, demo and alerting tests are extended.
+Local build, demo build, typecheck, lint, formatting, extension packaging, site check, duplicate scan (0.86%),
+16 shared alerting tests and the browser publish/view/restore flow with four accessibility scans passed.
+The eight database API tests could not start because local PostgreSQL is unavailable (ECONNREFUSED :5432).
+CI must verify these on PostgreSQL 16/17. The dependency audit passed its high-severity threshold; the existing
+low Fastify advisory GHSA-389g-gv7q-r4x8 remains. No dependencies were changed.
+Main-page and version-history screenshots are in `docs/screenshots/alerting-center/`.
+No merge or release is authorized for this continuation. Check the new branch PR for current CI results.
+
+Next: a durable common delivery queue with per-destination outcomes, followed by real event adapters and an
+explicit opt-in migration that avoids duplicate old/new sends. Preserve privacy, recipient access checks,
+notification preferences, Teams threads/security channels/reconnection and uncertain outcomes. Publishing a
+configuration is separate from activating delivery. No Azure Bot or new paid service. The earlier release request
+applied to PR #289; this new feature needs its own owner request before merge/release.
+
+## Historical draft checkpoint and original plan
+
 Last updated: 2026-10-23. Branch: `feature/alerting-center`, based on `origin/main` after release 2.1.1.
 
 Current release status: Tyler explicitly requested **merge and release** on 2026-10-23. Version 2.2.0 is being
