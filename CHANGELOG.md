@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Pinned reports.** Pin a saved report template from **Reports → Templates** and it appears in a **Pinned reports** card on your dashboard. One click opens it on Reports, set up and ready to run. Up to eight per person.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

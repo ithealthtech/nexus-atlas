@@ -231,7 +231,14 @@ const clientRoutes = [
 const routes = [
   createRoute({ getParentRoute: () => appRoute, path: '/', component: Dashboard }),
   createRoute({ getParentRoute: () => appRoute, path: '/clients', component: Clients }),
-  createRoute({ getParentRoute: () => appRoute, path: '/reports', component: Reports }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/reports',
+    component: Reports,
+    validateSearch: (search: Record<string, unknown>) => ({
+      template: typeof search.template === 'string' ? search.template : undefined,
+    }),
+  }),
   clientRoute.addChildren(clientRoutes),
   // The old one-page monthly report, retired in 2.0: its links open the client's Reports tab.
   createRoute({

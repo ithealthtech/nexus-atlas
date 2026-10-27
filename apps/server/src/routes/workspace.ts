@@ -1,8 +1,16 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
-import { ROLE_INFO, resolveWorkspace, workspacePrefsSchema, type ClientCounts } from '@atlas/shared';
+import {
+  MAX_PINNED_REPORTS,
+  ROLE_INFO,
+  pinReportSchema,
+  resolveWorkspace,
+  workspacePrefsSchema,
+  type ClientCounts,
+} from '@atlas/shared';
 import { z } from 'zod';
+import { HttpError } from '../errors.js';
 import { ClientService } from '../services/clients.js';
 import { FavoriteService, favoriteType } from '../services/favorites.js';
 import { Scope } from '../services/scope.js';
@@ -51,16 +59,17 @@ export function registerWorkspaceRoutes(
     const menu = body.menu ?? saved.menu;
     await db
       .update(schema.users)
-      .set({ workspace: { ...body, menu, seenWhatsNew: saved.seenWhatsNew } })
+      .set({ workspace: { ...body, menu, seenWhatsNew: saved.seenWhatsNew, pinnedReports: saved.pinnedReports } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
-  // Resets the dashboard and sections. The menu style is a separate choice and stays, as does what's been seen.
+  // Resets the dashboard and sections. The menu style is a separate choice and stays, as do what's been seen and
+  // pinned reports.
   app.delete('/api/account/workspace', authed, async (req) => {
-    const { menu, seenWhatsNew } = await prefs(actorOf(req).id);
+    const { menu, seenWhatsNew, pinnedReports } = await prefs(actorOf(req).id);
     await db
       .update(schema.users)
-      .set({ workspace: { menu, seenWhatsNew } })
+      .set({ workspace: { menu, seenWhatsNew, pinnedReports } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });
@@ -72,6 +81,21 @@ export function registerWorkspaceRoutes(
     await db
       .update(schema.users)
       .set({ workspace: { ...saved, seenWhatsNew: seen } })
+      .where(eq(schema.users.id, actorOf(req).id));
+    return prefs(actorOf(req).id);
+  });
+
+  // Pins a report template to the dashboard, or unpins it. Only the person's own pins change; the template itself
+  // is checked when the dashboard lists it, so a pin to one since deleted or unshared simply doesn't show.
+  app.post('/api/account/pinned-reports', authed, async (req) => {
+    const { templateId, pinned } = pinReportSchema.parse(req.body);
+    const saved = await prefs(actorOf(req).id);
+    const current = (saved.pinnedReports ?? []).filter((id) => id !== templateId);
+    if (pinned && current.length >= MAX_PINNED_REPORTS)
+      throw new HttpError(400, `You can pin up to ${MAX_PINNED_REPORTS} reports. Unpin one first.`);
+    await db
+      .update(schema.users)
+      .set({ workspace: { ...saved, pinnedReports: pinned ? [...current, templateId] : current } })
       .where(eq(schema.users.id, actorOf(req).id));
     return prefs(actorOf(req).id);
   });

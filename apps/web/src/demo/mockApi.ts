@@ -3984,12 +3984,23 @@ on('GET', '/admin/setup', () => ({
 }));
 on('PUT', '/account/workspace', (_m, b) => {
   const saved = resolveWorkspace(workspace);
-  workspace = { ...b, menu: b.menu ?? saved.menu, seenWhatsNew: saved.seenWhatsNew };
+  workspace = {
+    ...b,
+    menu: b.menu ?? saved.menu,
+    seenWhatsNew: saved.seenWhatsNew,
+    pinnedReports: saved.pinnedReports,
+  };
   return resolveWorkspace(workspace);
 });
 on('DELETE', '/account/workspace', () => {
-  const { menu, seenWhatsNew } = resolveWorkspace(workspace);
-  workspace = { menu, seenWhatsNew };
+  const { menu, seenWhatsNew, pinnedReports } = resolveWorkspace(workspace);
+  workspace = { menu, seenWhatsNew, pinnedReports };
+  return resolveWorkspace(workspace);
+});
+on('POST', '/account/pinned-reports', (_m, b) => {
+  const saved = resolveWorkspace(workspace);
+  const rest = (saved.pinnedReports ?? []).filter((id) => id !== b.templateId);
+  workspace = { ...saved, pinnedReports: b.pinned ? [...rest, String(b.templateId)] : rest };
   return resolveWorkspace(workspace);
 });
 on('POST', '/account/whats-new', (_m, b) => {

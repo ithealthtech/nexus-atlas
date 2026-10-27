@@ -230,6 +230,24 @@ describe('favorites, quick notes, and workspace preferences', () => {
     expect((await owner.call('POST', '/api/account/whats-new', { seen: '' })).status).toBe(400);
   });
 
+  it('pins report templates to the dashboard, whatever else they save or reset', async () => {
+    const get = async () => (await owner.call('GET', '/api/account/workspace')).data;
+    const ids = Array.from({ length: 9 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
+    const pin = (templateId: string, pinned = true) =>
+      owner.call('POST', '/api/account/pinned-reports', { templateId, pinned });
+    expect((await pin(ids[0]!)).data.pinnedReports).toEqual([ids[0]]);
+    expect((await pin(ids[1]!)).data.pinnedReports).toEqual([ids[0], ids[1]]);
+    // Pinning again doesn't duplicate; unpinning removes it.
+    expect((await pin(ids[0]!)).data.pinnedReports).toEqual([ids[1], ids[0]]);
+    expect((await pin(ids[1]!, false)).data.pinnedReports).toEqual([ids[0]]);
+    await owner.call('PUT', '/api/account/workspace', { widgets: [], hiddenSections: ['map'] });
+    await owner.call('DELETE', '/api/account/workspace');
+    expect((await get()).pinnedReports).toEqual([ids[0]]);
+    for (const id of ids.slice(1, 8)) expect((await pin(id)).status).toBe(200);
+    expect((await pin(ids[8]!)).status).toBe(400);
+    expect((await pin('not-a-template')).status).toBe(400);
+  });
+
   it('saves dashboard cards and hidden sections per person', async () => {
     const defaults = (await owner.call('GET', '/api/account/workspace')).data;
     expect(defaults.widgets.map((w: { id: string }) => w.id)).toEqual([...DASHBOARD_WIDGETS]);

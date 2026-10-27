@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from '@tanstack/react-router';
+import { useParams, useSearch } from '@tanstack/react-router';
 import {
   Activity,
   Archive,
@@ -22,6 +22,8 @@ import {
   ListFilter,
   LockKeyhole,
   PiggyBank,
+  Pin,
+  PinOff,
   Play,
   Presentation,
   Save,
@@ -47,6 +49,7 @@ import {
   type ReportRunView,
   type ReportSelection,
   type ReportTemplateView,
+  type WorkspacePrefs,
 } from '@atlas/shared';
 import { ReportShareDialog } from '@/components/ReportShare';
 import { ScheduleDialog, ScheduleList } from '@/components/ReportSchedules';
@@ -68,7 +71,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { api, download } from '@/lib/api';
-import { useClients, useLayouts } from '@/lib/queries';
+import { useClients, useLayouts, useWorkspacePrefs } from '@/lib/queries';
 import { DEMO } from '@/lib/demo';
 import { cn } from '@/lib/cn';
 
@@ -221,6 +224,31 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
     queryKey: ['report-templates'],
     queryFn: () => api<ReportTemplateView[]>('/reports/templates'),
   });
+  // A pinned report opened from the dashboard arrives as ?template=, and opens set up, ready to run.
+  const { template: wanted } = useSearch({ strict: false }) as { template?: string };
+  // Set while rendering, once per template asked for, rather than in an effect (React's "adjusting state" pattern).
+  const [opened, setOpened] = useState<string | null>(null);
+  const asked = wanted && wanted !== opened ? templates.data?.find((x) => x.id === wanted) : undefined;
+  if (asked) {
+    setOpened(asked.id);
+    setTemplate(asked);
+    setDefinition(asked.definition);
+    setRun(null);
+  }
+  const prefs = useWorkspacePrefs();
+  const pinned = new Set(prefs.data?.pinnedReports ?? []);
+  const pin = async (t: ReportTemplateView) => {
+    try {
+      const saved = await api<WorkspacePrefs>('/account/pinned-reports', {
+        method: 'POST',
+        body: { templateId: t.id, pinned: !pinned.has(t.id) },
+      });
+      qc.setQueryData(['workspace'], saved);
+      toast(pinned.has(t.id) ? 'Unpinned from your dashboard.' : 'Pinned to your dashboard.');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  };
   const history = useQuery({ queryKey: ['report-history'], queryFn: () => api<ReportRunView[]>('/reports/runs') });
   // The same report for the same clients, captured before this one, and (once asked for) what changed since.
   const [compare, setCompare] = useState<{ runId: string; previous: ReportRunDetail } | null>(null);
@@ -457,6 +485,17 @@ function ReportWorkspace({ clientId }: { clientId?: string }) {
                         {REPORT_INFO[t.definition.kind].name} · {clientCount(t.definition.clientIds.length)}
                       </span>
                     </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={
+                        pinned.has(t.id) ? `Unpin ${t.name} from the dashboard` : `Pin ${t.name} to the dashboard`
+                      }
+                      aria-pressed={pinned.has(t.id)}
+                      onClick={() => void pin(t)}
+                    >
+                      {pinned.has(t.id) ? <PinOff /> : <Pin />}
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"

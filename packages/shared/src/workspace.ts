@@ -27,6 +27,7 @@ export const DASHBOARD_WIDGETS = [
   'asset-stats',
   'health',
   'favorites',
+  'pinned-reports',
   'recent-clients',
   'activity',
   'setup',
@@ -53,6 +54,11 @@ export const DASHBOARD_WIDGET_INFO: Record<
   favorites: {
     label: 'Favorites',
     description: 'Clients, documents, assets, and passwords you starred.',
+    area: 'main',
+  },
+  'pinned-reports': {
+    label: 'Pinned reports',
+    description: 'Report templates you pinned, a click from running.',
     area: 'main',
   },
   'recent-clients': { label: 'Recently updated clients', description: 'The last five clients changed.', area: 'main' },
@@ -112,7 +118,13 @@ export type WorkspacePrefs = Omit<z.infer<typeof workspacePrefsSchema>, 'menu'> 
   menu: MenuStyle;
   /** The newest "What's new" this person has seen or put away (see WHATS_NEW). Set through its own route. */
   seenWhatsNew?: string;
+  /** Report templates pinned to the dashboard, in the order pinned. Set through its own route. */
+  pinnedReports?: string[];
 };
+
+/** How many report templates one person can pin. */
+export const MAX_PINNED_REPORTS = 8;
+export const pinReportSchema = z.object({ templateId: z.string().uuid(), pinned: z.boolean() });
 
 /** The release the What's new page describes. A person who hasn't seen it gets a card on their dashboard. */
 export const WHATS_NEW = '2.0';
@@ -145,7 +157,10 @@ export function resolveWorkspace(saved: unknown): WorkspacePrefs {
   ] as ClientSection[];
   const menu = MENU_STYLES.includes(raw.menu as MenuStyle) ? (raw.menu as MenuStyle) : DEFAULT_WORKSPACE.menu;
   const whatsNew = typeof raw.seenWhatsNew === 'string' ? { seenWhatsNew: raw.seenWhatsNew } : {};
-  return { widgets, hiddenSections, menu, ...whatsNew };
+  const pins = Array.isArray(raw.pinnedReports)
+    ? [...new Set(raw.pinnedReports.filter((id): id is string => typeof id === 'string'))].slice(0, MAX_PINNED_REPORTS)
+    : [];
+  return { widgets, hiddenSections, menu, ...whatsNew, ...(pins.length ? { pinnedReports: pins } : {}) };
 }
 
 // ---------- client workspace ----------
