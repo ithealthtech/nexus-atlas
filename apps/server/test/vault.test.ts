@@ -157,6 +157,12 @@ describe('password vault', () => {
       tech.id,
     ]);
     expect((await tech.b.call('POST', `/api/passwords/${item.id}/reveal`, {})).status).toBe(200);
+    // A restricted password asks for the password again once the sign-in confirmation is old.
+    await t.handle.db.update(schema.sessions).set({ reauthAt: new Date(0) });
+    const stale = await tech.b.call('POST', `/api/passwords/${item.id}/reveal`, {});
+    expect([stale.status, stale.data.code]).toEqual([403, 'reauth']);
+    expect((await tech.b.call('POST', '/api/session/reauth', { password: 'vault tech pass 12' })).status).toBe(200);
+    expect((await tech.b.call('POST', `/api/passwords/${item.id}/reveal`, {})).status).toBe(200);
     expect((await owner.call('GET', '/api/vault/audit')).data.length).toBeGreaterThan(2);
     expect((await tech.b.call('GET', '/api/vault/audit')).status).toBe(403);
   });

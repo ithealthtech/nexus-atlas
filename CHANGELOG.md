@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Password check before restricted reveals.** Revealing or copying a restricted password, or one of its old versions, in the browser asks you to confirm your password if you haven't in the last 10 minutes.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

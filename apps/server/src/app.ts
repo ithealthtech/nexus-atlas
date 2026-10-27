@@ -774,6 +774,10 @@ export async function buildApp({
     storage: files,
     maxUploadBytes,
     shareLimiter: failureLimiter(30, 15 * 60_000),
+    // Browser sessions can confirm a password on the spot; apps and API keys are vetted when they're set up.
+    stepUp: (req) => {
+      if (req.session?.session.kind === 'browser') identity.requireRecentAuth(req.session);
+    },
   });
   registerWorkspaceRoutes(app, { db, authed, vault });
   registerSetupRoutes(app, { db, authed, settings });
