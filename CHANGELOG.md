@@ -28,6 +28,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Added
 
 - **Dormant access alerts.** System status warns about accounts and API keys nobody has used for 60 days, naming them, and People marks inactive accounts.
+### Added
+
+- **Bitdefender infection alerts.** When GravityZone reports an infected endpoint, staff who can see that client get an email right away (not at the morning send time), once per endpoint per day while it stays infected.
 
 ## [2.2.0] - 2026-10-23
 
