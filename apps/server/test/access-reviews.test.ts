@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { strFromU8, unzipSync } from 'fflate';
 import type { AccessReviewView } from '@atlas/shared';
 import { OWNER, enroll, setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -81,6 +82,38 @@ describe('access reviews', () => {
     );
   });
 
+  it('packs the compliance evidence: log check, two-factor, policies, and signed-off reviews', async () => {
+    const review = (await owner.call('POST', `/api/clients/${harbor}/access-reviews`, {})).data as AccessReviewView;
+    for (const i of review.items)
+      await owner.call('POST', `/api/access-reviews/${review.id}/decisions`, { userId: i.userId, decision: 'keep' });
+    await owner.call('POST', `/api/access-reviews/${review.id}/sign-off`, { signedName: 'Avery Owner' });
+    await owner.call('POST', '/api/clients', { name: 'Never Reviewed LLC' });
+
+    const pack = await t.app.inject({
+      method: 'GET',
+      url: '/api/compliance/evidence-pack',
+      headers: { cookie: owner.cookie },
+    });
+    expect(pack.statusCode, pack.body).toBe(200);
+    expect(pack.headers['content-type']).toBe('application/zip');
+    const files = unzipSync(new Uint8Array(pack.rawPayload));
+    expect(Object.keys(files).sort()).toEqual([
+      '01 Security log integrity.txt',
+      '02 Security log.csv',
+      '03 Team and two-factor.csv',
+      '04 Vault policies.txt',
+      '05 Access reviews/Harbor Dental.pdf',
+      '05 Access reviews/Summary.csv',
+      'README.txt',
+    ]);
+    expect(strFromU8(files['01 Security log integrity.txt']!)).toContain('Result: INTACT');
+    expect(strFromU8(files['03 Team and two-factor.csv']!)).toContain(`"${OWNER.email}"`);
+    const readme = strFromU8(files['README.txt']!);
+    expect(readme).toContain('Access reviews: 1 of 2 clients signed off in the last 90 days.');
+    expect(strFromU8(files['05 Access reviews/Summary.csv']!)).toContain('"Never Reviewed LLC","Never","No"');
+    expect(strFromU8(files['05 Access reviews/Harbor Dental.pdf']!.subarray(0, 5))).toBe('%PDF-');
+  });
+
   it('is for administrators only', async () => {
     const tech = await technician('tech@atlas.test', { grants: [{ clientId: harbor, level: 'edit_passwords' }] });
     expect((await tech.b.call('POST', `/api/clients/${harbor}/access-reviews`, {})).status).toBe(403);
@@ -88,5 +121,6 @@ describe('access reviews', () => {
     const review = (await owner.call('POST', `/api/clients/${harbor}/access-reviews`, {})).data as AccessReviewView;
     expect((await tech.b.call('GET', `/api/access-reviews/${review.id}`)).status).toBe(403);
     expect((await owner.call('GET', `/api/access-reviews/${review.id}/pdf`)).status).toBe(409);
+    expect((await tech.b.call('GET', '/api/compliance/evidence-pack')).status).toBe(403);
   });
 });

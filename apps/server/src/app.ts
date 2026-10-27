@@ -84,6 +84,7 @@ import {
 } from './services/portal-certificate.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { registerAccessReviewRoutes } from './routes/access-reviews.js';
+import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerClientHealthRoutes } from './routes/client-health.js';
 import { ClientHealthService } from './services/client-health.js';
 import { registerSetupRoutes } from './routes/setup.js';
@@ -820,6 +821,14 @@ export async function buildApp({
   const clientHealth = new ClientHealthService(db, { settings, passwords: health, trackers });
   registerClientHealthRoutes(app, { db, authed, health: clientHealth });
   registerAccessReviewRoutes(app, { db, authed, settings });
+  registerComplianceRoutes(app, {
+    db,
+    authed,
+    recent,
+    settings,
+    audit,
+    requireStaffMfa: config.ATLAS_REQUIRE_STAFF_MFA,
+  });
   const notifier = registerAdminRoutes(app, {
     emergency,
     health,
