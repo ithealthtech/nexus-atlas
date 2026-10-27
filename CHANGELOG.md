@@ -8,6 +8,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 - **Safe updates.** When an update installed from **Administration → Updates** doesn't start, Atlas already went back to the previous version. Now, if the new version had already updated the database before failing, Atlas also restores the backup it took just before the update, so the previous version gets the database it knows instead of one it doesn't understand. It then checks the previous version answers. The Updates page says which happened: the database was untouched, or the backup was restored. This protects updates from this release onwards, since an update is run by the version already installed.
 - **Node.js 24 for new installs.** The Linux install script installs Node.js 24 on new servers, and the Docker image moves to Node.js 24. Servers already on Node.js 22 keep it until you move them: see *Moving to Node.js 24* in the deployment guide. Node.js 22 stops getting security fixes on 30 April 2027.
+- **Bitdefender counts everywhere Atlas judges protection.** For clients linked to GravityZone:
+  - **Health score:** the security part counts infected endpoints (double), endpoints needing attention, and devices Bitdefender doesn't manage. Each finding opens the client's overview, where the Bitdefender card lists them.
+  - **Endpoint health and Security posture reports** gain a **Bitdefender endpoints** section: every endpoint with its state, what needs attention, policy, licence and last seen, plus the RMM devices GravityZone doesn't manage. Endpoint health adds a **Bitdefender** column, and the Security overview adds infected, attention and without-Bitdefender counts. **Needs review** picks them out.
+  - **Cyber insurance readiness:** "Is endpoint protection running on every device?" is answered from Bitdefender, counting active licences against every device, including the ones it doesn't manage. An infected endpoint means it's never a plain Yes.
 
 ## [2.2.0] - 2026-10-23
 

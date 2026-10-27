@@ -2,6 +2,7 @@ import { asc, and, eq } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import { PASSWORD_ISSUE_LABELS, ROLE_INFO, type RotationRunStatus } from '@atlas/shared';
 import { MAX_REPORT_ROWS, capped, iso, newest, onlineText, type Collector, type ReportContext } from './context.js';
+import { bitdefenderSection } from './endpoints.js';
 
 const ROTATION_RESULT: Record<RotationRunStatus, string> = {
   dispatched: 'In progress',
@@ -49,6 +50,7 @@ export async function passwords(report: ReportContext) {
 /** Passwords, device protection, disk encryption, and automatic rotation, per client. */
 export const security: Collector = async (report) => {
   const endpoints = await report.endpoints();
+  const bitdefender = await report.bitdefender();
   const { vaultIds, health, issues, totals } = await passwords(report);
   const devices = capped(
     await report.db
@@ -92,8 +94,10 @@ export const security: Collector = async (report) => {
       'Protection missing / stopped',
       'Not encrypted',
       'Rotation failing',
+      ...(bitdefender.size ? ['Bitdefender infected', 'Bitdefender attention', 'Without Bitdefender'] : []),
     ],
     report.clients.map((c) => {
+      const bd = bitdefender.get(c.id);
       const vault = vaultIds.has(c.id);
       const total = totals.get(c.id);
       const machines = endpoints.filter((e) => e.clientId === c.id);
@@ -112,6 +116,13 @@ export const security: Collector = async (report) => {
         ),
         when(!!encrypted.length, () => encrypted.filter((d) => encryptionOf(d.volumes) === 'Not encrypted').length),
         when(!!targets, () => targets!.filter((r) => r.clientId === c.id && r.lastStatus === 'failed').length),
+        ...(bitdefender.size
+          ? [
+              when(!!bd, () => bd!.counts.infected),
+              when(!!bd, () => bd!.counts.attention),
+              when(!!bd, () => bd!.missing.length),
+            ]
+          : []),
       ];
     }),
   );
@@ -168,4 +179,5 @@ export const security: Collector = async (report) => {
         r.lastStatus ? ROTATION_RESULT[r.lastStatus] : 'Not run yet',
       ]),
     );
+  await bitdefenderSection(report);
 };

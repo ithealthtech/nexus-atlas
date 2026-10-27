@@ -15,6 +15,7 @@ import {
 } from '@atlas/shared';
 import { HttpError } from '../errors.js';
 import { actorFor } from '../identity/service.js';
+import { clientEndpoints } from './integrations/bitdefender.js';
 import { RmmHealthService } from './rmm-health.js';
 import { Scope } from './scope.js';
 import type { SettingsService } from './settings.js';
@@ -43,6 +44,11 @@ export interface HealthInputs {
   staleDays: number;
   /** Devices whose BitLocker state the collector reported, and those with a volume not encrypted. */
   encryption: { reported: number; unprotected: number };
+  /**
+   * Bitdefender GravityZone, for a client linked to it: the endpoints it manages, those infected or needing attention,
+   * and RMM devices it doesn't manage. Missing or null when the client isn't linked.
+   */
+  bitdefender?: { endpoints: number; infected: number; attention: number; missing: number } | null;
   documents: { total: number; overdue: number };
   primaryContact: boolean;
   locations: number;
@@ -102,12 +108,36 @@ export function scoreClient(clientId: string, clientName: string, input: HealthI
         '/assets',
       ),
     );
+  const bd = input.bitdefender;
+  if (bd && bd.endpoints + bd.missing > 0) {
+    // Its findings point at the client's overview, where the Bitdefender card lists each endpoint and device.
+    if (bd.endpoints) {
+      // Malware still on a machine counts double: it's the one thing here that is already a breach.
+      security.push(
+        simple(
+          ratio(bd.endpoints - bd.infected, bd.endpoints),
+          `${plural(bd.infected, 'endpoint')} still infected, per Bitdefender`,
+          '',
+          2,
+        ),
+        simple(
+          ratio(bd.endpoints - bd.attention, bd.endpoints),
+          `${plural(bd.attention, 'Bitdefender endpoint')} needing attention`,
+          '',
+        ),
+      );
+    }
+    security.push(
+      simple(ratio(bd.endpoints, bd.endpoints + bd.missing), `${plural(bd.missing, 'device')} without Bitdefender`, ''),
+    );
+  }
   parts.push({
     part: 'security',
     detail: [
       pw.total && plural(pw.total, 'password'),
       devices?.total && `protection on ${plural(devices.total, 'device')}`,
       encryption.reported && `BitLocker on ${encryption.reported}`,
+      bd?.endpoints && `Bitdefender on ${bd.endpoints}`,
     ]
       .filter(Boolean)
       .join(', '),
@@ -387,6 +417,21 @@ export class ClientHealthService {
 
     const rmm = await new RmmHealthService(this.deps.settings).report(scope);
     for (const c of rmm.clients) each(c.clientId, (i) => ((i.devices = c.counts), (i.staleDays = rmm.staleDays)));
+
+    // Bitdefender, for each client linked to a GravityZone company.
+    const links = (await this.deps.settings.bitdefenderLinks(orgId)) ?? {};
+    for (const m of Object.values(links)) {
+      if (m.action !== 'link' || !inputs.has(m.clientId)) continue;
+      const view = await clientEndpoints(db, orgId, m.clientId, true, now);
+      each(m.clientId, (i) => {
+        i.bitdefender = {
+          endpoints: view.endpoints.length,
+          infected: view.counts.infected,
+          attention: view.counts.attention,
+          missing: view.missing.length,
+        };
+      });
+    }
 
     const warranty = await new WarrantyService(this.deps.settings).report(scope);
     for (const c of warranty.clients) each(c.clientId, (i) => (i.warranties = dated(c.counts)));

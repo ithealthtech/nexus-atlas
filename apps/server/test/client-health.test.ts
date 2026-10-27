@@ -41,6 +41,31 @@ const devices = (over: Partial<RmmHealthCounts>): RmmHealthCounts => ({
 const part = (h: ReturnType<typeof scoreClient>, name: string) => h.parts.find((p) => p.part === name)!;
 
 describe('client health score', () => {
+  it('counts Bitdefender: infected endpoints double, then attention, then devices it does not manage', () => {
+    const base: HealthInputs = {
+      ...blank(),
+      passwords: { total: 10, withIssues: 0, breached: 0 },
+      devices: devices({}),
+      encryption: { reported: 10, unprotected: 0 },
+    };
+    expect(part(scoreClient('c', 'Not linked', base), 'security').score).toBe(100);
+    const linked = scoreClient('c', 'Linked', {
+      ...base,
+      bitdefender: { endpoints: 10, infected: 1, attention: 2, missing: 2 },
+    });
+    const security = part(linked, 'security');
+    // (1 + 1 + 1 + 0.9 × 2 + 0.8 + 10/12) / 7
+    expect(security.score).toBe(92);
+    expect(security.findings.map((f) => f.text)).toEqual([
+      '1 endpoint still infected, per Bitdefender',
+      '2 Bitdefender endpoints needing attention',
+      '2 devices without Bitdefender',
+    ]);
+    // Findings point at the client's overview, where the Bitdefender card is.
+    expect(security.findings.every((f) => f.section === '')).toBe(true);
+    expect(security.detail).toContain('Bitdefender on 10');
+  });
+
   it('leaves out what it cannot measure, rather than counting it healthy', () => {
     // A new client: only documentation can be measured, and nothing is on record yet.
     const empty = scoreClient('c', 'New client', blank());
