@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **Documentation coverage.** The documentation report opens with, per client, how many contacts, locations, assets, passwords, and articles are documented, and names the kinds that have none.
+- **Documentation coverage.** The documentation report opens with each client's coverage: the percentage of seven essentials on record (a primary contact, a location, a network diagram, a backup runbook, the internet provider, admin accounts, and Wi-Fi), which are missing, and how many contacts, locations, assets, passwords, and articles it has.
 
 ## [2.2.0] - 2026-10-23
 
