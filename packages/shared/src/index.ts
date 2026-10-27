@@ -26,3 +26,4 @@ export * from './setup.js';
 export * from './bitdefender.js';
 export * from './teams.js';
 export * from './alerting.js';
+export * from './access-reviews.js';

@@ -1802,3 +1802,29 @@ export const teamsDeliveries = pgTable(
     check('teams_deliveries_kind', sql`${t.kind} in ('expiration','review','breach','infection')`),
   ],
 );
+
+// Access reviews: a dated record that someone checked who can open a client, kept as evidence. The people and
+// their access are captured when the review starts, so the record shows what was reviewed even after access changes.
+export const accessReviews = pgTable(
+  'access_reviews',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // Each person with access when the review started, and the reviewer's decision on them.
+    items: jsonb('items').notNull(),
+    startedBy: uuid('started_by').references(() => users.id, { onDelete: 'set null' }),
+    startedByName: text('started_by_name').notNull(),
+    // Set when the reviewer signs it off; a signed-off review no longer changes.
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    signedBy: uuid('signed_by').references(() => users.id, { onDelete: 'set null' }),
+    signedName: text('signed_name'),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [index('access_reviews_client').on(t.orgId, t.clientId, t.createdAt)],
+);
