@@ -2,6 +2,12 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Bitdefender infection alerts.** When GravityZone reports an infected endpoint, staff who can see that client get an email right away (not at the morning send time), once per endpoint per day while it stays infected.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

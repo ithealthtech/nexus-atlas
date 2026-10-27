@@ -79,6 +79,8 @@ export class Notifier {
           await this.deps.reports?.runDue(org.id, now);
           await this.deps.clientHealth?.refresh(org.id).catch(this.log);
           await this.deps.audit.checkpoint(org.id);
+          // Infections can't wait for the morning email.
+          await this.alertInfections(org, now).catch(this.log);
           if (now.getHours() >= this.deps.sendHour) await this.sendForOrg(org, now);
         }
         this.lastRunAt = new Date();
@@ -150,6 +152,52 @@ export class Notifier {
       const alertKey = `alert:${user.id}:${day}`;
       if (alerts.length && (await this.claim(alertKey, user.id)))
         await this.send(org, user.email, 'Expiring soon', alerts, window).catch(() => this.unclaim(alertKey));
+    }
+  }
+
+  /**
+   * Emails staff who can see a client when Bitdefender reports one of its endpoints infected: once per endpoint per
+   * day while it stays infected, listing every infected endpoint they can see.
+   */
+  async alertInfections(org: { id: string; name: string }, now = new Date()) {
+    const t = schema.bitdefenderEndpoints;
+    const infected = await this.db
+      .select({ id: t.endpointId, name: t.name, clientId: t.clientId, clientName: schema.clients.name })
+      .from(t)
+      .innerJoin(schema.clients, eq(schema.clients.id, t.clientId))
+      .where(and(eq(t.orgId, org.id), eq(t.infected, true)))
+      .orderBy(schema.clients.name, t.name);
+    if (!infected.length || !(await this.deps.mail.enabled(org.id))) return;
+    const users = await this.db
+      .select()
+      .from(schema.users)
+      .where(and(eq(schema.users.orgId, org.id), eq(schema.users.disabled, false)));
+    const day = now.toISOString().slice(0, 10);
+    for (const user of users) {
+      if (!ROLE_INFO[user.role as Role].staff) continue;
+      const readable = new Set(await new Scope(this.db, actorFor(user)).readableClientIds());
+      const visible = infected.filter((e) => readable.has(e.clientId));
+      const claimed: string[] = [];
+      for (const e of visible) {
+        const key = `infected:${user.id}:${e.id}:${day}`;
+        if (await this.claim(key, user.id)) claimed.push(key);
+      }
+      if (!claimed.length) continue;
+      await this.deps.mail
+        .send(org.id, org.name, {
+          to: user.email,
+          subject: `Bitdefender: ${visible.length} infected endpoint${visible.length === 1 ? '' : 's'}`,
+          paragraphs: ['GravityZone reports malware on these endpoints. Check them in GravityZone.'],
+          rows: visible.slice(0, 100).map((e) => ({
+            cells: [e.name, e.clientName, 'Infected'],
+            url: `${this.deps.publicOrigin}/clients/${e.clientId}`,
+          })),
+          action: { label: 'Open Atlas', url: this.deps.publicOrigin },
+        })
+        .catch(async (err) => {
+          for (const key of claimed) await this.unclaim(key);
+          throw err;
+        });
     }
   }
 
