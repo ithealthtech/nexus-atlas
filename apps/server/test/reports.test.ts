@@ -690,7 +690,9 @@ describe('private client reports', () => {
     // The link opens the asset in that row.
     const first = await owner.call('GET', `/api${inventory.links![0]}`);
     expect(first.data.name).toBe(inventory.rows[0]![1]);
-    const docs = (await generate('documentation')).data.snapshot.sections[0] as ReportSection;
+    const docs = (await generate('documentation')).data.snapshot.sections.find(
+      (s: ReportSection) => s.title === 'Documentation health',
+    ) as ReportSection;
     expect(docs.links!.every((l) => l?.startsWith('/documents/'))).toBe(true);
 
     const link = await owner.call('POST', `/api/reports/runs/${made.data.id}/shares`, { expiresDays: 7 });
