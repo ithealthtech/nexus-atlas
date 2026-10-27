@@ -129,7 +129,7 @@ Atlas never gets root rights. The steps are:
 2. The `msp-atlas-updater.path` unit starts `/usr/local/sbin/atlas-updater` as root.
 3. The updater treats the request as untrusted. It accepts only a `vX.Y.Z` tag that exists on the repository.
 4. It takes a backup, then runs `atlas-install --version <tag>`.
-5. If the install fails after the code was swapped, it puts the previous code back and restarts Atlas. Database migrations are not rolled back; use the pre-update backup for that.
+5. If the install fails after the code was swapped (including when the new version doesn't answer `/readyz`), it puts the previous code back. If the new version had already applied database migrations (the count in `drizzle.__drizzle_migrations` changed, read with `psql`), it restores the pre-update backup with `restore.js --replace` before restarting the previous version. It then checks the previous version answers. The status message on the Updates page says which of these happened. Without `psql` it can't tell, and the message names the backup to restore if needed.
 6. It writes progress to `status.json`, and the full log to `last-update.log`, in `/var/lib/msp-atlas-updater`. The Updates page reads the status.
 
 Other installations, such as Docker or Windows, see the Updates page read-only and update the way they were deployed.
