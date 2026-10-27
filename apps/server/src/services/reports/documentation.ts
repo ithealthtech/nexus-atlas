@@ -1,7 +1,7 @@
 import { and, count, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { schema } from '@atlas/db';
 import { DOCUMENT_REVIEW_DAYS, documentFreshness } from '@atlas/shared';
-import { DAY, iso, type Collector, type ReportContext } from './context.js';
+import { iso, type Collector, type ReportContext } from './context.js';
 
 /**
  * The essentials every client's documentation should have, each checked from the records themselves: titles for
