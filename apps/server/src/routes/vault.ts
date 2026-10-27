@@ -28,6 +28,8 @@ export function registerVaultRoutes(
     storage: FileStorage;
     maxUploadBytes: number;
     shareLimiter: { check(key: string): void; fail(key: string): void };
+    /** Throws unless this request's person confirmed their password recently: asked before restricted reveals. */
+    stepUp?: (req: FastifyRequest) => void;
   },
 ) {
   const { db, authed } = deps;
@@ -72,7 +74,7 @@ export function registerVaultRoutes(
     vault.setFavorite(scopeOf(req), req.params.id, false),
   );
   app.post<{ Params: Params }>('/api/passwords/:id/reveal', authed, async (req) =>
-    vault.reveal(scopeOf(req), req.params.id, req.body, req.ip),
+    vault.reveal(scopeOf(req), req.params.id, req.body, req.ip, () => deps.stepUp?.(req)),
   );
   app.get<{ Params: Params }>('/api/passwords/:id/history', authed, async (req) =>
     vault.history(scopeOf(req), req.params.id),
@@ -80,7 +82,10 @@ export function registerVaultRoutes(
   app.post<{ Params: Params & { historyId: string } }>(
     '/api/passwords/:id/history/:historyId/reveal',
     authed,
-    async (req) => vault.revealHistory(scopeOf(req), req.params.id, req.params.historyId, req.body, req.ip),
+    async (req) =>
+      vault.revealHistory(scopeOf(req), req.params.id, req.params.historyId, req.body, req.ip, () =>
+        deps.stepUp?.(req),
+      ),
   );
   app.get<{ Params: Params }>('/api/passwords/:id/access', authed, async (req) =>
     vault.access(scopeOf(req), req.params.id),
