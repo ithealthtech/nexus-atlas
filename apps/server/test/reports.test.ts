@@ -810,7 +810,13 @@ describe('private client reports', () => {
       const serialized = JSON.stringify(result.data);
       for (const hidden of ['never-export-this', 'Archived workstation', 'Other client asset'])
         expect(serialized).not.toContain(hidden);
-      if (kind === 'documentation') expect(serialized).toContain('Review overdue');
+      if (kind === 'documentation') {
+        expect(serialized).toContain('Review overdue');
+        expect(result.data.snapshot.sections[0]).toMatchObject({
+          title: 'Documentation coverage',
+          rows: [['Harbor Dental', '0', '0', '1', '0', '1', 'No contacts, locations, passwords']],
+        });
+      }
       if (kind === 'endpoints') {
         expect(serialized).toContain('Unknown');
         expect(serialized).toContain('24 hours');
