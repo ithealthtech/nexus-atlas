@@ -1852,3 +1852,48 @@ export const accessReviews = pgTable(
   },
   (t) => [index('access_reviews_client').on(t.orgId, t.clientId, t.createdAt)],
 );
+
+// Alerts the alerting center sent, or is about to: one row per rule, event, reminder, channel and destination, so
+// each alert goes once. The message is kept as sent, for the history; it never holds a secret.
+export const alertDeliveries = pgTable(
+  'alert_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    version: integer('version'),
+    ruleId: text('rule_id').notNull(),
+    ruleName: text('rule_name').notNull(),
+    kind: text('kind').notNull(),
+    test: boolean('test').notNull().default(false),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+    itemName: text('item_name').notNull(),
+    // Hash of the event and reminder, e.g. an item, its date and "day-14".
+    eventKey: text('event_key').notNull(),
+    reason: text('reason').notNull(),
+    channel: text('channel').notNull(),
+    // A user ID for email; "team:channel" for Teams.
+    destination: text('destination').notNull(),
+    destinationLabel: text('destination_label').notNull(),
+    subject: text('subject').notNull(),
+    body: text('body').notNull(),
+    teamsFormat: text('teams_format').notNull().default('text'),
+    link: text('link').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    error: text('error').notNull().default(''),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    uniqueIndex('alert_deliveries_once').on(t.orgId, t.ruleId, t.eventKey, t.channel, t.destination),
+    index('alert_deliveries_due').on(t.status, t.nextAttemptAt),
+    index('alert_deliveries_org').on(t.orgId, t.createdAt),
+    check('alert_deliveries_status', sql`${t.status} in ('pending','sending','sent','failed','uncertain','skipped')`),
+    check('alert_deliveries_channel', sql`${t.channel} in ('email','teams')`),
+  ],
+);

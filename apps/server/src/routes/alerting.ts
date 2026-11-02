@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import type { Database } from '@atlas/db';
 import { alertHistoryQuerySchema, alertVersionNumberSchema } from '@atlas/shared';
-import { Scope } from '../services/scope.js';
+import { HttpError } from '../errors.js';
+import { Scope, isUuid } from '../services/scope.js';
+import type { AlertDeliveryService } from '../services/alerting/delivery.js';
 import { AlertWorkspaceService } from '../services/alerting/workspace.js';
 import { AlertPreviewService } from '../services/alerting/preview.js';
 import { AlertVersionService } from '../services/alerting/versions.js';
@@ -61,4 +63,43 @@ export function registerAlertingRoutes(
       return versions.restore(scope(req), alertVersionNumberSchema.parse(req.params.version), req.body, req.ip);
     },
   );
+}
+
+/** Live delivery from the alerting center: going live, what would send, history, retries and test sends. */
+export function registerAlertDeliveryRoutes(
+  app: FastifyInstance,
+  deps: {
+    db: Database;
+    authed: { onRequest: onRequestHookHandler };
+    recent: (req: FastifyRequest) => void;
+    delivery: AlertDeliveryService;
+  },
+) {
+  const { delivery } = deps;
+  const scope = (req: FastifyRequest) => new Scope(deps.db, req.session!.actor);
+  app.get('/api/settings/alerting/delivery', deps.authed, async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return delivery.state(scope(req));
+  });
+  app.put('/api/settings/alerting/delivery', deps.authed, async (req) => {
+    deps.recent(req);
+    return delivery.setMode(scope(req), req.body, req.ip);
+  });
+  app.get('/api/settings/alerting/delivery/preview', deps.authed, async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return delivery.dryRun(scope(req));
+  });
+  app.get('/api/settings/alerting/deliveries', deps.authed, async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return delivery.history(scope(req), req.query);
+  });
+  app.post<{ Params: { id: string } }>('/api/settings/alerting/deliveries/:id/retry', deps.authed, async (req) => {
+    deps.recent(req);
+    if (!isUuid(req.params.id)) throw new HttpError(404, 'Delivery not found.');
+    return delivery.retry(scope(req), req.params.id, req.body, req.ip);
+  });
+  app.post('/api/settings/alerting/test', deps.authed, async (req) => {
+    deps.recent(req);
+    return delivery.testSend(scope(req), req.body, req.ip);
+  });
 }
