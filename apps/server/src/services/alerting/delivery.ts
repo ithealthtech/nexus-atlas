@@ -437,6 +437,8 @@ export class AlertDeliveryService {
               body: d.channel === 'email' ? message.emailBody : message.teamsBody,
               teamsFormat: template.teamsFormat ?? 'text',
               link: message.link,
+              // Due from this tick, so the same pass sends it rather than the next one.
+              nextAttemptAt: now,
               ...(baseline
                 ? { status: 'skipped' as const, error: 'Already due when the alerting center went live.' }
                 : d.ready

@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Versions } from '@/components/alerting/Versions';
 import { useQuery } from '@tanstack/react-query';
 import type { AlertWorkspace } from '@atlas/shared';
-import { Badge, Button, Card, FormError, PageHeader, Skeleton } from '@/components/ui';
+import { Button, FormError, PageHeader, Skeleton } from '@/components/ui';
+import { DeliveryHistory, DeliveryPanel, TestSend } from '@/components/alerting/Delivery';
 import { Library } from '@/components/alerting/Library';
 import { TemplateEditor } from '@/components/alerting/TemplateEditor';
 import { RuleEditor } from '@/components/alerting/RuleEditor';
@@ -19,21 +20,20 @@ export function AlertingPage() {
       <PageHeader
         eyebrow="Administration"
         title="Alerting center"
-        description="Draft rules and custom messages for email and Microsoft Teams."
+        description="Rules and messages for email and Microsoft Teams: draft, test, publish, then go live."
       />
       <div className="flex flex-wrap gap-5 text-sm font-semibold text-primary">
         <Link to="/admin/email">Email connection & current alerts</Link>
         <Link to="/admin/teams">Teams connection, channels & delivery history</Link>
       </div>
-      <Card className="space-y-2 p-5">
-        <Badge tone="info">Draft workspace</Badge>
-        <p className="text-sm text-text-2">
-          Save templates and test rule conditions here. Drafts do not change automatic delivery. Current email and Teams
-          alerts continue using their existing settings.
-        </p>
-      </Card>
+      <div className="max-w-5xl">
+        <DeliveryPanel />
+      </div>
       <FormError message={query.error?.message} />
       {query.data ? <AlertStudio initial={query.data} /> : query.isLoading && <Skeleton className="h-80" />}
+      <div className="max-w-5xl">
+        <DeliveryHistory />
+      </div>
     </div>
   );
 }
@@ -61,6 +61,7 @@ function AlertStudio({ initial }: { initial: AlertWorkspace }) {
       )}
       {e.rule && (clients.isLoading || users.isLoading) && <Skeleton className="h-80" />}
       {e.template && <TemplateEditor key={e.template.id} template={e.template} change={e.changeTemplate} />}
+      {e.template && <TestSend template={e.template} saved={!e.dirty} />}
       <FormError message={e.error} />
       <div className="flex flex-wrap items-center gap-4">
         <Button loading={e.busy === 'save'} disabled={!!e.busy || !e.dirty} onClick={() => void e.save()}>
