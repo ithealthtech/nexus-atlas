@@ -28,6 +28,8 @@ export function Versions({ editor, lock }: { editor: AlertEditor; lock: (busy: b
       try {
         await work();
         await queries.invalidateQueries({ queryKey: ['alert-versions'] });
+        // The delivery panel shows which version sends.
+        await queries.invalidateQueries({ queryKey: ['alert-delivery'] });
       } finally {
         lock(false);
       }
@@ -44,7 +46,7 @@ export function Versions({ editor, lock }: { editor: AlertEditor; lock: (busy: b
       });
       setNote('');
       setBefore(undefined);
-      toast('Version published. Automatic delivery is not active yet.');
+      toast('Version published. If the alerting center is live, it sends from now on.');
     });
   const restore = () => {
     if (
@@ -65,8 +67,8 @@ export function Versions({ editor, lock }: { editor: AlertEditor; lock: (busy: b
     <Card className="space-y-4 p-5">
       <h2 className="text-lg font-semibold">Published versions</h2>
       <p className="text-sm text-text-2">
-        Publish a fixed copy of your saved templates and rules. Automatic delivery from these versions is coming in a
-        later update.
+        Publish a fixed copy of your saved templates and rules. While the alerting center is live, the newest published
+        version is what sends; drafts never do.
       </p>
       <Field label="Version note" help="Describe what changed. Do not include passwords or other secrets.">
         {(p) => <Input {...p} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />}

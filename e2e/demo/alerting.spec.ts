@@ -122,3 +122,55 @@ test('ready-made Teams templates create editable copies with formatted previews'
   await page.getByRole('button', { name: 'Use template', exact: true }).click();
   await expect(page.getByLabel('Teams message', { exact: true })).toContainText('Coordinate in this thread');
 });
+
+test('goes live from a published version after a preview, with a delivery history and test sends', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await signIn(page);
+  await open(page, '/admin/alerting');
+  await expect(page.getByText('Classic alerts', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Go live', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'New rule from template', exact: true }).click();
+  await page.getByLabel('Rule name', { exact: true }).fill('Renewal reminders');
+  await page.getByRole('checkbox', { name: /^Microsoft Teams client channel/ }).check();
+  await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
+  await expect(page.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
+  await page.getByLabel('Version note', { exact: true }).fill('First live rules');
+  await page.getByRole('button', { name: 'Publish saved drafts', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Preview what would send', exact: true }).click();
+  const preview = page.getByRole('dialog', { name: 'What would send now' });
+  await expect(preview).toContainText('Nothing is sent from here.');
+  await preview.getByRole('button', { name: 'Close', exact: true }).last().click();
+
+  await page.getByRole('button', { name: 'Go live', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Go live with the alerting center?' });
+  await expect(confirm).toContainText('Bitdefender infection emails');
+  await confirm.getByRole('checkbox', { name: /Also send reminders that are already due/ }).check();
+  await confirm.getByRole('button', { name: 'Go live', exact: true }).click();
+  await expect(page.getByText('Live', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Switch back to classic alerts', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Send test', exact: true }).click();
+  await expect(page.getByText('Test sent to your email.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Test', { exact: true }).first()).toBeVisible();
+
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      while (await page.getByRole('button', { name: 'Dismiss', exact: true }).count())
+        await page.getByRole('button', { name: 'Dismiss', exact: true }).first().click();
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+        .exclude('[data-demo-badge]')
+        .analyze();
+      expect(violations, `${colorScheme} ${width}`).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+  }
+  await page.getByRole('button', { name: 'Switch back to classic alerts', exact: true }).click();
+  await expect(page.getByText('Classic alerts', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});

@@ -7,6 +7,7 @@ import type { AuditService } from './audit.js';
 import type { ExpirationService } from './expirations.js';
 import type { MailService } from './mail.js';
 import { Scope } from './scope.js';
+import { alertCenterLive } from './alerting/delivery.js';
 import type { SettingsService } from './settings.js';
 import { Repeating, type ErrorLog } from './repeating.js';
 
@@ -144,6 +145,8 @@ export class Notifier {
       );
     const day = now.toISOString().slice(0, 10);
     const monday = now.getDay() === 1;
+    // With the alerting center live, its rules send the alerts; the Monday digest still comes from here.
+    const classic = !(await alertCenterLive(this.db, org.id));
     for (const user of users) {
       if (!ROLE_INFO[user.role as Role].staff) continue;
       const items = await this.deps.expirations.list(new Scope(this.db, actorFor(user)), window);
@@ -156,7 +159,7 @@ export class Notifier {
         continue; // The digest already lists today's alerts.
       }
       const alertKey = `alert:${user.id}:${day}`;
-      if (alerts.length && (await this.claim(alertKey, user.id)))
+      if (classic && alerts.length && (await this.claim(alertKey, user.id)))
         await this.send(org, user.email, 'Expiring soon', alerts, window).catch(() => this.unclaim(alertKey));
     }
   }
@@ -173,7 +176,7 @@ export class Notifier {
       .innerJoin(schema.clients, eq(schema.clients.id, t.clientId))
       .where(and(eq(t.orgId, org.id), eq(t.infected, true)))
       .orderBy(schema.clients.name, t.name);
-    if (!infected.length || !(await this.deps.mail.enabled(org.id))) return;
+    if (!infected.length || !(await this.deps.mail.enabled(org.id)) || (await alertCenterLive(this.db, org.id))) return;
     const users = await this.db
       .select()
       .from(schema.users)
