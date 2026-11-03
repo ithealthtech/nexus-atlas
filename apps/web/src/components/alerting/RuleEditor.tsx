@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import {
+  ALERT_DELIVERY_STYLES,
+  ALERT_DELIVERY_STYLE_LABELS,
   ALERT_ITEM_KINDS,
   ALERT_SEVERITIES,
+  type AlertDeliveryStyle,
+  type GroupView,
   type AlertRule,
   type AlertTemplate,
   type ClientSummary,
@@ -19,12 +23,14 @@ export function RuleEditor({
   templates,
   clients,
   users,
+  groups,
   change,
 }: {
   rule: AlertRule;
   templates: AlertTemplate[];
   clients: ClientSummary[];
   users: UserView[];
+  groups: GroupView[];
   change: (r: AlertRule) => void;
 }) {
   const [days, setDays] = useState(rule.daysBefore.join(', '));
@@ -32,7 +38,7 @@ export function RuleEditor({
     <Card>
       <CardHeader
         title="Rule editor"
-        description="Draft conditions and destinations. This rule does not send alerts yet."
+        description="Conditions and destinations. Changes send once published, while the alerting center is live."
       />
       <div className="space-y-5 p-5">
         <Field label="Rule name">
@@ -58,7 +64,7 @@ export function RuleEditor({
             </Select>
           )}
         </Field>
-        <Audience rule={rule} clients={clients} users={users} change={change} />
+        <Audience rule={rule} clients={clients} users={users} groups={groups} change={change} />
         <fieldset>
           <legend className="mb-3 text-sm font-semibold text-text">Item types</legend>
           <div className="flex flex-wrap gap-4">
@@ -108,6 +114,26 @@ export function RuleEditor({
               onChange={(e) => change({ ...rule, includeOverdue: e.target.checked })}
             />
           </>
+        )}
+        {rule.kind !== 'breach' && rule.kind !== 'infection' && (
+          <Field
+            label="Send as"
+            help="A daily summary goes at the summary hour under Timing, one per person or channel. Breaches and infections always go straight away."
+          >
+            {(p) => (
+              <Select
+                {...p}
+                value={rule.delivery}
+                onChange={(e) => change({ ...rule, delivery: e.target.value as AlertDeliveryStyle })}
+              >
+                {ALERT_DELIVERY_STYLES.map((s) => (
+                  <option key={s} value={s}>
+                    {ALERT_DELIVERY_STYLE_LABELS[s]}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
         )}
         <Checkbox
           label="Microsoft Teams client channel"

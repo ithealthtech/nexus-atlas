@@ -11,7 +11,8 @@ import { RuleEditor } from '@/components/alerting/RuleEditor';
 import { Preview } from '@/components/alerting/Preview';
 import { ALERTING_BASE, useAlertEditor } from '@/components/alerting/useAlertEditor';
 import { api } from '@/lib/api';
-import { useClients, useUsers } from '@/lib/queries';
+import { useClients, useGroups, useUsers } from '@/lib/queries';
+import { ScheduleEditor } from '@/components/alerting/Schedule';
 
 export function AlertingPage() {
   const query = useQuery({ queryKey: ['alerting'], queryFn: () => api<AlertWorkspace>(ALERTING_BASE) });
@@ -43,11 +44,13 @@ function AlertStudio({ initial }: { initial: AlertWorkspace }) {
   const [publishing, setPublishing] = useState(false);
   const clients = useClients();
   const users = useUsers();
+  const groups = useGroups();
   return (
     <fieldset disabled={!!e.busy || publishing} className="max-w-5xl min-w-0 space-y-6">
       <legend className="sr-only">Alert drafts</legend>
       <Versions editor={e} lock={setPublishing} />
       <Library editor={e} />
+      <ScheduleEditor schedule={e.workspace.schedule} change={e.changeSchedule} />
       <FormError message={clients.error?.message ?? users.error?.message} />
       {e.rule && clients.data && users.data && (
         <RuleEditor
@@ -56,6 +59,7 @@ function AlertStudio({ initial }: { initial: AlertWorkspace }) {
           templates={e.workspace.templates}
           clients={clients.data}
           users={users.data}
+          groups={groups.data ?? []}
           change={e.changeRule}
         />
       )}

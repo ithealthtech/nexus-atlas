@@ -29,6 +29,14 @@ export class AlertWorkspaceService {
     requireAlertAdmin(scope);
     const clientIds = new Set(rules.flatMap((r) => r.clientIds));
     await Promise.all([...clientIds].map((id) => scope.require(id, 'read', 'Client')));
+    const groupIds = [...new Set(rules.flatMap((r) => r.emailGroupIds))];
+    if (groupIds.length) {
+      const found = await this.db
+        .select({ id: schema.groups.id })
+        .from(schema.groups)
+        .where(and(eq(schema.groups.orgId, scope.actor.orgId), inArray(schema.groups.id, groupIds)));
+      if (found.length !== groupIds.length) throw new HttpError(400, 'Choose staff groups from this organization.');
+    }
     const userIds = [...new Set(rules.flatMap((r) => r.emailUserIds))];
     if (!userIds.length) return;
     const users = await this.db

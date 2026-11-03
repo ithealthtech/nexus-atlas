@@ -9,6 +9,7 @@ import {
   alertRetrySchema,
   alertRuleFires,
   alertSampleValues,
+  alertSendAt,
   alertTestSendSchema,
   alertWorkspaceSchema,
   dateSeverity,
@@ -46,6 +47,7 @@ type Row = typeof schema.alertDeliveries.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
 const table = schema.alertDeliveries;
 const DAY = 86_400_000;
+const NL = String.fromCharCode(10);
 const MAX_ATTEMPTS = 5;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const isoWeek = (date: Date) => {
@@ -63,6 +65,10 @@ interface StoredMode {
   by: string;
 }
 /** Where a delivery goes, worked out before anything is queued. */
+interface Recipients {
+  users: Map<string, { user: UserRow; levels: Map<string, AccessLevel> }>;
+  groups: Map<string, string[]>;
+}
 interface Destination {
   channel: AlertChannel;
   destination: string;
@@ -308,12 +314,14 @@ export class AlertDeliveryService {
     orgId: string,
     rule: AlertRule,
     event: AlertEvent,
-    users: Map<string, { user: UserRow; levels: Map<string, AccessLevel> }>,
+    { users, groups }: Recipients,
     teams: StoredTeams | null,
   ): Promise<Destination[]> {
     void orgId;
     const out: Destination[] = [];
-    for (const id of rule.emailUserIds) {
+    // Each person once, whether chosen directly or through one or more groups.
+    const ids = [...new Set([...rule.emailUserIds, ...rule.emailGroupIds.flatMap((g) => groups.get(g) ?? [])])];
+    for (const id of ids) {
       const entry = users.get(id);
       if (!entry) {
         out.push({
@@ -365,8 +373,19 @@ export class AlertDeliveryService {
       return { ready: false, detail: 'Turned off alert emails on their profile.' };
     return { ready: true, detail: 'Ready.' };
   }
-  private async recipients(orgId: string, rules: AlertRule[]) {
-    const ids = [...new Set(rules.flatMap((r) => r.emailUserIds))];
+  /** The people and staff groups the rules email, each person with their client access. */
+  private async recipients(orgId: string, rules: AlertRule[]): Promise<Recipients> {
+    const groupIds = [...new Set(rules.flatMap((r) => r.emailGroupIds))];
+    const members = groupIds.length
+      ? await this.db
+          .select({ groupId: schema.groupMembers.groupId, userId: schema.groupMembers.userId })
+          .from(schema.groupMembers)
+          .innerJoin(schema.groups, eq(schema.groups.id, schema.groupMembers.groupId))
+          .where(and(eq(schema.groups.orgId, orgId), inArray(schema.groupMembers.groupId, groupIds)))
+      : [];
+    const groups = new Map<string, string[]>();
+    for (const m of members) groups.set(m.groupId, [...(groups.get(m.groupId) ?? []), m.userId]);
+    const ids = [...new Set([...rules.flatMap((r) => r.emailUserIds), ...members.map((m) => m.userId)])];
     const rows = ids.length
       ? await this.db
           .select()
@@ -375,7 +394,7 @@ export class AlertDeliveryService {
       : [];
     const map = new Map<string, { user: UserRow; levels: Map<string, AccessLevel> }>();
     for (const user of rows) map.set(user.id, { user, levels: await clientLevels(this.db, actorFor(user)) });
-    return map;
+    return { users: map, groups };
   }
   private render(template: AlertTemplate, event: AlertEvent) {
     const link = `${this.deps.publicOrigin}${event.path}`;
@@ -437,8 +456,9 @@ export class AlertDeliveryService {
               body: d.channel === 'email' ? message.emailBody : message.teamsBody,
               teamsFormat: template.teamsFormat ?? 'text',
               link: message.link,
-              // Due from this tick, so the same pass sends it rather than the next one.
-              nextAttemptAt: now,
+              style: rule.delivery,
+              // From this pass, or after quiet hours, or at the summary hour.
+              nextAttemptAt: alertSendAt(now, rule.kind, rule.delivery, published.workspace.schedule),
               ...(baseline
                 ? { status: 'skipped' as const, error: 'Already due when the alerting center went live.' }
                 : d.ready
@@ -493,10 +513,47 @@ export class AlertDeliveryService {
       return rows;
     });
     const teams = due.some((r) => r.channel === 'teams') ? await this.deps.teams.load(org.id) : null;
-    for (const row of due) await this.send(org, row, teams, now);
+    const summaries = new Map<string, Row[]>();
+    for (const row of due) {
+      if (row.style !== 'daily') {
+        await this.send(org, row, teams, now);
+        continue;
+      }
+      const key = `${row.channel}|${row.destination}|${row.channel === 'teams' ? row.clientId : ''}`;
+      summaries.set(key, [...(summaries.get(key) ?? []), row]);
+    }
+    for (const rows of summaries.values()) {
+      if (rows.length === 1) {
+        await this.send(org, rows[0]!, teams, now);
+        continue;
+      }
+      const first = rows[0]!;
+      const lines = rows.map((r) => [r.subject, `${r.reason} · ${r.itemName}`, r.link].join(NL));
+      await this.send(
+        org,
+        {
+          ...first,
+          subject: `Alert summary: ${rows.length} items`,
+          body: [`${rows.length} alerts today.`, ...lines].join(NL + NL),
+          teamsFormat: 'text',
+          link: `${this.deps.publicOrigin}/expirations`,
+        },
+        teams,
+        now,
+        rows.map((r) => r.id),
+      );
+    }
   }
 
-  private async finish(row: Row, status: AlertDeliveryStatus, error: string, now: Date, retryIn = 0) {
+  /** Records how a send went, for the row (or every row a summary covered). */
+  private async finish(
+    row: Row,
+    status: AlertDeliveryStatus,
+    error: string,
+    now: Date,
+    retryIn = 0,
+    ids: string[] = [row.id],
+  ) {
     await this.db
       .update(table)
       .set({
@@ -508,15 +565,21 @@ export class AlertDeliveryService {
         ...(status === 'sent' ? { sentAt: now } : {}),
         ...(retryIn ? { nextAttemptAt: new Date(now.getTime() + retryIn) } : {}),
       })
-      .where(eq(table.id, row.id));
+      .where(inArray(table.id, ids));
   }
 
-  private async send(org: { id: string; name: string }, row: Row, teams: StoredTeams | null, now: Date) {
+  private async send(
+    org: { id: string; name: string },
+    row: Row,
+    teams: StoredTeams | null,
+    now: Date,
+    ids: string[] = [row.id],
+  ) {
+    const finish = (status: AlertDeliveryStatus, error: string, retryIn = 0) =>
+      this.finish(row, status, error, now, retryIn, ids);
     const backoff = 60_000 * 2 ** row.attempts;
     const failOrRetry = (message: string) =>
-      row.attempts + 1 >= MAX_ATTEMPTS
-        ? this.finish(row, 'failed', message, now)
-        : this.finish(row, 'pending', message, now, backoff);
+      row.attempts + 1 >= MAX_ATTEMPTS ? finish('failed', message) : finish('pending', message, backoff);
     try {
       if (row.channel === 'email') {
         const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, row.destination));
@@ -525,7 +588,7 @@ export class AlertDeliveryService {
           ? this.canReceive(entry, { kind: row.kind as AlertKind, clientId: row.clientId ?? '' } as AlertEvent)
           : { ready: false, detail: 'No longer in Atlas.' };
         // Test sends go to the person who asked, for any client.
-        if (!row.test && !check.ready) return this.finish(row, 'skipped', check.detail, now);
+        if (!row.test && !check.ready) return finish('skipped', check.detail);
         if (!(await this.deps.mail.enabled(org.id))) return failOrRetry('Email is not set up.');
         await this.deps.mail.send(org.id, org.name, {
           to: user!.email,
@@ -536,13 +599,13 @@ export class AlertDeliveryService {
             .filter(Boolean),
           action: { label: 'Open in Atlas', url: row.link },
         });
-        return this.finish(row, 'sent', '', now);
+        return finish('sent', '');
       }
       if (!teams?.enabled || !teams.connection) return failOrRetry('Microsoft Teams is not connected.');
       const mapping = teams.mappings.find((m) => m.clientId === row.clientId);
       const [teamId, channelId] = row.destination.split(':') as [string, string];
       if (!mapping || mapping.teamId !== teamId || ![mapping.channelId, mapping.securityChannelId].includes(channelId))
-        return this.finish(row, 'skipped', 'The client’s Teams channel changed since this was queued.', now);
+        return finish('skipped', 'The client’s Teams channel changed since this was queued.');
       const owner = await this.owner(org.id);
       if (!owner) return failOrRetry('The organization has no active owner to send as.');
       await this.deps.graph.notify(
@@ -553,7 +616,7 @@ export class AlertDeliveryService {
         undefined,
         row.teamsFormat === 'formatted' ? 'formatted' : 'text',
       );
-      return this.finish(row, 'sent', '', now);
+      return finish('sent', '');
     } catch (error) {
       if (error instanceof TeamsRequestError) {
         if (error.outcome === 'connection')
@@ -566,12 +629,12 @@ export class AlertDeliveryService {
               error: error.message,
               nextAttemptAt: new Date(now.getTime() + 60_000),
             })
-            .where(eq(table.id, row.id));
-        if (error.outcome === 'uncertain') return this.finish(row, 'uncertain', error.message, now);
-        if (error.outcome === 'failed') return this.finish(row, 'failed', error.message, now);
+            .where(inArray(table.id, ids));
+        if (error.outcome === 'uncertain') return finish('uncertain', error.message);
+        if (error.outcome === 'failed') return finish('failed', error.message);
         return failOrRetry(error.message);
       }
-      if (error instanceof HttpError && error.status < 500) return this.finish(row, 'failed', error.message, now);
+      if (error instanceof HttpError && error.status < 500) return finish('failed', error.message);
       return failOrRetry(row.channel === 'email' ? 'The email server didn’t accept the message.' : 'Sending failed.');
     }
   }
