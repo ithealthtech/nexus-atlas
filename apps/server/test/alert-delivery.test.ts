@@ -185,4 +185,42 @@ describe('alerting center delivery', () => {
     ] as const)
       expect((await b.call(method, path)).status).toBe(403);
   });
+  it('emails staff groups, holds routine reminders in quiet hours, and sends daily summaries as one message', async () => {
+    const created = await owner.call('POST', '/api/users', {
+      email: 'grouped@atlas.test',
+      name: 'Gale',
+      password: TEMP,
+      role: 'technician',
+      grants: [{ clientId, level: 'read' }],
+    });
+    const group = await owner.call('POST', '/api/groups', { name: 'Service desk', memberIds: [created.data.id] });
+    expect(group.status, JSON.stringify(group.data)).toBe(201);
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
+    await owner.call('POST', `/api/clients/${clientId}/assets`, {
+      layoutId: layouts.find((l) => l.key === 'ssl_certificate')!.id,
+      name: 'mail.harbordental.test',
+      fields: { common_name: 'mail.harbordental.test', expires: inDays(12) },
+    });
+    const hour = new Date().getUTCHours();
+    const rule = { ...workspace.rules[0]!, emailUserIds: [], emailGroupIds: [group.data.id], delivery: 'daily' };
+    // Quiet hours cover now, but a daily summary rule waits for the summary hour, which is now.
+    const schedule = { timeZone: 'UTC', quietStart: hour, quietEnd: (hour + 2) % 24, summaryHour: hour };
+    expect((await owner.call('PUT', BASE, { ...workspace, revision: 1, rules: [rule], schedule })).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 2, lastVersion: 0, note: 'Summaries' });
+    await owner.call('PUT', BASE + '/delivery', { mode: 'center', confirm: true, sendDue: true });
+    await worker().tick();
+    expect(sent().map((m) => [m.to, m.subject])).toEqual([['grouped@atlas.test', 'Alert summary: 2 items']]);
+    expect((await history()).deliveries.map((d) => d.status)).toEqual(['sent', 'sent']);
+
+    // Each alert as it happens, in quiet hours: it waits.
+    const each = { ...rule, id: randomUUID(), name: 'Each', delivery: 'each' };
+    expect((await owner.call('PUT', BASE, { ...workspace, revision: 2, rules: [each], schedule })).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 3, lastVersion: 1, note: 'Each' });
+    await worker().tick();
+    expect(sent()).toHaveLength(1);
+    expect((await history()).deliveries.filter((d) => d.ruleName === 'Each').map((d) => d.status)).toEqual([
+      'pending',
+      'pending',
+    ]);
+  });
 });

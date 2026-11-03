@@ -54,6 +54,19 @@ to keep, reload, and apply them to the latest drafts. Unsaved edits are lost whe
 Deleted clients and unavailable staff remain visible in a saved rule so you can remove their selections before
 saving again.
 
+## Who gets it, and when
+
+- **Email groups** in a rule email every active member of a staff group (Administration → Groups) who can open
+  the client. Someone chosen directly and through a group gets one email.
+- **Send as** chooses **Each alert as it happens** or **One daily summary**: one email per person (or one post per
+  Teams channel) at the summary hour, listing everything that rule has to say that day. Breaches and infections
+  always go straight away.
+- **Timing** sets the time zone, **quiet hours** and the hour daily summaries go. During quiet hours, routine
+  reminders (expirations and reviews) wait until the hours end; breaches and infections never wait. Set both quiet
+  hours to the same time for none, which is the default.
+
+Timing and these rule settings are saved with your drafts and take effect once published.
+
 ## Publish and restore versions
 
 After saving and previewing your drafts, enter a **Version note** and choose **Publish saved drafts**.
@@ -123,5 +136,4 @@ rule, why it went, the item, who it went to, and the outcome. Filter it by statu
 
 ## Still to come
 
-Recipient groups, client overrides with precedence, quiet hours and schedules, digests, and acknowledgement or
-escalation are separate steps.
+Client overrides with precedence, and acknowledgement or escalation, are separate steps.
