@@ -121,6 +121,16 @@ infections. Teams posts go to the client's mapped channel, or its security chann
 **Switch back to classic alerts** at any time. The classic alerts carry on, and nothing already sent is sent
 again. Going live and switching back are recorded in the security log.
 
+## Acknowledge and escalate
+
+Every alert email has an **Acknowledge or open** button, and every Teams post an **Acknowledge** link, to the
+alert's page in Atlas. Anyone on the team who can open the client can choose **Acknowledge** there: it's recorded
+for everyone the alert went to, with who did it, and it stops the alert escalating.
+
+In a rule, **Escalation** chooses people and groups and a time, from 15 minutes to a day. If nobody acknowledges
+an alert in that time, it goes once more to them by email, marked **Escalated**, whatever their alert email
+setting. Each alert escalates once. Choose nobody for no escalation, which is the default.
+
 ## Delivery history
 
 **Delivery history** lists every alert the alerting center sent or tried to send, newest first: the message, the
@@ -136,4 +146,4 @@ rule, why it went, the item, who it went to, and the outcome. Filter it by statu
 
 ## Still to come
 
-Client overrides with precedence, and acknowledgement or escalation, are separate steps.
+Client overrides with precedence are a separate step.
