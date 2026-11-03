@@ -223,4 +223,60 @@ describe('alerting center delivery', () => {
       'pending',
     ]);
   });
+  it('escalates what nobody acknowledges in time, once, and acknowledging stops it for everyone', async () => {
+    const created = await owner.call('POST', '/api/users', {
+      email: 'oncall@atlas.test',
+      name: 'Orla',
+      password: TEMP,
+      role: 'technician',
+      grants: [{ clientId, level: 'read' }],
+    });
+    const rule = { ...workspace.rules[0]!, escalation: { afterMinutes: 15, userIds: [created.data.id], groupIds: [] } };
+    expect((await owner.call('PUT', BASE, { ...workspace, revision: 1, rules: [rule] })).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 2, lastVersion: 0, note: 'Escalate' });
+    await owner.call('PUT', BASE + '/delivery', { mode: 'center', confirm: true, sendDue: true });
+    await worker().tick();
+    const first = sent().at(-1)!;
+    expect(first.to).toBe('owner@atlas.test');
+    // The email opens the alert's own page, to acknowledge it.
+    const [alert] = (await history()).deliveries;
+    expect(JSON.stringify(first)).toContain(`/alerts/${alert!.id}`);
+
+    // Not yet: 10 minutes on.
+    await worker().tick(new Date(Date.now() + 10 * 60_000));
+    expect(sent()).toHaveLength(1);
+    // 16 minutes on, nobody has acknowledged it: it goes to the on-call technician, once.
+    await worker().tick(new Date(Date.now() + 16 * 60_000));
+    await worker().tick(new Date(Date.now() + 30 * 60_000));
+    expect(sent().map((m) => [m.to, m.subject])).toEqual([
+      ['owner@atlas.test', 'Harbor Dental: Expirations'],
+      ['oncall@atlas.test', 'Escalated: Harbor Dental: Expirations'],
+    ]);
+    expect((await history()).deliveries[0]).toMatchObject({ escalation: true, status: 'sent' });
+
+    // Anyone who can open the client can acknowledge it, from either copy; it's recorded on both.
+    const { b } = await signIn(t.app, 'oncall@atlas.test', TEMP);
+    await b.call('POST', '/api/account/password', { current: TEMP, next: 'copper lantern field 9' });
+    await enroll(b);
+    const escalated = (await history()).deliveries[0]!;
+    expect((await b.call('GET', `/api/alerts/${escalated.id}`)).data.acknowledgedAt).toBeNull();
+    const acked = await b.call('POST', `/api/alerts/${escalated.id}/acknowledge`, {});
+    expect(acked.data).toMatchObject({ acknowledgedBy: 'Orla' });
+    expect((await owner.call('GET', `/api/alerts/${alert!.id}`)).data.acknowledgedBy).toBe('Orla');
+    const events = (await owner.call('GET', '/api/security-events')).data as { action: string }[];
+    expect(events.map((e) => e.action)).toContain('Alert acknowledged');
+  });
+
+  it('doesn’t escalate an alert someone acknowledged in time', async () => {
+    const rule = { ...workspace.rules[0]!, escalation: { afterMinutes: 15, userIds: [ownerId], groupIds: [] } };
+    expect((await owner.call('PUT', BASE, { ...workspace, revision: 1, rules: [rule] })).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 2, lastVersion: 0, note: 'Escalate' });
+    await owner.call('PUT', BASE + '/delivery', { mode: 'center', confirm: true, sendDue: true });
+    await worker().tick();
+    const [alert] = (await history()).deliveries;
+    expect((await owner.call('POST', `/api/alerts/${alert!.id}/acknowledge`, {})).status).toBe(200);
+    await worker().tick(new Date(Date.now() + 60 * 60_000));
+    expect(sent()).toHaveLength(1);
+    expect((await owner.call('GET', `/api/alerts/${randomUUID()}`)).status).toBe(404);
+  });
 });

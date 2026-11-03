@@ -112,6 +112,17 @@ export const alertRuleSchema = z
     teams: z.boolean().default(false),
     /** Each alert as it happens, or one summary a day per recipient at the workspace's summary hour. */
     delivery: z.enum(ALERT_DELIVERY_STYLES).default('each'),
+    /**
+     * If nobody acknowledges an alert within `afterMinutes`, it goes once more to these people and groups, marked as
+     * escalated. Off when nobody is chosen.
+     */
+    escalation: z
+      .object({
+        afterMinutes: z.number().int().min(15).max(10080).default(60),
+        userIds: uniqueIds.default([]),
+        groupIds: uniqueIds.default([]),
+      })
+      .default({ afterMinutes: 60, userIds: [], groupIds: [] }),
   })
   .superRefine((rule, ctx) => {
     if (!rule.teams && !rule.emailUserIds.length && !rule.emailGroupIds.length)

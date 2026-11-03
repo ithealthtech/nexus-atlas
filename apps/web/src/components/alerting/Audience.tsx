@@ -2,7 +2,7 @@ import { ROLE_INFO, type AlertRule, type ClientSummary, type GroupView, type Use
 import { Checkbox } from '@/components/ui';
 
 type Choice = { id: string; label: string };
-function Selection({
+export function Selection({
   title,
   description,
   options,

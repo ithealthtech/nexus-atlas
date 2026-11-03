@@ -1881,6 +1881,10 @@ export const alertDeliveries = pgTable(
     teamsFormat: text('teams_format').notNull().default('text'),
     // 'daily' rows go together, one summary per destination, at the summary hour.
     style: text('style').notNull().default('each'),
+    // Set on every row of an event when someone acknowledges it; an escalation is its own row, reason "Escalated".
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+    acknowledgedBy: text('acknowledged_by'),
+    escalation: boolean('escalation').notNull().default(false),
     link: text('link').notNull(),
     status: text('status').notNull().default('pending'),
     attempts: integer('attempts').notNull().default(0),
