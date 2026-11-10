@@ -82,7 +82,7 @@ describe('alerting center delivery', () => {
         clientName: 'Harbor Dental',
         itemName: 'portal.harbordental.test',
         reason: '14-day reminder',
-        destinations: [expect.objectContaining({ channel: 'email', ready: true, alreadySent: false })],
+        destinations: [expect.objectContaining({ channel: 'email', ready: true, existing: null })],
       }),
     ]);
     // Classic mode: the worker doesn't send anything from the center.
@@ -117,9 +117,7 @@ describe('alerting center delivery', () => {
     await owner.call('PUT', BASE + '/delivery', { mode: 'center', confirm: true, sendDue: true });
     await worker().tick();
     expect(sent()).toHaveLength(1);
-    expect((await owner.call('GET', BASE + '/delivery/preview')).data.matches[0].destinations[0].alreadySent).toBe(
-      true,
-    );
+    expect((await owner.call('GET', BASE + '/delivery/preview')).data.matches[0].destinations[0].existing).toBe('sent');
     expect((await owner.call('PUT', BASE + '/delivery', { mode: 'classic' })).data.mode).toBe('classic');
     await worker().tick();
     expect(sent()).toHaveLength(1);
@@ -174,6 +172,10 @@ describe('alerting center delivery', () => {
     await worker().tick();
     expect(sent()).toEqual([]);
     expect((await history()).deliveries[0]).toMatchObject({ status: 'skipped', error: 'Can’t open this client.' });
+    // The preview doesn't call a skipped alert sent.
+    expect((await owner.call('GET', BASE + '/delivery/preview')).data.matches[0].destinations[0].existing).toBe(
+      'skipped',
+    );
 
     const { b } = await signIn(t.app, 'tech@atlas.test', TEMP);
     await b.call('POST', '/api/account/password', { current: TEMP, next: 'copper lantern field 9' });

@@ -445,4 +445,17 @@ describe('Teams integration', () => {
     expect(calls.length).toBe(before);
     expect((await owner.call('POST', '/api/integrations/teams/connect', {})).status).toBe(200);
   });
+  it('posts alerting center Teams alerts to mapped channels, whose IDs contain colons', async () => {
+    const workspace = (await owner.call('GET', '/api/settings/alerting')).data;
+    expect((await owner.call('PUT', '/api/settings/alerting', workspace)).status).toBe(200);
+    const test = await owner.call('POST', '/api/settings/alerting/test', {
+      templateId: workspace.templates[0].id,
+      channel: 'teams',
+      clientId,
+    });
+    expect(test.data, JSON.stringify(test.data)).toMatchObject({ test: true, status: 'sent' });
+    expect(
+      calls.some((c) => c.method === 'POST' && c.url.includes(`/channels/${encodeURIComponent(CHANNEL)}/messages`)),
+    ).toBe(true);
+  });
 });

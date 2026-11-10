@@ -44,6 +44,7 @@ import { AlertWorkspaceService, requireAlertAdmin } from './workspace.js';
 
 type Row = typeof schema.alertDeliveries.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
+type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 const table = schema.alertDeliveries;
 const DAY = 86_400_000;
 const MAX_ATTEMPTS = 5;
@@ -170,8 +171,16 @@ export class AlertDeliveryService {
         throw new HttpError(409, 'Publish your alert rules first. The live alerts are the latest published version.');
     }
     const value: StoredMode = { mode: body.mode, since: new Date().toISOString(), by: scope.actor.name };
-    const baseline = body.mode === 'center' && !body.sendDue && (await this.storedMode(orgId))?.mode !== 'center';
     await this.db.transaction(async (tx) => {
+      // The org row lock serializes mode changes, and the baseline rows commit together with the mode, so a worker
+      // never sees the center live before the reminders already due are recorded as handled.
+      const [locked] = await tx
+        .select({ value: sql<StoredMode | null>`${schema.orgs.settings}->'alertingDelivery'` })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, orgId))
+        .for('update');
+      if (body.mode === 'center' && !body.sendDue && locked?.value?.mode !== 'center')
+        await this.collect(orgId, new Date(), true, tx);
       await tx
         .update(schema.orgs)
         .set({
@@ -188,7 +197,6 @@ export class AlertDeliveryService {
         ip,
       });
     });
-    if (baseline) await this.collect(orgId, new Date(), true);
     return this.state(scope);
   }
 
@@ -399,7 +407,7 @@ export class AlertDeliveryService {
    * Queues what the latest published rules send now, and returns how many deliveries were added. With `baseline`,
    * they're recorded as already handled instead, so going live doesn't repeat what the classic alerts sent.
    */
-  async collect(orgId: string, now = new Date(), baseline = false) {
+  async collect(orgId: string, now = new Date(), baseline = false, db: Database | Tx = this.db) {
     const published = await this.published(orgId);
     if (!published) return 0;
     const { rules, templates } = published.workspace;
@@ -418,7 +426,7 @@ export class AlertDeliveryService {
         for (const d of await this.destinations(orgId, rule, event, users, teams)) {
           // Destinations that can't receive it are left out of the queue; the preview explains why.
           if (!d.ready && d.channel === 'teams') continue;
-          const inserted = await this.db
+          const inserted = await db
             .insert(table)
             .values({
               orgId,
@@ -540,7 +548,10 @@ export class AlertDeliveryService {
       }
       if (!teams?.enabled || !teams.connection) return failOrRetry('Microsoft Teams is not connected.');
       const mapping = teams.mappings.find((m) => m.clientId === row.clientId);
-      const [teamId, channelId] = row.destination.split(':') as [string, string];
+      // Channel IDs contain colons themselves (19:…@thread.tacv2); only the first one separates the team.
+      const split = row.destination.indexOf(':');
+      const teamId = row.destination.slice(0, split);
+      const channelId = row.destination.slice(split + 1);
       if (!mapping || mapping.teamId !== teamId || ![mapping.channelId, mapping.securityChannelId].includes(channelId))
         return this.finish(row, 'skipped', 'The client’s Teams channel changed since this was queued.', now);
       const owner = await this.owner(org.id);
@@ -736,10 +747,14 @@ export class AlertDeliveryService {
         eventKey: table.eventKey,
         channel: table.channel,
         destination: table.destination,
+        status: table.status,
       })
       .from(table)
       .where(and(eq(table.orgId, orgId), eq(table.test, false)));
-    const done = new Set(sent.map((s) => `${s.ruleId}|${s.eventKey}|${s.channel}|${s.destination}`));
+    // Any existing row means it won't be queued again, but only a sent one actually went.
+    const existing = new Map(
+      sent.map((s) => [`${s.ruleId}|${s.eventKey}|${s.channel}|${s.destination}`, s.status as AlertDeliveryStatus]),
+    );
     const matches: AlertDryRun['matches'] = [];
     for (const rule of rules)
       for (const event of events) {
@@ -757,7 +772,7 @@ export class AlertDeliveryService {
             label: d.label,
             ready: d.ready,
             detail: d.detail,
-            alreadySent: done.has(`${rule.id}|${key}|${d.channel}|${d.destination}`),
+            existing: existing.get(`${rule.id}|${key}|${d.channel}|${d.destination}`) ?? null,
           })),
         });
         if (matches.length >= 500) return { version: published.version, events: events.length, matches };

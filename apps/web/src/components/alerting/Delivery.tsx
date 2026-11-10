@@ -173,7 +173,7 @@ function DryRunDrawer({ onClose }: { onClose: () => void }) {
     queryFn: () => api<AlertDryRun>(`${ALERTING_BASE}/delivery/preview`),
     gcTime: 0,
   });
-  const fresh = run.data?.matches.filter((m) => m.destinations.some((d) => d.ready && !d.alreadySent)).length ?? 0;
+  const fresh = run.data?.matches.filter((m) => m.destinations.some((d) => d.ready && !d.existing)).length ?? 0;
   return (
     <Drawer
       open
@@ -210,8 +210,14 @@ function DryRunDrawer({ onClose }: { onClose: () => void }) {
                     <MessageSquare className="size-3.5 text-muted" aria-hidden />
                   )}
                   <span>{d.label}</span>
-                  <Badge tone={d.alreadySent ? 'quiet' : d.ready ? 'success' : 'warning'}>
-                    {d.alreadySent ? 'Already sent' : d.ready ? 'Would send' : d.detail}
+                  <Badge tone={d.existing === 'sent' ? 'quiet' : d.existing || !d.ready ? 'warning' : 'success'}>
+                    {d.existing
+                      ? d.existing === 'sent'
+                        ? 'Already sent'
+                        : `Already in history: ${ALERT_DELIVERY_STATUS_LABELS[d.existing]}`
+                      : d.ready
+                        ? 'Would send'
+                        : d.detail}
                   </Badge>
                 </li>
               ))}

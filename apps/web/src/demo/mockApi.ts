@@ -4474,9 +4474,10 @@ on('GET', '/settings/alerting/delivery/preview', () => {
         ...d,
         ready: !d.label.includes('no channel'),
         detail: d.label.includes('no channel') ? 'No Teams channel is mapped to this client.' : 'Ready.',
-        alreadySent: demoDeliveries.some(
-          (s) => s.ruleName === m.rule.name && s.itemName === m.event.itemName && s.destination === d.label,
-        ),
+        existing:
+          demoDeliveries.find(
+            (s) => s.ruleName === m.rule.name && s.itemName === m.event.itemName && s.destination === d.label,
+          )?.status ?? null,
       })),
     })),
   };
