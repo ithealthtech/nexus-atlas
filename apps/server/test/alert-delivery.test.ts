@@ -384,7 +384,7 @@ describe('alerting center delivery', () => {
     await worker().tick();
     await worker().tick();
     const subjects = () => sent().map((m) => m.subject);
-    expect(subjects()).toEqual(['Harbor Dental: Infections', 'Harbor Dental: Infections']);
+    expect(subjects()).toEqual(['Harbor Dental: Confirmed infections', 'Harbor Dental: Confirmed infections']);
     const rows = (await history()).deliveries.filter((d) => d.status === 'sent');
     expect(rows.map((d) => d.reason).sort()).toEqual(['Infection reported', 'Infection resolved']);
     // A resolution is information: there's nothing to acknowledge.
