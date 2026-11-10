@@ -77,7 +77,9 @@ export function AlertPage() {
         </dl>
         {a.acknowledgedAt && (
           <p className="text-text-2">
-            {a.acknowledgedBy ?? 'Someone'} acknowledged it {relativeTime(a.acknowledgedAt)}, for everyone it went to.
+            {a.acknowledgedBy?.startsWith('Resolved by ')
+              ? `${a.acknowledgedBy} ${relativeTime(a.acknowledgedAt)}: nothing to acknowledge.`
+              : `${a.acknowledgedBy ?? 'Someone'} acknowledged it ${relativeTime(a.acknowledgedAt)}, for everyone it went to.`}
           </p>
         )}
         <FormError message={error} />

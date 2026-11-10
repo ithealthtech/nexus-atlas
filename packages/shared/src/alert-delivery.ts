@@ -130,6 +130,10 @@ export interface AlertEvent {
   daysRemaining: number | null;
   severity: AlertSeverity;
   path: string;
+  /** Why it alerts, when it isn't the alert type's usual reason, e.g. "Infection resolved". */
+  reason?: string;
+  /** For a resolution, who resolved it: its alerts are acknowledged as they're queued, so they never escalate. */
+  resolvedBy?: string;
 }
 
 /** How urgent a date is: overdue or within a week is critical, within 30 days a warning. */
@@ -155,7 +159,10 @@ export function alertRuleFires(rule: AlertRule, event: AlertEvent): { key: strin
   if (!rule.itemKinds.includes(event.itemKind) || !rule.severities.includes(event.severity)) return null;
   if (event.kind === 'expiration' || event.kind === 'review')
     return event.daysRemaining === null ? null : alertReminder(rule, event.daysRemaining);
-  return { key: 'once', reason: event.kind === 'breach' ? 'Found in a breach' : 'Infection reported' };
+  return {
+    key: 'once',
+    reason: event.reason ?? (event.kind === 'breach' ? 'Found in a breach' : 'Infection reported'),
+  };
 }
 
 /** The date (YYYY-MM-DD) it is in a time zone. */

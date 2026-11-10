@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
   ALERT_KIND_LABELS,
@@ -77,6 +77,55 @@ interface Destination {
   label: string;
   ready: boolean;
   detail: string;
+}
+
+/** The event key of a reported infection, active or resolved, as each alerts once. */
+const reportKey = (id: string, status: 'active' | 'resolved', at: Date) =>
+  `infection-report:${id}:${status}:${at.toISOString()}`;
+
+/**
+ * Records an infection a monitoring tool reported through the API, for the alerting center: a new report, or one
+ * after a resolution, alerts; a resolution alerts once and acknowledges the alerts for the report, so they don't
+ * escalate.
+ */
+export async function recordInfectionReport(
+  db: Database,
+  orgId: string,
+  clientId: string,
+  report: { assetId: string; eventId: string; source: string; status: 'active' | 'resolved' },
+  now = new Date(),
+) {
+  const t = schema.reportedInfections;
+  const where = and(
+    eq(t.orgId, orgId),
+    eq(t.clientId, clientId),
+    eq(t.assetId, report.assetId),
+    eq(t.source, report.source),
+    eq(t.eventId, report.eventId),
+  );
+  const [found] = await db.select().from(t).where(where);
+  if (report.status === 'active') {
+    if (!found)
+      await db
+        .insert(t)
+        .values({ orgId, clientId, ...report, reportedAt: now })
+        .onConflictDoNothing();
+    else if (found.status === 'resolved')
+      await db.update(t).set({ status: 'active', reportedAt: now, resolvedAt: null, updatedAt: now }).where(where);
+    return;
+  }
+  if (!found || found.status === 'resolved') return;
+  await db.update(t).set({ status: 'resolved', resolvedAt: now, updatedAt: now }).where(where);
+  await db
+    .update(schema.alertDeliveries)
+    .set({ acknowledgedAt: now, acknowledgedBy: `Resolved by ${report.source}`.slice(0, 200), updatedAt: now })
+    .where(
+      and(
+        eq(schema.alertDeliveries.orgId, orgId),
+        eq(schema.alertDeliveries.eventKey, hash(`${reportKey(found.id, 'active', found.reportedAt)}:once`)),
+        sql`${schema.alertDeliveries.acknowledgedAt} is null`,
+      ),
+    );
 }
 
 /** Whether the alerting center sends this organization's alerts, in place of the classic ones. */
@@ -308,6 +357,43 @@ export class AlertDeliveryService {
           path: e.assetId ? `/assets/${e.assetId}` : `/clients/${e.clientId}`,
         });
     }
+    if (kinds.has('infection')) {
+      // Reported through the API: open reports from the last 30 days, and resolutions from the last week.
+      const t = schema.reportedInfections;
+      const reports = await this.db
+        .select({ report: t, asset: schema.assets.name, client: schema.clients.name })
+        .from(t)
+        .innerJoin(schema.assets, eq(schema.assets.id, t.assetId))
+        .innerJoin(schema.clients, eq(schema.clients.id, t.clientId))
+        .where(
+          and(
+            eq(t.orgId, orgId),
+            or(
+              and(eq(t.status, 'active'), gt(t.reportedAt, new Date(now.getTime() - 30 * DAY))),
+              and(eq(t.status, 'resolved'), gt(t.resolvedAt, new Date(now.getTime() - 7 * DAY))),
+            ),
+          ),
+        );
+      for (const { report: r, asset, client } of reports) {
+        const resolved = r.status === 'resolved' && r.resolvedAt;
+        events.push({
+          kind: 'infection',
+          key: resolved ? reportKey(r.id, 'resolved', r.resolvedAt!) : reportKey(r.id, 'active', r.reportedAt),
+          clientId: r.clientId,
+          clientName: client,
+          itemKind: 'asset',
+          itemId: r.assetId,
+          itemName: asset,
+          itemType: `Reported by ${r.source}`,
+          dueDate: null,
+          daysRemaining: null,
+          // A resolution is information: rules that only send critical alerts leave it out.
+          severity: resolved ? 'info' : 'critical',
+          path: `/assets/${r.assetId}`,
+          ...(resolved ? { reason: 'Infection resolved', resolvedBy: r.source } : {}),
+        });
+      }
+    }
     return events;
   }
 
@@ -464,6 +550,9 @@ export class AlertDeliveryService {
               teamsFormat: template.teamsFormat ?? 'text',
               link: message.link,
               style: rule.delivery,
+              ...(event.resolvedBy
+                ? { acknowledgedAt: now, acknowledgedBy: `Resolved by ${event.resolvedBy}`.slice(0, 200) }
+                : {}),
               // From this pass, or after quiet hours, or at the summary hour.
               nextAttemptAt: alertSendAt(now, rule.kind, rule.delivery, published.workspace.schedule),
               ...(baseline

@@ -1903,3 +1903,33 @@ export const alertDeliveries = pgTable(
     check('alert_deliveries_channel', sql`${t.channel} in ('email','teams')`),
   ],
 );
+
+// Infections a monitoring tool reported through the API, by its own event ID, for the alerting center: each report
+// and each resolution alerts once. Only these fields are kept: no free text or raw payloads.
+export const reportedInfections = pgTable(
+  'reported_infections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    source: text('source').notNull(),
+    eventId: text('event_id').notNull(),
+    status: text('status').notNull(),
+    // When it was last reported active, and resolved; a report after a resolution starts it again.
+    reportedAt: timestamp('reported_at', { withTimezone: true }).notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    uniqueIndex('reported_infections_once').on(t.orgId, t.clientId, t.assetId, t.source, t.eventId),
+    check('reported_infections_status', sql`${t.status} in ('active','resolved')`),
+  ],
+);

@@ -346,4 +346,58 @@ describe('alerting center delivery', () => {
     await worker().tick();
     expect(sent()).toHaveLength(1);
   });
+  it('alerts on infections a monitoring tool reports, once each, and a resolution acknowledges them', async () => {
+    const report = (status: 'active' | 'resolved') =>
+      owner.call('POST', `/api/clients/${clientId}/teams/infections`, {
+        eventId: 'incident-4821',
+        assetId,
+        status,
+        source: 'NinjaOne',
+      });
+    const [asset] = await t.handle.db.select().from(schema.assets).where(eq(schema.assets.clientId, clientId));
+    const assetId = asset!.id;
+    const template = workspace.templates.find((v) => v.kind === 'infection')!;
+    const rule = {
+      ...workspace.rules[0]!,
+      id: randomUUID(),
+      name: 'Infections',
+      kind: 'infection' as const,
+      templateId: template.id,
+      daysBefore: [],
+      includeOverdue: false,
+      escalation: { afterMinutes: 15, userIds: [ownerId], groupIds: [] },
+    };
+    // Classic alerts, without Teams set up: the feed is refused, as before.
+    expect((await report('active')).status).toBe(409);
+    expect((await owner.call('PUT', BASE, { ...workspace, revision: 1, rules: [rule] })).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 2, lastVersion: 0, note: 'Infections' });
+    await owner.call('PUT', BASE + '/delivery', { mode: 'center', confirm: true });
+    await worker().tick();
+    // Reported before going live: recorded as already handled.
+    expect(sent()).toEqual([]);
+
+    // Live: a resolution alerts, then a new report of the same incident alerts once.
+    expect((await report('resolved')).status).toBe(202);
+    await worker().tick();
+    expect((await report('active')).status).toBe(202);
+    expect((await report('active')).status).toBe(202);
+    await worker().tick();
+    await worker().tick();
+    const subjects = () => sent().map((m) => m.subject);
+    expect(subjects()).toEqual(['Harbor Dental: Infections', 'Harbor Dental: Infections']);
+    const rows = (await history()).deliveries.filter((d) => d.status === 'sent');
+    expect(rows.map((d) => d.reason).sort()).toEqual(['Infection reported', 'Infection resolved']);
+    // A resolution is information: there's nothing to acknowledge.
+    expect(rows.find((d) => d.reason === 'Infection resolved')!.acknowledgedBy).toBe('Resolved by NinjaOne');
+
+    // Resolved: the open alert is acknowledged by the tool, so it doesn't escalate, and the resolution alerts.
+    const open = (await history()).deliveries.find((d) => d.reason === 'Infection reported' && d.status === 'sent')!;
+    expect((await report('resolved')).status).toBe(202);
+    expect((await owner.call('GET', `/api/alerts/${open.id}`)).data.acknowledgedBy).toBe('Resolved by NinjaOne');
+    await worker().tick(new Date(Date.now() + 20 * 60_000));
+    expect(subjects()).toHaveLength(3);
+    expect(subjects().some((s) => s.startsWith('Escalated'))).toBe(false);
+    const events = (await owner.call('GET', '/api/security-events')).data as { action: string }[];
+    expect(events.map((e) => e.action)).toContain('Infection report received');
+  });
 });
