@@ -3,9 +3,9 @@
 Open **Administration → Email & alerts → Open alerting center**. Administrators can prepare custom email and
 Microsoft Teams messages and test rules together.
 
-This first checkpoint is a **draft workspace**. Saving a draft does not activate it or replace current alert
-settings. Email and Teams continue sending their existing alerts. The links at the top open the current email
-connection, Teams channel mappings, and Teams delivery history.
+You work in four steps: **draft** templates and rules, **test** them, **publish** a version, then **go live**.
+Until you go live, Atlas keeps sending its classic alerts and nothing here sends. Saving drafts never sends. The
+links at the top open the email connection and the Teams channel mappings.
 
 ## Create a template
 
@@ -65,12 +65,63 @@ Save any unsaved edits first. Review restored selections: a client may have been
 since publication. Correct unavailable selections before publishing again. Concurrent changes are rejected;
 reload drafts or refresh version history before retrying.
 
-Publishing and restoring do not activate new delivery. Current email and Teams alerts still use their existing
-settings. Versions are retained with the organization’s configuration and included in database backups. Keep
+While the alerting center is live, the newest published version is what sends: publishing a new version changes
+what sends from the next minute. Restoring only changes drafts. Versions are retained with the organization’s configuration and included in database backups. Keep
 passwords and other secrets out of templates and version notes.
 
-## Coming next
+## Send a test
 
-A shared delivery queue and history, explicit migration from current alert
-settings, recipient groups, client overrides with precedence, test sends, schedules and digests, and escalation
-are separate implementation steps. None are activated by saving drafts in this checkpoint.
+Below the template editor, **Send a test** sends the selected template as saved, with example details and marked
+**[Test]**: to your own email, or to a client's mapped Teams channel. Tests appear in the delivery history. Save
+your drafts first to test your latest changes.
+
+## Preview what would send
+
+**Delivery → Preview what would send** checks the latest published version against what Atlas knows right now:
+every current expiration, document review, breached password and infected Bitdefender endpoint. For each match it
+shows the rule, the reason (for example **14-day reminder** or **Overdue**) and each destination, marked
+**Would send**, **Already sent**, or why it can't (for example **Can't open this client** or **No Teams channel is
+mapped to this client**). Nothing is sent from the preview.
+
+## Go live
+
+Choose **Delivery → Go live**. The confirmation lists what stops, so nothing is sent twice:
+
+- the daily **Expiring soon** emails (the Monday digest keeps coming);
+- **Bitdefender infection** emails;
+- **Teams notifications** for expirations, document reviews, password breaches and infections.
+
+Reminders that are already due at that moment were most likely sent by the classic alerts, so they're recorded as
+done rather than sent again. Tick **Also send reminders that are already due** to send them anyway. From then on,
+Atlas checks every minute and sends each reminder once:
+
+- **Expirations and reviews:** each reminder day in a rule fires once, when the item reaches it. If the server was
+  off on the day, the reminder goes the next time it runs. **Overdue** fires once, if the rule includes it. A new
+  date (a renewed certificate, say) starts the reminders again.
+- **Password breaches:** once per breach, until the password changes.
+- **Infections:** when GravityZone reports an endpoint infected, then once a week while it stays infected.
+
+Just before each email, Atlas checks the recipient is still an active staff member who can open the client.
+Someone who turned off alert emails on their profile doesn't get routine reminders, but still gets breaches and
+infections. Teams posts go to the client's mapped channel, or its security channel for breaches and infections.
+
+**Switch back to classic alerts** at any time. The classic alerts carry on, and nothing already sent is sent
+again. Going live and switching back are recorded in the security log.
+
+## Delivery history
+
+**Delivery history** lists every alert the alerting center sent or tried to send, newest first: the message, the
+rule, why it went, the item, who it went to, and the outcome. Filter it by status.
+
+- **Sent:** the email server or Teams accepted it. For email that means accepted for delivery, not read.
+- **Waiting:** queued, or retrying after a temporary failure (up to five tries, further apart each time).
+- **Failed:** it couldn't be sent, with the reason. **Send again** queues it once more.
+- **Check before retrying:** Atlas can't tell whether it arrived, for example because the server restarted while
+  sending. Check the inbox or channel first; **Send again** asks you to confirm, since it may arrive twice.
+- **Not sent:** the recipient couldn't receive it (no longer has access, or turned alert emails off), or it was
+  already due when you went live.
+
+## Still to come
+
+Recipient groups, client overrides with precedence, quiet hours and schedules, digests, and acknowledgement or
+escalation are separate steps.

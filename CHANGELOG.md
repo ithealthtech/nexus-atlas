@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The alerting center goes live.** Published alert rules now send, by email and to Microsoft Teams, in place of the classic alerts. Open **Administration → Email & alerts → Open alerting center**:
+  - **Preview what would send** checks your latest published version against every current expiration, document review, breached password and infected endpoint, and shows who each alert would go to, without sending anything.
+  - **Go live** says exactly which classic alerts stop, so nothing is sent twice. Reminders already due are recorded as done unless you choose to send them. **Switch back to classic alerts** at any time.
+  - Each reminder day fires once, even if the server was off that day. Recipients' access is checked just before each email, failures retry, and anything Atlas can't confirm arrived waits for you to check before sending again.
+  - **Delivery history** lists every alert with why it went, who it went to and how it went, with **Send again** for failures.
+  - **Send a test** sends a template to your email or a client's Teams channel, marked as a test.
+
 ## [2.3.0] - 2026-10-27
 
 ### Added

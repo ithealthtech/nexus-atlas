@@ -1,5 +1,20 @@
 # Alerting center — handoff for Claude
 
+## Live delivery (2026-11-02, Claude)
+
+Steps 3–5 of the plan below are built on `feature/alert-delivery`: migration `0049_alert_deliveries.sql` adds the
+durable per-destination queue and history; `apps/server/src/services/alerting/delivery.ts` collects real events
+(expirations, reviews, breaches, Bitdefender infections), matches the latest published version with
+`alertRuleFires` (shared `alert-delivery.ts`: each reminder threshold fires once), queues one row per rule, event,
+reminder, channel and destination (unique index), and sends through `MailService` and `TeamsGraph.notify`,
+rechecking access before each email. Stale `sending` rows become `uncertain`; retries back off up to five tries.
+Activation is explicit: `orgs.settings.alertingDelivery.mode` is `classic` (default) or `center`. In `center`, the
+Notifier's daily expiry emails and Bitdefender infection email and the Teams worker's collection stand down
+(`alertCenterLive`); the Monday digest and already-queued classic Teams posts continue. Going live records reminders
+already due as `skipped` unless `sendDue`. UI: `components/alerting/Delivery.tsx` (panel, dry-run drawer, history,
+test send). Still to do: recipient groups, client overrides, schedules/quiet hours, digests, acknowledgement and
+escalation; the inbound Teams infection webhook still posts through the classic Teams queue.
+
 ## Teams template continuation
 
 Current branch: `feature/teams-template-library`, based on `feature/alerting-publishing` (PR #290).

@@ -17,6 +17,7 @@ import { securityEvent } from '../security-log.js';
 import { TeamsSettingsStore, type StoredTeams } from './settings.js';
 import type { TeamsGraph } from './graph.js';
 import { TeamsRequestError } from './client.js';
+import { alertCenterLive } from '../alerting/delivery.js';
 
 type Delivery = typeof schema.teamsDeliveries.$inferSelect;
 const rootWaitOutcomes: Record<string, TeamsRequestError['outcome']> = {
@@ -209,7 +210,8 @@ export class TeamsAlerts {
         .where(and(eq(schema.users.id, saved.ownerId), eq(schema.users.orgId, org.id)));
       if (!owner || owner.disabled || !ROLE_INFO[owner.role as keyof typeof ROLE_INFO]?.admin) continue;
       const scope = new Scope(this.db, actorFor(owner));
-      await this.collect(org.id, saved, scope);
+      // With the alerting center live, its rules post to Teams; this only finishes what was already queued.
+      if (!(await alertCenterLive(this.db, org.id))) await this.collect(org.id, saved, scope);
       if (saved.connection) await this.deliver(scope, saved, now);
     }
   }

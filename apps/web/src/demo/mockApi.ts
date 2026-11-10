@@ -5,6 +5,11 @@ import {
   publishAlertsSchema,
   restoreAlertsSchema,
   type AlertVersion,
+  type AlertDeliveryView,
+  type AlertEvent,
+  ALERT_KIND_LABELS,
+  alertRuleFires,
+  dateSeverity,
   alertPreviewSchema,
   alertSampleValues,
   defaultAlertWorkspace,
@@ -4378,6 +4383,177 @@ on('POST', '/settings/alerting/preview', (_m, b) => {
     ...(rule ? matchAlertRule(rule, sample) : { matched: true, reasons: ['Template preview only'] }),
     destinations,
   };
+});
+// Live delivery: the demo matches its own expirations against the published rules, like the server, and records
+// what it would send. Nothing leaves the browser.
+let demoDeliveryMode: { mode: 'classic' | 'center'; since: string | null; by: string | null } = {
+  mode: 'classic',
+  since: null,
+  by: null,
+};
+const demoDeliveries: AlertDeliveryView[] = [];
+function demoAlertEvents(): AlertEvent[] {
+  return expirations(365).flatMap((item) =>
+    item.clientId
+      ? [
+          {
+            kind: item.kind === 'document' ? ('review' as const) : ('expiration' as const),
+            key: `${item.kind}:${item.id}:${item.date}`,
+            clientId: item.clientId,
+            clientName: item.clientName ?? '',
+            itemKind: item.kind,
+            itemId: item.id,
+            itemName: item.kind === 'password' ? 'A password needs attention' : item.title,
+            itemType: item.label,
+            dueDate: item.date,
+            daysRemaining: item.daysLeft,
+            severity: dateSeverity(item.daysLeft),
+            path: `/${item.kind}s/${item.id}`,
+          },
+        ]
+      : [],
+  );
+}
+function demoMatches() {
+  const latest = alertVersions.at(-1);
+  if (!latest) return [];
+  return latest.workspace.rules.flatMap((rule) =>
+    demoAlertEvents().flatMap((event) => {
+      const fires = alertRuleFires(rule, event);
+      if (!fires) return [];
+      const template = latest.workspace.templates.find((t) => t.id === rule.templateId)!;
+      const destinations = [
+        ...rule.emailUserIds.map((id) => {
+          const user = users.find((u) => u.id === id);
+          return { channel: 'email' as const, label: user ? `${user.name} <${user.email}>` : 'A removed person' };
+        }),
+        ...(rule.teams
+          ? [
+              {
+                channel: 'teams' as const,
+                label: `Teams: ${demoTeams.mappings.find((m) => m.clientId === event.clientId)?.channelName ?? 'no channel mapped'}`,
+              },
+            ]
+          : []),
+      ];
+      return [{ rule, event, fires, template, destinations, version: latest.version }];
+    }),
+  );
+}
+on('GET', '/settings/alerting/delivery', () => {
+  const week = demoDeliveries.filter((d) => !d.test);
+  const count = (s: string) => week.filter((d) => d.status === s).length;
+  const latest = alertVersions.at(-1);
+  return {
+    ...demoDeliveryMode,
+    publishedVersion: latest?.version ?? null,
+    publishedRules: latest?.workspace.rules.length ?? 0,
+    email: true,
+    teams: true,
+    counts: {
+      sent: count('sent'),
+      failed: count('failed'),
+      uncertain: count('uncertain'),
+      pending: 0,
+      skipped: count('skipped'),
+    },
+  };
+});
+on('GET', '/settings/alerting/delivery/preview', () => {
+  const matches = demoMatches();
+  return {
+    version: alertVersions.at(-1)?.version ?? null,
+    events: demoAlertEvents().length,
+    matches: matches.map((m) => ({
+      ruleName: m.rule.name,
+      kind: m.rule.kind,
+      clientName: m.event.clientName,
+      itemName: m.event.itemName,
+      reason: m.fires.reason,
+      destinations: m.destinations.map((d) => ({
+        ...d,
+        ready: !d.label.includes('no channel'),
+        detail: d.label.includes('no channel') ? 'No Teams channel is mapped to this client.' : 'Ready.',
+        existing:
+          demoDeliveries.find(
+            (s) => s.ruleName === m.rule.name && s.itemName === m.event.itemName && s.destination === d.label,
+          )?.status ?? null,
+      })),
+    })),
+  };
+});
+on('PUT', '/settings/alerting/delivery', (_m, b) => {
+  if (b.mode === 'center' && !alertVersions.length) throw new MockError(409, 'Publish your alert rules first.');
+  demoDeliveryMode = { mode: b.mode === 'center' ? 'center' : 'classic', since: now(), by: db.owner.name };
+  if (b.mode === 'center')
+    // The demo "sends" straight away what is due, so the history has something to show.
+    for (const m of demoMatches())
+      for (const d of m.destinations)
+        demoDeliveries.unshift({
+          id: uuid(),
+          test: false,
+          version: m.version,
+          ruleName: m.rule.name,
+          kind: m.rule.kind,
+          clientId: m.event.clientId,
+          clientName: m.event.clientName,
+          itemName: m.event.itemName,
+          channel: d.channel,
+          destination: d.label,
+          subject: renderAlertTemplate(m.template, {
+            clientName: m.event.clientName,
+            eventName: ALERT_KIND_LABELS[m.event.kind],
+            itemName: m.event.itemName,
+            itemType: m.event.itemType,
+            dueDate: m.event.dueDate ?? '',
+            daysRemaining: String(m.event.daysRemaining ?? ''),
+            severity: m.event.severity,
+            atlasUrl: 'https://atlas.example' + m.event.path,
+          }).emailSubject,
+          reason: b.sendDue ? m.fires.reason : `${m.fires.reason} (already due when going live)`,
+          link: m.event.path,
+          status: b.sendDue ? 'sent' : 'skipped',
+          attempts: b.sendDue ? 1 : 0,
+          error: b.sendDue ? '' : 'Already due when the alerting center went live.',
+          createdAt: now(),
+          sentAt: b.sendDue ? now() : null,
+        });
+  return null;
+});
+on('GET', '/settings/alerting/deliveries', (_m, _b, q) => ({
+  deliveries: demoDeliveries.filter((d) => !q.get('status') || d.status === q.get('status')).slice(0, 50),
+  nextBefore: null,
+}));
+on('POST', '/settings/alerting/deliveries/:id/retry', (m) => {
+  const d = find(demoDeliveries, m[1]!, 'Delivery');
+  Object.assign(d, { status: 'sent', error: '', sentAt: now(), attempts: d.attempts + 1 });
+  return { ok: true };
+});
+on('POST', '/settings/alerting/test', (_m, b) => {
+  const template = alertWorkspace.templates.find((t) => t.id === b.templateId);
+  if (!template) throw new MockError(404, 'Save the template first, then send a test.');
+  const delivery: AlertDeliveryView = {
+    id: uuid(),
+    test: true,
+    version: null,
+    ruleName: `Test: ${template.name}`,
+    kind: template.kind,
+    clientId: (b.clientId as string | null) ?? null,
+    clientName: b.clientId ? find(db.clients, String(b.clientId), 'Client').name : null,
+    itemName: 'Example certificate',
+    channel: b.channel === 'teams' ? 'teams' : 'email',
+    destination: b.channel === 'teams' ? 'Teams: client channel' : `${db.owner.name} <${db.owner.email}>`,
+    subject: '[Test] ' + template.name,
+    reason: `Test sent by ${db.owner.name}`,
+    link: '/',
+    status: 'sent',
+    attempts: 1,
+    error: '',
+    createdAt: now(),
+    sentAt: now(),
+  };
+  demoDeliveries.unshift(delivery);
+  return delivery;
 });
 on('GET', '/clients/:id/teams', (m) => ({
   name: find(db.clients, m[1]!, 'Client').name + ' — Team discussion',

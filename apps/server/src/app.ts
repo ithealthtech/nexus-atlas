@@ -95,7 +95,8 @@ import { RequestLogService, isPrivatePath, redactBody, redactHeaders, redactUrl 
 import { registerRequestLogRoutes } from './routes/request-log.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerTeamsRoutes } from './routes/teams.js';
-import { registerAlertingRoutes } from './routes/alerting.js';
+import { registerAlertDeliveryRoutes, registerAlertingRoutes } from './routes/alerting.js';
+import { AlertDeliveryService } from './services/alerting/delivery.js';
 import { TeamsSettingsStore } from './services/teams/settings.js';
 import { TeamsGraph } from './services/teams/graph.js';
 import { TeamsAlerts } from './services/teams/alerts.js';
@@ -1100,9 +1101,23 @@ export async function buildApp({
     fetcher: teamsFetch,
   });
   app.decorate('teamsAlerts', teamsAlerts);
+  const alertDelivery = new AlertDeliveryService(db, {
+    mail,
+    teams: teamsSettings,
+    graph: teamsGraph,
+    expirations: new ExpirationService(vault),
+    health,
+    publicOrigin: config.publicOrigin,
+  });
+  registerAlertDeliveryRoutes(app, { db, authed, recent, delivery: alertDelivery });
+  app.decorate('alertDelivery', alertDelivery);
   if (config.NODE_ENV !== 'test') {
     teamsAlerts.start((err) => app.log.error({ err }, 'Teams alert delivery'));
-    app.addHook('onClose', async () => teamsAlerts.stop());
+    alertDelivery.start((err) => app.log.error({ err }, 'Alerting center delivery'));
+    app.addHook('onClose', async () => {
+      teamsAlerts.stop();
+      alertDelivery.stop();
+    });
   }
   app.all('/api/*', async () => {
     throw new HttpError(404, 'Not found.');
