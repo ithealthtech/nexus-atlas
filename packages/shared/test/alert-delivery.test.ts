@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   alertReminder,
+  alertPaused,
   alertRuleFires,
+  alertRuleFiresIn,
+  alertRuleSchema,
+  alertScheduleSchema,
+  localDate,
   alertSendAt,
   dateSeverity,
   inQuietHours,
@@ -93,5 +98,42 @@ describe('alert timing', () => {
     expect(alertSendAt(evening, 'review', 'daily', schedule).toISOString()).toBe('2026-11-03T14:00:00.000Z');
     const nine = new Date('2026-11-03T14:20:00Z');
     expect(nextLocalHour(nine, 'America/New_York', 9)).toBe(nine);
+  });
+});
+
+describe('alert precedence', () => {
+  const schedule = alertScheduleSchema.parse({ timeZone: 'America/New_York' });
+  const general = rule();
+  const own = rule({ id: '00000000-0000-4000-8000-000000000003', clientIds: ['c1'], replacesGeneral: true });
+  const now = new Date('2026-11-10T15:00:00Z');
+
+  it('lets a client rule replace the rules for all clients, for its clients only', () => {
+    const ws = { rules: [general, own], pauses: [], schedule };
+    expect(alertRuleFiresIn(ws, general, event(), now)).toBeNull();
+    expect(alertRuleFiresIn(ws, own, event(), now)?.key).toBe('day-30');
+    expect(alertRuleFiresIn(ws, general, event({ clientId: 'c2' }), now)?.key).toBe('day-30');
+    // Without replacing, both send.
+    const both = { ...ws, rules: [general, { ...own, replacesGeneral: false }] };
+    expect(alertRuleFiresIn(both, general, event(), now)).not.toBeNull();
+    // Only the same alert type is replaced.
+    const other = { ...ws, rules: [general, { ...own, kind: 'review' as const }] };
+    expect(alertRuleFiresIn(other, general, event(), now)).not.toBeNull();
+  });
+
+  it('pauses a client through the last day, in the workspace time zone', () => {
+    // 01:00 UTC on the 11th is still the 10th in New York.
+    expect(localDate(new Date('2026-11-11T01:00:00Z'), schedule.timeZone)).toBe('2026-11-10');
+    const pauses = [{ clientId: 'c1', until: '2026-11-10', note: '' }];
+    expect(alertPaused(pauses, 'c1', '2026-11-10')).not.toBeNull();
+    expect(alertPaused(pauses, 'c1', '2026-11-11')).toBeNull();
+    expect(alertPaused([{ clientId: 'c1', until: null, note: '' }], 'c1', '2030-01-01')).not.toBeNull();
+    const ws = { rules: [general], pauses, schedule };
+    expect(alertRuleFiresIn(ws, general, event(), new Date('2026-11-11T01:00:00Z'))).toBeNull();
+    expect(alertRuleFiresIn(ws, general, event(), new Date('2026-11-11T06:00:00Z'))).not.toBeNull();
+    expect(alertRuleFiresIn(ws, general, event({ clientId: 'c2' }), now)).not.toBeNull();
+  });
+
+  it('needs clients for a rule that replaces the rules for all clients', () => {
+    expect(alertRuleSchema.safeParse({ ...own, clientIds: [] }).success).toBe(false);
   });
 });

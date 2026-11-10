@@ -13,6 +13,7 @@ import { ALERTING_BASE, useAlertEditor } from '@/components/alerting/useAlertEdi
 import { api } from '@/lib/api';
 import { useClients, useGroups, useUsers } from '@/lib/queries';
 import { ScheduleEditor } from '@/components/alerting/Schedule';
+import { Pauses } from '@/components/alerting/Pauses';
 
 export function AlertingPage() {
   const query = useQuery({ queryKey: ['alerting'], queryFn: () => api<AlertWorkspace>(ALERTING_BASE) });
@@ -51,6 +52,14 @@ function AlertStudio({ initial }: { initial: AlertWorkspace }) {
       <Versions editor={e} lock={setPublishing} />
       <Library editor={e} />
       <ScheduleEditor schedule={e.workspace.schedule} change={e.changeSchedule} />
+      {clients.data && (
+        <Pauses
+          pauses={e.workspace.pauses}
+          schedule={e.workspace.schedule}
+          clients={clients.data}
+          change={e.changePauses}
+        />
+      )}
       <FormError message={clients.error?.message ?? users.error?.message} />
       {e.rule && clients.data && users.data && (
         <RuleEditor

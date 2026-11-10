@@ -7,7 +7,9 @@ import {
   alertDeliveryModeSchema,
   alertDeliveryQuerySchema,
   alertRetrySchema,
-  alertRuleFires,
+  alertPaused,
+  alertRuleFiresIn,
+  localDate,
   alertSampleValues,
   alertSendAt,
   alertTestSendSchema,
@@ -452,7 +454,7 @@ export class AlertDeliveryService {
       const template = templates.find((t) => t.id === rule.templateId);
       if (!template) continue;
       for (const event of events) {
-        const fires = alertRuleFires(rule, event);
+        const fires = alertRuleFiresIn(published.workspace, rule, event, now);
         if (!fires) continue;
         const message = this.render(template, event);
         for (const d of await this.destinations(orgId, rule, event, users, teams)) {
@@ -567,7 +569,10 @@ export class AlertDeliveryService {
           ...rule.escalation.groupIds.flatMap((g) => recipients.groups.get(g) ?? []),
         ]),
       ];
-      for (const { row, clientName } of due)
+      const today = localDate(now, published.workspace.schedule.timeZone);
+      for (const { row, clientName } of due) {
+        // A paused client's alerts wait to escalate until the pause ends.
+        if (alertPaused(published.workspace.pauses, row.clientId, today)) continue;
         for (const id of ids) {
           const entry = recipients.users.get(id);
           const check = entry
@@ -604,6 +609,7 @@ export class AlertDeliveryService {
             .returning({ id: table.id });
           added += inserted.length;
         }
+      }
     }
     return added;
   }
@@ -1022,7 +1028,8 @@ export class AlertDeliveryService {
     const published = await this.published(orgId);
     if (!published) return { version: null, events: 0, matches: [] };
     const { rules } = published.workspace;
-    const events = await this.events(orgId, rules);
+    const now = new Date();
+    const events = await this.events(orgId, rules, now);
     const users = await this.recipients(orgId, rules);
     const teams = await this.deps.teams.load(orgId);
     const sent = await this.db
@@ -1042,7 +1049,7 @@ export class AlertDeliveryService {
     const matches: AlertDryRun['matches'] = [];
     for (const rule of rules)
       for (const event of events) {
-        const fires = alertRuleFires(rule, event);
+        const fires = alertRuleFiresIn(published.workspace, rule, event, now);
         if (!fires) continue;
         const key = hash(`${event.key}:${fires.key}`);
         matches.push({

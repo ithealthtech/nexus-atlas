@@ -25,9 +25,9 @@ export class AlertWorkspaceService {
     return row.value == null ? defaultAlertWorkspace() : alertWorkspaceSchema.parse(row.value);
   }
 
-  async validateReferences(scope: Scope, rules: AlertWorkspace['rules']) {
+  async validateReferences(scope: Scope, rules: AlertWorkspace['rules'], pauses: AlertWorkspace['pauses'] = []) {
     requireAlertAdmin(scope);
-    const clientIds = new Set(rules.flatMap((r) => r.clientIds));
+    const clientIds = new Set([...rules.flatMap((r) => r.clientIds), ...pauses.map((p) => p.clientId)]);
     await Promise.all([...clientIds].map((id) => scope.require(id, 'read', 'Client')));
     const groupIds = [...new Set(rules.flatMap((r) => r.emailGroupIds))];
     if (groupIds.length) {
@@ -50,7 +50,7 @@ export class AlertWorkspaceService {
   async save(scope: Scope, input: unknown, ip: string): Promise<AlertWorkspace> {
     const orgId = requireAlertAdmin(scope);
     const body = alertWorkspaceSchema.parse(input);
-    await this.validateReferences(scope, body.rules);
+    await this.validateReferences(scope, body.rules, body.pauses);
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .select({ value: sql<unknown>`${schema.orgs.settings}->'alerting'` })

@@ -110,6 +110,11 @@ export const alertRuleSchema = z
     /** Staff groups: every active member who can open the client gets the email. */
     emailGroupIds: uniqueIds.default([]),
     teams: z.boolean().default(false),
+    /**
+     * For a rule with clients chosen: those clients get this rule instead of the rules for all clients of the same
+     * alert type, so one client can have its own recipients, reminder days or escalation.
+     */
+    replacesGeneral: z.boolean().default(false),
     /** Each alert as it happens, or one summary a day per recipient at the workspace's summary hour. */
     delivery: z.enum(ALERT_DELIVERY_STYLES).default('each'),
     /**
@@ -131,6 +136,12 @@ export const alertRuleSchema = z
         path: ['emailUserIds'],
         message: 'Choose an email recipient or Microsoft Teams.',
       });
+    if (rule.replacesGeneral && !rule.clientIds.length)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['replacesGeneral'],
+        message: 'Choose the clients this rule is for, or turn off Use instead of the rules for all clients.',
+      });
     if (['expiration', 'review'].includes(rule.kind) && !rule.daysBefore.length && !rule.includeOverdue)
       ctx.addIssue({
         code: 'custom',
@@ -139,6 +150,18 @@ export const alertRuleSchema = z
       });
   });
 export type AlertRule = z.infer<typeof alertRuleSchema>;
+
+/** A client whose alerts are paused, until the end of a day in the workspace time zone or until resumed. */
+export const alertPauseSchema = z.object({
+  clientId: z.string().uuid(),
+  until: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .default(null),
+  note: z.string().trim().max(200).default(''),
+});
+export type AlertPause = z.infer<typeof alertPauseSchema>;
 
 export const alertWorkspaceSchema = z
   .object({
@@ -150,8 +173,11 @@ export const alertWorkspaceSchema = z
     templates: z.array(alertTemplateSchema).max(100),
     rules: z.array(alertRuleSchema).max(200),
     schedule: alertScheduleSchema,
+    pauses: z.array(alertPauseSchema).max(500).default([]),
   })
   .superRefine((workspace, ctx) => {
+    if (new Set(workspace.pauses.map((p) => p.clientId)).size !== workspace.pauses.length)
+      ctx.addIssue({ code: 'custom', path: ['pauses'], message: 'Pause each client once.' });
     for (const key of ['templates', 'rules'] as const) {
       if (new Set(workspace[key].map((v) => v.id)).size !== workspace[key].length)
         ctx.addIssue({ code: 'custom', path: [key], message: 'Each entry must have its own ID.' });
@@ -270,6 +296,7 @@ export function defaultAlertWorkspace(): AlertWorkspace {
     revision: 0,
     rules: [],
     schedule: alertScheduleSchema.parse(undefined),
+    pauses: [],
     templates: ALERT_KINDS.map((kind) => ({
       id: ids[kind],
       name: `${ALERT_KIND_LABELS[kind]} — starter`,

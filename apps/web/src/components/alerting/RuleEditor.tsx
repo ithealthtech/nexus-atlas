@@ -76,6 +76,14 @@ export function RuleEditor({
           )}
         </Field>
         <Audience rule={rule} clients={clients} users={users} groups={groups} change={change} />
+        {(rule.clientIds.length > 0 || rule.replacesGeneral) && (
+          <Checkbox
+            label="Use instead of the rules for all clients"
+            description={`For ${rule.clientIds.length === 1 ? 'this client' : 'these clients'}, only rules with the client chosen send this type of alert; the rules for all clients don't. Use it to give a client its own recipients, reminder days or escalation.`}
+            checked={rule.replacesGeneral}
+            onChange={(e) => change({ ...rule, replacesGeneral: e.target.checked })}
+          />
+        )}
         <fieldset>
           <legend className="mb-3 text-sm font-semibold text-text">Item types</legend>
           <div className="flex flex-wrap gap-4">
