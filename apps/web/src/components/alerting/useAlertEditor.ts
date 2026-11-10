@@ -35,6 +35,7 @@ function newRule(template: AlertTemplate, userId: string): AlertRule {
     emailGroupIds: [],
     teams: false,
     delivery: 'each',
+    escalation: { afterMinutes: 60, userIds: [], groupIds: [] },
   };
 }
 

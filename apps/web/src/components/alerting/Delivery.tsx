@@ -300,8 +300,16 @@ export function DeliveryHistory() {
                   ) : (
                     <MessageSquare className="size-4 shrink-0 text-muted" aria-label="Teams" />
                   )}
-                  <span className="min-w-0 truncate">{d.subject}</span>
+                  {d.test ? (
+                    <span className="min-w-0 truncate">{d.subject}</span>
+                  ) : (
+                    <AppLink to={`/alerts/${d.id}`} className="min-w-0 truncate hover:underline">
+                      {d.subject}
+                    </AppLink>
+                  )}
                   {d.test && <Badge tone="info">Test</Badge>}
+                  {d.escalation && <Badge tone="danger">Escalated</Badge>}
+                  {d.acknowledgedAt && <Badge tone="success">Acknowledged by {d.acknowledgedBy}</Badge>}
                 </p>
                 <p className="text-xs text-muted">
                   {d.ruleName} · {d.reason} · {d.itemName} · to {d.destination}

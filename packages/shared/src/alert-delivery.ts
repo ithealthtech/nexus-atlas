@@ -74,6 +74,11 @@ export interface AlertDeliveryView {
   error: string;
   createdAt: string;
   sentAt: string | null;
+  /** Sent again, to the rule's escalation recipients, because nobody acknowledged it in time. */
+  escalation: boolean;
+  /** When and by whom anyone acknowledged it; shared by every copy of the alert. */
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
 }
 export interface AlertDeliveryPage {
   deliveries: AlertDeliveryView[];

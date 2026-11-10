@@ -98,6 +98,16 @@ export function registerAlertDeliveryRoutes(
     if (!isUuid(req.params.id)) throw new HttpError(404, 'Delivery not found.');
     return delivery.retry(scope(req), req.params.id, req.body, req.ip);
   });
+  // An alert's own page, from the link in its email or Teams post: open to staff who can open the client.
+  app.get<{ Params: { id: string } }>('/api/alerts/:id', deps.authed, async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    if (!isUuid(req.params.id)) throw new HttpError(404, 'Alert not found.');
+    return delivery.alert(scope(req), req.params.id);
+  });
+  app.post<{ Params: { id: string } }>('/api/alerts/:id/acknowledge', deps.authed, async (req) => {
+    if (!isUuid(req.params.id)) throw new HttpError(404, 'Alert not found.');
+    return delivery.acknowledge(scope(req), req.params.id, req.ip);
+  });
   app.post('/api/settings/alerting/test', deps.authed, async (req) => {
     deps.recent(req);
     return delivery.testSend(scope(req), req.body, req.ip);

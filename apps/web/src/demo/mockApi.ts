@@ -4517,6 +4517,9 @@ on('PUT', '/settings/alerting/delivery', (_m, b) => {
           error: b.sendDue ? '' : 'Already due when the alerting center went live.',
           createdAt: now(),
           sentAt: b.sendDue ? now() : null,
+          escalation: false,
+          acknowledgedAt: null,
+          acknowledgedBy: null,
         });
   return null;
 });
@@ -4528,6 +4531,14 @@ on('POST', '/settings/alerting/deliveries/:id/retry', (m) => {
   const d = find(demoDeliveries, m[1]!, 'Delivery');
   Object.assign(d, { status: 'sent', error: '', sentAt: now(), attempts: d.attempts + 1 });
   return { ok: true };
+});
+on('GET', '/alerts/:id', (m) => find(demoDeliveries, m[1]!, 'Alert'));
+on('POST', '/alerts/:id/acknowledge', (m) => {
+  const d = find(demoDeliveries, m[1]!, 'Alert');
+  for (const other of demoDeliveries)
+    if (other.ruleName === d.ruleName && other.itemName === d.itemName && !other.acknowledgedAt)
+      Object.assign(other, { acknowledgedAt: now(), acknowledgedBy: db.owner.name });
+  return d;
 });
 on('POST', '/settings/alerting/test', (_m, b) => {
   const template = alertWorkspace.templates.find((t) => t.id === b.templateId);
@@ -4551,6 +4562,9 @@ on('POST', '/settings/alerting/test', (_m, b) => {
     error: '',
     createdAt: now(),
     sentAt: now(),
+    escalation: false,
+    acknowledgedAt: null,
+    acknowledgedBy: null,
   };
   demoDeliveries.unshift(delivery);
   return delivery;

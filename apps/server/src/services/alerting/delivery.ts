@@ -383,12 +383,14 @@ export class AlertDeliveryService {
   private canReceive(
     entry: { user: UserRow; levels: Map<string, AccessLevel> },
     event: Pick<AlertEvent, 'kind' | 'clientId'>,
+    /** Escalations go whatever someone's routine alert preference, like breaches and infections. */
+    urgent = false,
   ) {
     const { user, levels } = entry;
     if (user.disabled || !ROLE_INFO[user.role as Role]?.staff)
       return { ready: false, detail: 'Not an active staff member.' };
     if ((levels.get(event.clientId) ?? 'none') === 'none') return { ready: false, detail: 'Can’t open this client.' };
-    if (!SECURITY.includes(event.kind) && !user.notifyDigest)
+    if (!urgent && !SECURITY.includes(event.kind) && !user.notifyDigest)
       return { ready: false, detail: 'Turned off alert emails on their profile.' };
     return { ready: true, detail: 'Ready.' };
   }
@@ -506,8 +508,168 @@ export class AlertDeliveryService {
       .where(sql`${schema.orgs.settings}->'alertingDelivery'->>'mode' = 'center'`);
     for (const org of orgs) {
       await this.collect(org.id, now);
+      await this.escalate(org.id, now);
       await this.deliver(org, now);
     }
+  }
+
+  // ---------- acknowledgement and escalation ----------
+  /** An event's rows: the alert as sent to everyone, and its escalation. */
+  private eventRows(orgId: string, row: Pick<Row, 'ruleId' | 'eventKey'>) {
+    const base = row.ruleId.replace(/:escalation$/, '');
+    return and(
+      eq(table.orgId, orgId),
+      eq(table.eventKey, row.eventKey),
+      inArray(table.ruleId, [base, `${base}:escalation`]),
+    );
+  }
+
+  /**
+   * Queues escalations: alerts sent by a rule with escalation recipients that nobody has acknowledged within its
+   * time go once more to those people, marked as escalated. Each event escalates once.
+   */
+  async escalate(orgId: string, now = new Date()) {
+    const published = await this.published(orgId);
+    const rules = published?.workspace.rules.filter((r) => r.escalation.userIds.length || r.escalation.groupIds.length);
+    if (!published || !rules?.length) return 0;
+    const recipients = await this.recipients(
+      orgId,
+      rules.map((r) => ({ ...r, emailUserIds: r.escalation.userIds, emailGroupIds: r.escalation.groupIds })),
+    );
+    const since = await this.escalatingSince(
+      orgId,
+      rules.map((r) => r.id),
+    );
+    let added = 0;
+    for (const rule of rules) {
+      const after = rule.escalation.afterMinutes * 60_000;
+      const due = await this.db
+        .selectDistinctOn([table.eventKey], { row: table, clientName: schema.clients.name })
+        .from(table)
+        .leftJoin(schema.clients, eq(schema.clients.id, table.clientId))
+        .where(
+          and(
+            eq(table.orgId, orgId),
+            eq(table.ruleId, rule.id),
+            eq(table.test, false),
+            eq(table.status, 'sent'),
+            sql`${table.acknowledgedAt} is null`,
+            lte(table.sentAt, new Date(now.getTime() - after)),
+            // Only alerts sent since escalation was set up for this rule, and not long ago.
+            gte(table.sentAt, since.get(rule.id)!),
+            gte(table.sentAt, new Date(now.getTime() - after - 7 * DAY)),
+          ),
+        )
+        .orderBy(table.eventKey, asc(table.sentAt));
+      const ids = [
+        ...new Set([
+          ...rule.escalation.userIds,
+          ...rule.escalation.groupIds.flatMap((g) => recipients.groups.get(g) ?? []),
+        ]),
+      ];
+      for (const { row, clientName } of due)
+        for (const id of ids) {
+          const entry = recipients.users.get(id);
+          const check = entry
+            ? this.canReceive(entry, rowEvent(row), true)
+            : { ready: false, detail: 'No longer in Atlas.' };
+          const inserted = await this.db
+            .insert(table)
+            .values({
+              orgId,
+              version: published.version,
+              ruleId: `${rule.id}:escalation`,
+              ruleName: rule.name,
+              kind: row.kind,
+              clientId: row.clientId,
+              itemName: row.itemName,
+              eventKey: row.eventKey,
+              reason: `Not acknowledged after ${rule.escalation.afterMinutes} minutes`,
+              channel: 'email',
+              destination: id,
+              destinationLabel: entry ? `${entry.user.name} <${entry.user.email}>` : 'A removed person',
+              subject: `Escalated: ${row.subject}`.slice(0, 300),
+              body: [
+                `Nobody has acknowledged this alert${clientName ? ` for ${clientName}` : ''} in ${rule.escalation.afterMinutes} minutes.`,
+                row.body,
+              ].join(NL + NL),
+              teamsFormat: 'text',
+              style: 'each',
+              link: row.link,
+              escalation: true,
+              nextAttemptAt: now,
+              ...(check.ready ? {} : { status: 'skipped' as const, error: check.detail }),
+            })
+            .onConflictDoNothing()
+            .returning({ id: table.id });
+          added += inserted.length;
+        }
+    }
+    return added;
+  }
+
+  /**
+   * When each rule's escalation began: the publication that started its latest unbroken run of versions with
+   * escalation recipients. Alerts sent before then were sent without escalation and never escalate.
+   */
+  private async escalatingSince(orgId: string, ruleIds: string[]) {
+    const versions = await this.db
+      .select({ workspace: schema.alertVersions.workspace, publishedAt: schema.alertVersions.publishedAt })
+      .from(schema.alertVersions)
+      .where(eq(schema.alertVersions.orgId, orgId))
+      .orderBy(desc(schema.alertVersions.version));
+    const since = new Map<string, Date>();
+    const open = new Set(ruleIds);
+    for (const version of versions) {
+      const { rules } = alertWorkspaceSchema.parse(version.workspace);
+      for (const id of [...open]) {
+        const rule = rules.find((r) => r.id === id);
+        if (rule && (rule.escalation.userIds.length || rule.escalation.groupIds.length))
+          since.set(id, version.publishedAt);
+        else open.delete(id);
+      }
+      if (!open.size) break;
+    }
+    return since;
+  }
+
+  /** One alert, for its page: anyone on the team who can open the client can see and acknowledge it. */
+  async alert(scope: Scope, id: string): Promise<AlertDeliveryView> {
+    if (!ROLE_INFO[scope.actor.role].staff) throw new HttpError(404, 'Alert not found.');
+    const [found] = await this.db
+      .select({ row: table, clientName: schema.clients.name })
+      .from(table)
+      .leftJoin(schema.clients, eq(schema.clients.id, table.clientId))
+      .where(and(eq(table.orgId, scope.actor.orgId), eq(table.id, id)));
+    if (!found) throw new HttpError(404, 'Alert not found.');
+    if (found.row.clientId) await scope.require(found.row.clientId, 'read', 'Alert');
+    return this.view(found.row, found.clientName);
+  }
+
+  /** Acknowledges an alert for everyone it went to, which also stops its escalation. */
+  async acknowledge(scope: Scope, id: string, ip: string): Promise<AlertDeliveryView> {
+    await this.alert(scope, id);
+    const [row] = await this.db.select().from(table).where(eq(table.id, id));
+    if (!row!.acknowledgedAt) {
+      await this.db
+        .update(table)
+        .set({ acknowledgedAt: new Date(), acknowledgedBy: scope.actor.name })
+        .where(and(this.eventRows(scope.actor.orgId, row!), sql`${table.acknowledgedAt} is null`));
+      // An escalation still waiting to go (after a failed try, say) isn't needed any more.
+      await this.db
+        .update(table)
+        .set({ status: 'skipped', error: 'Acknowledged before the escalation went.', claimedAt: null })
+        .where(and(this.eventRows(scope.actor.orgId, row!), eq(table.escalation, true), eq(table.status, 'pending')));
+      await securityEvent(this.db, {
+        orgId: scope.actor.orgId,
+        userId: scope.actor.id,
+        actor: scope.actor.name,
+        action: 'Alert acknowledged',
+        detail: `${row!.ruleName}; ${row!.itemName}`,
+        ip,
+      });
+    }
+    return this.alert(scope, id);
   }
 
   async deliver(org: { id: string; name: string }, now = new Date()) {
@@ -567,7 +729,10 @@ export class AlertDeliveryService {
         continue;
       }
       const first = rows[0]!;
-      const lines = rows.map((r) => [r.subject, `${r.reason} · ${r.itemName}`, r.link].join(NL));
+      // Each item links to its own alert page, so every one of them can be acknowledged from the summary.
+      const lines = rows.map((r) =>
+        [r.subject, `${r.reason} · ${r.itemName}`, `${this.deps.publicOrigin}/alerts/${r.id}`].join(NL),
+      );
       await this.send(
         org,
         {
@@ -590,7 +755,9 @@ export class AlertDeliveryService {
     const entry = user ? { user, levels: await clientLevels(this.db, actorFor(user)) } : null;
     const keep: Row[] = [];
     for (const row of rows) {
-      const check = entry ? this.canReceive(entry, rowEvent(row)) : { ready: false, detail: 'No longer in Atlas.' };
+      const check = entry
+        ? this.canReceive(entry, rowEvent(row), row.escalation)
+        : { ready: false, detail: 'No longer in Atlas.' };
       if (check.ready) keep.push(row);
       else await this.finish(row, 'skipped', check.detail, now);
     }
@@ -636,7 +803,9 @@ export class AlertDeliveryService {
       if (row.channel === 'email') {
         const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, row.destination));
         const entry = user ? { user, levels: await clientLevels(this.db, actorFor(user)) } : null;
-        const check = entry ? this.canReceive(entry, rowEvent(row)) : { ready: false, detail: 'No longer in Atlas.' };
+        const check = entry
+          ? this.canReceive(entry, rowEvent(row), row.escalation)
+          : { ready: false, detail: 'No longer in Atlas.' };
         // Test sends go to the person who asked, for any client.
         if (!row.test && !check.ready) return finish('skipped', check.detail);
         if (!(await this.deps.mail.enabled(org.id))) return failOrRetry('Email is not set up.');
@@ -647,7 +816,12 @@ export class AlertDeliveryService {
             .split(/\n\s*\n/)
             .map((p) => p.trim())
             .filter(Boolean),
-          action: { label: 'Open in Atlas', url: row.link },
+          // Tests have no alert page; real alerts open theirs, to acknowledge and follow the link.
+          // A summary lists each item's own alert page instead.
+          action:
+            row.test || ids.length > 1
+              ? { label: 'Open in Atlas', url: row.link }
+              : { label: 'Acknowledge or open', url: `${this.deps.publicOrigin}/alerts/${ids[0]}` },
         });
         return finish('sent', '');
       }
@@ -665,7 +839,9 @@ export class AlertDeliveryService {
         new Scope(this.db, actorFor(owner)),
         row.clientId!,
         { teamId, channelId },
-        row.body,
+        row.test || ids.length > 1
+          ? row.body
+          : `${row.body}${NL}${NL}Acknowledge: ${this.deps.publicOrigin}/alerts/${ids[0]}`,
         undefined,
         row.teamsFormat === 'formatted' ? 'formatted' : 'text',
       );
@@ -735,6 +911,9 @@ export class AlertDeliveryService {
       error: row.error,
       createdAt: row.createdAt.toISOString(),
       sentAt: row.sentAt?.toISOString() ?? null,
+      escalation: row.escalation,
+      acknowledgedAt: row.acknowledgedAt?.toISOString() ?? null,
+      acknowledgedBy: row.acknowledgedBy,
     };
   }
 
