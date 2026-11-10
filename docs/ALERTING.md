@@ -138,6 +138,14 @@ In a rule, **Escalation** chooses people and groups and a time, from 15 minutes 
 an alert in that time, it goes once more to them by email, marked **Escalated**, whatever their alert email
 setting. Each alert escalates once. Choose nobody for no escalation, which is the default.
 
+## Infections a monitoring tool reports
+
+Infection rules cover Bitdefender endpoints that Atlas syncs, and infections your RMM or monitoring tool reports
+through the [confirmed infection-event feed](TEAMS.md#confirmed-infection-event-feed). Once the alerting center is
+live, each report alerts once, as **Infection reported** (critical), and resolving it sends **Infection resolved**
+(info) and acknowledges the alerts for the report, so they don't escalate. Leave **info** out of a rule's severities
+to skip the resolutions. A report that comes back after being resolved alerts again.
+
 ## Delivery history
 
 **Delivery history** lists every alert the alerting center sent or tried to send, newest first: the message, the
@@ -150,7 +158,3 @@ rule, why it went, the item, who it went to, and the outcome. Filter it by statu
   sending. Check the inbox or channel first; **Send again** asks you to confirm, since it may arrive twice.
 - **Not sent:** the recipient couldn't receive it (no longer has access, or turned alert emails off), or it was
   already due when you went live.
-
-## Still to come
-
-Infection alerts that Bitdefender posts to Teams directly are a separate step.

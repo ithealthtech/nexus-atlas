@@ -17,7 +17,7 @@ import { securityEvent } from '../security-log.js';
 import { TeamsSettingsStore, type StoredTeams } from './settings.js';
 import type { TeamsGraph } from './graph.js';
 import { TeamsRequestError } from './client.js';
-import { alertCenterLive } from '../alerting/delivery.js';
+import { alertCenterLive, recordInfectionReport } from '../alerting/delivery.js';
 
 type Delivery = typeof schema.teamsDeliveries.$inferSelect;
 const rootWaitOutcomes: Record<string, TeamsRequestError['outcome']> = {
@@ -90,7 +90,21 @@ export class TeamsAlerts {
         ),
       );
     if (!asset) throw new HttpError(404, 'Asset not found.');
-    const saved = await this.deps.settings.load(scope.actor.orgId);
+    const orgId = scope.actor.orgId;
+    // Kept for the alerting center either way, so going live later still knows what's open.
+    await recordInfectionReport(this.db, orgId, clientId, body);
+    if (await alertCenterLive(this.db, orgId)) {
+      await securityEvent(this.db, {
+        orgId,
+        userId: scope.actor.id,
+        actor: scope.actor.name,
+        action: 'Infection report received',
+        detail: `Client ${clientId}; asset ${body.assetId}; ${body.status}; for the alerting center`,
+        ip,
+      });
+      return { ok: true };
+    }
+    const saved = await this.deps.settings.load(orgId);
     if (!saved?.enabled || !saved.alerts.includes('infection') || !saved.mappings.some((m) => m.clientId === clientId))
       throw new HttpError(409, 'Enable infection notifications and map this client in Teams settings.');
     const root = JSON.stringify(['infection', clientId, body.assetId, body.source, body.eventId]);

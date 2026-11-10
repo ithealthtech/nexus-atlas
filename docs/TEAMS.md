@@ -98,7 +98,9 @@ Content-Type: application/json
 
 Use a stable `eventId` and source for an incident. Send the same event with `status: "resolved"` when it is cleared.
 The asset must belong to that client, and the API key's creator must still be staff with edit access. The feed
-returns 202 after queuing; it returns 409 if infection alerts are disabled or the client is unmapped. No arbitrary
+returns 202 after queuing; with the classic alerts, it returns 409 if infection alerts are disabled or the client is
+unmapped. Once the alerting center is live, reports go to its infection rules instead, by email or Teams, and the
+feed always accepts them (see [Alerting](ALERTING.md)). No arbitrary
 message text, credentials, or raw monitoring payloads are accepted. This integration does not diagnose infections.
 
 ## Operators and developers
