@@ -109,7 +109,14 @@ export interface AlertDryRun {
     clientName: string;
     itemName: string;
     reason: string;
-    destinations: { channel: AlertChannel; label: string; ready: boolean; detail: string; alreadySent: boolean }[];
+    destinations: {
+      channel: AlertChannel;
+      label: string;
+      ready: boolean;
+      detail: string;
+      /** What happened to this alert already, if it was queued before; it isn't queued again either way. */
+      existing: AlertDeliveryStatus | null;
+    }[];
   }[];
 }
 

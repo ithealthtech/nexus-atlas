@@ -45,6 +45,7 @@ import { AlertWorkspaceService, requireAlertAdmin } from './workspace.js';
 
 type Row = typeof schema.alertDeliveries.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
+type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 const table = schema.alertDeliveries;
 const DAY = 86_400_000;
 const NL = String.fromCharCode(10);
@@ -76,6 +77,14 @@ interface Destination {
   ready: boolean;
   detail: string;
 }
+
+/** Rows that go out together as one daily summary: per person, or per client's Teams channel. */
+const summaryKey = (row: Row) => `${row.channel}|${row.destination}|${row.channel === 'teams' ? row.clientId : ''}`;
+/** Enough of a queued row's event to recheck whether its recipient may still receive it. */
+const rowEvent = (row: Row): Pick<AlertEvent, 'kind' | 'clientId'> => ({
+  kind: row.kind as AlertKind,
+  clientId: row.clientId ?? '',
+});
 
 /** Whether the alerting center sends this organization's alerts, in place of the classic ones. */
 export async function alertCenterLive(db: Database, orgId: string) {
@@ -176,8 +185,16 @@ export class AlertDeliveryService {
         throw new HttpError(409, 'Publish your alert rules first. The live alerts are the latest published version.');
     }
     const value: StoredMode = { mode: body.mode, since: new Date().toISOString(), by: scope.actor.name };
-    const baseline = body.mode === 'center' && !body.sendDue && (await this.storedMode(orgId))?.mode !== 'center';
     await this.db.transaction(async (tx) => {
+      // The org row lock serializes mode changes, and the baseline rows commit together with the mode, so a worker
+      // never sees the center live before the reminders already due are recorded as handled.
+      const [locked] = await tx
+        .select({ value: sql<StoredMode | null>`${schema.orgs.settings}->'alertingDelivery'` })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, orgId))
+        .for('update');
+      if (body.mode === 'center' && !body.sendDue && locked?.value?.mode !== 'center')
+        await this.collect(orgId, new Date(), true, tx);
       await tx
         .update(schema.orgs)
         .set({
@@ -194,7 +211,6 @@ export class AlertDeliveryService {
         ip,
       });
     });
-    if (baseline) await this.collect(orgId, new Date(), true);
     return this.state(scope);
   }
 
@@ -423,7 +439,7 @@ export class AlertDeliveryService {
    * Queues what the latest published rules send now, and returns how many deliveries were added. With `baseline`,
    * they're recorded as already handled instead, so going live doesn't repeat what the classic alerts sent.
    */
-  async collect(orgId: string, now = new Date(), baseline = false) {
+  async collect(orgId: string, now = new Date(), baseline = false, db: Database | Tx = this.db) {
     const published = await this.published(orgId);
     if (!published) return 0;
     const { rules, templates } = published.workspace;
@@ -442,7 +458,7 @@ export class AlertDeliveryService {
         for (const d of await this.destinations(orgId, rule, event, users, teams)) {
           // Destinations that can't receive it are left out of the queue; the preview explains why.
           if (!d.ready && d.channel === 'teams') continue;
-          const inserted = await this.db
+          const inserted = await db
             .insert(table)
             .values({
               orgId,
@@ -520,6 +536,10 @@ export class AlertDeliveryService {
       orgId,
       rules.map((r) => ({ ...r, emailUserIds: r.escalation.userIds, emailGroupIds: r.escalation.groupIds })),
     );
+    const since = await this.escalatingSince(
+      orgId,
+      rules.map((r) => r.id),
+    );
     let added = 0;
     for (const rule of rules) {
       const after = rule.escalation.afterMinutes * 60_000;
@@ -535,7 +555,8 @@ export class AlertDeliveryService {
             eq(table.status, 'sent'),
             sql`${table.acknowledgedAt} is null`,
             lte(table.sentAt, new Date(now.getTime() - after)),
-            // Not alerts from long before escalation was set up.
+            // Only alerts sent since escalation was set up for this rule, and not long ago.
+            gte(table.sentAt, since.get(rule.id)!),
             gte(table.sentAt, new Date(now.getTime() - after - 7 * DAY)),
           ),
         )
@@ -550,7 +571,7 @@ export class AlertDeliveryService {
         for (const id of ids) {
           const entry = recipients.users.get(id);
           const check = entry
-            ? this.canReceive(entry, { kind: row.kind as AlertKind, clientId: row.clientId ?? '' }, true)
+            ? this.canReceive(entry, rowEvent(row), true)
             : { ready: false, detail: 'No longer in Atlas.' };
           const inserted = await this.db
             .insert(table)
@@ -587,6 +608,31 @@ export class AlertDeliveryService {
     return added;
   }
 
+  /**
+   * When each rule's escalation began: the publication that started its latest unbroken run of versions with
+   * escalation recipients. Alerts sent before then were sent without escalation and never escalate.
+   */
+  private async escalatingSince(orgId: string, ruleIds: string[]) {
+    const versions = await this.db
+      .select({ workspace: schema.alertVersions.workspace, publishedAt: schema.alertVersions.publishedAt })
+      .from(schema.alertVersions)
+      .where(eq(schema.alertVersions.orgId, orgId))
+      .orderBy(desc(schema.alertVersions.version));
+    const since = new Map<string, Date>();
+    const open = new Set(ruleIds);
+    for (const version of versions) {
+      const { rules } = alertWorkspaceSchema.parse(version.workspace);
+      for (const id of [...open]) {
+        const rule = rules.find((r) => r.id === id);
+        if (rule && (rule.escalation.userIds.length || rule.escalation.groupIds.length))
+          since.set(id, version.publishedAt);
+        else open.delete(id);
+      }
+      if (!open.size) break;
+    }
+    return since;
+  }
+
   /** One alert, for its page: anyone on the team who can open the client can see and acknowledge it. */
   async alert(scope: Scope, id: string): Promise<AlertDeliveryView> {
     if (!ROLE_INFO[scope.actor.role].staff) throw new HttpError(404, 'Alert not found.');
@@ -609,6 +655,11 @@ export class AlertDeliveryService {
         .update(table)
         .set({ acknowledgedAt: new Date(), acknowledgedBy: scope.actor.name })
         .where(and(this.eventRows(scope.actor.orgId, row!), sql`${table.acknowledgedAt} is null`));
+      // An escalation still waiting to go (after a failed try, say) isn't needed any more.
+      await this.db
+        .update(table)
+        .set({ status: 'skipped', error: 'Acknowledged before the escalation went.', claimedAt: null })
+        .where(and(this.eventRows(scope.actor.orgId, row!), eq(table.escalation, true), eq(table.status, 'pending')));
       await securityEvent(this.db, {
         orgId: scope.actor.orgId,
         userId: scope.actor.id,
@@ -622,14 +673,30 @@ export class AlertDeliveryService {
   }
 
   async deliver(org: { id: string; name: string }, now = new Date()) {
+    const isDue = and(eq(table.orgId, org.id), eq(table.status, 'pending'), lte(table.nextAttemptAt, now));
     const due = await this.db.transaction(async (tx) => {
-      const rows = await tx
-        .select()
-        .from(table)
-        .where(and(eq(table.orgId, org.id), eq(table.status, 'pending'), lte(table.nextAttemptAt, now)))
-        .orderBy(asc(table.createdAt))
-        .limit(50)
-        .for('update', { skipLocked: true });
+      // One worker claims at a time per organization, so a destination's daily rows can't be split between two.
+      await tx.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.id, org.id)).for('update');
+      const rows = await tx.select().from(table).where(isDue).orderBy(asc(table.createdAt)).limit(50);
+      // A daily summary covers everything due for its destination, not just what fits in this batch.
+      const daily = new Set(rows.filter((r) => r.style === 'daily').map(summaryKey));
+      if (daily.size) {
+        const taken = new Set(rows.map((r) => r.id));
+        const more = await tx
+          .select()
+          .from(table)
+          .where(
+            and(
+              isDue,
+              eq(table.style, 'daily'),
+              inArray(
+                table.destination,
+                rows.filter((r) => r.style === 'daily').map((r) => r.destination),
+              ),
+            ),
+          );
+        rows.push(...more.filter((r) => !taken.has(r.id) && daily.has(summaryKey(r))));
+      }
       if (rows.length)
         await tx
           .update(table)
@@ -649,16 +716,23 @@ export class AlertDeliveryService {
         await this.send(org, row, teams, now);
         continue;
       }
-      const key = `${row.channel}|${row.destination}|${row.channel === 'teams' ? row.clientId : ''}`;
+      const key = summaryKey(row);
       summaries.set(key, [...(summaries.get(key) ?? []), row]);
     }
-    for (const rows of summaries.values()) {
+    for (const group of summaries.values()) {
+      // An email summary can cover several clients: each item is rechecked, and only those the person can still
+      // open go in it.
+      const rows = group[0]!.channel === 'email' ? await this.receivable(group, now) : group;
+      if (!rows.length) continue;
       if (rows.length === 1) {
         await this.send(org, rows[0]!, teams, now);
         continue;
       }
       const first = rows[0]!;
-      const lines = rows.map((r) => [r.subject, `${r.reason} · ${r.itemName}`, r.link].join(NL));
+      // Each item links to its own alert page, so every one of them can be acknowledged from the summary.
+      const lines = rows.map((r) =>
+        [r.subject, `${r.reason} · ${r.itemName}`, `${this.deps.publicOrigin}/alerts/${r.id}`].join(NL),
+      );
       await this.send(
         org,
         {
@@ -673,6 +747,21 @@ export class AlertDeliveryService {
         rows.map((r) => r.id),
       );
     }
+  }
+
+  /** The email rows (all to one person) they can still receive; the rest are recorded as skipped. */
+  private async receivable(rows: Row[], now: Date) {
+    const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, rows[0]!.destination));
+    const entry = user ? { user, levels: await clientLevels(this.db, actorFor(user)) } : null;
+    const keep: Row[] = [];
+    for (const row of rows) {
+      const check = entry
+        ? this.canReceive(entry, rowEvent(row), row.escalation)
+        : { ready: false, detail: 'No longer in Atlas.' };
+      if (check.ready) keep.push(row);
+      else await this.finish(row, 'skipped', check.detail, now);
+    }
+    return keep;
   }
 
   /** Records how a send went, for the row (or every row a summary covered). */
@@ -715,7 +804,7 @@ export class AlertDeliveryService {
         const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, row.destination));
         const entry = user ? { user, levels: await clientLevels(this.db, actorFor(user)) } : null;
         const check = entry
-          ? this.canReceive(entry, { kind: row.kind as AlertKind, clientId: row.clientId ?? '' }, row.escalation)
+          ? this.canReceive(entry, rowEvent(row), row.escalation)
           : { ready: false, detail: 'No longer in Atlas.' };
         // Test sends go to the person who asked, for any client.
         if (!row.test && !check.ready) return finish('skipped', check.detail);
@@ -728,15 +817,20 @@ export class AlertDeliveryService {
             .map((p) => p.trim())
             .filter(Boolean),
           // Tests have no alert page; real alerts open theirs, to acknowledge and follow the link.
-          action: row.test
-            ? { label: 'Open in Atlas', url: row.link }
-            : { label: 'Acknowledge or open', url: `${this.deps.publicOrigin}/alerts/${ids[0]}` },
+          // A summary lists each item's own alert page instead.
+          action:
+            row.test || ids.length > 1
+              ? { label: 'Open in Atlas', url: row.link }
+              : { label: 'Acknowledge or open', url: `${this.deps.publicOrigin}/alerts/${ids[0]}` },
         });
         return finish('sent', '');
       }
       if (!teams?.enabled || !teams.connection) return failOrRetry('Microsoft Teams is not connected.');
       const mapping = teams.mappings.find((m) => m.clientId === row.clientId);
-      const [teamId, channelId] = row.destination.split(':') as [string, string];
+      // Channel IDs contain colons themselves (19:…@thread.tacv2); only the first one separates the team.
+      const split = row.destination.indexOf(':');
+      const teamId = row.destination.slice(0, split);
+      const channelId = row.destination.slice(split + 1);
       if (!mapping || mapping.teamId !== teamId || ![mapping.channelId, mapping.securityChannelId].includes(channelId))
         return finish('skipped', 'The client’s Teams channel changed since this was queued.');
       const owner = await this.owner(org.id);
@@ -745,7 +839,9 @@ export class AlertDeliveryService {
         new Scope(this.db, actorFor(owner)),
         row.clientId!,
         { teamId, channelId },
-        row.test ? row.body : `${row.body}${NL}${NL}Acknowledge: ${this.deps.publicOrigin}/alerts/${ids[0]}`,
+        row.test || ids.length > 1
+          ? row.body
+          : `${row.body}${NL}${NL}Acknowledge: ${this.deps.publicOrigin}/alerts/${ids[0]}`,
         undefined,
         row.teamsFormat === 'formatted' ? 'formatted' : 'text',
       );
@@ -935,10 +1031,14 @@ export class AlertDeliveryService {
         eventKey: table.eventKey,
         channel: table.channel,
         destination: table.destination,
+        status: table.status,
       })
       .from(table)
       .where(and(eq(table.orgId, orgId), eq(table.test, false)));
-    const done = new Set(sent.map((s) => `${s.ruleId}|${s.eventKey}|${s.channel}|${s.destination}`));
+    // Any existing row means it won't be queued again, but only a sent one actually went.
+    const existing = new Map(
+      sent.map((s) => [`${s.ruleId}|${s.eventKey}|${s.channel}|${s.destination}`, s.status as AlertDeliveryStatus]),
+    );
     const matches: AlertDryRun['matches'] = [];
     for (const rule of rules)
       for (const event of events) {
@@ -956,7 +1056,7 @@ export class AlertDeliveryService {
             label: d.label,
             ready: d.ready,
             detail: d.detail,
-            alreadySent: done.has(`${rule.id}|${key}|${d.channel}|${d.destination}`),
+            existing: existing.get(`${rule.id}|${key}|${d.channel}|${d.destination}`) ?? null,
           })),
         });
         if (matches.length >= 500) return { version: published.version, events: events.length, matches };
