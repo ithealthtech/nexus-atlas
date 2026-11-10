@@ -54,6 +54,40 @@ export const alertTemplateSchema = z.object({
 });
 export type AlertTemplate = z.infer<typeof alertTemplateSchema>;
 export const ALERT_ITEM_KINDS = ['asset', 'document', 'password'] as const;
+export const ALERT_DELIVERY_STYLES = ['each', 'daily'] as const;
+export type AlertDeliveryStyle = (typeof ALERT_DELIVERY_STYLES)[number];
+export const ALERT_DELIVERY_STYLE_LABELS: Record<AlertDeliveryStyle, string> = {
+  each: 'Each alert as it happens',
+  daily: 'One daily summary',
+};
+
+/**
+ * When alerts go, for the whole workspace, in the organization's time zone. Routine reminders (expirations and
+ * reviews) wait out quiet hours; breaches and infections always go straight away. Daily summaries go at the
+ * summary hour.
+ */
+export const alertScheduleSchema = z
+  .object({
+    timeZone: z
+      .string()
+      .min(1)
+      .max(64)
+      .refine((tz) => {
+        try {
+          new Intl.DateTimeFormat('en-GB', { timeZone: tz });
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'Choose a time zone from the list.')
+      .default('UTC'),
+    /** Hours (0–23) when routine reminders wait, from start to end; the same hour for both means none. */
+    quietStart: z.number().int().min(0).max(23).default(0),
+    quietEnd: z.number().int().min(0).max(23).default(0),
+    summaryHour: z.number().int().min(0).max(23).default(8),
+  })
+  .default({ timeZone: 'UTC', quietStart: 0, quietEnd: 0, summaryHour: 8 });
+export type AlertSchedule = z.infer<typeof alertScheduleSchema>;
 export const ALERT_SEVERITIES = ['info', 'warning', 'critical'] as const;
 export type AlertSeverity = (typeof ALERT_SEVERITIES)[number];
 const uniqueIds = z
@@ -73,10 +107,14 @@ export const alertRuleSchema = z
     includeOverdue: z.boolean().default(false),
     severities: z.array(z.enum(ALERT_SEVERITIES)).min(1).max(3),
     emailUserIds: uniqueIds.default([]),
+    /** Staff groups: every active member who can open the client gets the email. */
+    emailGroupIds: uniqueIds.default([]),
     teams: z.boolean().default(false),
+    /** Each alert as it happens, or one summary a day per recipient at the workspace's summary hour. */
+    delivery: z.enum(ALERT_DELIVERY_STYLES).default('each'),
   })
   .superRefine((rule, ctx) => {
-    if (!rule.teams && !rule.emailUserIds.length)
+    if (!rule.teams && !rule.emailUserIds.length && !rule.emailGroupIds.length)
       ctx.addIssue({
         code: 'custom',
         path: ['emailUserIds'],
@@ -100,6 +138,7 @@ export const alertWorkspaceSchema = z
       .max(Number.MAX_SAFE_INTEGER - 1),
     templates: z.array(alertTemplateSchema).max(100),
     rules: z.array(alertRuleSchema).max(200),
+    schedule: alertScheduleSchema,
   })
   .superRefine((workspace, ctx) => {
     for (const key of ['templates', 'rules'] as const) {
@@ -219,6 +258,7 @@ export function defaultAlertWorkspace(): AlertWorkspace {
   return {
     revision: 0,
     rules: [],
+    schedule: alertScheduleSchema.parse(undefined),
     templates: ALERT_KINDS.map((kind) => ({
       id: ids[kind],
       name: `${ALERT_KIND_LABELS[kind]} — starter`,

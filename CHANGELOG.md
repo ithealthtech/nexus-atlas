@@ -12,6 +12,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Each reminder day fires once, even if the server was off that day. Recipients' access is checked just before each email, failures retry, and anything Atlas can't confirm arrived waits for you to check before sending again.
   - **Delivery history** lists every alert with why it went, who it went to and how it went, with **Send again** for failures.
   - **Send a test** sends a template to your email or a client's Teams channel, marked as a test.
+- **Alert groups, quiet hours and daily summaries.** A rule can email whole staff groups (each member once, and only if they can open the client), and send as **One daily summary** instead of one message per item. **Timing** sets your time zone, quiet hours (routine reminders wait; breaches and infections never do) and when summaries go.
 
 ## [2.3.0] - 2026-10-27
 

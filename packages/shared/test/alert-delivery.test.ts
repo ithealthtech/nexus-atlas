@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { alertReminder, alertRuleFires, dateSeverity, type AlertEvent, type AlertRule } from '../src/index.js';
+import {
+  alertReminder,
+  alertRuleFires,
+  alertSendAt,
+  dateSeverity,
+  inQuietHours,
+  nextLocalHour,
+  type AlertEvent,
+  type AlertRule,
+} from '../src/index.js';
 
 const rule = (over: Partial<AlertRule> = {}): AlertRule => ({
   id: '00000000-0000-4000-8000-000000000001',
@@ -65,5 +74,24 @@ describe('alert reminders', () => {
       'warning',
       'info',
     ]);
+  });
+});
+
+describe('alert timing', () => {
+  const schedule = { timeZone: 'America/New_York', quietStart: 18, quietEnd: 8, summaryHour: 9 };
+  // 23:30 UTC on 2 Nov 2026 is 18:30 in New York (EST, UTC-5).
+  const evening = new Date('2026-11-02T23:30:00Z');
+  it('holds routine reminders through quiet hours, never breaches or infections', () => {
+    expect(inQuietHours(evening, schedule)).toBe(true);
+    expect(inQuietHours(new Date('2026-11-02T15:00:00Z'), schedule)).toBe(false);
+    expect(alertSendAt(evening, 'expiration', 'each', schedule).toISOString()).toBe('2026-11-03T13:00:00.000Z');
+    expect(alertSendAt(evening, 'breach', 'each', schedule)).toBe(evening);
+    expect(alertSendAt(evening, 'infection', 'daily', schedule)).toBe(evening);
+    expect(inQuietHours(evening, { ...schedule, quietStart: 0, quietEnd: 0 })).toBe(false);
+  });
+  it('sends daily summaries at the summary hour, or straight away during it', () => {
+    expect(alertSendAt(evening, 'review', 'daily', schedule).toISOString()).toBe('2026-11-03T14:00:00.000Z');
+    const nine = new Date('2026-11-03T14:20:00Z');
+    expect(nextLocalHour(nine, 'America/New_York', 9)).toBe(nine);
   });
 });

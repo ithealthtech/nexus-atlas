@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AlertKind, AlertRule, AlertSeverity } from './alerting.js';
+import type { AlertKind, AlertRule, AlertSchedule, AlertSeverity } from './alerting.js';
 
 // ---------- live delivery from the alerting center ----------
 /**
@@ -158,4 +158,36 @@ export function alertRuleFires(rule: AlertRule, event: AlertEvent): { key: strin
   if (event.kind === 'expiration' || event.kind === 'review')
     return event.daysRemaining === null ? null : alertReminder(rule, event.daysRemaining);
   return { key: 'once', reason: event.kind === 'breach' ? 'Found in a breach' : 'Infection reported' };
+}
+
+// ---------- timing ----------
+/** The hour (0–23) it is in a time zone. */
+export function localHour(at: Date, timeZone: string) {
+  return Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone }).format(at));
+}
+/** Whether it's quiet hours: routine reminders wait until they end. */
+export function inQuietHours(at: Date, s: AlertSchedule) {
+  if (s.quietStart === s.quietEnd) return false;
+  const h = localHour(at, s.timeZone);
+  return s.quietStart < s.quietEnd ? h >= s.quietStart && h < s.quietEnd : h >= s.quietStart || h < s.quietEnd;
+}
+/** The start of the next hour, from now on, that is `hour` o'clock in the time zone; now, during that hour. */
+export function nextLocalHour(now: Date, timeZone: string, hour: number) {
+  if (localHour(now, timeZone) === hour) return now;
+  const start = new Date(now);
+  start.setUTCMinutes(0, 0, 0);
+  for (let i = 1; i <= 48; i++) {
+    const at = new Date(start.getTime() + i * 3_600_000);
+    if (localHour(at, timeZone) === hour) return at;
+  }
+  return now;
+}
+/**
+ * When a queued alert should go: breaches and infections at once; a daily summary rule at the summary hour; a
+ * routine reminder at once, or when quiet hours end.
+ */
+export function alertSendAt(now: Date, kind: AlertKind, style: 'each' | 'daily', s: AlertSchedule) {
+  if (kind === 'breach' || kind === 'infection') return now;
+  if (style === 'daily') return nextLocalHour(now, s.timeZone, s.summaryHour);
+  return inQuietHours(now, s) ? nextLocalHour(now, s.timeZone, s.quietEnd) : now;
 }

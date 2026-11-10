@@ -1,4 +1,4 @@
-import { ROLE_INFO, type AlertRule, type ClientSummary, type UserView } from '@atlas/shared';
+import { ROLE_INFO, type AlertRule, type ClientSummary, type GroupView, type UserView } from '@atlas/shared';
 import { Checkbox } from '@/components/ui';
 
 type Choice = { id: string; label: string };
@@ -46,11 +46,13 @@ export function Audience({
   rule,
   clients,
   users,
+  groups,
   change,
 }: {
   rule: AlertRule;
   clients: ClientSummary[];
   users: UserView[];
+  groups: GroupView[];
   change: (r: AlertRule) => void;
 }) {
   const staff = users.filter((u) => (!u.disabled && ROLE_INFO[u.role].staff) || rule.emailUserIds.includes(u.id));
@@ -75,6 +77,16 @@ export function Audience({
         missing="Unavailable staff member"
         change={(emailUserIds) => change({ ...rule, emailUserIds })}
       />
+      {(groups.length > 0 || rule.emailGroupIds.length > 0) && (
+        <Selection
+          title="Email groups"
+          description="Every active member of the group who can open the client. Someone in two groups gets one email."
+          options={groups.map((g) => ({ id: g.id, label: `${g.name} (${g.memberIds.length})` }))}
+          selected={rule.emailGroupIds}
+          missing="Removed group"
+          change={(emailGroupIds) => change({ ...rule, emailGroupIds })}
+        />
+      )}
     </>
   );
 }

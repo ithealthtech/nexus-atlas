@@ -32,7 +32,9 @@ function newRule(template: AlertTemplate, userId: string): AlertRule {
     includeOverdue: false,
     severities: [...ALERT_SEVERITIES],
     emailUserIds: [userId],
+    emailGroupIds: [],
     teams: false,
+    delivery: 'each',
   };
 }
 
@@ -67,6 +69,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
     setRuleId('');
     setPreview(null);
   };
+  const changeSchedule = (schedule: AlertWorkspace['schedule']) => setWorkspace((w) => ({ ...w, schedule }));
   const changeTemplate = (next: AlertTemplate) =>
     setWorkspace((w) => ({ ...w, templates: w.templates.map((t) => (t.id === next.id ? next : t)) }));
   const changeRule = (next: AlertRule) =>
@@ -157,6 +160,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
     busy,
     error,
     dirty,
+    changeSchedule,
     changeTemplate,
     changeRule,
     selectTemplate,

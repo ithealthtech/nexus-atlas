@@ -1,0 +1,1 @@
+ALTER TABLE "alert_deliveries" ADD COLUMN "style" text DEFAULT 'each' NOT NULL;
