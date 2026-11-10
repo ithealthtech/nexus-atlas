@@ -225,4 +225,52 @@ describe('alerting center delivery', () => {
       'pending',
     ]);
   });
+
+  it('puts every due item in one summary, and only items from clients the person can still open', async () => {
+    const otherId = (await owner.call('POST', '/api/clients', { name: 'Other Client' })).data.id as string;
+    const created = await owner.call('POST', '/api/users', {
+      email: 'summary@atlas.test',
+      name: 'Sam',
+      password: TEMP,
+      role: 'technician',
+      grants: [
+        { clientId, level: 'read' },
+        { clientId: otherId, level: 'read' },
+      ],
+    });
+    const techId = created.data.id as string;
+    const orgId = (await owner.call('GET', '/api/session')).data.actor.orgId as string;
+    const row = (client: string, n: number) => ({
+      orgId,
+      ruleId: 'rule',
+      ruleName: 'Summary',
+      kind: 'expiration',
+      clientId: client,
+      itemName: `${client === otherId ? 'Other' : 'Harbor'} item ${n}`,
+      eventKey: `${client}:${n}`,
+      reason: '14-day reminder',
+      channel: 'email',
+      destination: techId,
+      destinationLabel: 'Sam',
+      subject: `Item ${n}`,
+      body: 'Due soon',
+      style: 'daily',
+      link: 'http://localhost/',
+      nextAttemptAt: new Date(Date.now() - 60_000),
+    });
+    await t.handle.db
+      .insert(schema.alertDeliveries)
+      .values([...Array.from({ length: 55 }, (_, n) => row(clientId, n)), row(otherId, 0)]);
+    await t.handle.db.delete(schema.clientAccess).where(eq(schema.clientAccess.clientId, otherId));
+
+    await worker().deliver({ id: orgId, name: 'Atlas' });
+    await worker().deliver({ id: orgId, name: 'Atlas' });
+    expect(sent().map((m) => [m.to, m.subject])).toEqual([['summary@atlas.test', 'Alert summary: 55 items']]);
+    expect(sent()[0]!.text).not.toContain('Other item');
+    const rows = await t.handle.db.select().from(schema.alertDeliveries);
+    expect(rows.filter((r) => r.status === 'sent')).toHaveLength(55);
+    expect(rows.filter((r) => r.clientId === otherId).map((r) => [r.status, r.error])).toEqual([
+      ['skipped', 'Can’t open this client.'],
+    ]);
+  });
 });

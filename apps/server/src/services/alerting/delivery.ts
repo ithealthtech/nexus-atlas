@@ -78,6 +78,14 @@ interface Destination {
   detail: string;
 }
 
+/** Rows that go out together as one daily summary: per person, or per client's Teams channel. */
+const summaryKey = (row: Row) => `${row.channel}|${row.destination}|${row.channel === 'teams' ? row.clientId : ''}`;
+/** Enough of a queued row's event to recheck whether its recipient may still receive it. */
+const rowEvent = (row: Row): Pick<AlertEvent, 'kind' | 'clientId'> => ({
+  kind: row.kind as AlertKind,
+  clientId: row.clientId ?? '',
+});
+
 /** Whether the alerting center sends this organization's alerts, in place of the classic ones. */
 export async function alertCenterLive(db: Database, orgId: string) {
   const [row] = await db
@@ -372,7 +380,10 @@ export class AlertDeliveryService {
     return out;
   }
   /** Staff who can open the client, and (for routine reminders) haven't turned alert emails off. */
-  private canReceive(entry: { user: UserRow; levels: Map<string, AccessLevel> }, event: AlertEvent) {
+  private canReceive(
+    entry: { user: UserRow; levels: Map<string, AccessLevel> },
+    event: Pick<AlertEvent, 'kind' | 'clientId'>,
+  ) {
     const { user, levels } = entry;
     if (user.disabled || !ROLE_INFO[user.role as Role]?.staff)
       return { ready: false, detail: 'Not an active staff member.' };
@@ -500,14 +511,30 @@ export class AlertDeliveryService {
   }
 
   async deliver(org: { id: string; name: string }, now = new Date()) {
+    const isDue = and(eq(table.orgId, org.id), eq(table.status, 'pending'), lte(table.nextAttemptAt, now));
     const due = await this.db.transaction(async (tx) => {
-      const rows = await tx
-        .select()
-        .from(table)
-        .where(and(eq(table.orgId, org.id), eq(table.status, 'pending'), lte(table.nextAttemptAt, now)))
-        .orderBy(asc(table.createdAt))
-        .limit(50)
-        .for('update', { skipLocked: true });
+      // One worker claims at a time per organization, so a destination's daily rows can't be split between two.
+      await tx.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.id, org.id)).for('update');
+      const rows = await tx.select().from(table).where(isDue).orderBy(asc(table.createdAt)).limit(50);
+      // A daily summary covers everything due for its destination, not just what fits in this batch.
+      const daily = new Set(rows.filter((r) => r.style === 'daily').map(summaryKey));
+      if (daily.size) {
+        const taken = new Set(rows.map((r) => r.id));
+        const more = await tx
+          .select()
+          .from(table)
+          .where(
+            and(
+              isDue,
+              eq(table.style, 'daily'),
+              inArray(
+                table.destination,
+                rows.filter((r) => r.style === 'daily').map((r) => r.destination),
+              ),
+            ),
+          );
+        rows.push(...more.filter((r) => !taken.has(r.id) && daily.has(summaryKey(r))));
+      }
       if (rows.length)
         await tx
           .update(table)
@@ -527,10 +554,14 @@ export class AlertDeliveryService {
         await this.send(org, row, teams, now);
         continue;
       }
-      const key = `${row.channel}|${row.destination}|${row.channel === 'teams' ? row.clientId : ''}`;
+      const key = summaryKey(row);
       summaries.set(key, [...(summaries.get(key) ?? []), row]);
     }
-    for (const rows of summaries.values()) {
+    for (const group of summaries.values()) {
+      // An email summary can cover several clients: each item is rechecked, and only those the person can still
+      // open go in it.
+      const rows = group[0]!.channel === 'email' ? await this.receivable(group, now) : group;
+      if (!rows.length) continue;
       if (rows.length === 1) {
         await this.send(org, rows[0]!, teams, now);
         continue;
@@ -551,6 +582,19 @@ export class AlertDeliveryService {
         rows.map((r) => r.id),
       );
     }
+  }
+
+  /** The email rows (all to one person) they can still receive; the rest are recorded as skipped. */
+  private async receivable(rows: Row[], now: Date) {
+    const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, rows[0]!.destination));
+    const entry = user ? { user, levels: await clientLevels(this.db, actorFor(user)) } : null;
+    const keep: Row[] = [];
+    for (const row of rows) {
+      const check = entry ? this.canReceive(entry, rowEvent(row)) : { ready: false, detail: 'No longer in Atlas.' };
+      if (check.ready) keep.push(row);
+      else await this.finish(row, 'skipped', check.detail, now);
+    }
+    return keep;
   }
 
   /** Records how a send went, for the row (or every row a summary covered). */
@@ -592,9 +636,7 @@ export class AlertDeliveryService {
       if (row.channel === 'email') {
         const [user] = await this.db.select().from(schema.users).where(eq(schema.users.id, row.destination));
         const entry = user ? { user, levels: await clientLevels(this.db, actorFor(user)) } : null;
-        const check = entry
-          ? this.canReceive(entry, { kind: row.kind as AlertKind, clientId: row.clientId ?? '' } as AlertEvent)
-          : { ready: false, detail: 'No longer in Atlas.' };
+        const check = entry ? this.canReceive(entry, rowEvent(row)) : { ready: false, detail: 'No longer in Atlas.' };
         // Test sends go to the person who asked, for any client.
         if (!row.test && !check.ready) return finish('skipped', check.detail);
         if (!(await this.deps.mail.enabled(org.id))) return failOrRetry('Email is not set up.');
