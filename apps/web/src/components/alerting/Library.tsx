@@ -55,6 +55,11 @@ export function Library({ editor: e }: { editor: AlertEditor }) {
                 {e.workspace.rules.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
+                    {r.replacesGeneral
+                      ? ` (instead of all-client rules for ${r.clientIds.length} ${r.clientIds.length === 1 ? 'client' : 'clients'})`
+                      : r.clientIds.length
+                        ? ` (${r.clientIds.length} ${r.clientIds.length === 1 ? 'client' : 'clients'})`
+                        : ''}
                   </option>
                 ))}
               </Select>

@@ -279,4 +279,71 @@ describe('alerting center delivery', () => {
     expect(sent()).toHaveLength(1);
     expect((await owner.call('GET', `/api/alerts/${randomUUID()}`)).status).toBe(404);
   });
+  it('gives a client its own rule instead of the rules for all clients, and sends nothing for a paused client', async () => {
+    const cedar = (await owner.call('POST', '/api/clients', { name: 'Cedar Clinic' })).data.id as string;
+    const layouts = (await owner.call('GET', '/api/layouts')).data as { id: string; key: string }[];
+    await owner.call('POST', `/api/clients/${cedar}/assets`, {
+      layoutId: layouts.find((l) => l.key === 'ssl_certificate')!.id,
+      name: 'mail.cedarclinic.test',
+      fields: { common_name: 'mail.cedarclinic.test', expires: inDays(12) },
+    });
+    const tech = await owner.call('POST', '/api/users', {
+      email: 'cedar@atlas.test',
+      name: 'Cass',
+      password: TEMP,
+      role: 'technician',
+      grants: [{ clientId: cedar, level: 'read' }],
+    });
+    const own = {
+      ...workspace.rules[0]!,
+      id: randomUUID(),
+      name: 'Cedar on call',
+      clientIds: [cedar],
+      emailUserIds: [tech.data.id],
+    };
+    // A replacing rule needs its clients, and each client is paused once.
+    const bad = {
+      ...workspace,
+      revision: 1,
+      rules: [...workspace.rules, { ...own, clientIds: [], replacesGeneral: true }],
+    };
+    expect((await owner.call('PUT', BASE, bad)).status).toBe(400);
+    const twice = [
+      { clientId, until: null, note: '' },
+      { clientId, until: null, note: '' },
+    ];
+    expect((await owner.call('PUT', BASE, { ...workspace, revision: 1, pauses: twice })).status).toBe(400);
+
+    const next = {
+      ...workspace,
+      revision: 1,
+      rules: [...workspace.rules, { ...own, replacesGeneral: true }],
+      pauses: [{ clientId, until: null, note: 'Offboarding' }],
+    };
+    expect((await owner.call('PUT', BASE, next)).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 2, lastVersion: 0, note: 'Overrides' });
+    const preview = (await owner.call('GET', BASE + '/delivery/preview')).data as AlertDryRun;
+    expect(preview.matches.map((m) => [m.ruleName, m.clientName])).toEqual([['Cedar on call', 'Cedar Clinic']]);
+    await owner.call('PUT', BASE + '/delivery', { mode: 'center', confirm: true, sendDue: true });
+    await worker().tick();
+    // Cedar's own rule replaces the rule for all clients; Harbor Dental is paused.
+    expect(sent().map((m) => [m.to, m.subject])).toEqual([['cedar@atlas.test', 'Cedar Clinic: Expirations']]);
+
+    // Resumed: what's still due for Harbor Dental sends then.
+    const resumed = { ...next, revision: 2, pauses: [] };
+    expect((await owner.call('PUT', BASE, resumed)).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 3, lastVersion: 1, note: 'Resume' });
+    await worker().tick();
+    expect(sent().map((m) => m.to)).toEqual(['cedar@atlas.test', 'owner@atlas.test']);
+  });
+
+  it('ends a pause after its last day', async () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const next = { ...workspace, revision: 1, pauses: [{ clientId, until: yesterday, note: '' }] };
+    expect((await owner.call('PUT', BASE, next)).status).toBe(200);
+    await owner.call('POST', BASE + '/publish', { revision: 2, lastVersion: 0, note: 'Pause ended' });
+    await owner.call('PUT', BASE + '/delivery', { mode: 'center', confirm: true, sendDue: true });
+    await worker().tick();
+    expect(sent()).toHaveLength(1);
+  });
 });

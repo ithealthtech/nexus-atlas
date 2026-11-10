@@ -8,7 +8,7 @@ import {
   type AlertDeliveryView,
   type AlertEvent,
   ALERT_KIND_LABELS,
-  alertRuleFires,
+  alertRuleFiresIn,
   dateSeverity,
   alertPreviewSchema,
   alertSampleValues,
@@ -4419,7 +4419,7 @@ function demoMatches() {
   if (!latest) return [];
   return latest.workspace.rules.flatMap((rule) =>
     demoAlertEvents().flatMap((event) => {
-      const fires = alertRuleFires(rule, event);
+      const fires = alertRuleFiresIn(latest.workspace, rule, event, new Date());
       if (!fires) return [];
       const template = latest.workspace.templates.find((t) => t.id === rule.templateId)!;
       const destinations = [

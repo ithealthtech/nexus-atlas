@@ -97,7 +97,7 @@ export class AlertVersionService {
         .where(and(eq(table.orgId, orgId), eq(table.draftRevision, body.revision)));
       if (existing)
         throw new HttpError(409, `These saved drafts are already published as version ${existing.version}.`);
-      await new AlertWorkspaceService(this.db).validateReferences(scope, workspace.rules);
+      await new AlertWorkspaceService(this.db).validateReferences(scope, workspace.rules, workspace.pauses);
       await tx.insert(table).values({
         orgId,
         version: latest + 1,

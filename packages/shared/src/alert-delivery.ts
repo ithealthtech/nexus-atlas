@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AlertKind, AlertRule, AlertSchedule, AlertSeverity } from './alerting.js';
+import type { AlertKind, AlertPause, AlertRule, AlertSchedule, AlertSeverity, AlertWorkspace } from './alerting.js';
 
 // ---------- live delivery from the alerting center ----------
 /**
@@ -156,6 +156,38 @@ export function alertRuleFires(rule: AlertRule, event: AlertEvent): { key: strin
   if (event.kind === 'expiration' || event.kind === 'review')
     return event.daysRemaining === null ? null : alertReminder(rule, event.daysRemaining);
   return { key: 'once', reason: event.kind === 'breach' ? 'Found in a breach' : 'Infection reported' };
+}
+
+/** The date (YYYY-MM-DD) it is in a time zone. */
+export function localDate(at: Date, timeZone: string) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+}
+/** The client's pause, if its alerts are paused on that date. */
+export function alertPaused(pauses: AlertPause[], clientId: string | null, date: string) {
+  return pauses.find((p) => p.clientId === clientId && (p.until === null || p.until >= date)) ?? null;
+}
+/** A rule for all clients that a client's own rule of the same alert type replaces, for that client. */
+export function alertRuleReplacedBy(rules: AlertRule[], rule: AlertRule, clientId: string | null) {
+  if (rule.clientIds.length || !clientId) return null;
+  return (
+    rules.find(
+      (r) => r.id !== rule.id && r.replacesGeneral && r.kind === rule.kind && r.clientIds.includes(clientId),
+    ) ?? null
+  );
+}
+/**
+ * Whether a published rule sends for an event, with the workspace's precedence: nothing for a paused client, and a
+ * client's own rule replaces the rules for all clients when it says so.
+ */
+export function alertRuleFiresIn(
+  workspace: Pick<AlertWorkspace, 'rules' | 'pauses' | 'schedule'>,
+  rule: AlertRule,
+  event: AlertEvent,
+  now: Date,
+) {
+  if (alertPaused(workspace.pauses, event.clientId, localDate(now, workspace.schedule.timeZone))) return null;
+  if (alertRuleReplacedBy(workspace.rules, rule, event.clientId)) return null;
+  return alertRuleFires(rule, event);
 }
 
 // ---------- timing ----------

@@ -34,6 +34,7 @@ function newRule(template: AlertTemplate, userId: string): AlertRule {
     emailUserIds: [userId],
     emailGroupIds: [],
     teams: false,
+    replacesGeneral: false,
     delivery: 'each',
     escalation: { afterMinutes: 60, userIds: [], groupIds: [] },
   };
@@ -71,6 +72,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
     setPreview(null);
   };
   const changeSchedule = (schedule: AlertWorkspace['schedule']) => setWorkspace((w) => ({ ...w, schedule }));
+  const changePauses = (pauses: AlertWorkspace['pauses']) => setWorkspace((w) => ({ ...w, pauses }));
   const changeTemplate = (next: AlertTemplate) =>
     setWorkspace((w) => ({ ...w, templates: w.templates.map((t) => (t.id === next.id ? next : t)) }));
   const changeRule = (next: AlertRule) =>
@@ -162,6 +164,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
     error,
     dirty,
     changeSchedule,
+    changePauses,
     changeTemplate,
     changeRule,
     selectTemplate,
