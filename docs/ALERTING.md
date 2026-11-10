@@ -64,8 +64,15 @@ saving again.
 - **Timing** sets the time zone, **quiet hours** and the hour daily summaries go. During quiet hours, routine
   reminders (expirations and reviews) wait until the hours end; breaches and infections never wait. Set both quiet
   hours to the same time for none, which is the default.
+- **Use instead of the rules for all clients**, in a rule with clients chosen, gives those clients their own rule:
+  for them, only rules with the client chosen send that type of alert, and the rules for all clients don't. Use it
+  for a client with its own recipients, reminder days or escalation, such as an on-call contract. Other alert types
+  and other clients are unaffected.
+- **Paused clients** stops everything for a client, breaches and infections included, today, for a week, two
+  weeks, 30 days or until you choose **Resume**, with a note to say why. Nothing escalates meanwhile. Whatever is
+  still due when the pause ends sends then. A pause ends after its last day, in the Timing time zone.
 
-Timing and these rule settings are saved with your drafts and take effect once published.
+The preview of what would send follows the same rules. Timing, paused clients and these rule settings are saved with your drafts and take effect once published.
 
 ## Publish and restore versions
 
@@ -146,4 +153,4 @@ rule, why it went, the item, who it went to, and the outcome. Filter it by statu
 
 ## Still to come
 
-Client overrides with precedence are a separate step.
+Infection alerts that Bitdefender posts to Teams directly are a separate step.
