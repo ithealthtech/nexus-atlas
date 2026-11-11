@@ -4,6 +4,8 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-11
+
 ### Added
 
 - **Restore from a backup in Atlas.** **Administration → System status → Restore from a backup** lets the owner put data back without the command line. Choose a backup from the backup folder or upload an `.atlasbak` file, enter the **Master key for this backup** if it was made by another installation or before the key changed, and choose **Check backup**: Atlas reads and checks the whole file and shows what it holds before anything changes.
