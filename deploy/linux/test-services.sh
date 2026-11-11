@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Runs atlas-updater.sh's service actions against real systemd, with stand-ins for Atlas and its web proxy.
+# Runs atlas-updater.sh's service actions against real systemd and the real web proxy (Caddy), with a stand-in for
+# Atlas.
 # CI runs it as root on a throwaway machine. It creates the `atlas` user, /opt/msp-atlas, /etc/msp-atlas,
 # /var/lib/msp-atlas, /var/lib/msp-atlas-updater, and units named like the real ones, so it refuses to run anywhere
 # Atlas is installed.
@@ -57,18 +58,9 @@ ExecStart=$NODE $APP/standin.js
 [Install]
 WantedBy=multi-user.target
 EOF
-if ! systemctl cat caddy.service >/dev/null 2>&1; then
-  cat > /etc/systemd/system/caddy.service <<'EOF'
-[Unit]
-Description=Stand-in for the web proxy (helper test)
-
-[Service]
-ExecStart=/bin/sleep infinity
-
-[Install]
-WantedBy=multi-user.target
-EOF
-fi
+# The real web proxy, so the Caddy settings atlas-access writes are loaded and tried, not only read.
+command -v caddy >/dev/null && systemctl cat caddy.service >/dev/null 2>&1 \
+  || { echo "Install Caddy first (apt-get install caddy): the remote access checks go through it." >&2; exit 1; }
 if ! systemctl cat postgresql.service >/dev/null 2>&1; then
   cat > /etc/systemd/system/postgresql.service <<'EOF'
 [Unit]
@@ -220,8 +212,19 @@ failA() {
 expect "Atlas's address" "$(envget PUBLIC_URL)" "https://atlas.example.test"
 expect "who Atlas believes" "$(envget TRUST_PROXY)" "127.0.0.1,::1,10.0.0.5,10.1.0.0/24"
 grep -q 'trusted_proxies static 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile || failA "Caddy doesn't trust the proxy"
-grep -q '@proxy remote_ip 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile || failA "Caddy doesn't limit Atlas to the proxy"
-echo "ok: the web proxy only lets the reverse proxy through"
+grep -q '@proxy remote_ip 127.0.0.1 ::1 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile \
+  || failA "Caddy doesn't limit Atlas to the proxy"
+# A reverse proxy may send requests on over HTTP or HTTPS; both reach Atlas, the way the proxy would ask.
+curl -fsS -m 5 -H "Host: atlas.example.test" http://127.0.0.1/readyz >/dev/null \
+  || failA "the web proxy doesn't serve Atlas on port 80"
+curl -fsS -k -m 5 --resolve atlas.example.test:443:127.0.0.1 https://atlas.example.test/readyz >/dev/null \
+  || failA "the web proxy doesn't serve Atlas over HTTPS on port 443"
+# Anyone else is turned away. 192.0.2.10 is a documentation address, on this machine only for this check.
+ip addr add 192.0.2.10/32 dev lo
+code="$(curl -sS -o /dev/null -m 5 -w '%{http_code}' --interface 192.0.2.10 -H "Host: atlas.example.test" http://192.0.2.10/readyz || true)"
+ip addr del 192.0.2.10/32 dev lo
+expect "an address that isn't the reverse proxy is turned away" "$code" 403
+echo "ok: the web proxy only lets the reverse proxy through, over HTTP and HTTPS"
 grep -qx 'MODE=proxy' "$CONF/access.conf" || failA "the choice wasn't saved"
 expect "the helper installed atlas-access from the release" "$(owner /usr/local/sbin/atlas-access)" "root:root 755"
 expect "the settings file kept its owner" "$(owner "$CONF/atlas.env")" "root:atlas 640"
@@ -242,6 +245,31 @@ grep -qx 'MODE=proxy' "$CONF/access.conf" || failA "the saved choice wasn't put 
 grep -q 'trusted_proxies' /etc/caddy/Caddyfile || failA "the web proxy's settings weren't put back"
 echo "ok: the previous settings are back"
 expect "Atlas is running" "$(systemctl is-active msp-atlas)" active
+
+echo "== Remote access: a web proxy that doesn't pass requests on to Atlas is undone"
+# Caddy keeps running and accepts its new settings, but serves nothing: Atlas alone answering isn't enough.
+# (Caddy's unit waits for it to say it started; the stand-in never would, so it starts as a plain process.)
+install -d /etc/systemd/system/caddy.service.d
+printf '[Service]\nType=simple\nExecStart=\nExecStart=/bin/sleep infinity\nExecReload=\nExecReload=/bin/true\n' \
+  > /etc/systemd/system/caddy.service.d/zz-not-serving.conf
+systemctl daemon-reload; systemctl restart caddy
+expect "the change fails" \
+  "$(access '"mode":"proxy","publicUrl":"https://atlas.other.test","trusted":"10.0.0.6"')" failed
+grep -q "the web proxy on this server didn't pass requests for https://atlas.other.test on to it" "$ACCESS_JSON" \
+  || failA "the result doesn't say the web proxy wasn't passing requests on"
+echo "ok: the result says why"
+expect "the address is back" "$(envget PUBLIC_URL)" "https://atlas.example.test"
+grep -q '@proxy remote_ip 127.0.0.1 ::1 10.0.0.5 10.1.0.0/24' /etc/caddy/Caddyfile \
+  || failA "the web proxy's settings weren't put back"
+rm -f /etc/systemd/system/caddy.service.d/zz-not-serving.conf
+systemctl daemon-reload; systemctl restart caddy
+for _ in $(seq 1 20); do
+  curl -fsS -m 5 -H "Host: atlas.example.test" http://127.0.0.1/readyz >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -fsS -m 5 -H "Host: atlas.example.test" http://127.0.0.1/readyz >/dev/null \
+  || failA "the previous address isn't served again"
+echo "ok: the previous address is served again"
 
 echo "== Remote access: a Cloudflare Tunnel"
 # A stand-in for cloudflared: it runs until stopped, and says which token it was given.
