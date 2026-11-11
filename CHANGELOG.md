@@ -4,6 +4,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Fixed
+
+- **Your own reverse proxy under Administration → Remote access.** Choosing **Your own reverse proxy** turned off HTTPS on this server, so a proxy that sends requests on over HTTPS, or an address whose DNS still pointed at this server, had its connection refused. This server now answers your proxy over HTTP on port 80 and over HTTPS on port 443, with a certificate from its own authority, still only for the proxy addresses you list.
+- **Putting the previous settings back.** A change under **Remote access** only checked that Atlas itself had restarted, so a web proxy that wasn't passing requests on to Atlas still counted as working and nothing was undone. The server now asks its web proxy the way visitors, a tunnel or your reverse proxy do, puts the previous settings back if that fails, and says why.
+
 ## [2.4.1] - 2026-11-11
 
 ### Added

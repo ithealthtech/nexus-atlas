@@ -14,10 +14,12 @@
 #   tailscale   Tailscale Serve (your tailnet) or Funnel (the internet) serves Atlas at its .ts.net name, with
 #               Tailscale's own certificate.
 #   proxy       Your own reverse proxy (nginx, Traefik, IIS, Nginx Proxy Manager, ...) terminates HTTPS and
-#               sends requests to this server on port 80. Only the addresses given may.
+#               sends requests to this server on port 80, or on 443 with Caddy's own certificate. Only the addresses
+#               given may.
 #
 # Atlas has one address. Every mode sets PUBLIC_URL and TRUST_PROXY in atlas.env, and the choice is saved in
-# access.conf. If Atlas doesn't answer afterwards, the previous settings are put back.
+# access.conf. If Atlas, or the web proxy in front of it, doesn't answer afterwards, the previous settings are put
+# back.
 # Secrets (the tunnel token, the Tailscale auth key) are read from files, never from the command line, and are
 # kept only where root can read them.
 set -euo pipefail
@@ -92,23 +94,36 @@ caddy_redirect() { # url
 }
 EOF
 }
-caddy_proxy() { # trusted (comma-separated)
-  local list="${1//,/ }"
+# Your reverse proxy may send requests on to this server over plain HTTP (port 80) or over HTTPS (port 443). HTTPS
+# here uses Caddy's own authority, since the public certificate belongs to your proxy: the address's DNS points at
+# the proxy, so this server can't get a public certificate for it. Only the proxy's addresses reach Atlas, plus
+# this server itself, so atlas-access can check the change worked.
+caddy_proxy() { # url trusted (comma-separated)
+  local host; host="$(host_of "$1")"; host="${host%%:*}"
+  local list="${2//,/ }"
   write_caddy <<EOF
 {
-	auto_https off
+	auto_https disable_redirects
+	default_sni $host
 	servers {
 		trusted_proxies static $list
 	}
 }
-:80 {
-	@proxy remote_ip $list
+(atlas) {
+	@proxy remote_ip ${LOOPBACK//,/ } $list
 	handle @proxy {
 		encode zstd gzip
 		reverse_proxy 127.0.0.1:$PORT
 		header -Server
 	}
 	respond "Use the address your reverse proxy serves Atlas at." 403
+}
+http://:80 {
+	import atlas
+}
+https://$host {
+	tls internal
+	import atlas
 }
 EOF
 }
@@ -206,6 +221,35 @@ atlas_ready() { # url tries
   done
   return 1
 }
+# Atlas answering on its own port isn't enough: visitors, a tunnel, or your reverse proxy reach it through the web
+# proxy. Asks the web proxy on this server the way they do, so a web proxy that isn't serving Atlas on the new
+# address is caught and the change undone. A public certificate may still be on its way, so certificates aren't
+# checked here.
+web_ready() { # mode url tries
+  command -v caddy >/dev/null || return 0
+  local host; host="$(host_of "$2")"; host="${host%%:*}"
+  local https=(curl -fsS -k -m 5 --resolve "$host:443:127.0.0.1" "https://$host/readyz")
+  local plain=(curl -fsS -m 5 -H "Host: $host" "http://127.0.0.1:80/readyz")
+  for _ in $(seq 1 "$3"); do
+    case "$1" in
+      # Your reverse proxy may use either port; both must reach Atlas.
+      proxy) "${plain[@]}" >/dev/null 2>&1 && "${https[@]}" >/dev/null 2>&1 && return 0 ;;
+      # Caddy answers on 443 at once with its own authority; a public certificate can take a minute, and port 80
+      # sends visitors on to HTTPS either way.
+      direct)
+        local code; code="$(curl -sS -o /dev/null -m 5 -w '%{http_code}' -H "Host: $host" http://127.0.0.1:80/ 2>/dev/null || true)"
+        [[ "$code" =~ ^30[178]$ ]] && return 0
+        ;;
+      # The tunnel serves Atlas; this server's own address sends people on to it.
+      *)
+        local code; code="$(curl -sS -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:80/ 2>/dev/null || true)"
+        [[ "$code" == 308 ]] && return 0
+        ;;
+    esac
+    sleep 2
+  done
+  return 1
+}
 
 # ---------- apply ----------
 apply() { # mode url trusted funnel token-file auth-key-file
@@ -234,7 +278,9 @@ apply() { # mode url trusted funnel token-file auth-key-file
     if [[ -f "$backup/access.conf" ]]; then cp -p "$backup/access.conf" "$ACCESS_FILE"; else rm -f "$ACCESS_FILE"; fi
     [[ "$mode" == cloudflare && "$old_mode" != cloudflare ]] && stop_cloudflared
     [[ "$mode" == tailscale && "$old_mode" != tailscale ]] && stop_tailscale_serve
-    reload_caddy || true
+    # In a subshell: reload_caddy stops the script when the web proxy refuses its settings, and Atlas must still be
+    # restarted on the previous ones.
+    (reload_caddy) || true
     systemctl restart msp-atlas || true
   }
 
@@ -262,7 +308,7 @@ apply() { # mode url trusted funnel token-file auth-key-file
         ;;
       proxy)
         stop_cloudflared; stop_tailscale_serve
-        caddy_proxy "$trusted"
+        caddy_proxy "$url" "$trusted"
         trusted="$LOOPBACK,$trusted"
         ;;
     esac
@@ -270,7 +316,11 @@ apply() { # mode url trusted funnel token-file auth-key-file
     set_env TRUST_PROXY "$trusted"
     reload_caddy
     systemctl restart msp-atlas
-    atlas_ready "$url" 45 || { echo "Atlas didn't answer at its new address." >&2; exit 1; }
+    atlas_ready "$url" 45 || { echo "ERROR: Atlas didn't start on its new address." >&2; exit 1; }
+    web_ready "$mode" "$url" 15 || {
+      echo "ERROR: Atlas started, but the web proxy on this server didn't pass requests for $url on to it." >&2
+      exit 1
+    }
     save_choice "$mode" "$url" "${trusted#"$LOOPBACK"}" "$funnel"
     echo "$url" > "$backup/url"
   ) || { restore; rm -rf "$backup"; die "Nothing was changed: the previous settings are back."; }

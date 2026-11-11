@@ -266,14 +266,16 @@ jobs:
           path: apps/windows/dist/app
           retention-days: 7
 
-  # The root helper's service actions (deploy/linux/atlas-updater.sh), run against real systemd with stand-ins for
-  # Atlas and its web proxy: restarts, a repair, refusals, and reading service states from inside Atlas's sandbox.
+  # The root helper's service actions (deploy/linux/atlas-updater.sh), run against real systemd and the real web proxy
+  # (Caddy) with a stand-in for Atlas: restarts, a repair, refusals, remote access, and reading service states from
+  # inside Atlas's sandbox.
   linux-helper:
     name: Linux service helper
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -y -q caddy
       - run: sudo CI=true bash deploy/linux/test-services.sh
 
   docker:
