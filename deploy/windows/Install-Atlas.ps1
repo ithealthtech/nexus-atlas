@@ -261,8 +261,8 @@ $envXml
 "@ | Set-Content -Path (Join-Path $ServiceDir "$ServiceName.xml") -Encoding utf8
 
 if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
-  & $ServiceExe stop | Out-Null
-  & $ServiceExe refresh
+  # WinSW 2 reads the settings above each time the service starts, so a restart is all an update needs.
+  & $ServiceExe stopwait | Out-Null
 } else {
   & $ServiceExe install
 }

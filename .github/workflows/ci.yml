@@ -256,7 +256,7 @@ jobs:
           .\deploy\windows\Install-Atlas.ps1 -DatabaseUrl 'postgres://atlas:atlas-ci@127.0.0.1:5432/atlas' *>&1 |
             Tee-Object "$env:RUNNER_TEMP\demo\1-first-install.txt"
           $settings = Get-Content "$env:ProgramData\MSP Atlas\atlas.env"
-          $settings -replace '(PASSPHRASE|DATABASE_URL)=.*', '$1=(hidden)' | Set-Content "$env:RUNNER_TEMP\demo\1-atlas.env.txt"
+          $settings -replace '(PASSPHRASE|DATABASE_URL)=.*', '$1=(hidden)' | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\demo\1-atlas.env.txt"
           $url = ($settings | Where-Object { $_ -like 'PUBLIC_URL=*' }).Substring(11)
           node "$env:GITHUB_WORKSPACE\demo-shot.cjs" $url "$env:RUNNER_TEMP\demo\1-atlas-at-lan-address.png"
           if ($LASTEXITCODE) { throw 'Edge could not open Atlas.' }
@@ -273,6 +273,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           .\deploy\windows\Install-Atlas.ps1 *>&1 | Tee-Object "$env:RUNNER_TEMP\demo\2-run-again.txt"
+          # A re-run shouldn't print errors from the service wrapper.
+          if (Select-String -Path "$env:RUNNER_TEMP\demo\2-run-again.txt" -Pattern 'FATAL|Unknown command' -Quiet) { throw 'The service wrapper reported an error.' }
           $now = (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'MSP Atlas (local address)').Thumbprint
           if ($now -ne (Get-Content "$env:RUNNER_TEMP\thumbprint.txt")) { throw 'The certificate was replaced.' }
       - name: A domain, served by a reverse proxy
@@ -282,7 +284,7 @@ jobs:
           .\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.test *>&1 |
             Tee-Object "$env:RUNNER_TEMP\demo\3-given-a-domain.txt"
           $settings = Get-Content "$env:ProgramData\MSP Atlas\atlas.env"
-          $settings -replace '(PASSPHRASE|DATABASE_URL)=.*', '$1=(hidden)' | Set-Content "$env:RUNNER_TEMP\demo\3-atlas.env.txt"
+          $settings -replace '(PASSPHRASE|DATABASE_URL)=.*', '$1=(hidden)' | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\demo\3-atlas.env.txt"
           foreach ($line in 'HOST=127.0.0.1', 'PUBLIC_URL=https://atlas.example.test', 'TRUST_PROXY=true') {
             if ($settings -notcontains $line) { throw "Missing $line" }
           }

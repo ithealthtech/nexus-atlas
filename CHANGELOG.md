@@ -11,6 +11,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Fixed
 
+- **Windows updates no longer print a service error.** Re-running `Install-Atlas.ps1` asked the service wrapper for a command it doesn't have and printed a crash message; it now just restarts the service, which picks up the new settings.
 - **Windows install no longer times out.** The installer's readiness check is now addressed the way Atlas expects, so it no longer waits two minutes and reports that Atlas didn't start when it had.
 ### Added
 
