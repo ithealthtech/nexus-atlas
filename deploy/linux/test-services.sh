@@ -248,8 +248,9 @@ expect "Atlas is running" "$(systemctl is-active msp-atlas)" active
 
 echo "== Remote access: a web proxy that doesn't pass requests on to Atlas is undone"
 # Caddy keeps running and accepts its new settings, but serves nothing: Atlas alone answering isn't enough.
+# (Caddy's unit waits for it to say it started; the stand-in never would, so it starts as a plain process.)
 install -d /etc/systemd/system/caddy.service.d
-printf '[Service]\nExecStart=\nExecStart=/bin/sleep infinity\nExecReload=\nExecReload=/bin/true\n' \
+printf '[Service]\nType=simple\nExecStart=\nExecStart=/bin/sleep infinity\nExecReload=\nExecReload=/bin/true\n' \
   > /etc/systemd/system/caddy.service.d/zz-not-serving.conf
 systemctl daemon-reload; systemctl restart caddy
 expect "the change fails" \
