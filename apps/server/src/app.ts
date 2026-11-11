@@ -244,6 +244,8 @@ export async function buildApp({
             ],
           },
     trustProxy: config.TRUST_PROXY,
+    // Atlas serves HTTPS itself when it has a certificate; otherwise a proxy in front of it does.
+    ...(config.tls ? { https: config.tls } : {}),
     bodyLimit: 1024 * 1024,
     requestTimeout: 30_000,
   });

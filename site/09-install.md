@@ -25,10 +25,10 @@ The installer sets up Node.js 22, PostgreSQL 16 and Caddy on Ubuntu 22.04 or 24.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
-sudo bash install-atlas.sh --public-url https://atlas.example.com
+sudo bash install-atlas.sh
 ```
 
-The script prints the setup code when it finishes. It is also in `journalctl -u msp-atlas`.
+No domain is needed to start: Atlas is ready at this server's own address, `https://<server IP>`, and the script prints that address and the setup code when it finishes (the code is also in `journalctl -u msp-atlas`). When Atlas has a domain, set it in **Administration → Remote access**, or run the installer with `--public-url https://atlas.yourmsp.com`. You can choose the domain at install time the same way.
 
 - **Choosing a version:** `--version v1.0.2` installs that release. `sudo bash install-atlas.sh --help` lists every option.
 - **HTTPS:** for a public DNS name, Caddy gets and renews a certificate by itself. For an IP address or a one-word name, it acts as its own certificate authority, which browsers don't trust until you install it. **Admin → Certificate** gives you the file. See [The certificate](manual/looking-after-atlas.html#the-certificate).
@@ -60,13 +60,15 @@ A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-a
 3. From an elevated PowerShell prompt, run:
 
 ```powershell
-.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
+.\deploy\windows\Install-Atlas.ps1 -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
 ```
 
 The script creates `C:\ProgramData\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log`.
 
-> [!note] HTTPS on Windows
-> Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\nas\atlas-backups` to keep backups on another machine.
+Atlas is ready straight away at this server's own address, `https://<LAN IP>:4318`, over HTTPS with a certificate the script makes for it. Port 4318 is opened in Windows Firewall for private and domain networks. Other computers' browsers warn until they trust `atlas-local-certificate.cer`, in the Atlas folder: import it into **Trusted Root Certification Authorities**, or deploy it with Group Policy.
+
+> [!note] Giving Atlas a domain
+> When Atlas has a domain, publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows, forwarding to `http://127.0.0.1:4318`, then run the script again with `-PublicUrl https://atlas.yourmsp.com`. Passkeys need a domain. Add `-BackupDir \\nas\atlas-backups` to keep backups on another machine.
 
 To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key.
 

@@ -175,8 +175,11 @@ Full detail in [SECURITY.md](SECURITY.md) and [docs/IDENTITY.md](docs/IDENTITY.m
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
-sudo bash install-atlas.sh --public-url https://atlas.example.com
+sudo bash install-atlas.sh
 ```
+
+Atlas starts at the server's own address, `https://<server IP>`. Give it a domain later in
+**Administration → Remote access**, or add `--public-url https://atlas.yourmsp.com`.
 
 **Docker (Linux), by hand** — set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD`, and
 `ATLAS_MASTER_KEY` in `.env`, then:
@@ -190,10 +193,11 @@ docker compose -f deploy/docker-compose.yml logs app | grep "setup code"
 [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), then from an elevated prompt:
 
 ```powershell
-.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
+.\deploy\windows\Install-Atlas.ps1 -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
 ```
 
-Open `PUBLIC_URL` and enter the setup code to create the owner account. No default
+On Windows, Atlas is then at `https://<this server's LAN IP>:4318` until you give it a domain with
+`-PublicUrl`. Open Atlas's address and enter the setup code to create the owner account. No default
 administrator or password exists. Later versions install from **Administration → Updates**.
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the installer's options.
 

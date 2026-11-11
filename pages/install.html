@@ -186,10 +186,16 @@
         </p>
         <div class="code">
           <pre><code data-lang="bash">curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
-sudo bash install-atlas.sh --public-url https://atlas.example.com</code></pre>
+sudo bash install-atlas.sh</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
-        <p>The script prints the setup code when it finishes. It is also in <code>journalctl -u msp-atlas</code>.</p>
+        <p>
+          No domain is needed to start: Atlas is ready at this server's own address,
+          <code>https://&lt;server IP&gt;</code>, and the script prints that address and the setup code when it finishes
+          (the code is also in <code>journalctl -u msp-atlas</code>). When Atlas has a domain, set it in
+          <strong>Administration → Remote access</strong>, or run the installer with
+          <code>--public-url https://atlas.yourmsp.com</code>. You can choose the domain at install time the same way.
+        </p>
         <ul>
           <li>
             <strong>Choosing a version:</strong> <code>--version v1.0.2</code> installs that release.
@@ -249,7 +255,7 @@ docker compose -f deploy/docker-compose.yml logs app | grep &quot;setup code&quo
           <li>From an elevated PowerShell prompt, run:</li>
         </ol>
         <div class="code">
-          <pre><code data-lang="powershell">.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl &quot;postgres://atlas:&lt;password&gt;@localhost:5432/atlas&quot;</code></pre>
+          <pre><code data-lang="powershell">.\deploy\windows\Install-Atlas.ps1 -DatabaseUrl &quot;postgres://atlas:&lt;password&gt;@localhost:5432/atlas&quot;</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
         <p>
@@ -257,12 +263,20 @@ docker compose -f deploy/docker-compose.yml logs app | grep &quot;setup code&quo
           the master key file on first install, and registers the <code>MSPAtlas</code> service to start automatically.
           The setup code is in <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>.
         </p>
+        <p>
+          Atlas is ready straight away at this server's own address, <code>https://&lt;LAN IP&gt;:4318</code>, over
+          HTTPS with a certificate the script makes for it. Port 4318 is opened in Windows Firewall for private and
+          domain networks. Other computers' browsers warn until they trust <code>atlas-local-certificate.cer</code>, in
+          the Atlas folder: import it into <strong>Trusted Root Certification Authorities</strong>, or deploy it with
+          Group Policy.
+        </p>
         <aside class="callout callout-note">
-          <p class="callout-title">HTTPS on Windows</p>
+          <p class="callout-title">Giving Atlas a domain</p>
           <p>
-            Atlas listens on <code>127.0.0.1:4318</code>. Publish it over HTTPS with IIS (URL Rewrite and Application
-            Request Routing) or Caddy for Windows. Add <code>-BackupDir \\nas\atlas-backups</code> to keep backups on
-            another machine.
+            When Atlas has a domain, publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or
+            Caddy for Windows, forwarding to <code>http://127.0.0.1:4318</code>, then run the script again with
+            <code>-PublicUrl https://atlas.yourmsp.com</code>. Passkeys need a domain. Add
+            <code>-BackupDir \\nas\atlas-backups</code> to keep backups on another machine.
           </p>
         </aside>
         <p>

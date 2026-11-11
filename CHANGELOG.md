@@ -4,6 +4,16 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Changed
+
+- **Windows install works without a domain.** `Install-Atlas.ps1` no longer needs `-PublicUrl`. Atlas serves HTTPS itself at the server's own address, `https://<LAN IP>:4318`, with a certificate made for that address and trusted on the server, and the port is opened in Windows Firewall for private and domain networks. Once Atlas has a domain behind IIS or Caddy, run the script with `-PublicUrl https://atlas.yourmsp.com`; it switches Atlas back behind the proxy and removes the certificate and firewall rule. Running it again picks up a changed address.
+- **Linux install docs no longer ask for a domain.** The install page, README and deployment guide showed `--public-url` on the first-install command, though the installer never needed it. They now start at the server's own address and say how to add a domain later, in **Administration → Remote access**.
+- **Linux install picks the right address.** Without `--public-url`, the installer uses the address on the server's default route, not the first one listed (which could be a Docker bridge).
+
+### Fixed
+
+- **Windows updates no longer print a service error.** Re-running `Install-Atlas.ps1` asked the service wrapper for a command it doesn't have and printed a crash message; it now just restarts the service, which picks up the new settings.
+- **Windows install no longer times out.** The installer's readiness check is now addressed the way Atlas expects, so it no longer waits two minutes and reports that Atlas didn't start when it had.
 ### Added
 
 - **Live filters and sorting for assets.** **Docs → Assets** and each client's **Assets** tab now filter as you type or choose: search every word across names, clients and fields, and combine client, status, last-updated and any layout field (such as **Operating system** on **Endpoints**), including fields that are blank. Choose a column heading to sort by it and again to reverse it. The filters are kept in the page's address for bookmarking and sharing, and **Save view** keeps up to 20 named views of filters and sort, for you alone. The layout list, **Columns**, **Show archived** and the **Sort** menu are all still there.

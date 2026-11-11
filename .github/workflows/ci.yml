@@ -210,6 +210,175 @@ jobs:
             if ($errors) { $errors | ForEach-Object { Write-Error "${script}: $_" }; exit 1 }
           }
 
+  # The Linux installer, run for real on a fresh Ubuntu 24.04 the way the install page says, without a domain:
+  # Atlas at this server's own address, then given a domain later (as Remote access does), then updated.
+  linux-installer:
+    name: Linux server installer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Like a fresh server
+        run: |
+          # The runner's own Node.js 20 would shadow the one the installer sets up.
+          sudo rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx
+          # The installer takes a release or a branch from a repository: this checkout, as a branch.
+          git branch demo-install
+          mkdir -p "$RUNNER_TEMP/demo"
+      - name: First install, without a domain
+        run: |
+          set -o pipefail
+          sudo bash deploy/linux/install-atlas.sh --repo "$GITHUB_WORKSPACE" --version demo-install 2>&1 |
+            tee "$RUNNER_TEMP/demo/1-first-install.txt"
+          sudo sed -E 's/^(DATABASE_URL)=.*/\1=(hidden)/' /etc/msp-atlas/atlas.env | tee "$RUNNER_TEMP/demo/1-atlas.env.txt"
+          url="$(sudo grep -E '^PUBLIC_URL=' /etc/msp-atlas/atlas.env | cut -d= -f2-)"
+          [[ "$url" =~ ^https://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Unexpected address: $url"; exit 1; }
+          echo "URL=$url" >> "$GITHUB_ENV"
+          # Caddy's own certificate authority signed the certificate; check it against that, not with -k.
+          sudo cp /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/demo/caddy-root.crt"
+          curl -fsS --cacert "$RUNNER_TEMP/demo/caddy-root.crt" "$url/readyz" | tee "$RUNNER_TEMP/demo/1-readyz.txt"
+      - name: Look at it in a browser
+        run: |
+          npm ci --no-audit --no-fund >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > demo-shot.cjs <<'EOF'
+          const { chromium } = require('@playwright/test');
+          const [url, file] = process.argv.slice(2);
+          (async () => {
+            const browser = await chromium.launch();
+            // Chromium here doesn't use the system's trusted certificates, so Caddy's own authority is accepted
+            // for the picture; the curl check above verified the certificate properly.
+            const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true });
+            await page.goto(url, { waitUntil: 'networkidle' });
+            await page.screenshot({ path: file });
+            console.log(`${url} -> "${await page.title()}"`);
+            await browser.close();
+          })().catch((e) => { console.error(e.message); process.exit(1); });
+          EOF
+          node demo-shot.cjs "$URL" "$RUNNER_TEMP/demo/1-atlas-at-server-address.png"
+      - name: Later, a domain (what Administration -> Remote access does)
+        run: |
+          set -o pipefail
+          sudo atlas-access apply --mode direct --public-url https://atlas.example.test 2>&1 | tee "$RUNNER_TEMP/demo/2-given-a-domain.txt"
+          sudo sed -E 's/^(DATABASE_URL)=.*/\1=(hidden)/' /etc/msp-atlas/atlas.env | tee "$RUNNER_TEMP/demo/2-atlas.env.txt"
+          sudo cat /etc/caddy/Caddyfile | tee "$RUNNER_TEMP/demo/2-Caddyfile.txt"
+          sudo grep -qx 'PUBLIC_URL=https://atlas.example.test' /etc/msp-atlas/atlas.env
+      - name: An update keeps it
+        run: |
+          set -o pipefail
+          sudo atlas-install --repo "$GITHUB_WORKSPACE" --version demo-install 2>&1 | tee "$RUNNER_TEMP/demo/3-update.txt"
+          sudo grep -qx 'PUBLIC_URL=https://atlas.example.test' /etc/msp-atlas/atlas.env
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-installer-demo
+          path: ${{ runner.temp }}/demo
+      - name: Service log
+        if: failure()
+        run: sudo journalctl -u msp-atlas -u caddy -n 80 --no-pager
+
+  # The Windows server installer, run for real in Windows PowerShell 5.1 against the runner's own PostgreSQL: a first
+  # install at this server's own address, an update that keeps it, a domain behind a proxy, back again, uninstall.
+  windows-installer:
+    name: Windows server installer
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Demo recorder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\demo" | Out-Null
+          # Opens an address in Edge, which uses this server's trusted certificates, and saves what it shows.
+          @'
+          const { chromium } = require('@playwright/test');
+          const [url, file] = process.argv.slice(2);
+          (async () => {
+            const browser = await chromium.launch({ channel: 'msedge' });
+            const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+            await page.goto(url, { waitUntil: 'networkidle' });
+            await page.screenshot({ path: file });
+            console.log(`${url} -> "${await page.title()}"`);
+            await browser.close();
+          })().catch((e) => { console.error(e.message); process.exit(1); });
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\demo-shot.cjs"
+      - name: PostgreSQL
+        shell: pwsh
+        run: |
+          $service = Get-Service postgresql* | Select-Object -First 1
+          Set-Service $service.Name -StartupType Manual
+          Start-Service $service.Name
+          & "$env:PGBIN\psql.exe" -c "create role atlas login password 'atlas-ci'" -c 'create database atlas owner atlas'
+          if ($LASTEXITCODE) { exit 1 }
+      - name: First install, at this server's own address
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1 -DatabaseUrl 'postgres://atlas:atlas-ci@127.0.0.1:5432/atlas' *>&1 |
+            Tee-Object "$env:RUNNER_TEMP\demo\1-first-install.txt"
+          $settings = Get-Content "$env:ProgramData\MSP Atlas\atlas.env"
+          $settings -replace '(PASSPHRASE|DATABASE_URL)=.*', '$1=(hidden)' | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\demo\1-atlas.env.txt"
+          $url = ($settings | Where-Object { $_ -like 'PUBLIC_URL=*' }).Substring(11)
+          node "$env:GITHUB_WORKSPACE\demo-shot.cjs" $url "$env:RUNNER_TEMP\demo\1-atlas-at-lan-address.png"
+          if ($LASTEXITCODE) { throw 'Edge could not open Atlas.' }
+          if ($url -notmatch '^https://\d+\.\d+\.\d+\.\d+:4318$') { throw "Unexpected address: $url" }
+          if ($settings -notcontains 'HOST=0.0.0.0') { throw 'Atlas should listen on the network.' }
+          # Trusted on this server: no certificate warning.
+          if ((Invoke-WebRequest "$url/readyz" -UseBasicParsing).StatusCode -ne 200) { throw 'Not ready.' }
+          if (-not (Get-NetFirewallRule -DisplayName 'MSP Atlas (HTTPS)' -ErrorAction SilentlyContinue)) { throw 'No firewall rule.' }
+          if (-not (Test-Path .\atlas-local-certificate.cer)) { throw 'No certificate for other computers.' }
+          (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'MSP Atlas (local address)').Thumbprint |
+            Set-Content "$env:RUNNER_TEMP\thumbprint.txt"
+      - name: Running it again keeps the address and certificate
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1 *>&1 | Tee-Object "$env:RUNNER_TEMP\demo\2-run-again.txt"
+          # A re-run shouldn't print errors from the service wrapper.
+          if (Select-String -Path "$env:RUNNER_TEMP\demo\2-run-again.txt" -Pattern 'FATAL|Unknown command' -Quiet) { throw 'The service wrapper reported an error.' }
+          $now = (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'MSP Atlas (local address)').Thumbprint
+          if ($now -ne (Get-Content "$env:RUNNER_TEMP\thumbprint.txt")) { throw 'The certificate was replaced.' }
+      - name: A domain, served by a reverse proxy
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.test *>&1 |
+            Tee-Object "$env:RUNNER_TEMP\demo\3-given-a-domain.txt"
+          $settings = Get-Content "$env:ProgramData\MSP Atlas\atlas.env"
+          $settings -replace '(PASSPHRASE|DATABASE_URL)=.*', '$1=(hidden)' | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\demo\3-atlas.env.txt"
+          foreach ($line in 'HOST=127.0.0.1', 'PUBLIC_URL=https://atlas.example.test', 'TRUST_PROXY=true') {
+            if ($settings -notcontains $line) { throw "Missing $line" }
+          }
+          if ($settings -like 'ATLAS_TLS_*') { throw 'The local certificate is still configured.' }
+          if (Get-NetFirewallRule -DisplayName 'MSP Atlas (HTTPS)' -ErrorAction SilentlyContinue) { throw 'The firewall rule is still there.' }
+          if (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'MSP Atlas (local address)') { throw 'Still trusted.' }
+      - name: Back to this server's own address, then uninstall
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1 -LocalAddress auto *>&1 | Tee-Object "$env:RUNNER_TEMP\demo\4-back-to-lan-address.txt"
+          $url = ((Get-Content "$env:ProgramData\MSP Atlas\atlas.env") | Where-Object { $_ -like 'PUBLIC_URL=*' }).Substring(11)
+          if ((Invoke-WebRequest "$url/readyz" -UseBasicParsing).StatusCode -ne 200) { throw 'Not ready.' }
+          node "$env:GITHUB_WORKSPACE\demo-shot.cjs" $url "$env:RUNNER_TEMP\demo\4-atlas-back-at-lan-address.png"
+          .\deploy\windows\Install-Atlas.ps1 -Uninstall *>&1 | Tee-Object "$env:RUNNER_TEMP\demo\5-uninstall.txt"
+          if (Get-Service MSPAtlas -ErrorAction SilentlyContinue) { throw 'The service is still there.' }
+          if (Get-NetFirewallRule -DisplayName 'MSP Atlas (HTTPS)' -ErrorAction SilentlyContinue) { throw 'The firewall rule is still there.' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-installer-demo
+          path: ${{ runner.temp }}/demo
+      - name: Service log
+        if: failure()
+        shell: pwsh
+        run: Get-ChildItem "$env:ProgramData\MSP Atlas\logs" -Filter *.log | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 60 }
+
   # Atlas for Windows (apps/windows): the core library's tests, the WinUI app itself (which only builds on Windows),
   # and its setup program, built the way a release builds it and then run for real.
   windows-client:

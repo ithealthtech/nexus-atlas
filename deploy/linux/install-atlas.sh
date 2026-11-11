@@ -33,8 +33,9 @@ How people reach Atlas (the same choices as Administration -> Remote access; kep
                                requests to this server on port 80, keeping the Host header.
 
 Examples:
-  sudo bash install-atlas.sh --public-url https://atlas.yourmsp.com   # first install, newest release
-  sudo bash install-atlas.sh                                          # upgrade to the newest release
+  sudo bash install-atlas.sh                                          # first install, at this server's own address
+  sudo bash install-atlas.sh --public-url https://atlas.yourmsp.com   # first install, with a domain
+  sudo atlas-install                                                  # upgrade to the newest release
   sudo bash install-atlas.sh --version v1.0.2                         # a specific release
   sudo bash install-atlas.sh --access tailscale --tailscale-key-file ./key   # reached over Tailscale
 EOF
@@ -90,7 +91,9 @@ if [[ -z "$PUBLIC_URL" && -f "$ENV_FILE" ]]; then
   PUBLIC_URL="$(grep -E '^PUBLIC_URL=' "$ENV_FILE" | cut -d= -f2- || true)"
 fi
 if [[ -z "$PUBLIC_URL" ]]; then
-  PUBLIC_URL="https://$(hostname -I | awk '{print $1}')"
+  # This server's own address until it has a domain: the one on the default route (not a Docker bridge's).
+  LAN_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+  PUBLIC_URL="https://${LAN_IP:-$(hostname -I | awk '{print $1}')}"
 fi
 [[ "$PUBLIC_URL" == https://* ]] || die "--public-url must start with https:// (Atlas refuses http in production)."
 SITE_HOST="${PUBLIC_URL#https://}"; SITE_HOST="${SITE_HOST%%/*}"
