@@ -85,7 +85,7 @@ Resetting signs them out everywhere, including the browser extension and Atlas f
 1. Ask them first to move anything in their personal vault that the company needs. Nobody else can open it, including you.
 2. Choose **Manage**, tick **Disable this account**, and save. They're signed out everywhere at once, including the extension and Atlas for Windows, and can't sign in until re-enabled. Their history stays, so the security log still shows what they did.
 3. Revoke any [API keys](settings.html#api-keys) they made, since a key acts as the person who made it.
-4. Change the passwords they used that matter. Filter **Vault access** on the security log by their name to see which they revealed or copied.
+4. Change the passwords they used that matter. The **Password activity CSV** on the security log shows which they revealed or copied.
 
 **Sign out everywhere** ends every session for a person without disabling them, for example if a laptop is lost.
 
