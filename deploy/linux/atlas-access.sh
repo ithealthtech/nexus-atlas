@@ -129,7 +129,10 @@ EOF
 }
 reload_caddy() {
   command -v caddy >/dev/null || return 0
-  caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1 || die "The web proxy refused the new settings."
+  local why
+  # Caddy's own reason, so the page can say what it objected to.
+  why="$(caddy validate --config "$CADDYFILE" --adapter caddyfile 2>&1 >/dev/null)" \
+    || die "The web proxy refused the new settings: $(grep -iE 'error|invalid' <<<"$why" | tail -1 | cut -c1-300)"
   systemctl reload caddy 2>/dev/null || systemctl restart caddy
 }
 
