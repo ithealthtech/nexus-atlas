@@ -164,22 +164,125 @@
         </figure>
         <h2 id="microsoft-teams"><a class="anchor" href="#microsoft-teams">Microsoft Teams</a></h2>
         <p>
-          Under <strong>Administration → Microsoft Teams</strong>, connect a Microsoft work account for discussions and
-          automatic notifications. No Azure Bot resource or Teams app installation is required. Map each client to its
-          own channel, with an optional separate security destination. Staff open <strong>More → Teams</strong> in a
-          client workspace to read posts and replies, start a discussion, or edit messages they created through Atlas.
+          <strong>Administration → Microsoft Teams</strong> links each client to its own Teams channel. Staff can then
+          read and post in that channel from the client's <strong>More → Teams</strong> page, and Atlas posts alerts
+          there. Atlas signs in to Teams as one Microsoft work account you connect; no Azure Bot, Teams app or extra
+          hosting is needed. Posts appear under that account's name, and Atlas's security log records which staff member
+          wrote them.
+        </p>
+        <h3 id="before-you-start"><a class="anchor" href="#before-you-start">Before you start</a></h3>
+        <p>
+          You need a Microsoft Entra account that can register apps and grant admin consent, and a Teams-licensed work
+          account that is a member of every channel Atlas will post in. A dedicated account, such as
+          <code>atlas-alerts@yourmsp.com</code>, keeps alerts from looking like a person wrote them, but may need its
+          own licence.
+        </p>
+        <h3 id="setting-it-up"><a class="anchor" href="#setting-it-up">Setting it up</a></h3>
+        <ol class="steps">
+          <li>
+            In the Microsoft Entra admin center, open <strong>App registrations → New registration</strong>. Choose
+            <strong>Accounts in this organizational directory only</strong>. Under <strong>Redirect URI</strong>, choose
+            <strong>Web</strong> and enter your Atlas address followed by <code>/api/integrations/teams/callback</code>,
+            such as <code>https://atlas.example.com/api/integrations/teams/callback</code>. Choose
+            <strong>Register</strong>.
+          </li>
+          <li>Copy the <strong>Directory (tenant) ID</strong> and <strong>Application (client) ID</strong>.</li>
+          <li>
+            Under <strong>Certificates &amp; secrets</strong>, create a client secret and copy its
+            <strong>Value</strong>. Note when it expires.
+          </li>
+          <li>
+            Under <strong>API permissions → Add a permission → Microsoft Graph → Delegated permissions</strong>, add
+            <code>ChannelMessage.Read.All</code>, <code>ChannelMessage.Send</code> and
+            <code>ChannelMessage.ReadWrite</code>, plus <code>openid</code>, <code>profile</code>,
+            <code>email</code> and <code>offline_access</code>. Choose <strong>Grant admin consent</strong>.
+          </li>
+          <li>
+            In Atlas, tick <strong>Enable Microsoft Teams</strong>, enter the <strong>Directory (tenant) ID</strong>,
+            <strong>Application (client) ID</strong> and <strong>Application secret</strong>, and save.
+          </li>
+          <li>
+            Choose <strong>Connect Microsoft account</strong>, and sign in as the work account from
+            <strong>Before you start</strong>.
+          </li>
+          <li>
+            Map each client to its channel. In Teams, choose <strong>Get link to channel</strong> on the channel; the
+            link contains the team ID (<code>groupId=…</code>) and the channel ID (<code>19:…@thread.tacv2</code>,
+            URL-encoded; decode <code>%3a</code> to <code>:</code> and <code>%40</code> to <code>@</code>). In Atlas,
+            choose the <strong>Client</strong>, and enter the <strong>Team ID</strong>, a
+            <strong>Channel name</strong> people will recognize, and the <strong>Channel ID</strong>.
+          </li>
+          <li>
+            Optionally, enter a <strong>Security channel ID (optional)</strong>: a channel in the same team that gets
+            breach and infection alerts instead, such as one only your security team can see. It must not be a client's
+            discussion channel.
+          </li>
+          <li>
+            Choose <strong>Send test notification</strong>. A test message marked as a test should appear in the
+            channel.
+          </li>
+        </ol>
+        <h3 id="automatic-alerts"><a class="anchor" href="#automatic-alerts">Automatic alerts</a></h3>
+        <p>
+          Under <strong>Automatic alerts</strong>, tick which alerts go to Teams: <strong>Expirations</strong>,
+          <strong>Document reviews</strong>, <strong>Password breaches</strong> and
+          <strong>Confirmed infections</strong>.
+        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Reminder days</strong></td>
+                <td>
+                  Days before an expiry or review date when the client's channel is told. The default is 30, 14, 7, 1
+                  and 0; 0 includes anything overdue.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Daily digest hour (0–23)</strong></td>
+                <td>
+                  Expirations and reviews reaching a reminder day are grouped into one post a day, after this hour.
+                  Quiet days send nothing.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Time zone</strong></td>
+                <td>
+                  The time zone for that hour, such as <code>America/New_York</code>. Daylight saving time is followed.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Breaches and infections are checked every minute and posted straight away. A resolved infection is posted as a
+          reply in the original thread. Posts never include a password, username, notes or recovery key: only a summary
+          and a link that needs signing in to Atlas.
         </p>
         <p>
-          Alerts cover expirations, document reviews, password breaches and confirmed infection events. Expirations and
-          reviews arrive as a daily digest at reminder milestones; security events are checked every minute. Configure
-          the time zone and alert types, use <strong>Send test notification</strong> after saving, and check
-          <strong>Delivery history</strong> if a message does not arrive. Password values and recovery keys are never
-          posted. See the
-          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md" rel="noopener"
-            >Teams setup guide</a
+          Once the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ALERTING.md" rel="noopener"
+            >alerting center</a
           >
-          for Microsoft registration, account permissions, reconnection, and the infection-event feed. Alerts appear
-          under the connected account and stay queued if Microsoft requires sign-in again.
+          is live, its rules send Teams alerts instead, so they aren't sent twice.
+        </p>
+        <h3 id="when-something-goes-wrong">
+          <a class="anchor" href="#when-something-goes-wrong">When something goes wrong</a>
+        </h3>
+        <p>
+          <strong>Delivery history</strong> lists every post with its client, alert, status and details. If Microsoft
+          throttles Atlas, it waits and tries again, up to five times. If Microsoft asks the account to sign in again,
+          alerts wait in the queue: choose <strong>Connect Microsoft account</strong> again, and they go out. A post
+          whose outcome Atlas couldn't confirm is held for you to check in Teams rather than sent twice. When the secret
+          expires, create a new one, paste it into <strong>Application secret</strong> and save. The
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/TEAMS.md" rel="noopener">Teams guide</a>
+          covers the infection-event feed and the details.
         </p>
         <h2 id="import-from-hudu"><a class="anchor" href="#import-from-hudu">Import from Hudu</a></h2>
         <ol class="steps">
@@ -269,31 +372,127 @@
           security log.
         </p>
         <h2 id="connectwise-rmm"><a class="anchor" href="#connectwise-rmm">ConnectWise RMM</a></h2>
-        <p>Atlas reads devices, their health and tickets from the ConnectWise platform API.</p>
+        <p>
+          Atlas reads companies, sites, contacts, devices and tickets from ConnectWise RMM through the ConnectWise
+          platform API, and keeps each client's documentation current from them. It only writes to ConnectWise if you
+          turn on one of the options that does.
+        </p>
+        <h3 id="connecting"><a class="anchor" href="#connecting">Connecting</a></h3>
         <ol class="steps">
           <li>
-            In ConnectWise RMM, open <strong>Integrations → API Access</strong> and create a client ID and secret. Add
-            the tickets read permission for tickets, and <strong>Automation read</strong> and
-            <strong>Automation create</strong> if you'll use password rotation.
+            In ConnectWise RMM, open <strong>Integrations → API Access</strong> and create an API client. Give it the
+            read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them,
+            devices write (for Atlas links), tickets create (for ticket notes and expiry tickets), and
+            <strong>Automation read</strong> and <strong>Automation create</strong> (for password rotation). Copy the
+            client ID and secret.
           </li>
-          <li>In Atlas, enter them under <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
-          <li>Link each ConnectWise company to a client, or let Atlas create the client.</li>
-          <li>Choose what to sync: devices, tickets, and optionally BitLocker keys, by site or device.</li>
+          <li>In Atlas, open <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
+          <li>
+            Choose the <strong>Region</strong> your ConnectWise tenant is in: <strong>North America</strong>,
+            <strong>Europe</strong> or <strong>Australia</strong>.
+          </li>
+          <li>
+            Enter the <strong>Client ID</strong> and <strong>Client secret</strong>. The secret is encrypted with the
+            master key; afterwards the field says <strong>Saved and encrypted. Leave empty to keep it.</strong>
+          </li>
+          <li>Leave <strong>Sync every hour</strong> ticked unless you only want to sync by hand.</li>
+          <li>
+            Choose <strong>Connect</strong>. Atlas checks the credentials before saving them. Later, the button is
+            <strong>Save and test</strong>.
+          </li>
+          <li>Link each ConnectWise company to an Atlas client, or let Atlas create the client.</li>
+          <li>Choose <strong>Sync now</strong> for the first sync, and watch its progress.</li>
         </ol>
-        <p>The sync runs every hour, and <strong>Sync now</strong> runs it straight away.</p>
-        <ul>
-          <li>
-            <strong>Devices</strong> become device assets with manufacturer, model, serial number, operating system,
-            last check-in, online status and endpoint protection. Fields you add yourself are kept on each sync. A
-            device the RMM no longer has is archived.
-          </li>
-          <li><strong>Tickets</strong> are read-only and feed the Tickets cards.</li>
-          <li><strong>Warranty dates</strong> for Dell, Lenovo and HP are looked up when ConnectWise has none.</li>
-          <li>
-            <strong>BitLocker keys</strong> in a device custom field are saved to the client's vault, linked to the
-            device.
-          </li>
-        </ul>
+        <h3 id="what-to-sync"><a class="anchor" href="#what-to-sync">What to sync</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>What it brings in</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Sites</strong></td>
+                <td>Each linked company's sites, as locations.</td>
+              </tr>
+              <tr>
+                <td><strong>Contacts</strong></td>
+                <td>Each company's contacts, matched to existing ones by email.</td>
+              </tr>
+              <tr>
+                <td><strong>Devices</strong></td>
+                <td>
+                  Devices as assets, updating same-named ones. Manufacturer, model, serial number, operating system,
+                  last check-in, online status and endpoint protection come across; fields you add yourself are kept. A
+                  device the RMM no longer has is archived.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Tickets</strong></td>
+                <td>Read-only, for the ticket cards and dashboard. Needs the tickets read permission.</td>
+              </tr>
+              <tr>
+                <td><strong>Software and sign-ins</strong></td>
+                <td>Each device's installed software and who signs in, and which host each virtual machine runs on.</td>
+              </tr>
+              <tr>
+                <td><strong>BitLocker keys</strong></td>
+                <td>
+                  Recovery keys kept in a device custom field, saved to the client's vault and linked to the device. Off
+                  until you turn it on.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Save devices in</strong> chooses the asset layout. <strong>Automatic</strong> uses the
+          <strong>Endpoints</strong> layout when there is one (a layout called Devices or Computer Assets is renamed to
+          Endpoints), otherwise Configurations. Warranty dates for Dell, Lenovo and HP are looked up when ConnectWise
+          has none.
+        </p>
+        <h3 id="options-that-write-to-connectwise">
+          <a class="anchor" href="#options-that-write-to-connectwise">Options that write to ConnectWise</a>
+        </h3>
+        <p>These change data in your ConnectWise tenant, so they're off until you turn them on.</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Atlas links</strong></td>
+                <td>
+                  Writes each device's Atlas address into its <strong>Atlas link</strong> custom field on every sync, so
+                  technicians can jump from ConnectWise to Atlas. Add that device custom field in ConnectWise first.
+                  Needs devices write.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Ticket notes</strong></td>
+                <td>
+                  Lets technicians add internal notes to tickets from Atlas, and adds a note to the ticket whose number
+                  is in the reason when someone reveals a password (never the password itself). Needs tickets create.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Expiry tickets</strong></td>
+                <td>
+                  Opens one ticket for each domain, certificate, licence or warranty of a linked client coming due, on
+                  every sync. <strong>Days before it expires</strong> (1 to 180) sets how far ahead, and
+                  <strong>Service board</strong> the board's name (empty uses the first board). Needs tickets create.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>Disconnect</strong> deletes the secret from Atlas. Synced devices stay.</p>
         <h2 id="microsoft-365"><a class="anchor" href="#microsoft-365">Microsoft 365</a></h2>
         <p>
           <strong>Import &amp; export → Microsoft 365</strong> documents each client's tenant from one multi-tenant app
