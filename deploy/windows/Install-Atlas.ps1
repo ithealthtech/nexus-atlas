@@ -92,8 +92,13 @@ function Get-LanAddress {
 }
 
 function Remove-LocalCertificates {
-  Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\My |
-    Where-Object { $_.FriendlyName -eq $CertName } | Remove-Item -DeleteKey -ErrorAction SilentlyContinue
+  foreach ($store in 'Root', 'My') {
+    Get-ChildItem "Cert:\LocalMachine\$store" | Where-Object { $_.FriendlyName -eq $CertName } | ForEach-Object {
+      # -DeleteKey only exists for a certificate path given directly, and only a certificate with its key has one.
+      $path = "Cert:\LocalMachine\$store\$($_.Thumbprint)"
+      if ($_.HasPrivateKey) { Remove-Item -LiteralPath $path -DeleteKey } else { Remove-Item -LiteralPath $path }
+    }
+  }
 }
 
 # A certificate for this server's own address, kept while it still covers the address and has a month left.
@@ -123,7 +128,7 @@ function Set-LocalCertificate([string]$Address, [hashtable]$Settings) {
   # Trusted on this server, so its own browser and this script's check don't warn; the key lives only in the .pfx.
   Import-Certificate -FilePath $CerFile -CertStoreLocation Cert:\LocalMachine\Root |
     ForEach-Object { $_.FriendlyName = $CertName }
-  Remove-Item "Cert:\LocalMachine\My\$($cert.Thumbprint)" -DeleteKey
+  Remove-Item -LiteralPath "Cert:\LocalMachine\My\$($cert.Thumbprint)" -DeleteKey
   $Settings['ATLAS_TLS_PFX_FILE'] = $PfxFile
   $Settings['ATLAS_TLS_PFX_PASSPHRASE'] = $pass
 }
