@@ -13,6 +13,7 @@ import {
 } from '@tanstack/react-router';
 import { Loader2, Lock } from 'lucide-react';
 import type { ComponentType } from 'react';
+import { parseAssetSearch } from '@atlas/shared';
 import { Card, EmptyState, ToastProvider } from '@/components/ui';
 import { AppShell, useSignOut } from '@/components/AppShell';
 import { AuthScreen } from '@/auth/AuthScreen';
@@ -30,7 +31,8 @@ import { ClientOverview } from '@/pages/client/ClientOverview';
 import { ClientActivity, ClientContacts, ClientLocations } from '@/pages/client/people';
 import { ClientRelationshipMap } from '@/pages/client/RelationshipMap';
 import { DomainTracker, SslTracker } from '@/components/Trackers';
-import { AllAssets, AssetDetail, ClientAssets } from '@/pages/assets';
+import { AssetDetail } from '@/pages/assets';
+import { AllAssets, ClientAssets } from '@/pages/asset-list';
 import { Layouts } from '@/pages/Layouts';
 import { SharePage } from '@/pages/SharePage';
 import { SharedArticle } from '@/pages/SharedArticle';
@@ -206,7 +208,7 @@ const clientRoutes = [
     getParentRoute: () => clientRoute,
     path: '/assets',
     component: ClientAssets,
-    validateSearch: listSearch,
+    validateSearch: parseAssetSearch,
   }),
   createRoute({
     getParentRoute: () => clientRoute,
@@ -251,7 +253,12 @@ const routes = [
       throw redirect({ to: '/clients/$clientId/reports', params: { clientId: params.clientId } });
     },
   }),
-  createRoute({ getParentRoute: () => appRoute, path: '/assets', component: AllAssets, validateSearch: listSearch }),
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: '/assets',
+    component: AllAssets,
+    validateSearch: parseAssetSearch,
+  }),
   createRoute({
     getParentRoute: () => appRoute,
     path: '/assets/labels',

@@ -293,6 +293,26 @@ describe('favorites, quick notes, and workspace preferences', () => {
     expect((await put('assets', { columns: { x: Array(9).fill('f') } })).status).toBe(400);
   });
 
+  it('keeps named asset views with their filters and sort, and rejects duplicates and oversized ones', async () => {
+    const put = (view: unknown) => owner.call('PUT', '/api/account/list-views/assets', view);
+    const endpoints = {
+      name: 'Windows endpoints',
+      filters: { layout: 'abc', status: 'active', 'f.operating_system': 'Windows' },
+      sort: 'field:operating_system',
+      dir: 'desc',
+    };
+    const saved = await put({ sort: 'updated', dir: 'asc', saved: [endpoints] });
+    expect(saved.status).toBe(200);
+    expect(saved.data.listViews.assets).toEqual({ sort: 'updated', dir: 'asc', saved: [endpoints] });
+    expect((await put({ saved: [endpoints, { ...endpoints, name: 'windows ENDPOINTS' }] })).status).toBe(400);
+    expect((await put({ saved: [{ ...endpoints, name: '  ' }] })).status).toBe(400);
+    expect((await put({ dir: 'sideways' })).status).toBe(400);
+    const many = Object.fromEntries(Array.from({ length: 41 }, (_, i) => [`f.k${i}`, 'x']));
+    expect((await put({ saved: [{ name: 'Too many', filters: many }] })).status).toBe(400);
+    const views = Array.from({ length: 21 }, (_, i) => ({ name: `View ${i}`, filters: {} }));
+    expect((await put({ saved: views })).status).toBe(400);
+  });
+
   it('saves dashboard cards and hidden sections per person', async () => {
     const defaults = (await owner.call('GET', '/api/account/workspace')).data;
     expect(defaults.widgets.map((w: { id: string }) => w.id)).toEqual([...DASHBOARD_WIDGETS]);
