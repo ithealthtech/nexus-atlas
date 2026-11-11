@@ -20,6 +20,23 @@ An asset is anything you look after: a server, a workstation, a firewall, a swit
 
 **Docs → Assets** lists assets across every client you can see. A client's **Assets** tab lists just theirs, grouped by layout.
 
+### Find, filter and sort assets
+
+The list narrows as you type or choose, and every filter combines with the others:
+
+- **Filter by name, IP, serial…** searches names, clients, layouts and every field. Each word you type has to match somewhere, so `dell 2022` finds a Dell server running Windows Server 2022.
+- The layouts down the side (or across the top on a phone) show one layout, such as **Endpoints** or **Domains**.
+- **All clients** narrows the list to one client. (A client's **Assets** tab already shows just that client.)
+- **Active**, **Inactive** and **Retired** show assets with those statuses. Choose more than one to see each of them; choose none to see all.
+- **Updated any time** can show only assets updated in the last 7, 30 or 90 days, or those **Not updated in a year**.
+- **+ Filter by field…** filters on one of the layout's fields, such as **Operating system**, **Manufacturer** or **Type**. A choice field offers its choices; a text field matches what you type anywhere in it. Either can find assets where the field **has a value** or **is blank**. With **All assets** chosen, you can filter on the fields of every layout in the list.
+
+**Showing 3 of 48 assets** tells you how far the filters have narrowed the list, and **Clear filters** removes them all (the layout stays). The filters are kept in the page's address, so you can bookmark a filtered list or send it to a colleague, who sees the same assets if they can open them.
+
+Choose a column heading, such as **Name**, **Client**, **Status**, **Updated** or one of a layout's columns, to sort by it, and choose it again to reverse the order. The **Sort** menu and the arrow beside it do the same. Assets with nothing in a field's column always come last. Your sort is remembered on any computer you sign in to.
+
+**Save view** keeps the current filters and sort under a name, such as "Windows endpoints with no warranty date", and **Saved views…** brings one back. You can keep up to 20, and only you see them. To remove one, choose **Save view** and the bin beside it.
+
 ### Add an asset
 
 1. Open the client and go to its **Assets** tab, then choose **Add asset**.
