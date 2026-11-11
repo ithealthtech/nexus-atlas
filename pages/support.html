@@ -208,9 +208,11 @@
         <h2 id="email"><a class="anchor" href="#email">Email</a></h2>
         <h3 id="email-isn-t-sending"><a class="anchor" href="#email-isn-t-sending">Email isn't sending</a></h3>
         <p>
-          <strong>Admin → Email &amp; alerts → Send test</strong> shows the mail server's error. Prefer
-          <strong>Microsoft 365 (app registration)</strong>; for legacy SMTP, Authenticated SMTP must be on for the
-          mailbox.
+          <strong>Admin → Email &amp; alerts → Send test</strong> shows the mail server's error. With
+          <strong>Microsoft 365 (app registration)</strong>, <strong>Check permissions</strong> says whether the app has
+          the Mail.Send application permission; an expired client secret is the next most common cause. For legacy SMTP,
+          Authenticated SMTP must be on for the mailbox. See
+          <a href="settings.html#email-and-alerts">Email &amp; alerts</a>.
         </p>
         <h2 id="backups-and-the-server"><a class="anchor" href="#backups-and-the-server">Backups and the server</a></h2>
         <h3 id="backups-are-failing-or-on-the-same-disk">
@@ -225,7 +227,7 @@
         </h3>
         <p>
           A backup can only be read with the master key it was made with. After a rotation, list the old key after the
-          new one and try again.
+          new one and try again. See <a href="looking-after-atlas.html#restore-a-backup">Restore a backup</a>.
         </p>
         <h3 id="atlas-says-it-can-t-read-or-write-a-file-or-a-service-is-stopped">
           <a class="anchor" href="#atlas-says-it-can-t-read-or-write-a-file-or-a-service-is-stopped"
@@ -241,7 +243,7 @@
         </h3>
         <p>
           <strong>Admin → Certificate</strong>: download the authority, install it, and open Atlas at the address on the
-          certificate.
+          certificate. Step by step in <a href="remote-access.html#the-certificate">The certificate</a>.
         </p>
         <h3 id="verify-now-reports-a-break-in-the-security-log">
           <a class="anchor" href="#verify-now-reports-a-break-in-the-security-log"
@@ -251,6 +253,54 @@
         <p>
           Someone changed the database directly. Keep the server as it is, export the security log, and investigate.
           Restore from a backup if needed.
+        </p>
+        <h2 id="reaching-atlas"><a class="anchor" href="#reaching-atlas">Reaching Atlas</a></h2>
+        <h3 id="atlas-doesn-t-open-after-changing-how-it-s-reached">
+          <a class="anchor" href="#atlas-doesn-t-open-after-changing-how-it-s-reached"
+            >Atlas doesn't open after changing how it's reached</a
+          >
+        </h3>
+        <p>
+          If the Remote access banner said <strong>Done.</strong>, Atlas is running and the problem is outside the
+          server: DNS, a firewall, the tunnel's public hostname, or your proxy. Check that way's troubleshooting table
+          in <a href="remote-access.html">Remote access and HTTPS</a>, or put the previous way back from the server's
+          console with <code>sudo atlas-access apply</code>. See
+          <a href="remote-access.html#getting-back-in-from-the-server">Getting back in from the server</a>.
+        </p>
+        <h3 id="the-change-failed-and-the-settings-were-put-back">
+          <a class="anchor" href="#the-change-failed-and-the-settings-were-put-back"
+            >The change failed and the settings were put back</a
+          >
+        </h3>
+        <p>
+          The banner says why: <strong>Atlas didn't start on its new address</strong>, or
+          <strong>the web proxy on this server didn't pass requests</strong> on to it. The full log is in
+          <code>/var/lib/msp-atlas-updater/last-access.log</code>.
+        </p>
+        <h3 id="403-unknown-host"><a class="anchor" href="#403-unknown-host">403 Unknown host</a></h3>
+        <p>
+          You opened Atlas at a different name or IP address from its address, or a reverse proxy changed the
+          <code>Host</code> header. Use the address on <strong>Admin → Remote access</strong>, and keep the original
+          host on the proxy.
+        </p>
+        <h3 id="use-the-address-your-reverse-proxy-serves-atlas-at">
+          <a class="anchor" href="#use-the-address-your-reverse-proxy-serves-atlas-at"
+            >Use the address your reverse proxy serves Atlas at</a
+          >
+        </h3>
+        <p>
+          The request reached the Atlas server directly, or from a proxy address that isn't listed. Open Atlas through
+          the proxy, or add the proxy's real address under <strong>Your reverse proxy's addresses</strong>.
+        </p>
+        <h3 id="connection-refused-through-my-reverse-proxy">
+          <a class="anchor" href="#connection-refused-through-my-reverse-proxy"
+            >Connection refused through my reverse proxy</a
+          >
+        </h3>
+        <p>
+          The proxy is sending to a port Atlas doesn't serve. Point it at <code>http://&lt;server&gt;:80</code> or
+          <code>https://&lt;server&gt;:443</code>, never 4318, and check the firewall between them. See
+          <a href="remote-access.html#your-own-reverse-proxy">Your own reverse proxy</a>.
         </p>
         <h2 id="imports-and-syncs"><a class="anchor" href="#imports-and-syncs">Imports and syncs</a></h2>
         <h3 id="a-hudu-import-stopped-partway">
@@ -329,6 +379,7 @@
           <li><a href="#access">Access</a></li>
           <li><a href="#email">Email</a></li>
           <li><a href="#backups-and-the-server">Backups and the server</a></li>
+          <li><a href="#reaching-atlas">Reaching Atlas</a></li>
           <li><a href="#imports-and-syncs">Imports and syncs</a></li>
           <li><a href="#apps">Apps</a></li>
           <li><a href="#still-stuck">Still stuck</a></li>
