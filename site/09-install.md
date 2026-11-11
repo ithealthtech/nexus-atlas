@@ -60,13 +60,15 @@ A ready-built image is published for each release: `ghcr.io/ithealthtech/nexus-a
 3. From an elevated PowerShell prompt, run:
 
 ```powershell
-.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
+.\deploy\windows\Install-Atlas.ps1 -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
 ```
 
 The script creates `C:\ProgramData\MSP Atlas` (readable only by Administrators and SYSTEM), creates the master key file on first install, and registers the `MSPAtlas` service to start automatically. The setup code is in `C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log`.
 
-> [!note] HTTPS on Windows
-> Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows. Add `-BackupDir \\nas\atlas-backups` to keep backups on another machine.
+Atlas is ready straight away at this server's own address, `https://<LAN IP>:4318`, over HTTPS with a certificate the script makes for it. Port 4318 is opened in Windows Firewall for private and domain networks. Other computers' browsers warn until they trust `atlas-local-certificate.cer`, in the Atlas folder: import it into **Trusted Root Certification Authorities**, or deploy it with Group Policy.
+
+> [!note] Giving Atlas a domain
+> When Atlas has a domain, publish it over HTTPS with IIS (URL Rewrite and Application Request Routing) or Caddy for Windows, forwarding to `http://127.0.0.1:4318`, then run the script again with `-PublicUrl https://atlas.yourmsp.com`. Passkeys need a domain. Add `-BackupDir \\nas\atlas-backups` to keep backups on another machine.
 
 To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps your settings and key.
 

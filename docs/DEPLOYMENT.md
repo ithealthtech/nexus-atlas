@@ -167,19 +167,22 @@ The helper that knows these actions arrives with the release that has the Servic
 2. Extract the Windows package from the GitHub release (`msp-atlas-<version>-windows.zip`, already built, with a `.sha256` checksum beside it) to, for example, `C:\Program Files\MSP Atlas`. From source instead: copy the repository there and run `npm ci` and `npm run build`.
 3. From an elevated PowerShell prompt:
    ```powershell
-   .\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
+   .\deploy\windows\Install-Atlas.ps1 -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
    ```
 
 What the script does:
 - **Data folder:** creates `C:\ProgramData\MSP Atlas`, readable only by Administrators and SYSTEM.
 - **Master key:** creates the key file there on first install, and reminds you to copy it somewhere safe.
 - **Settings:** writes `atlas.env` with your settings.
+- **Address:** with no domain yet, Atlas serves HTTPS itself at this server's own address, `https://<LAN IP>:4318`. The script makes a certificate for that address, trusts it on this server, and allows port 4318 through Windows Firewall on private and domain networks (not public ones).
 - **Service wrapper:** downloads WinSW 2.12.0 and checks it against a pinned SHA-256.
 - **Service:** registers the `MSPAtlas` service to start automatically and restart if it stops, then waits until Atlas answers.
 
 After install:
 - **Setup code:** the first-run setup code is in `C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log`.
-- **HTTPS:** Atlas listens on `127.0.0.1:4318`. Publish it over HTTPS with IIS (URL Rewrite + Application Request Routing) or Caddy for Windows. Atlas trusts the proxy's forwarded client address.
+- **Other computers:** browsers warn about the certificate until they trust it. Import `atlas-local-certificate.cer`, in the Atlas folder, into **Trusted Root Certification Authorities**, or deploy it with Group Policy. Passkeys need a domain; one-time codes work at an address.
+- **A changed address:** run the script again with no arguments. It looks the address up again and makes a new certificate if it changed. To choose the address or a name yourself, add `-LocalAddress 192.168.1.20`.
+- **A domain:** once Atlas has one, publish it over HTTPS with IIS (URL Rewrite + Application Request Routing) or Caddy for Windows, forwarding to `http://127.0.0.1:4318` and keeping the Host header, then run the script with `-PublicUrl https://atlas.yourmsp.com`. Atlas then listens only on `127.0.0.1:4318` and trusts the proxy's forwarded client address, and the script removes the local certificate and firewall rule. `-LocalAddress auto` goes back to the server's own address.
 - **Upgrading:** extract the new package over the old folder (or update the source and rebuild), then run the script again with no arguments. It keeps your settings and key.
 - **Backups:** add `-BackupDir \\nas\atlas-backups` to keep them on another machine. The service account needs write access there.
 - **Removing:** `-Uninstall` removes the service but leaves data, key, and backups in place.

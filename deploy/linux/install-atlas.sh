@@ -90,7 +90,9 @@ if [[ -z "$PUBLIC_URL" && -f "$ENV_FILE" ]]; then
   PUBLIC_URL="$(grep -E '^PUBLIC_URL=' "$ENV_FILE" | cut -d= -f2- || true)"
 fi
 if [[ -z "$PUBLIC_URL" ]]; then
-  PUBLIC_URL="https://$(hostname -I | awk '{print $1}')"
+  # This server's own address until it has a domain: the one on the default route (not a Docker bridge's).
+  LAN_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+  PUBLIC_URL="https://${LAN_IP:-$(hostname -I | awk '{print $1}')}"
 fi
 [[ "$PUBLIC_URL" == https://* ]] || die "--public-url must start with https:// (Atlas refuses http in production)."
 SITE_HOST="${PUBLIC_URL#https://}"; SITE_HOST="${SITE_HOST%%/*}"

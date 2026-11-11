@@ -2,6 +2,17 @@
 
 All notable changes to MSP Atlas are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Windows install works without a domain.** `Install-Atlas.ps1` no longer needs `-PublicUrl`. Atlas serves HTTPS itself at the server's own address, `https://<LAN IP>:4318`, with a certificate made for that address and trusted on the server, and the port is opened in Windows Firewall for private and domain networks. Once Atlas has a domain behind IIS or Caddy, run the script with `-PublicUrl https://atlas.yourmsp.com`; it switches Atlas back behind the proxy and removes the certificate and firewall rule. Running it again picks up a changed address.
+- **Linux install picks the right address.** Without `--public-url`, the installer uses the address on the server's default route, not the first one listed (which could be a Docker bridge).
+
+### Fixed
+
+- **Windows install no longer times out.** The installer's readiness check is now addressed the way Atlas expects, so it no longer waits two minutes and reports that Atlas didn't start when it had.
+
 ## [2.4.0] - 2026-11-10
 
 ### Added

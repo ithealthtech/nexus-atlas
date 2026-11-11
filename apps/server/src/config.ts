@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 
 const ADDRESS = /^(\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?|[0-9a-f:]*:[0-9a-f:]*(\/\d{1,3})?)$/i;
@@ -31,6 +32,10 @@ const schema = z.object({
   // The address people use to reach Atlas. Origin and Host checks, cookie security, and links derive from it.
   PUBLIC_URL: z.string().url().default('http://127.0.0.1:4318'),
   TRUST_PROXY: trustProxy,
+  // HTTPS served by Atlas itself, with a PKCS#12 (.pfx) certificate: how the Windows installer serves Atlas at
+  // this server's own address until it has a domain behind a reverse proxy.
+  ATLAS_TLS_PFX_FILE: z.string().optional(),
+  ATLAS_TLS_PFX_PASSPHRASE: z.string().optional(),
   // Master key: 32 bytes, base64url. Provide one of these; in development a key file is created on first run.
   ATLAS_MASTER_KEY: z.string().optional(),
   ATLAS_MASTER_KEY_FILE: z.string().optional(),
@@ -64,7 +69,12 @@ const schema = z.object({
   WEB_DIST: z.string().optional(),
 });
 
-export type Config = z.infer<typeof schema> & { secureCookies: boolean; publicOrigin: string; publicHost: string };
+export type Config = z.infer<typeof schema> & {
+  secureCookies: boolean;
+  publicOrigin: string;
+  publicHost: string;
+  tls?: { pfx: Buffer; passphrase?: string };
+};
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = schema.safeParse(env);
@@ -82,5 +92,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         'Set ATLAS_MASTER_KEY or ATLAS_MASTER_KEY_FILE in production. Back the key up separately from the database.',
       );
   }
-  return { ...config, secureCookies, publicOrigin: url.origin, publicHost: url.host };
+  let tls: Config['tls'];
+  if (config.ATLAS_TLS_PFX_FILE) {
+    if (!secureCookies) throw new Error('Serving HTTPS needs a PUBLIC_URL that starts with https://.');
+    try {
+      tls = { pfx: readFileSync(config.ATLAS_TLS_PFX_FILE), passphrase: config.ATLAS_TLS_PFX_PASSPHRASE };
+    } catch {
+      throw new Error(`Can't read the certificate in ATLAS_TLS_PFX_FILE (${config.ATLAS_TLS_PFX_FILE}).`);
+    }
+  }
+  return { ...config, secureCookies, publicOrigin: url.origin, publicHost: url.host, ...(tls ? { tls } : {}) };
 }

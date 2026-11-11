@@ -210,6 +210,77 @@ jobs:
             if ($errors) { $errors | ForEach-Object { Write-Error "${script}: $_" }; exit 1 }
           }
 
+  # The Windows server installer, run for real in Windows PowerShell 5.1 against the runner's own PostgreSQL: a first
+  # install at this server's own address, an update that keeps it, a domain behind a proxy, back again, uninstall.
+  windows-installer:
+    name: Windows server installer
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: PostgreSQL
+        shell: pwsh
+        run: |
+          $service = Get-Service postgresql* | Select-Object -First 1
+          Set-Service $service.Name -StartupType Manual
+          Start-Service $service.Name
+          & "$env:PGBIN\psql.exe" -c "create role atlas login password 'atlas-ci'" -c 'create database atlas owner atlas'
+          if ($LASTEXITCODE) { exit 1 }
+      - name: First install, at this server's own address
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1 -DatabaseUrl 'postgres://atlas:atlas-ci@127.0.0.1:5432/atlas'
+          $settings = Get-Content "$env:ProgramData\MSP Atlas\atlas.env"
+          $url = ($settings | Where-Object { $_ -like 'PUBLIC_URL=*' }).Substring(11)
+          if ($url -notmatch '^https://\d+\.\d+\.\d+\.\d+:4318$') { throw "Unexpected address: $url" }
+          if ($settings -notcontains 'HOST=0.0.0.0') { throw 'Atlas should listen on the network.' }
+          # Trusted on this server: no certificate warning.
+          if ((Invoke-WebRequest "$url/readyz" -UseBasicParsing).StatusCode -ne 200) { throw 'Not ready.' }
+          if (-not (Get-NetFirewallRule -DisplayName 'MSP Atlas (HTTPS)' -ErrorAction SilentlyContinue)) { throw 'No firewall rule.' }
+          if (-not (Test-Path .\atlas-local-certificate.cer)) { throw 'No certificate for other computers.' }
+          (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'MSP Atlas (local address)').Thumbprint |
+            Set-Content "$env:RUNNER_TEMP\thumbprint.txt"
+      - name: Running it again keeps the address and certificate
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1
+          $now = (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'MSP Atlas (local address)').Thumbprint
+          if ($now -ne (Get-Content "$env:RUNNER_TEMP\thumbprint.txt")) { throw 'The certificate was replaced.' }
+      - name: A domain, served by a reverse proxy
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.test
+          $settings = Get-Content "$env:ProgramData\MSP Atlas\atlas.env"
+          foreach ($line in 'HOST=127.0.0.1', 'PUBLIC_URL=https://atlas.example.test', 'TRUST_PROXY=true') {
+            if ($settings -notcontains $line) { throw "Missing $line" }
+          }
+          if ($settings -like 'ATLAS_TLS_*') { throw 'The local certificate is still configured.' }
+          if (Get-NetFirewallRule -DisplayName 'MSP Atlas (HTTPS)' -ErrorAction SilentlyContinue) { throw 'The firewall rule is still there.' }
+          if (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'MSP Atlas (local address)') { throw 'Still trusted.' }
+      - name: Back to this server's own address, then uninstall
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\deploy\windows\Install-Atlas.ps1 -LocalAddress auto
+          $url = ((Get-Content "$env:ProgramData\MSP Atlas\atlas.env") | Where-Object { $_ -like 'PUBLIC_URL=*' }).Substring(11)
+          if ((Invoke-WebRequest "$url/readyz" -UseBasicParsing).StatusCode -ne 200) { throw 'Not ready.' }
+          .\deploy\windows\Install-Atlas.ps1 -Uninstall
+          if (Get-Service MSPAtlas -ErrorAction SilentlyContinue) { throw 'The service is still there.' }
+          if (Get-NetFirewallRule -DisplayName 'MSP Atlas (HTTPS)' -ErrorAction SilentlyContinue) { throw 'The firewall rule is still there.' }
+      - name: Service log
+        if: failure()
+        shell: pwsh
+        run: Get-ChildItem "$env:ProgramData\MSP Atlas\logs" -Filter *.log | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 60 }
+
   # Atlas for Windows (apps/windows): the core library's tests, the WinUI app itself (which only builds on Windows),
   # and its setup program, built the way a release builds it and then run for real.
   windows-client:

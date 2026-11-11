@@ -190,10 +190,11 @@ docker compose -f deploy/docker-compose.yml logs app | grep "setup code"
 [latest release](https://github.com/ithealthtech/nexus-atlas/releases/latest), then from an elevated prompt:
 
 ```powershell
-.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
+.\deploy\windows\Install-Atlas.ps1 -DatabaseUrl "postgres://atlas:<password>@localhost:5432/atlas"
 ```
 
-Open `PUBLIC_URL` and enter the setup code to create the owner account. No default
+On Windows, Atlas is then at `https://<this server's LAN IP>:4318` until you give it a domain with
+`-PublicUrl`. Open Atlas's address and enter the setup code to create the owner account. No default
 administrator or password exists. Later versions install from **Administration → Updates**.
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the installer's options.
 
