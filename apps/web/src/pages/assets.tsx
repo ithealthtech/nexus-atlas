@@ -1,41 +1,18 @@
-import { useMemo, useState, type FormEvent } from 'react';
-import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { useState, type FormEvent } from 'react';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  Archive,
-  ArchiveRestore,
-  ClipboardPaste,
-  Columns3,
-  Pencil,
-  Plus,
-  QrCode,
-  RefreshCw,
-  Search,
-  Server,
-  ShieldCheck,
-} from 'lucide-react';
-import {
-  ASSET_STATUSES,
-  MAX_LIST_COLUMNS,
-  REPORTABLE_FIELD_TYPES,
-  atLeast,
-  type AssetView,
-  type LayoutField,
-  type LayoutView,
-  type WarrantyCheckResult,
-} from '@atlas/shared';
+import { Archive, ArchiveRestore, ClipboardPaste, Pencil, QrCode, RefreshCw, Server, ShieldCheck } from 'lucide-react';
+import { ASSET_STATUSES, atLeast, type AssetView, type WarrantyCheckResult } from '@atlas/shared';
 import {
   Badge,
   Button,
   Card,
   CardHeader,
-  Checkbox,
   Dialog,
   EmptyState,
   Field,
   FormError,
   Input,
-  PageHeader,
   Select,
   Skeleton,
   Textarea,
@@ -49,9 +26,8 @@ import { AttachmentsPanel, ItemActivity, RelatedPanel, RevisionsPanel } from '@/
 import { DeviceInventoryCards } from '@/components/Inventory';
 import { ApiError, api } from '@/lib/api';
 import { useActor } from '@/lib/session';
-import { useAsset, useAssets, useClient, useClients, useLayouts } from '@/lib/queries';
+import { useAsset, useClients, useLayouts } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
-import { useListView } from '@/lib/list-views';
 import { AppLink } from '@/components/AppLink';
 import { BackLink, DetailHeader } from '@/components/DetailHeader';
 import { cn } from '@/lib/cn';
@@ -61,7 +37,7 @@ import { BitlockerPanel } from '@/components/BitlockerPanel';
 import { DeviceSecurityCard } from '@/components/CwSecurity';
 import { BitdefenderDeviceCard } from '@/components/Bitdefender';
 
-const statusTone = { active: 'success', inactive: 'warning', retired: 'neutral' } as const;
+export const statusTone = { active: 'success', inactive: 'warning', retired: 'neutral' } as const;
 
 // ---------------------------------------------------------------- form
 export function AssetDialog({
@@ -306,322 +282,6 @@ function DomainRefresh({
       </Button>
     </div>
   );
-}
-
-// ---------------------------------------------------------------- list
-type AssetSort = 'name' | 'updated' | 'status';
-const ASSET_SORTS: Record<AssetSort, string> = { name: 'Name', updated: 'Recently updated', status: 'Status' };
-const sortAssets = (assets: AssetView[], sort: AssetSort) => {
-  const name = (a: AssetView, b: AssetView) => a.name.localeCompare(b.name, undefined, { numeric: true });
-  const status = (a: AssetView) => ASSET_STATUSES.indexOf(a.status);
-  return [...assets].sort(
-    sort === 'updated'
-      ? (a, b) => b.updatedAt.localeCompare(a.updatedAt) || name(a, b)
-      : sort === 'status'
-        ? (a, b) => status(a) - status(b) || name(a, b)
-        : name,
-  );
-};
-/** Fields that fit a column: short values only, never long text. */
-const columnFields = (layout: LayoutView) => layout.fields.filter((f) => REPORTABLE_FIELD_TYPES.includes(f.type));
-/** The columns for one layout: the person's choice, or the layout's "show in list" fields. */
-function layoutColumns(layout: LayoutView | undefined, chosen: string[] | undefined): LayoutField[] {
-  if (!layout) return [];
-  if (!chosen) return layout.fields.filter((f) => f.showInList).slice(0, 4);
-  const fields = columnFields(layout);
-  return chosen.flatMap((key) => fields.filter((f) => f.key === key)).slice(0, MAX_LIST_COLUMNS);
-}
-
-/** Choose which of a layout's fields show as columns, for this person. */
-function ColumnsDialog({
-  layout,
-  chosen,
-  onSave,
-  onClose,
-}: {
-  layout: LayoutView;
-  chosen: LayoutField[];
-  onSave: (keys: string[] | undefined) => void;
-  onClose: () => void;
-}) {
-  const [keys, setKeys] = useState(chosen.map((f) => f.key));
-  const toggle = (key: string) =>
-    setKeys((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={`${layout.name} columns`}
-      description={`Choose up to ${MAX_LIST_COLUMNS}. Only you see this choice.`}
-      footer={
-        <>
-          <Button variant="ghost" onClick={() => onSave(undefined)}>
-            Use the layout's columns
-          </Button>
-          <Button onClick={() => onSave(keys)}>Save</Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        {columnFields(layout).map((f) => (
-          <Checkbox
-            key={f.key}
-            label={f.label}
-            checked={keys.includes(f.key)}
-            disabled={!keys.includes(f.key) && keys.length >= MAX_LIST_COLUMNS}
-            onChange={() => toggle(f.key)}
-          />
-        ))}
-      </div>
-    </Dialog>
-  );
-}
-
-function AssetTable({
-  assets,
-  layout,
-  columns,
-  showClient,
-}: {
-  assets: AssetView[];
-  layout?: LayoutView;
-  columns: LayoutField[];
-  showClient: boolean;
-}) {
-  return (
-    <div className="relative overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-surface-2 text-xs text-muted">
-          <tr>
-            <th className="px-5 py-3 font-medium">Name</th>
-            {showClient && <th className="hidden px-5 py-3 font-medium sm:table-cell">Client</th>}
-            {columns.map((c) => (
-              <th key={c.key} className="hidden px-5 py-3 font-medium md:table-cell">
-                {c.label}
-              </th>
-            ))}
-            <th className="px-5 py-3 font-medium">Status</th>
-            <th className="hidden px-5 py-3 font-medium sm:table-cell">Updated</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {assets.map((a) => (
-            <tr key={a.id} className="hover:bg-surface-2">
-              <td className="px-5 py-3">
-                <AppLink to={`/assets/${a.id}`} className="flex items-center gap-3">
-                  <ItemIcon type="asset" icon={a.layoutIcon} />
-                  <span className="min-w-0">
-                    <span className="block font-semibold whitespace-nowrap hover:underline">{a.name}</span>
-                    {!layout && <span className="block text-xs text-muted">{a.layoutName}</span>}
-                    {/* On a phone the client column gives way, so the client shows here. */}
-                    {showClient && <span className="block text-xs text-muted sm:hidden">{a.clientName}</span>}
-                  </span>
-                </AppLink>
-              </td>
-              {showClient && (
-                <td className="hidden px-5 py-3 whitespace-nowrap text-text-2 sm:table-cell">{a.clientName}</td>
-              )}
-              {columns.map((c) => (
-                <td key={c.key} className="hidden max-w-56 truncate px-5 py-3 text-text-2 md:table-cell">
-                  <FieldValue field={c} value={a.fields[c.key]} />
-                </td>
-              ))}
-              <td className="px-5 py-3">
-                <Badge tone={a.status === 'active' ? 'quiet' : statusTone[a.status]} className="capitalize">
-                  {a.status}
-                </Badge>
-              </td>
-              <td className="hidden px-5 py-3 whitespace-nowrap text-muted sm:table-cell">
-                {relativeTime(a.updatedAt)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export function AssetsView({ clientId }: { clientId?: string }) {
-  const search = useSearch({ strict: false }) as { layout?: string; archived?: boolean };
-  const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [choosingColumns, setChoosingColumns] = useState(false);
-  const [view, saveView] = useListView('assets');
-  const sort: AssetSort = view.sort === 'updated' || view.sort === 'status' ? view.sort : 'name';
-  const layouts = useLayouts().data ?? [];
-  const client = useClient(clientId ?? '');
-  const canEdit = clientId ? atLeast(client.data?.access ?? 'none', 'edit') : false;
-  const all = useAssets({ client: clientId, archived: search.archived });
-  const layout = layouts.find((l) => l.id === search.layout);
-  const rows = useMemo(
-    () =>
-      sortAssets(
-        (all.data ?? []).filter(
-          (a) =>
-            (!search.layout || a.layoutId === search.layout) &&
-            `${a.name} ${a.clientName} ${JSON.stringify(a.fields)}`.toLowerCase().includes(query.trim().toLowerCase()),
-        ),
-        sort,
-      ),
-    [all.data, search.layout, query, sort],
-  );
-  const columns = layoutColumns(layout, layout ? view.columns?.[layout.key] : undefined);
-  const saveColumns = (keys: string[] | undefined) => {
-    if (!layout) return;
-    const rest = { ...view.columns };
-    delete rest[layout.key];
-    saveView({ columns: keys ? { ...rest, [layout.key]: keys } : rest });
-    setChoosingColumns(false);
-  };
-  const setLayout = (id?: string) =>
-    navigate({ to: '.', search: (prev: Record<string, unknown>) => ({ ...prev, layout: id }) });
-  const counts = new Map<string, number>();
-  for (const a of all.data ?? []) counts.set(a.layoutId, (counts.get(a.layoutId) ?? 0) + 1);
-  const visibleLayouts = layouts.filter((l) => counts.get(l.id) || l.id === search.layout);
-  return (
-    <>
-      {!clientId && (
-        <PageHeader
-          eyebrow="All clients"
-          title="Assets"
-          description="Every documented device, service, and subscription you can access."
-        />
-      )}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label="Asset layouts" className="flex gap-1 overflow-x-auto lg:flex-col">
-          <button
-            onClick={() => setLayout(undefined)}
-            aria-current={!search.layout}
-            className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm whitespace-nowrap text-text-2 hover:bg-surface-3 aria-[current=true]:bg-primary-soft aria-[current=true]:font-semibold aria-[current=true]:text-primary"
-          >
-            All assets <span className="text-xs text-muted">{all.data?.length ?? ''}</span>
-          </button>
-          {visibleLayouts.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => setLayout(l.id)}
-              aria-current={search.layout === l.id}
-              className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm whitespace-nowrap text-text-2 hover:bg-surface-3 aria-[current=true]:bg-primary-soft aria-[current=true]:font-semibold aria-[current=true]:text-primary"
-            >
-              {l.name} <span className="text-xs text-muted">{counts.get(l.id) ?? 0}</span>
-            </button>
-          ))}
-        </nav>
-        <Card>
-          <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
-            <label className="relative min-w-48 flex-1">
-              <span className="sr-only">Filter assets</span>
-              <Search
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
-                aria-hidden
-              />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filter by name, IP, serial…"
-                className="pl-9"
-              />
-            </label>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                navigate({
-                  to: '.',
-                  search: (prev: Record<string, unknown>) => ({
-                    ...prev,
-                    archived: search.archived ? undefined : true,
-                  }),
-                })
-              }
-            >
-              {search.archived ? <ArchiveRestore /> : <Archive />} {search.archived ? 'Show active' : 'Show archived'}
-            </Button>
-            <label className="w-full sm:w-auto">
-              <span className="sr-only">Sort</span>
-              <Select value={sort} onChange={(e) => saveView({ sort: e.target.value })}>
-                {Object.entries(ASSET_SORTS).map(([k, label]) => (
-                  <option key={k} value={k}>
-                    Sort: {label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            {layout && columnFields(layout).length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setChoosingColumns(true)}>
-                <Columns3 /> Columns
-              </Button>
-            )}
-            {clientId && !search.archived && (
-              <AppLink
-                to="/assets/labels"
-                search={{ client: clientId, layout: search.layout }}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-text-2 hover:bg-surface-3 hover:text-text"
-              >
-                <QrCode className="size-4" aria-hidden /> QR labels
-              </AppLink>
-            )}
-            {canEdit && (
-              <Button onClick={() => setAdding(true)}>
-                <Plus /> Add asset
-              </Button>
-            )}
-          </div>
-          {all.isLoading ? (
-            <div className="space-y-3 p-5">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-11" />
-              ))}
-            </div>
-          ) : rows.length ? (
-            <AssetTable assets={rows} layout={layout} columns={columns} showClient={!clientId} />
-          ) : (
-            <EmptyState
-              icon={Server}
-              title={
-                search.archived ? 'No archived assets' : query || search.layout ? 'Nothing matches' : 'No assets yet'
-              }
-              description={
-                canEdit
-                  ? 'Document firewalls, servers, circuits, domains, and more — each with the fields that matter.'
-                  : clientId
-                    ? 'Nothing has been documented here yet.'
-                    : 'Open a client to add assets.'
-              }
-              action={
-                canEdit && !search.archived ? (
-                  <Button onClick={() => setAdding(true)}>
-                    <Plus /> Add asset
-                  </Button>
-                ) : undefined
-              }
-            />
-          )}
-        </Card>
-      </div>
-      {choosingColumns && layout && (
-        <ColumnsDialog
-          layout={layout}
-          chosen={columns}
-          onSave={saveColumns}
-          onClose={() => setChoosingColumns(false)}
-        />
-      )}
-      {adding && clientId && (
-        <AssetDialog clientId={clientId} layoutId={search.layout} onClose={() => setAdding(false)} />
-      )}
-    </>
-  );
-}
-
-export function ClientAssets() {
-  const { clientId } = useParams({ strict: false }) as { clientId: string };
-  return <AssetsView clientId={clientId} />;
-}
-export function AllAssets() {
-  return <AssetsView />;
 }
 
 // ---------------------------------------------------------------- detail

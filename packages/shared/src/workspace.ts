@@ -142,11 +142,34 @@ export type ListName = (typeof LIST_NAMES)[number];
  * One list's saved view. Each list checks the values it reads and falls back to its default, so a view saved by
  * a newer or older version never breaks the page.
  */
+/** Most named views one person can save for a list. */
+export const MAX_SAVED_VIEWS = 20;
+/** A named set of filters (the list's search parameters) and the sort to show them in. */
+export const savedListViewSchema = z.object({
+  name: z.string().trim().min(1, 'Give the view a name.').max(60),
+  filters: z
+    .record(z.string().max(60), z.string().max(2000))
+    .refine((f) => Object.keys(f).length <= 40, 'A view can hold up to 40 filters.'),
+  sort: z.string().max(60).optional(),
+  dir: z.enum(['asc', 'desc']).optional(),
+});
+export type SavedListView = z.infer<typeof savedListViewSchema>;
 export const listViewSchema = z.object({
-  sort: z.string().max(20).optional(),
+  /** A sort key; field columns are `field:<key>`. */
+  sort: z.string().max(60).optional(),
+  /** The sort's direction; without one, each sort uses its own default. */
+  dir: z.enum(['asc', 'desc']).optional(),
   group: z.string().max(20).optional(),
   /** Extra columns by asset layout key: the layout's field keys, in order. */
   columns: z.record(z.string().max(60), z.array(z.string().max(40)).max(8)).optional(),
+  saved: z
+    .array(savedListViewSchema)
+    .max(MAX_SAVED_VIEWS)
+    .refine(
+      (views) => new Set(views.map((v) => v.name.toLowerCase())).size === views.length,
+      'Each saved view needs its own name.',
+    )
+    .optional(),
 });
 export type ListViewPrefs = z.infer<typeof listViewSchema>;
 /** Most extra columns a list shows at once. */

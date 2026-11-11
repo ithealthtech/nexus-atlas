@@ -12,6 +12,9 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 ### Fixed
 
 - **Windows install no longer times out.** The installer's readiness check is now addressed the way Atlas expects, so it no longer waits two minutes and reports that Atlas didn't start when it had.
+### Added
+
+- **Live filters and sorting for assets.** **Docs → Assets** and each client's **Assets** tab now filter as you type or choose: search every word across names, clients and fields, and combine client, status, last-updated and any layout field (such as **Operating system** on **Endpoints**), including fields that are blank. Choose a column heading to sort by it and again to reverse it. The filters are kept in the page's address for bookmarking and sharing, and **Save view** keeps up to 20 named views of filters and sort, for you alone. The layout list, **Columns**, **Show archived** and the **Sort** menu are all still there.
 
 ## [2.4.0] - 2026-11-10
 
