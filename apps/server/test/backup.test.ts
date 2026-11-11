@@ -200,6 +200,29 @@ describe('backup and restore', () => {
     }
   });
 
+  it('saves every row of a table larger than one batch exactly once', async () => {
+    // Enough rows to fill more than ten pages, where text order ("(10,1)" before "(2,1)") differs from page order.
+    await t.handle.pool.query(
+      `insert into activity (org_id, actor_name, action, entity_type, title)
+       select (select id from orgs limit 1), 'Dana Morales', 'updated', 'client', 'Row ' || n from generate_series(1, 2000) n`,
+    );
+    const expected = (await t.handle.pool.query<{ id: string }>('select id::text from activity order by id')).rows;
+    const run = await waitForBackup((await owner.call('POST', '/api/backups', {})).data.id);
+    const target = await freshDatabase({ migrate: false });
+    try {
+      await restoreBackup({
+        handle: target.handle,
+        keys,
+        storage: new LocalStorage(join(dir, 'restored')),
+        file: join(dir, 'backups', run.fileName),
+      });
+      const restored = await target.handle.pool.query<{ id: string }>('select id::text from activity order by id');
+      expect(restored.rows).toEqual(expected);
+    } finally {
+      await target.drop();
+    }
+  });
+
   it('refuses a damaged backup without changing the target database', async () => {
     const run = await waitForBackup((await owner.call('POST', '/api/backups', {})).data.id);
     const file = join(dir, 'backups', run.fileName);
