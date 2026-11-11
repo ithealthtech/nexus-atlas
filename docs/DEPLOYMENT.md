@@ -107,8 +107,13 @@ In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run res
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
-sudo bash install-atlas.sh --public-url https://atlas.example.com
+sudo bash install-atlas.sh
 ```
+
+With no `--public-url`, Atlas is served at this server's own address, `https://<server IP>`: the address on the
+default route, with a certificate from Caddy's own authority. Give it a domain later in **Administration → Remote
+access** (or `sudo atlas-access apply --mode direct --public-url https://atlas.yourmsp.com`), or pass
+`--public-url` now.
 
 - **Choosing a version:** `--version latest` (the default) picks the highest `vX.Y.Z` release tag; pre-releases such as `v1.3.0-rc1` are never picked automatically. `--version v1.0.2` installs that release. A branch name such as `main` works for testing. The installed version is recorded in `/etc/msp-atlas/installed-version`.
 - **Help:** `sudo bash install-atlas.sh --help` lists every option.

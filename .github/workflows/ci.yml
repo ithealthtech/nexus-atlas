@@ -210,6 +210,73 @@ jobs:
             if ($errors) { $errors | ForEach-Object { Write-Error "${script}: $_" }; exit 1 }
           }
 
+  # The Linux installer, run for real on a fresh Ubuntu 24.04 the way the install page says, without a domain:
+  # Atlas at this server's own address, then given a domain later (as Remote access does), then updated.
+  linux-installer:
+    name: Linux server installer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Like a fresh server
+        run: |
+          # The runner's own Node.js 20 would shadow the one the installer sets up.
+          sudo rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx
+          # The installer takes a release or a branch from a repository: this checkout, as a branch.
+          git branch demo-install
+          mkdir -p "$RUNNER_TEMP/demo"
+      - name: First install, without a domain
+        run: |
+          set -o pipefail
+          sudo bash deploy/linux/install-atlas.sh --repo "$GITHUB_WORKSPACE" --version demo-install 2>&1 |
+            tee "$RUNNER_TEMP/demo/1-first-install.txt"
+          sudo sed -E 's/^(DATABASE_URL)=.*/\1=(hidden)/' /etc/msp-atlas/atlas.env | tee "$RUNNER_TEMP/demo/1-atlas.env.txt"
+          url="$(sudo grep -E '^PUBLIC_URL=' /etc/msp-atlas/atlas.env | cut -d= -f2-)"
+          [[ "$url" =~ ^https://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Unexpected address: $url"; exit 1; }
+          echo "URL=$url" >> "$GITHUB_ENV"
+          # Caddy's own certificate authority signed the certificate; check it against that, not with -k.
+          sudo cp /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt "$RUNNER_TEMP/demo/caddy-root.crt"
+          curl -fsS --cacert "$RUNNER_TEMP/demo/caddy-root.crt" "$url/readyz" | tee "$RUNNER_TEMP/demo/1-readyz.txt"
+      - name: Look at it in a browser
+        run: |
+          npm ci --no-audit --no-fund >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > demo-shot.cjs <<'EOF'
+          const { chromium } = require('@playwright/test');
+          const [url, file] = process.argv.slice(2);
+          (async () => {
+            const browser = await chromium.launch();
+            // Chromium here doesn't use the system's trusted certificates, so Caddy's own authority is accepted
+            // for the picture; the curl check above verified the certificate properly.
+            const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true });
+            await page.goto(url, { waitUntil: 'networkidle' });
+            await page.screenshot({ path: file });
+            console.log(`${url} -> "${await page.title()}"`);
+            await browser.close();
+          })().catch((e) => { console.error(e.message); process.exit(1); });
+          EOF
+          node demo-shot.cjs "$URL" "$RUNNER_TEMP/demo/1-atlas-at-server-address.png"
+      - name: Later, a domain (what Administration -> Remote access does)
+        run: |
+          set -o pipefail
+          sudo atlas-access apply --mode direct --public-url https://atlas.example.test 2>&1 | tee "$RUNNER_TEMP/demo/2-given-a-domain.txt"
+          sudo sed -E 's/^(DATABASE_URL)=.*/\1=(hidden)/' /etc/msp-atlas/atlas.env | tee "$RUNNER_TEMP/demo/2-atlas.env.txt"
+          sudo cat /etc/caddy/Caddyfile | tee "$RUNNER_TEMP/demo/2-Caddyfile.txt"
+          sudo grep -qx 'PUBLIC_URL=https://atlas.example.test' /etc/msp-atlas/atlas.env
+      - name: An update keeps it
+        run: |
+          set -o pipefail
+          sudo atlas-install --repo "$GITHUB_WORKSPACE" --version demo-install 2>&1 | tee "$RUNNER_TEMP/demo/3-update.txt"
+          sudo grep -qx 'PUBLIC_URL=https://atlas.example.test' /etc/msp-atlas/atlas.env
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-installer-demo
+          path: ${{ runner.temp }}/demo
+      - name: Service log
+        if: failure()
+        run: sudo journalctl -u msp-atlas -u caddy -n 80 --no-pager
+
   # The Windows server installer, run for real in Windows PowerShell 5.1 against the runner's own PostgreSQL: a first
   # install at this server's own address, an update that keeps it, a domain behind a proxy, back again, uninstall.
   windows-installer:

@@ -33,8 +33,9 @@ How people reach Atlas (the same choices as Administration -> Remote access; kep
                                requests to this server on port 80, keeping the Host header.
 
 Examples:
-  sudo bash install-atlas.sh --public-url https://atlas.yourmsp.com   # first install, newest release
-  sudo bash install-atlas.sh                                          # upgrade to the newest release
+  sudo bash install-atlas.sh                                          # first install, at this server's own address
+  sudo bash install-atlas.sh --public-url https://atlas.yourmsp.com   # first install, with a domain
+  sudo atlas-install                                                  # upgrade to the newest release
   sudo bash install-atlas.sh --version v1.0.2                         # a specific release
   sudo bash install-atlas.sh --access tailscale --tailscale-key-file ./key   # reached over Tailscale
 EOF

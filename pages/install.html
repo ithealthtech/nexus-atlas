@@ -186,10 +186,16 @@
         </p>
         <div class="code">
           <pre><code data-lang="bash">curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
-sudo bash install-atlas.sh --public-url https://atlas.example.com</code></pre>
+sudo bash install-atlas.sh</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
-        <p>The script prints the setup code when it finishes. It is also in <code>journalctl -u msp-atlas</code>.</p>
+        <p>
+          No domain is needed to start: Atlas is ready at this server's own address,
+          <code>https://&lt;server IP&gt;</code>, and the script prints that address and the setup code when it finishes
+          (the code is also in <code>journalctl -u msp-atlas</code>). When Atlas has a domain, set it in
+          <strong>Administration → Remote access</strong>, or run the installer with
+          <code>--public-url https://atlas.yourmsp.com</code>. You can choose the domain at install time the same way.
+        </p>
         <ul>
           <li>
             <strong>Choosing a version:</strong> <code>--version v1.0.2</code> installs that release.

@@ -175,8 +175,11 @@ Full detail in [SECURITY.md](SECURITY.md) and [docs/IDENTITY.md](docs/IDENTITY.m
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
-sudo bash install-atlas.sh --public-url https://atlas.example.com
+sudo bash install-atlas.sh
 ```
+
+Atlas starts at the server's own address, `https://<server IP>`. Give it a domain later in
+**Administration → Remote access**, or add `--public-url https://atlas.yourmsp.com`.
 
 **Docker (Linux), by hand** — set `PUBLIC_URL`, `ATLAS_DOMAIN`, `POSTGRES_PASSWORD`, and
 `ATLAS_MASTER_KEY` in `.env`, then:
