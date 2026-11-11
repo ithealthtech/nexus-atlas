@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ShieldAlert, Trash2 } from 'lucide-react';
 import type { EraseStatus } from '@atlas/shared';
-import { Button, Card, CardHeader, Dialog, Field, FormError, Input, useToast } from '@/components/ui';
+import { Button, Card, CardHeader, ConfirmNameField, Dialog, Field, FormError, Input, useToast } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
@@ -127,17 +127,12 @@ function RequestDialog({ orgName, onClose, onDone }: { orgName: string; onClose:
             )}
           </Field>
         </div>
-        <Field label={`Type the organization name: ${orgName}`} error={error?.fields?.confirmName}>
-          {(p) => (
-            <Input
-              {...p}
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          )}
-        </Field>
+        <ConfirmNameField
+          label={`Type the organization name: ${orgName}`}
+          value={typed}
+          onChange={setTyped}
+          error={error?.fields?.confirmName}
+        />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
     </Dialog>

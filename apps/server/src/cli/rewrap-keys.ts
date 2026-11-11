@@ -3,12 +3,10 @@
 // Use after putting a new key first in ATLAS_MASTER_KEY / the key file while keeping the old one listed.
 // Once this reports success, the old master key can be removed.
 import { join, resolve } from 'node:path';
-import { eq, isNotNull } from 'drizzle-orm';
-import { connect, runMigrations, schema } from '@atlas/db';
+import { connect, runMigrations } from '@atlas/db';
 import { loadConfig } from '../config.js';
-import { loadKeyProvider, open, seal } from '../crypto/keys.js';
-import { VaultKeys } from '../crypto/vault-keys.js';
-import { SettingsService } from '../services/settings.js';
+import { loadKeyProvider } from '../crypto/keys.js';
+import { rewrapMasterSecrets } from '../crypto/rewrap.js';
 
 const config = loadConfig();
 const master = loadKeyProvider({
@@ -19,17 +17,7 @@ const master = loadKeyProvider({
 });
 const database = connect(config.DATABASE_URL);
 await runMigrations(database);
-const vault = await VaultKeys.rewrapAll(database.db, master);
-let mfa = 0;
-for (const user of await database.db.select().from(schema.users).where(isNotNull(schema.users.mfaSecret))) {
-  const aad = `user|${user.id}|mfa`;
-  await database.db
-    .update(schema.users)
-    .set({ mfaSecret: seal(master, open(master, user.mfaSecret!, aad), aad) })
-    .where(eq(schema.users.id, user.id));
-  mfa++;
-}
-const settings = await new SettingsService(database.db, master).rewrapSecrets();
+const { vault, mfa, settings } = await rewrapMasterSecrets(database.db, master);
 console.log(
   `Re-wrapped ${vault} vault key(s), ${mfa} MFA secret(s), and ${settings} email/import secret(s) under master key ${master.keyId}.`,
 );

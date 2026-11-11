@@ -14,6 +14,8 @@ export interface RestoreResult {
   createdAt: string;
   tables: number;
   rows: number;
+  /** Rows left out because this database already had them (adding back only). */
+  skipped: number;
   files: number;
   missingFiles: string[];
 }
@@ -48,6 +50,7 @@ export async function verifyBackup(file: string, keys: KeyProvider) {
   return {
     appVersion: manifest.appVersion,
     createdAt: manifest.createdAt,
+    migrations: manifest.migrations,
     tables: manifest.tables.length,
     rows,
     files,
@@ -108,6 +111,62 @@ export async function restoreBackup(options: {
     await rm(folder, { recursive: true, force: true });
   }
 
+  const loaded = await load({ handle, storage, reader, manifest, mode: 'replace' });
+  log(`Restored ${loaded.rows} rows and ${loaded.files} files.`);
+  await runMigrations(handle);
+  return { appVersion: manifest.appVersion, createdAt: manifest.createdAt, ...loaded };
+}
+
+/** Rows in these tables are never added back into a working database: the security log is an unbroken chain. */
+const MERGE_SKIPPED = new Set(['security_events']);
+
+/** Why a backup can't be merged into this database, or null when it can. */
+export async function mergeBlocked(manifest: { migrations: number }) {
+  const journal = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')) as {
+    entries: unknown[];
+  };
+  if (manifest.migrations === journal.entries.length) return null;
+  return manifest.migrations > journal.entries.length
+    ? 'This backup was made by a newer version of Atlas. Upgrade Atlas first.'
+    : 'This backup was made by an older version of Atlas, whose database was laid out differently. Only overwriting can restore it.';
+}
+
+/**
+ * Adds back the rows and attachments in a backup that this database doesn't have, keeping every row it does have
+ * as it is now. Rows are matched by their keys; the security log is left alone. The backup must come from the
+ * same Atlas database layout. One transaction: if any row can't go in (for example because it points at
+ * something that was replaced since), nothing is kept.
+ */
+export async function mergeBackup(options: {
+  handle: DatabaseHandle;
+  keys: KeyProvider;
+  storage: FileStorage;
+  file: string;
+  verified?: boolean;
+  log?: (line: string) => void;
+}): Promise<RestoreResult> {
+  const { handle, keys, storage, log = () => undefined } = options;
+  if (!options.verified) await verifyBackup(options.file, keys);
+  const reader = open(options.file, keys);
+  const manifest = await readManifest(reader);
+  const blocked = await mergeBlocked(manifest);
+  if (blocked) throw new Error(blocked);
+  log(`Adding back what's missing from the backup of ${manifest.createdAt} (Atlas ${manifest.appVersion}).`);
+  const loaded = await load({ handle, storage, reader, manifest, mode: 'merge' });
+  log(`Added ${loaded.rows} rows and ${loaded.files} files; ${loaded.skipped} rows were already here.`);
+  return { appVersion: manifest.appVersion, createdAt: manifest.createdAt, ...loaded };
+}
+
+/** Reads every table and file frame into the database in one transaction. */
+async function load(options: {
+  handle: DatabaseHandle;
+  storage: FileStorage;
+  reader: FrameReader;
+  manifest: Manifest;
+  mode: 'replace' | 'merge';
+}) {
+  const { handle, storage, reader, manifest, mode } = options;
+  const merge = mode === 'merge';
   const client = await handle.pool.connect();
   const written: string[] = [];
   try {
@@ -133,15 +192,16 @@ export async function restoreBackup(options: {
          where contype = 'f' and connamespace = 'public'::regnamespace`,
       )
     ).rows;
-    // Rows go in table by table, so references are checked at the end rather than row by row, and the audit
-    // log's triggers are paused so its hash chain is kept exactly as it was.
+    // Rows go in table by table, so references are checked at the end rather than row by row. In a full restore
+    // the security log's triggers are paused so its hash chain is kept exactly as it was.
     for (const fk of foreignKeys)
       await client.query(`alter table ${fk.tbl} alter constraint ${quote(fk.name)} deferrable initially deferred`);
     await client.query('set constraints all deferred');
-    for (const table of tables) await client.query(`alter table ${quote(table)} disable trigger user`);
+    if (!merge) for (const table of tables) await client.query(`alter table ${quote(table)} disable trigger user`);
 
     const counts: Record<string, number> = {};
     let rows = 0;
+    let skipped = 0;
     let files = 0;
     type Summary = { rows: Record<string, number>; files: number; missingFiles?: string[] };
     let summary = null as Summary | null;
@@ -150,15 +210,27 @@ export async function restoreBackup(options: {
       if (frame.kind === 'T') {
         if (!tables.has(frame.name) || !manifest.tables.includes(frame.name))
           throw new BackupFormatError(`The backup has rows for an unknown table "${frame.name}".`);
+        counts[frame.name] = (counts[frame.name] ?? 0) + frame.rows.length;
+        if (merge && MERGE_SKIPPED.has(frame.name)) {
+          skipped += frame.rows.length;
+          continue;
+        }
         const cols = columns.get(frame.name)!.map(quote).join(', ');
-        await client.query(
-          `insert into ${quote(frame.name)} (${cols}) select ${cols} from json_populate_recordset(null::${quote(frame.name)}, $1::json)`,
+        const result = await client.query(
+          `insert into ${quote(frame.name)} (${cols}) select ${cols} from json_populate_recordset(null::${quote(frame.name)}, $1::json)` +
+            (merge ? ' on conflict do nothing' : ''),
           [JSON.stringify(frame.rows)],
         );
-        counts[frame.name] = (counts[frame.name] ?? 0) + frame.rows.length;
-        rows += frame.rows.length;
+        const added = merge ? (result.rowCount ?? 0) : frame.rows.length;
+        rows += added;
+        skipped += frame.rows.length - added;
       } else if (frame.kind === 'F') {
-        await storage.restore(frame.key, Readable.from(reader.pieces(frame.size)));
+        const pieces = Readable.from(reader.pieces(frame.size));
+        if (merge && (await storage.size(frame.key).catch(() => null)) !== null) {
+          for await (const piece of pieces) void piece;
+          continue;
+        }
+        await storage.restore(frame.key, pieces);
         written.push(frame.key);
         files++;
       } else if (frame.kind === 'E') {
@@ -166,38 +238,45 @@ export async function restoreBackup(options: {
       } else throw new BackupFormatError('The backup contents are damaged.');
     }
     await reader.end();
-    for (const [table, n] of Object.entries(summary!.rows))
+    for (const [table, n] of Object.entries(summary.rows))
       if ((counts[table] ?? 0) !== n) throw new BackupFormatError(`The backup is missing rows from ${table}.`);
-    if (files !== summary!.files) throw new BackupFormatError('The backup is missing attachment files.');
+    if (!merge && files !== summary.files) throw new BackupFormatError('The backup is missing attachment files.');
 
-    // Serial IDs continue after the restored rows.
+    // Serial IDs continue after the restored rows (and, when adding back, never move backwards).
     const serials = await client.query<{ table_name: string; column_name: string }>(
       `select table_name, column_name from information_schema.columns
        where table_schema = 'public' and column_default like 'nextval(%'`,
     );
     for (const s of serials.rows)
       await client.query(
-        `select setval(pg_get_serial_sequence($1, $2), coalesce((select max(${quote(s.column_name)}) from ${quote(s.table_name)}), 0) + 1, false)`,
+        merge
+          ? `select setval(pg_get_serial_sequence($1, $2), greatest(coalesce((select max(${quote(s.column_name)}) from ${quote(s.table_name)}), 0),
+               (select last_value from pg_sequences where format('%I.%I', schemaname, sequencename) = pg_get_serial_sequence($1, $2)), 1))`
+          : `select setval(pg_get_serial_sequence($1, $2), coalesce((select max(${quote(s.column_name)}) from ${quote(s.table_name)}), 0) + 1, false)`,
         [quote(s.table_name), s.column_name],
       );
 
     // Check every reference now (this fails the restore if any row points at something missing), then put the
     // triggers and constraints back as they were.
-    await client.query('set constraints all immediate');
-    for (const table of tables) await client.query(`alter table ${quote(table)} enable trigger user`);
+    try {
+      await client.query('set constraints all immediate');
+    } catch (error) {
+      if (!merge) throw error;
+      throw new Error(
+        'Some rows in the backup point at records this installation no longer has in the same form, so nothing was added. Overwrite instead, or restore a newer backup.',
+        { cause: error },
+      );
+    }
+    if (!merge) for (const table of tables) await client.query(`alter table ${quote(table)} enable trigger user`);
     for (const fk of foreignKeys)
       await client.query(`alter table ${fk.tbl} alter constraint ${quote(fk.name)} not deferrable`);
     await client.query('commit');
-    log(`Restored ${rows} rows and ${files} files.`);
-
-    await runMigrations(handle);
     return {
-      appVersion: manifest.appVersion,
-      createdAt: manifest.createdAt,
       tables: Object.keys(counts).length,
       rows,
+      skipped,
       files,
-      missingFiles: summary!.missingFiles ?? [],
+      missingFiles: summary.missingFiles ?? [],
     };
   } catch (error) {
     await client.query('rollback').catch(() => undefined);

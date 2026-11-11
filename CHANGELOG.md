@@ -4,6 +4,14 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Added
+
+- **Restore from a backup in Atlas.** **Administration → System status → Restore from a backup** lets the owner put data back without the command line. Choose a backup from the backup folder or upload an `.atlasbak` file, enter the **Master key for this backup** if it was made by another installation or before the key changed, and choose **Check backup**: Atlas reads and checks the whole file and shows what it holds before anything changes.
+  - With **Overwrite current values** off, Atlas adds back only what this installation is missing, such as a deleted client or password, and keeps everything that's here now as it is.
+  - With it on, the whole database and all attachments are replaced with the backup. Atlas asks you to confirm and type the organization's name, and everyone signs in again afterwards.
+  - Either way your password is needed, a safety backup of the database as it is now is taken first, and Atlas restarts to install the backup before anyone can use it. If an overwrite fails part way, Atlas puts the database back from the safety backup. The result is shown on the same page and in the security log.
+  - A backup made with another installation's master key is moved onto this installation's own key as it's restored, so the old key isn't needed afterwards.
+
 ### Fixed
 
 - **Your own reverse proxy under Administration → Remote access.** Choosing **Your own reverse proxy** turned off HTTPS on this server, so a proxy that sends requests on over HTTPS, or an address whose DNS still pointed at this server, had its connection refused. This server now answers your proxy over HTTP on port 80 and over HTTPS on port 443, with a certificate from its own authority, still only for the proxy addresses you list.

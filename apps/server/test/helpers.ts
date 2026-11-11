@@ -81,6 +81,7 @@ export async function startApp(
     portalAuthorities?: AuthorityFetch;
     siemSender?: SiemSender;
     keys?: KeyProvider;
+    restart?: () => void;
     /** An existing database (for example one a backup was restored into) instead of a fresh one. */
     database?: Awaited<ReturnType<typeof freshDatabase>>;
   } = {},

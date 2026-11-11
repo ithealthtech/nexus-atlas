@@ -56,3 +56,15 @@ export function describeDevice(userAgent: string) {
             : '';
   return os ? `${browser} on ${os}` : browser;
 }
+
+export const formatBytes = (bytes: number | null | undefined) => {
+  if (bytes === null || bytes === undefined) return 'Unknown';
+  const units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${unit ? value.toFixed(value < 10 ? 1 : 0) : value} ${units[unit]}`;
+};

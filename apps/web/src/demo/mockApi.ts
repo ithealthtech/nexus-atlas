@@ -65,6 +65,8 @@ import {
   type ActivityView,
   type ApiKeyView,
   type BackupRunView,
+  type RestoreCheck,
+  type RestoreStatus,
   type PortalCertificateView,
   type ServiceAction,
   type ServiceRun,
@@ -3638,6 +3640,22 @@ on('POST', '/backups', () => {
   return run;
 });
 on('GET', '/backups/:id/download', () => notInDemo('Downloading a backup'));
+on('GET', '/backups/restore', (): RestoreStatus => ({
+  files: [{ name: 'atlas-20261110-020000.atlasbak', size: 48_213_504, modifiedAt: ago(9 * 60) }],
+  last: null,
+}));
+on('POST', '/backups/restore/check', (): RestoreCheck => ({
+  createdAt: ago(9 * 60),
+  appVersion: '2.4.1',
+  tables: 112,
+  rows: 18_422,
+  files: 312,
+  keyId: 'Dm4xQk7a',
+  keyLoaded: true,
+  canMerge: true,
+  mergeBlocked: null,
+}));
+on('POST', '/backups/restore', () => notInDemo('Restoring a backup'));
 // Services: an action takes a few seconds, as it does on a real server.
 const serviceStarted: Record<string, string> = {
   atlas: ago(3 * 24 * 60),
