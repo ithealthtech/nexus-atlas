@@ -428,14 +428,84 @@
           lost, so use it to recover from a disaster or to move Atlas to a new server, not to undo one mistake (most
           items have their own history and <strong>Restore</strong> for that).
         </p>
-        <aside class="callout callout-note">
-          <p class="callout-title">Restoring from Atlas itself</p>
-          <p>
-            Restoring a backup from a page in Atlas is being added. Until then, restore from the server's command line
-            as below.
-          </p>
-        </aside>
-        <p>You need:</p>
+        <p>
+          There are two ways: from <strong>System status</strong> in Atlas, which works on every kind of install, or
+          from the server's command line, for when Atlas won't start.
+        </p>
+        <h3 id="restoring-from-atlas"><a class="anchor" href="#restoring-from-atlas">Restoring from Atlas</a></h3>
+        <p>Only the owner can restore. Administrators see the last result.</p>
+        <ol class="steps">
+          <li>
+            Open <strong>Admin → System status</strong>, and find the <strong>Restore from a backup</strong> card, below
+            <strong>Backups</strong>.
+          </li>
+          <li>
+            Choose the backup:
+            <ul>
+              <li>
+                <strong>Backup in the backup folder</strong> lists the backups on the server, newest first, including
+                ones made before an earlier restore;
+              </li>
+              <li>
+                or <strong>Or upload a backup file</strong>: an <code>.atlasbak</code> file from this or another Atlas,
+                up to 20 GB.
+              </li>
+            </ul>
+          </li>
+          <li>
+            <strong>Master key for this backup.</strong> Leave it empty if this Atlas made the backup with the key it
+            uses now. For a backup from another installation, or from before a key rotation, paste that key: the
+            43-character value from the old installation's <code>master.key</code> (or <code>atlas-master.key</code>) or
+            its <code>ATLAS_MASTER_KEY</code>.
+          </li>
+          <li>
+            Choose <strong>Check backup</strong>. Atlas reads the whole file and shows when it was made, the Atlas
+            version, how many rows, tables and files it holds, and the fingerprint of the key it needs. If the key is
+            wrong, the message names the key the backup needs.
+          </li>
+          <li>
+            Decide on <strong>Overwrite current values</strong>:
+            <ul>
+              <li>
+                <strong>Off</strong> adds back only what's missing, and keeps everything that's there now, including
+                changes made since the backup. Use it to recover deleted items. The backup must be from the same Atlas
+                version.
+              </li>
+              <li>
+                <strong>On</strong> replaces the whole database and every attachment with the backup's. Anything changed
+                since the backup is lost, and everyone signs in again. Use it to recover from a disaster or to move
+                Atlas from another server.
+              </li>
+            </ul>
+          </li>
+          <li>Enter <strong>Your password</strong>.</li>
+          <li>
+            Choose <strong>Restore backup</strong>, or, with overwrite on, <strong>Overwrite and restore…</strong>. The
+            dialog <strong>Overwrite the database?</strong> asks you to tick
+            <strong>I understand this overwrites the current database for everyone</strong> and type the organization's
+            name, so it can't happen by accident.
+          </li>
+          <li>
+            Atlas takes a safety backup, named <em>Before restoring a backup</em>, then restarts and installs the backup
+            as it starts, before anything else runs. The page reconnects by itself. Linux, Docker and Windows service
+            installs start again on their own; if you run Atlas by hand, start it again yourself.
+          </li>
+          <li>
+            Sign in again if you overwrote, and check <strong>Last restore</strong> on <strong>System status</strong>:
+            <strong>Restored</strong>, <strong>Put back as it was</strong> (the restore failed, and the safety backup
+            was put back), or <strong>Failed</strong>, with the reason.
+          </li>
+        </ol>
+        <p>
+          Passwords and other secrets from a backup made with another installation's key are re-encrypted with this
+          installation's key, so you don't need to keep the old key loaded afterwards. Each step is in the security log:
+          <em>Backup restore requested</em>, then <em>Backup restored</em>, <em>Backup restore rolled back</em> or
+          <em>Backup restore failed</em>.
+        </p>
+        <h3 id="restoring-from-the-command-line">
+          <a class="anchor" href="#restoring-from-the-command-line">Restoring from the command line</a>
+        </h3>
+        <p>Use this when Atlas itself won't start. You need:</p>
         <ul>
           <li>the <code>.atlasbak</code> file, copied onto the server;</li>
           <li>

@@ -89,10 +89,31 @@ To change one on a Linux server, edit `/etc/msp-atlas/atlas.env` as root, then r
 
 Restoring replaces what's in Atlas with what was in the backup. Anything changed since the backup was made is lost, so use it to recover from a disaster or to move Atlas to a new server, not to undo one mistake (most items have their own history and **Restore** for that).
 
-> [!note] Restoring from Atlas itself
-> Restoring a backup from a page in Atlas is being added. Until then, restore from the server's command line as below.
+There are two ways: from **System status** in Atlas, which works on every kind of install, or from the server's command line, for when Atlas won't start.
 
-You need:
+### Restoring from Atlas
+
+Only the owner can restore. Administrators see the last result.
+
+1. Open **Admin → System status**, and find the **Restore from a backup** card, below **Backups**.
+2. Choose the backup:
+  - **Backup in the backup folder** lists the backups on the server, newest first, including ones made before an earlier restore;
+  - or **Or upload a backup file**: an `.atlasbak` file from this or another Atlas, up to 20 GB.
+3. **Master key for this backup.** Leave it empty if this Atlas made the backup with the key it uses now. For a backup from another installation, or from before a key rotation, paste that key: the 43-character value from the old installation's `master.key` (or `atlas-master.key`) or its `ATLAS_MASTER_KEY`.
+4. Choose **Check backup**. Atlas reads the whole file and shows when it was made, the Atlas version, how many rows, tables and files it holds, and the fingerprint of the key it needs. If the key is wrong, the message names the key the backup needs.
+5. Decide on **Overwrite current values**:
+  - **Off** adds back only what's missing, and keeps everything that's there now, including changes made since the backup. Use it to recover deleted items. The backup must be from the same Atlas version.
+  - **On** replaces the whole database and every attachment with the backup's. Anything changed since the backup is lost, and everyone signs in again. Use it to recover from a disaster or to move Atlas from another server.
+6. Enter **Your password**.
+7. Choose **Restore backup**, or, with overwrite on, **Overwrite and restore…**. The dialog **Overwrite the database?** asks you to tick **I understand this overwrites the current database for everyone** and type the organization's name, so it can't happen by accident.
+8. Atlas takes a safety backup, named *Before restoring a backup*, then restarts and installs the backup as it starts, before anything else runs. The page reconnects by itself. Linux, Docker and Windows service installs start again on their own; if you run Atlas by hand, start it again yourself.
+9. Sign in again if you overwrote, and check **Last restore** on **System status**: **Restored**, **Put back as it was** (the restore failed, and the safety backup was put back), or **Failed**, with the reason.
+
+Passwords and other secrets from a backup made with another installation's key are re-encrypted with this installation's key, so you don't need to keep the old key loaded afterwards. Each step is in the security log: *Backup restore requested*, then *Backup restored*, *Backup restore rolled back* or *Backup restore failed*.
+
+### Restoring from the command line
+
+Use this when Atlas itself won't start. You need:
 
 - the `.atlasbak` file, copied onto the server;
 - the master key it was made with. If the key was rotated since, both the old and the new key must be loaded: in `/etc/msp-atlas/master.key`, one key per line, newest first;
