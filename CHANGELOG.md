@@ -4,6 +4,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Fixed
+
+- **Backups now hold every row of large tables.** Since 1.7.27, a table with more than 500 rows (usually the activity history) was saved with some rows twice and others missing, so overwriting from such a backup failed with `duplicate key value violates unique constraint` and Atlas put the database back from the safety backup. Backups made from this version on are complete. Take a new backup after updating: older backups can't be fully restored, and Atlas now says so instead of showing the database error.
+
 ## [2.5.0] - 2026-11-11
 
 ### Added

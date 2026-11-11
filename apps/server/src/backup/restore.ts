@@ -29,6 +29,11 @@ interface Manifest {
   tables: string[];
 }
 
+const UNIQUE_VIOLATION = '23505';
+/** Atlas 1.7.27 to 2.5.0 saved tables of more than 500 rows with some rows twice and others missing. */
+const INCOMPLETE_BACKUP =
+  'This backup is incomplete: it has some rows twice and is missing others, because of a fault in how Atlas 1.7.27 to 2.5.0 made backups of large tables. Nothing from it was kept. Restore a backup made by a later version of Atlas.';
+
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 /** Opens a backup and checks every chunk, without writing anything. Returns what it contains. */
@@ -216,11 +221,16 @@ async function load(options: {
           continue;
         }
         const cols = columns.get(frame.name)!.map(quote).join(', ');
-        const result = await client.query(
-          `insert into ${quote(frame.name)} (${cols}) select ${cols} from json_populate_recordset(null::${quote(frame.name)}, $1::json)` +
-            (merge ? ' on conflict do nothing' : ''),
-          [JSON.stringify(frame.rows)],
-        );
+        const result = await client
+          .query(
+            `insert into ${quote(frame.name)} (${cols}) select ${cols} from json_populate_recordset(null::${quote(frame.name)}, $1::json)` +
+              (merge ? ' on conflict do nothing' : ''),
+            [JSON.stringify(frame.rows)],
+          )
+          .catch((error: unknown) => {
+            if ((error as { code?: string }).code !== UNIQUE_VIOLATION) throw error;
+            throw new BackupFormatError(INCOMPLETE_BACKUP, { cause: error });
+          });
         const added = merge ? (result.rowCount ?? 0) : frame.rows.length;
         rows += added;
         skipped += frame.rows.length - added;

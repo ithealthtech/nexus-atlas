@@ -254,9 +254,11 @@ export class BackupService {
         let last = '(0,0)';
         counts[table] = 0;
         for (;;) {
+          // `t.ctid`, not `ctid`: the bare name would sort by the text alias, so "(10,1)" came before "(2,1)" and
+          // tables over one batch were saved with rows repeated and others left out.
           const page = await client.query<{ ctid: string; j: string }>(
             `select ctid::text as ctid, row_to_json(t)::text as j from "${table}" t
-             where ctid > $1::tid order by ctid limit ${BATCH}`,
+             where ctid > $1::tid order by t.ctid limit ${BATCH}`,
             [last],
           );
           if (!page.rows.length) break;
