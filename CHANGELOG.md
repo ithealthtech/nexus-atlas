@@ -12,6 +12,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
   - Either way your password is needed, a safety backup of the database as it is now is taken first, and Atlas restarts to install the backup before anyone can use it. If an overwrite fails part way, Atlas puts the database back from the safety backup. The result is shown on the same page and in the security log.
   - A backup made with another installation's master key is moved onto this installation's own key as it's restored, so the old key isn't needed afterwards.
 
+### Changed
+
+- **The manual explains every setting step by step.** A new chapter, **Remote access and HTTPS**, walks through each way of reaching Atlas (this server, Cloudflare Tunnel, Tailscale and Funnel, and your own reverse proxy): what to set up first, what to enter in each field, how to check it worked, what to do when it doesn't, what moves with the address, and how to get back in from the server. **Installing Atlas**, **Settings** and **Keeping Atlas healthy** now cover every installer option, each mail service from the Entra app registration onwards, every **Theme** setting, what each **System status** check means, restoring a backup on each kind of server, moving Atlas to a new server, and running services from the console. Chapters after **Installing Atlas** move up one number.
+
 ### Fixed
 
 - **Your own reverse proxy under Administration → Remote access.** Choosing **Your own reverse proxy** turned off HTTPS on this server, so a proxy that sends requests on over HTTPS, or an address whose DNS still pointed at this server, had its connection refused. This server now answers your proxy over HTTP on port 80 and over HTTPS on port 443, with a certificate from its own authority, still only for the proxy addresses you list.

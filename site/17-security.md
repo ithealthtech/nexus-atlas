@@ -4,8 +4,8 @@ nav: Security model
 out: security.html
 active: security
 group: Reference
-order: 16
-number: 16
+order: 17
+number: 17
 summary: What Atlas protects, from whom, and where its protections end.
 ---
 

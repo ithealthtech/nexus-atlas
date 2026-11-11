@@ -1,6 +1,6 @@
 # Deploying MSP Atlas
 
-Atlas runs as one Node.js service in front of PostgreSQL 16, behind an HTTPS reverse proxy. It runs on **Docker (Linux)** or as a **Windows service**; both use the same build.
+Atlas runs as one Node.js service in front of PostgreSQL 16, behind an HTTPS reverse proxy. It runs on **Ubuntu or Debian** with the installer, on **Docker (Linux)**, or as a **Windows service**; all use the same build. This guide is the reference for every setting. The [manual](https://ithealthtech.github.io/nexus-atlas/install.html) walks through each installation step by step, and [Remote access and HTTPS](https://ithealthtech.github.io/nexus-atlas/manual/remote-access.html) covers publishing Atlas.
 
 ## Docker Compose (Linux)
 
@@ -23,7 +23,7 @@ The certificate is used only for the install step and is not stored in the image
 
 ## The master key
 
-- **What it protects:** secrets that are stored encrypted, namely MFA secrets now and vault passwords from M2. Everything else is in PostgreSQL.
+- **What it protects:** every value stored encrypted: vault passwords, notes and one-time code keys (through each organization's vault data key), MFA secrets, and the stored email, Hudu, ConnectWise, Microsoft and SIEM credentials. Backups are encrypted with a key derived from it. Everything else is in PostgreSQL.
 - **Keep a copy offline**, separate from database backups: for example, in your existing password manager plus a sealed printout. **If you lose the key, encrypted data can't be recovered.** If someone steals a database backup without the key, they can't read those secrets.
 - **What the vault stores:** each organization's vault data key is kept only in encrypted form, under the master key, in `vault_keys`. Passwords, notes, and TOTP keys are encrypted with that data key.
 - **Rotating the master key:**
@@ -92,8 +92,19 @@ Atlas backs itself up every night. Each backup is one encrypted `.atlasbak` file
 
 1. Stop Atlas.
 2. Make sure the master key the backup was made with is loaded (`ATLAS_MASTER_KEY` or the key file). After a rotation, keep the old key listed.
-3. Run `npm run restore -w @atlas/server -- <file.atlasbak>` against a new, empty database. To overwrite the current database and attachments, add `--replace`.
+3. Run `npm run restore -w @atlas/server -- <file.atlasbak>` against a new, empty database. To overwrite the current database and attachments, add `--replace`. Without it, the restore refuses a database that already holds data.
 4. Start Atlas.
+
+On a server set up with the Linux installer, run the restore as the `atlas` user with its settings:
+
+```bash
+sudo systemctl stop msp-atlas
+cd /opt/msp-atlas
+sudo runuser -u atlas -- node --env-file=/etc/msp-atlas/atlas.env apps/server/dist/cli/restore.js <file.atlasbak> --replace
+sudo systemctl start msp-atlas
+```
+
+`backup.js verify <file>` in the same way checks a file without changing anything. The manual's [Restore a backup](https://ithealthtech.github.io/nexus-atlas/manual/looking-after-atlas.html#restore-a-backup) has the full procedure, including moving Atlas to a new server.
 
 In Docker: `docker compose -f deploy/docker-compose.yml run --rm app npm run restore -w @atlas/server -- /data/backups/<file>`.
 

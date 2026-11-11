@@ -115,43 +115,149 @@
             <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
           </li>
           <li>
+            <a href="../manual/remote-access.html"><span class="num">10</span>Remote access and HTTPS</a>
+          </li>
+          <li>
             <a href="../manual/people-and-access.html" aria-current="page"
-              ><span class="num">10</span>People and access</a
+              ><span class="num">11</span>People and access</a
             >
           </li>
           <li>
-            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+            <a href="../manual/settings.html"><span class="num">12</span>Settings</a>
           </li>
           <li>
-            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+            <a href="../manual/integrations.html"><span class="num">13</span>Data and integrations</a>
           </li>
           <li>
-            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+            <a href="../manual/looking-after-atlas.html"><span class="num">14</span>Keeping Atlas healthy</a>
           </li>
           <li>
-            <a href="../manual/upgrading-to-2.html"><span class="num">17</span>Upgrading to 2.0</a>
+            <a href="../manual/upgrading-to-2.html"><span class="num">18</span>Upgrading to 2.0</a>
           </li>
         </ul>
         <p class="sidebar-group">Reference</p>
         <ul>
           <li>
-            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+            <a href="../manual/tasks.html"><span class="num">15</span>Tasks at a glance</a>
           </li>
           <li>
-            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+            <a href="../support.html"><span class="num">16</span>Troubleshooting</a>
           </li>
           <li>
-            <a href="../security.html"><span class="num">16</span>Security model</a>
+            <a href="../security.html"><span class="num">17</span>Security model</a>
           </li>
         </ul>
       </nav>
       <main id="content" class="doc">
-        <p class="eyebrow">Chapter 10</p>
+        <p class="eyebrow">Chapter 11</p>
         <h1>People and access</h1>
         <p>
-          This chapter is for administrators. It covers who can sign in, what each person can reach, and the rules that
-          protect the vault.
+          This chapter is for administrators. It covers who can sign in, what each person can reach, how they sign in,
+          and the rules that protect the vault. Atlas checks every one of these on the server for every request, so
+          hiding something in the menus is never what protects it.
         </p>
+        <h2 id="how-access-works"><a class="anchor" href="#how-access-works">How access works</a></h2>
+        <p>
+          Two things decide what someone can do: their <strong>role</strong>, and their
+          <strong>access level</strong> for each client.
+        </p>
+        <h3 id="roles"><a class="anchor" href="#roles">Roles</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Who it's for</th>
+                <th>What it allows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Owner</strong></td>
+                <td>You, and perhaps one partner</td>
+                <td>
+                  Everything, including security settings, vault policies, remote access, key management and erasing all
+                  data.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Administrator</strong></td>
+                <td>People who run Atlas</td>
+                <td>
+                  All clients, passwords, people and settings. Can't create, change or reset owners, or change the
+                  owner-only settings.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Technician</strong></td>
+                <td>Your engineers</td>
+                <td>Works in the clients they're given, up to editing passwords.</td>
+              </tr>
+              <tr>
+                <td><strong>Read-only technician</strong></td>
+                <td>Juniors, auditors, contractors</td>
+                <td>Reads documentation for their clients. Can't change anything or reveal passwords.</td>
+              </tr>
+              <tr>
+                <td><strong>Client editor</strong></td>
+                <td>A client's own IT contact</td>
+                <td>Edits their own company's documentation in the <a href="client-portal.html">client portal</a>.</td>
+              </tr>
+              <tr>
+                <td><strong>Client viewer</strong></td>
+                <td>A client's staff</td>
+                <td>Reads their own company's documentation.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Owners and administrators see every client, always. The first four are staff; the last two are client
+          accounts, which can only ever see their own client.
+        </p>
+        <h3 id="access-levels"><a class="anchor" href="#access-levels">Access levels</a></h3>
+        <p>For each client, every other person has one of four levels:</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Level</th>
+                <th>Can</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>No access</strong></td>
+                <td>Not see the client at all. It doesn't appear in lists, search or reports.</td>
+              </tr>
+              <tr>
+                <td><strong>Read</strong></td>
+                <td>See its documentation, and the names of its passwords.</td>
+              </tr>
+              <tr>
+                <td><strong>Edit</strong></td>
+                <td>Also change documentation.</td>
+              </tr>
+              <tr>
+                <td><strong>Edit + passwords</strong></td>
+                <td>Also reveal, copy, add and change passwords.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A person's level for a client is the highest of: their <strong>Every client</strong> level, their own level
+          for that client, and the levels of any <a href="#groups">group</a> they're in. It is then capped at what their
+          role allows: a read-only technician never gets more than <strong>Read</strong>, whatever a group gives them.
+          Changes apply straight away, even to people who are signed in.
+        </p>
+        <aside class="callout callout-tip">
+          <p class="callout-title">Start narrow</p>
+          <p>
+            Give technicians <strong>No access</strong> for every client, then the clients they look after, or put them
+            in groups. Raising access later is easy; finding out who saw what isn't.
+          </p>
+        </aside>
         <h2 id="people-access"><a class="anchor" href="#people-access">People &amp; access</a></h2>
         <figure>
           <a href="../images/manual/people.png"
@@ -160,9 +266,10 @@
           <figcaption>Admin → People &amp; access lists everyone who can sign in.</figcaption>
         </figure>
         <p>
-          <strong>Admin → People &amp; access</strong> lists everyone who can sign in, with their role, their access,
-          whether two-step verification is on, and when they last signed in. Choose <strong>Manage</strong> to change
-          someone.
+          <strong>Admin → People &amp; access</strong> lists everyone who can sign in, with their role, a summary of
+          their access (<strong>Everything</strong>, <strong>All clients · Read</strong>, a client's name, or
+          <strong>No clients</strong>), whether two-step sign-in is on, and when they last signed in. Accounts not used
+          for 60 days are marked, so you can disable them. Choose <strong>Manage</strong> to change someone.
         </p>
         <h3 id="add-a-person"><a class="anchor" href="#add-a-person">Add a person</a></h3>
         <figure>
@@ -173,70 +280,123 @@
         </figure>
         <ol class="steps">
           <li>Choose <strong>Add person</strong>.</li>
-          <li>Enter their <strong>Name</strong> and <strong>Email</strong>.</li>
           <li>
-            Choose their <strong>Role</strong>. See
-            <a href="getting-started.html#what-you-can-do-depends-on-your-role">the roles table</a>.
+            Enter their <strong>Name</strong> and <strong>Email</strong>. The email is how they sign in, and must match
+            their account at Microsoft or your SAML provider if they'll use single sign-on.
+          </li>
+          <li>Choose their <strong>Role</strong>. Only the owner can make another owner.</li>
+          <li>
+            For a staff role, under <strong>Client access</strong>, choose the level for
+            <strong>Every client (including new ones)</strong>. Then, in the list of clients below, raise it for
+            individual clients where needed; a client left on <strong>Default</strong> gets the
+            <strong>Every client</strong> level. Administrators and owners skip this, since they see everything.
           </li>
           <li>
-            Under <strong>Client access</strong>, choose a level for <strong>Every client (including new ones)</strong>,
-            then raise it for individual clients if you need to.
+            For a client role, there's no <strong>Every client</strong> level: give them a level for their own client
+            only, in the list of clients.
           </li>
           <li>
-            Choose <strong>Create account</strong>. Atlas shows a temporary password for them to change at first
-            sign-in.
+            Atlas fills in a <strong>Temporary password</strong>: a random passphrase. Keep it, or choose
+            <strong>Generate another password</strong>.
+          </li>
+          <li>
+            Choose <strong>Create account</strong>, and give them the temporary password privately, such as by phone or
+            a <a href="passwords.html">Send</a>. Don't email it with the address.
           </li>
         </ol>
-        <p>Staff must set up two-step verification before they can do anything else.</p>
-        <h3 id="access-levels"><a class="anchor" href="#access-levels">Access levels</a></h3>
         <p>
-          For each client, a person has one of <strong>No access</strong>, <strong>Read</strong>,
-          <strong>Edit</strong> or <strong>Edit + passwords</strong>.
+          At first sign-in they choose their own password (at least 12 characters), and staff set up two-step sign-in
+          with an authenticator app before they can do anything else.
         </p>
-        <ul>
-          <li>The <strong>Every client</strong> level applies to every client, including clients added later.</li>
-          <li>A per-client level can raise it for one client.</li>
-          <li>
-            A person's access is the highest of their own levels and their groups' levels, but never more than their
-            role allows.
-          </li>
-        </ul>
-        <p>Changes apply straight away, even to people who are signed in.</p>
-        <h3 id="when-someone-loses-their-phone">
-          <a class="anchor" href="#when-someone-loses-their-phone">When someone loses their phone</a>
+        <h3 id="changing-someone"><a class="anchor" href="#changing-someone">Changing someone</a></h3>
+        <p>
+          Choose <strong>Manage</strong> on their row. You can change their name, role and client access, then
+          <strong>Save</strong>. Changing someone's role lowers their client access to what the new role allows.
+        </p>
+        <h3 id="when-someone-forgets-their-password-or-loses-their-phone">
+          <a class="anchor" href="#when-someone-forgets-their-password-or-loses-their-phone"
+            >When someone forgets their password or loses their phone</a
+          >
         </h3>
         <p>
-          Choose <strong>Manage</strong>, then <strong>Reset sign-in</strong>, and tick
-          <strong>Also reset two-step verification</strong>. They set it up again next time they sign in.
+          People can reset a forgotten password themselves from the sign-in page, once
+          <a href="settings.html#email-and-alerts">email is set up</a>. When they can't:
+        </p>
+        <ol class="steps">
+          <li>Choose <strong>Manage</strong>, then <strong>Reset sign-in</strong>.</li>
+          <li>Atlas gives them a new temporary password.</li>
+          <li>
+            If they've lost their authenticator app, tick <strong>Also reset two-step verification</strong>. They set it
+            up again next time they sign in.
+          </li>
+          <li>Choose <strong>Reset sign-in</strong>, and give them the temporary password privately.</li>
+        </ol>
+        <p>
+          Resetting signs them out everywhere, including the browser extension and Atlas for Windows. Five wrong
+          attempts in a row lock an account for 15 minutes; a reset doesn't need you to wait.
         </p>
         <h3 id="when-someone-leaves"><a class="anchor" href="#when-someone-leaves">When someone leaves</a></h3>
-        <p>
-          Edit them and tick <strong>Disable this account</strong>. Their sessions end at once, the browser extension
-          and Atlas for Windows are signed out, and their history stays. Ask them first to move anything in their
-          personal vault that the company needs.
-        </p>
+        <ol class="steps">
+          <li>
+            Ask them first to move anything in their personal vault that the company needs. Nobody else can open it,
+            including you.
+          </li>
+          <li>
+            Choose <strong>Manage</strong>, tick <strong>Disable this account</strong>, and save. They're signed out
+            everywhere at once, including the extension and Atlas for Windows, and can't sign in until re-enabled. Their
+            history stays, so the security log still shows what they did.
+          </li>
+          <li>
+            Revoke any <a href="settings.html#api-keys">API keys</a> they made, since a key acts as the person who made
+            it.
+          </li>
+          <li>
+            Change the passwords they used that matter. The <strong>Password activity CSV</strong> on the security log
+            shows which they revealed or copied.
+          </li>
+        </ol>
         <p>
           <strong>Sign out everywhere</strong> ends every session for a person without disabling them, for example if a
           laptop is lost.
         </p>
+        <h3 id="sessions"><a class="anchor" href="#sessions">Sessions</a></h3>
+        <p>
+          A sign-in lasts until the person signs out, is idle for 2 hours, or 12 hours have passed, whichever comes
+          first. <strong>Remember this browser for 30 days</strong> on the code screen skips the two-step code on that
+          browser, not the password.
+        </p>
         <h3 id="safeguards"><a class="anchor" href="#safeguards">Safeguards</a></h3>
         <ul>
           <li>You can't change your own role or disable yourself.</li>
-          <li>Administrators can't create, change or reset owners. At least one active owner must remain.</li>
-          <li>Changing someone's role lowers their client access to what the new role allows.</li>
+          <li>Administrators can't create, change or reset owners.</li>
+          <li>At least one active owner must remain.</li>
         </ul>
         <h2 id="groups"><a class="anchor" href="#groups">Groups</a></h2>
-        <p>
-          <strong>Admin → Groups</strong> gives a team access to a set of clients in one place. Add people to a group
-          and give the group a level for each client. Someone in several groups gets the highest level any of them
-          gives. Groups can also be listed on restricted passwords.
-        </p>
         <figure>
           <a href="../images/manual/groups.png"
             ><img src="../images/manual/groups.png" alt="Groups" loading="lazy"
           /></a>
           <figcaption>Admin → Groups.</figcaption>
         </figure>
+        <p>
+          <strong>Admin → Groups</strong> gives a team access to a set of clients in one place. For example, a
+          <em>Tier 1</em> group with <strong>Read</strong> for every client, or a team that looks after a few clients
+          with <strong>Edit + passwords</strong> for those.
+        </p>
+        <ol class="steps">
+          <li>
+            Choose to add a group; the <strong>New group</strong> dialog opens. Give it a <strong>Name</strong> and, if
+            you like, a <strong>Description</strong>.
+          </li>
+          <li>Add its members.</li>
+          <li>For each client, choose the group's level.</li>
+          <li>Save.</li>
+        </ol>
+        <p>
+          Members get this access on top of their own, and someone in several groups gets the highest level any of them
+          gives. Each person's role still caps what they can do. Groups can also be listed on
+          <a href="passwords.html">restricted passwords</a>, so a whole team can use them.
+        </p>
         <h2 id="single-sign-on"><a class="anchor" href="#single-sign-on">Single sign-on</a></h2>
         <p>
           Staff can sign in with <strong>Microsoft Entra ID</strong> or any <strong>SAML 2.0</strong> identity provider
@@ -250,19 +410,20 @@
           </li>
           <li>
             <strong>An administrator confirms each person's first link.</strong> The first time someone signs in, Atlas
-            matches them by email and stops. Open them under <strong>People &amp; access → Manage</strong>, check the
-            name, email and ID shown, and choose <strong>Confirm Microsoft account</strong> or
-            <strong>Confirm SAML account</strong>. After that Atlas recognizes them by the provider's own ID, so a
-            changed address still works and a look-alike address gets nowhere.
+            matches them by email and stops. Open them under <strong>People &amp; access → Manage</strong>: it shows
+            <strong>Waiting</strong>, with the name, email and ID the provider sent. If that's really them, choose
+            <strong>Confirm Microsoft account</strong> or <strong>Confirm SAML account</strong>. After that, Atlas
+            recognizes them by the provider's own ID, so a changed address still works and a look-alike address gets
+            nowhere. <strong>Unlink Microsoft</strong> or <strong>Unlink SAML</strong> undoes it.
           </li>
           <li>
-            <strong>The owner can always use a password.</strong> With
-            <strong>Require single sign-on for staff</strong> on, other staff can't sign in with a password or passkey,
-            but the owner can, so a problem at the provider never locks everyone out.
+            <strong>The owner can always use a password.</strong> With single sign-on required, other staff can't sign
+            in with a password or passkey, but the owner can, so a problem at the provider never locks everyone out.
           </li>
           <li>
-            <strong>Atlas's own two-step verification still applies</strong> unless you choose to trust the provider's.
+            <strong>Atlas's own two-step sign-in still applies</strong> unless you choose to trust the provider's.
           </li>
+          <li><strong>Client accounts</strong> always sign in with a password.</li>
         </ul>
         <figure>
           <a href="../images/manual/sign-in.png"
@@ -271,49 +432,130 @@
           <figcaption>Admin → Sign-in, with Microsoft and SAML.</figcaption>
         </figure>
         <h3 id="microsoft-entra-id"><a class="anchor" href="#microsoft-entra-id">Microsoft Entra ID</a></h3>
+        <p>
+          Use a separate app registration from the one used for email or Microsoft 365, so each has only the permissions
+          it needs.
+        </p>
         <ol class="steps">
           <li>
-            In the Microsoft Entra admin center, under <strong>App registrations</strong>, make a separate app for
-            sign-in, and add the <strong>Web</strong> redirect address shown on the
-            <strong>Microsoft sign-in</strong> card.
+            In the Microsoft Entra admin center, open <strong>App registrations → New registration</strong>. Name it,
+            for example <code>MSP Atlas sign-in</code>, and choose
+            <strong>Accounts in this organizational directory only</strong>.
           </li>
-          <li>Create a client secret and copy its <strong>Value</strong>.</li>
+          <li>
+            Under <strong>Redirect URI</strong>, choose <strong>Web</strong> and paste the address shown on the
+            <strong>Microsoft sign-in</strong> card in Atlas (<strong>Copy the redirect address</strong>). It's your
+            Atlas address followed by <code>/api/auth/entra/callback</code>. Choose <strong>Register</strong>.
+          </li>
+          <li>
+            Copy the <strong>Directory (tenant) ID</strong> and <strong>Application (client) ID</strong> from the app's
+            overview.
+          </li>
+          <li>
+            Under <strong>Certificates &amp; secrets</strong>, create a client secret and copy its
+            <strong>Value</strong>. Note when it expires. No API permissions beyond the default <em>User.Read</em> are
+            needed.
+          </li>
           <li>
             In Atlas, enter the <strong>Sign-in tenant ID</strong>, <strong>Sign-in app ID</strong> and
             <strong>Sign-in secret</strong>.
           </li>
           <li>
-            Tick <strong>Show “Sign in with Microsoft” on the sign-in page</strong> and choose
+            Tick <strong>Show “Sign in with Microsoft” on the sign-in page</strong>, and choose
             <strong>Save Microsoft sign-in</strong>.
           </li>
-          <li>Try it in a private window before you tick <strong>Require Microsoft sign-in for staff</strong>.</li>
+          <li>
+            In a private browser window, choose <strong>Sign in with Microsoft</strong> as a staff member, then confirm
+            their link as above. Check they get in.
+          </li>
+          <li>Only then, if you want, tick <strong>Require Microsoft sign-in for staff</strong>.</li>
         </ol>
-        <p>
-          <strong>Trust Microsoft's multi-factor sign-in</strong> skips the Atlas code when Microsoft already asked for
-          more than a password (through conditional access or Security Defaults).
-        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Trust Microsoft's multi-factor sign-in</strong></td>
+                <td>
+                  When Microsoft already asked for more than a password (through conditional access or Security
+                  Defaults), Atlas doesn't also ask for its own code. Off, people still use Atlas's.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Require Microsoft sign-in for staff</strong></td>
+                <td>Staff can no longer sign in with a password. The owner always can.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>When the secret expires, sign-in with Microsoft stops. Make a new one and paste it in before then.</p>
         <h3 id="saml"><a class="anchor" href="#saml">SAML</a></h3>
         <ol class="steps">
           <li>
-            In your identity provider, add a SAML app using the <strong>Single sign-on (ACS) URL</strong> and
-            <strong>Audience (SP entity ID)</strong> shown on the <strong>SAML sign-in</strong> card. Send the person's
-            email as an attribute named <code>email</code>, and choose a name ID that never changes for a person. The
-            provider must sign the assertion.
+            In your identity provider, add a SAML app (often called a custom or generic SAML 2.0 app) using the two
+            values shown on the <strong>SAML sign-in</strong> card:
+            <ul>
+              <li>
+                <strong>Single sign-on (ACS) URL</strong>: your Atlas address followed by
+                <code>/api/auth/saml/acs</code>;
+              </li>
+              <li>
+                <strong>Audience (SP entity ID)</strong>: your Atlas address followed by
+                <code>/api/auth/saml/metadata</code>. Providers that import metadata can read it from that address.
+              </li>
+            </ul>
           </li>
           <li>
-            In Atlas, enter the <strong>Identity provider name</strong> (it goes on the button), its
-            <strong>Provider issuer (entity ID)</strong>, its <strong>Provider sign-on URL</strong>, and paste its
+            Send the person's email address as an attribute named <code>email</code>, and choose a name ID that never
+            changes for a person (a persistent ID, not the email address if people's addresses can change). The provider
+            must sign the assertion.
+          </li>
+          <li>Assign the app to the staff who should use it.</li>
+          <li>From the provider, copy its issuer (entity ID), its sign-on URL, and its signing certificate.</li>
+          <li>
+            In Atlas, enter the <strong>Identity provider name</strong> (shown on the button: “Sign in with …”), the
+            <strong>Provider issuer (entity ID)</strong>, the <strong>Provider sign-on URL</strong>, and paste the
             <strong>Provider signing certificate</strong>.
           </li>
           <li>
             Tick <strong>Show “Sign in with your provider” on the sign-in page</strong>, choose
-            <strong>Save SAML sign-in</strong>, and try it in a private window before requiring it.
+            <strong>Save SAML sign-in</strong>, and try it in a private window, confirming the link as above, before
+            requiring it.
           </li>
         </ol>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>The identity provider enforces multi-factor sign-in</strong></td>
+                <td>
+                  Atlas doesn't also ask for its own code. SAML can't tell Atlas whether MFA was really used, so only
+                  tick this if the provider requires it for this app.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Require single sign-on for staff</strong></td>
+                <td>Staff can no longer sign in with a password. The owner always can.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p>
           Start from the Atlas sign-in page, not the provider's app tile: Atlas refuses a response it didn't ask for.
           When the provider issues a new certificate, paste the old and new together, then remove the old one once the
-          provider has switched.
+          provider has switched. Changing the identity provider clears everyone's link, and each person needs confirming
+          again.
         </p>
         <h2 id="vault-policies"><a class="anchor" href="#vault-policies">Vault policies</a></h2>
         <figure>
@@ -325,48 +567,67 @@
           </figcaption>
         </figure>
         <p>
-          <strong>Admin → Vault policies</strong> holds the rules for the whole vault. Every administrator can see them;
-          only the owner can change them.
+          <strong>Admin → Vault policies</strong> holds the rules for the whole vault, emergency access, and where the
+          audit logs go. Every administrator can see them; only the owner can change them.
         </p>
+        <h3 id="policies"><a class="anchor" href="#policies">Policies</a></h3>
         <div class="table">
           <table>
             <thead>
               <tr>
                 <th>Policy</th>
-                <th>What it does</th>
+                <th>What it does, and when to use it</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td><strong>MFA</strong></td>
                 <td>
-                  Lists every active account that can reach passwords without two-step verification, such as client
-                  accounts.
+                  Not a setting: lists every active account that can reach passwords without two-step sign-in, such as
+                  client accounts, so you can follow up.
                 </td>
               </tr>
               <tr>
-                <td><strong>Generator</strong></td>
-                <td>
-                  The shortest password the generator makes, whether it always includes numbers or symbols, and whether
-                  it offers PINs.
-                </td>
+                <td><strong>Shortest generated password</strong></td>
+                <td>The generator never makes a shorter password than this. At least 12 characters, up to 64.</td>
+              </tr>
+              <tr>
+                <td><strong>Always include numbers</strong> / <strong>Always include symbols</strong></td>
+                <td>Every generated password has at least one, for systems that insist.</td>
+              </tr>
+              <tr>
+                <td><strong>Offer PINs</strong></td>
+                <td>Short number codes, for door keypads and phones. Turn off if nobody should make one.</td>
               </tr>
               <tr>
                 <td><strong>Require a reason for every reveal, copy, and share</strong></td>
-                <td>Applies to every client, on top of each client's own setting.</td>
+                <td>
+                  People type why before seeing a password, and the reason goes in its access history. Applies to every
+                  client; clients can also require it one by one. Useful for compliance, at the cost of a few seconds
+                  each time.
+                </td>
               </tr>
               <tr>
                 <td><strong>Don't let read-only accounts reveal passwords</strong></td>
-                <td>Client viewers still see which passwords are shared with them, but can't reveal or copy them.</td>
+                <td>
+                  Client viewers still see which passwords are shared with them, but can't reveal or copy them.
+                  Read-only technicians never can.
+                </td>
               </tr>
               <tr>
                 <td><strong>Restricted passwords are for the people listed on them</strong></td>
-                <td>Administrators need a place on an entry's list like everyone else. The owner always has access.</td>
+                <td>
+                  Administrators then need a place on a restricted password's list too, or emergency access. The owner
+                  always has access. Turn on when even administrators shouldn't see some passwords, such as a client's
+                  domain admin.
+                </td>
               </tr>
               <tr>
                 <td><strong>Give each staff member a personal vault</strong></td>
                 <td>
-                  Turns My vault on or off for everyone. Turning it off hides the vaults without deleting anything.
+                  A private place for their own logins and notes, under <strong>My vault</strong>. Nobody else can open
+                  it, including you, and it isn't in reports or the audit log. Turning this off hides the vaults without
+                  deleting anything.
                 </td>
               </tr>
             </tbody>
@@ -376,28 +637,60 @@
         <p>For when the owner can't be reached and a restricted password is needed.</p>
         <ol class="steps">
           <li>
-            The owner adds trusted administrators under <strong>Emergency access</strong>, each with a wait between one
-            hour and a week.
+            The owner adds trusted administrators under <strong>Emergency access</strong>: choose the
+            <strong>Administrator</strong>, the <strong>Wait before access</strong> (1, 4 or 12 hours, or 1, 2, 3 or 7
+            days) and <strong>Add</strong>.
           </li>
-          <li>A trusted administrator requests access and says why. The owner is emailed at once.</li>
           <li>
-            During the wait the owner can <strong>Deny</strong> it or <strong>Approve now</strong>. Otherwise access
+            When it's needed, the trusted administrator opens <strong>Vault policies</strong>, chooses to request
+            access, and answers <strong>Why do you need emergency access?</strong> The owner is emailed at once.
+          </li>
+          <li>
+            During the wait, the owner can <strong>Deny</strong> it or <strong>Approve now</strong>. Otherwise access
             starts when the wait ends, and everyone involved is emailed.
           </li>
           <li>Access covers every restricted password for 24 hours. The owner can end it early.</li>
         </ol>
         <p>
-          Every step is in the security log, and each password used this way says <em>Emergency access</em> in its
-          access history.
+          Choose a wait long enough for the owner to notice the email and deny a request they didn't expect, but short
+          enough to be useful in an emergency. Every step is in the security log, and each password used this way says
+          <em>Emergency access</em> in its access history.
         </p>
         <h3 id="streaming-logs-to-a-siem">
           <a class="anchor" href="#streaming-logs-to-a-siem">Streaming logs to a SIEM</a>
         </h3>
         <p>
-          <strong>Stream logs to a SIEM</strong> sends new security events and password access as they happen, about
-          every 30 seconds, by HTTPS webhook (JSON, optionally signed with HMAC-SHA256) or syslog (RFC 5424 over TLS,
-          TCP or UDP). If the SIEM can't be reached, Atlas records the error on the page and tries again from the same
-          place, so nothing is skipped. <strong>Send a test event</strong> checks the connection.
+          <strong>Stream logs to a SIEM</strong> sends the security log and the password access log, as they happen, to
+          your SIEM or log platform. It starts with events after you turn it on.
+        </p>
+        <ol class="steps">
+          <li>Tick <strong>Stream logs</strong>.</li>
+          <li>
+            Choose <strong>Send by</strong>:
+            <ul>
+              <li>
+                <strong>Webhook</strong>: enter the <strong>Webhook address</strong> (<code>https://</code>). Each batch
+                is POSTed as JSON: <code>{ events: [...] }</code>. Optionally enter a <strong>Signing secret</strong>;
+                each request then carries <code>X-Atlas-Signature: sha256=</code> and the HMAC-SHA256 of the body.
+              </li>
+              <li>
+                <strong>Syslog</strong>: enter the <strong>Syslog server</strong> and <strong>Port</strong>, and choose
+                the <strong>Transport</strong>: <strong>TLS (recommended, usually port 6514)</strong>,
+                <strong>TCP (usually port 514)</strong> or <strong>UDP (usually port 514)</strong>. Messages are RFC
+                5424. UDP can lose messages without anyone knowing, so prefer TLS.
+              </li>
+            </ul>
+          </li>
+          <li>
+            Tick what to send: <strong>Security log</strong> (sign-ins, failures, lockouts, and changes to people and
+            settings) and <strong>Password access log</strong> (every reveal, copy, change and share, with the reason
+            given).
+          </li>
+          <li>Save, then choose <strong>Send a test event</strong> and find it in your SIEM.</li>
+        </ol>
+        <p>
+          Events go out about every 30 seconds. If the SIEM can't be reached, Atlas shows the error on the page and
+          tries again from the same place, so nothing is skipped.
         </p>
         <h2 id="the-security-log"><a class="anchor" href="#the-security-log">The security log</a></h2>
         <figure>
@@ -406,37 +699,57 @@
           /></a>
           <figcaption>Admin → Security log.</figcaption>
         </figure>
-        <p>
-          <strong>Admin → Security log</strong> records sign-ins, failures, lockouts, account and access changes, API
-          key use, exports, backups, service actions and updates, each with the address it came from.
-          <strong>Vault access</strong> lists every password reveal, copy, change and share.
-        </p>
+        <p><strong>Admin → Security log</strong> has two lists:</p>
         <ul>
-          <li><strong>Export</strong> either log as CSV. Atlas asks for your password again first.</li>
           <li>
-            <strong>Verify now</strong> checks that no event has been changed, reordered or removed since it was
-            written. Events are chained together by the database, with a signed checkpoint.
+            <strong>Security log</strong>: sign-ins, failed attempts, lockouts, account and access changes, API key use,
+            exports, backups, service actions, remote access changes and updates, each with who, when and the address it
+            came from. The latest 200 are shown.
           </li>
           <li>
-            Logs are kept forever by default. Choose 1 to 7 years under
-            <strong>Admin → Email &amp; alerts → Alerts and logs</strong>.
+            <strong>Vault access</strong>: every password reveal, copy, change and share across all clients, with the
+            reason given. The latest 300 are shown.
           </li>
         </ul>
+        <h3 id="exports"><a class="anchor" href="#exports">Exports</a></h3>
+        <ul>
+          <li>
+            <strong>Security events CSV</strong> and <strong>Password activity CSV</strong> download the whole of each
+            log. Atlas asks for your password again first.
+          </li>
+          <li>
+            <strong>Compliance evidence pack</strong> downloads a ZIP of the log check, the security log, two-step
+            sign-in status, vault policies, and each client's latest access review, for auditors and insurers.
+          </li>
+        </ul>
+        <h3 id="checking-the-log-hasn-t-been-changed">
+          <a class="anchor" href="#checking-the-log-hasn-t-been-changed">Checking the log hasn't been changed</a>
+        </h3>
+        <p>
+          Each event includes a fingerprint of the one before it, and Atlas signs a checkpoint, so an edited, reordered
+          or removed entry is detected. <strong>Log integrity → Verify now</strong> checks the whole chain. Do it every
+          week; System status reminds you after two days.
+        </p>
+        <p>
+          Logs are kept forever by default. To keep them for 1 to 7 years instead, see
+          <a href="settings.html#alerts-and-logs">Alerts and logs</a>.
+        </p>
         <aside class="callout callout-warning">
           <p class="callout-title">If Verify now reports a break</p>
           <p>
-            Someone changed the database directly. Keep the server as it is, export the security log, and investigate.
-            Restore from a backup if you need to.
+            Someone changed the database directly, outside Atlas. Keep the server as it is, export the security log, and
+            investigate before changing anything. Restore from a backup if you need to.
           </p>
         </aside>
         <nav class="pager" aria-label="Chapters">
-          <a class="prev" href="../install.html"><span>Previous</span>Installing Atlas</a
+          <a class="prev" href="../manual/remote-access.html"><span>Previous</span>Remote access and HTTPS</a
           ><a class="next" href="../manual/settings.html"><span>Next</span>Settings</a>
         </nav>
       </main>
       <nav class="toc" aria-label="On this page">
         <p>On this page</p>
         <ul>
+          <li><a href="#how-access-works">How access works</a></li>
           <li><a href="#people-access">People &amp; access</a></li>
           <li><a href="#groups">Groups</a></li>
           <li><a href="#single-sign-on">Single sign-on</a></li>

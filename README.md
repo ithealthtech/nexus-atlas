@@ -171,7 +171,7 @@ Full detail in [SECURITY.md](SECURITY.md) and [docs/IDENTITY.md](docs/IDENTITY.m
 
 ## Install
 
-**Linux, one command** — the installer sets up Docker, the database, HTTPS, and a master key:
+**Ubuntu or Debian, one command** — the installer sets up Node.js, PostgreSQL, Caddy for HTTPS, a master key, nightly backups, and the updater:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
@@ -195,7 +195,9 @@ docker compose -f deploy/docker-compose.yml logs app | grep "setup code"
 
 Open `PUBLIC_URL` and enter the setup code to create the owner account. No default
 administrator or password exists. Later versions install from **Administration → Updates**.
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the installer's options.
+The [installation chapter](https://ithealthtech.github.io/nexus-atlas/install.html) of the manual walks through every way step by step, and
+[Remote access and HTTPS](https://ithealthtech.github.io/nexus-atlas/manual/remote-access.html) covers publishing Atlas directly, through Cloudflare
+Tunnel or Tailscale, or behind your own reverse proxy. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) lists every setting.
 
 ## Local development
 
@@ -272,9 +274,10 @@ Microsoft 365 sync supports partner account sign-in with GDAP, active customer r
 | [Administrator guide](docs/ADMIN-GUIDE.md) | [Data in and out](docs/DATA.md) | [Identity and permissions](docs/IDENTITY.md) |
 | [Security model](SECURITY.md) | [Changelog](CHANGELOG.md) | [Verification log](docs/VERIFICATION.md) |
 | [Roadmap](docs/ROADMAP.md) | [Product site](https://ithealthtech.github.io/nexus-atlas/) | [BitLocker](docs/BITLOCKER.md) |
+| [The manual](https://ithealthtech.github.io/nexus-atlas/manual/) | | |
 | | | [Contributing](CONTRIBUTING.md) |
 
-Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [SECURITY.md](SECURITY.md), and the
+The [manual](https://ithealthtech.github.io/nexus-atlas/manual/) is the step-by-step guide to every page and setting. Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [SECURITY.md](SECURITY.md), and the
 [administrator guide](docs/ADMIN-GUIDE.md) before storing client credentials.
 
 ## Security
