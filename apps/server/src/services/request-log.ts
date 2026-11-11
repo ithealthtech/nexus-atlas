@@ -38,6 +38,7 @@ const JWT = /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g;
 // Matched by path segment, so client-scoped routes (/api/clients/:id/passwords) count too.
 const PRIVATE_SEGMENTS = new Set([
   'alerting',
+  'restore',
   'teams',
   'passwords',
   'password-folders',

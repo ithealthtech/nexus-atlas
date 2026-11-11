@@ -66,6 +66,27 @@ export function Field({
   );
 }
 
+/** A name typed exactly, to confirm something that can't be undone (deleting a client, erasing or overwriting data). */
+export function ConfirmNameField({
+  label,
+  value,
+  onChange,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+}) {
+  return (
+    <Field label={label} error={error}>
+      {(p) => (
+        <Input {...p} value={value} onChange={(e) => onChange(e.target.value)} autoComplete="off" spellCheck={false} />
+      )}
+    </Field>
+  );
+}
+
 export function Checkbox({
   label,
   description,

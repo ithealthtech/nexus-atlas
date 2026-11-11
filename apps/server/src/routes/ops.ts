@@ -1,9 +1,11 @@
 import { createReadStream } from 'node:fs';
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import type { Database } from '@atlas/db';
-import type { BackupRunView } from '@atlas/shared';
+import { restoreCheckSchema, restoreRequestSchema, type BackupRunView, type RestoreCheck } from '@atlas/shared';
 import { requireAdmin } from '../authz.js';
 import type { BackupService } from '../backup/service.js';
+import { RESTORE_UPLOAD_BYTES, type RestoreService } from '../backup/staged.js';
+import type { IdentityService } from '../identity/service.js';
 import { isUuid } from '../services/scope.js';
 import { HttpError } from '../errors.js';
 import type { StatusService } from '../services/status.js';
@@ -16,11 +18,14 @@ export function registerOpsRoutes(
     db: Database;
     authed: { onRequest: onRequestHookHandler };
     recent: (req: FastifyRequest) => void;
+    identity: IdentityService;
     status: StatusService;
     backups: BackupService;
+    restores: RestoreService;
+    restart: () => void;
   },
 ) {
-  const { db, authed, recent, status, backups } = deps;
+  const { db, authed, recent, status, backups, restores } = deps;
   const admin = (req: FastifyRequest) => {
     const actor = req.session!.actor;
     requireAdmin(actor);
@@ -65,5 +70,56 @@ export function registerOpsRoutes(
       .header('Content-Length', String(file.size))
       .header('Content-Disposition', `attachment; filename="${file.name}"`)
       .send(createReadStream(file.path));
+  });
+
+  // Restoring a backup replaces or adds to everyone's data, so only the owner can, and only after confirming.
+  const owner = (req: FastifyRequest) => {
+    const actor = admin(req);
+    if (actor.role !== 'owner') throw new HttpError(403, 'Only the owner can restore a backup.');
+    return actor;
+  };
+
+  app.get('/api/backups/restore', authed, async (req) => {
+    admin(req);
+    return restores.status();
+  });
+
+  app.post('/api/backups/restore/upload', authed, async (req, reply) => {
+    owner(req);
+    const saved = await restores.upload(await req.file({ limits: { fileSize: RESTORE_UPLOAD_BYTES } }));
+    await event(req, 'Backup uploaded for restore', saved.name);
+    return reply.status(201).send(saved);
+  });
+
+  app.post('/api/backups/restore/check', authed, async (req): Promise<RestoreCheck> => {
+    owner(req);
+    const body = restoreCheckSchema.parse(req.body ?? {});
+    return restores.check(body.source, body.masterKey);
+  });
+
+  // Checks everything, takes a safety backup before an overwrite, then restarts Atlas, which installs the backup
+  // as it starts, before anyone can sign in or any scheduled job runs.
+  app.post('/api/backups/restore', authed, async (req, reply) => {
+    const actor = owner(req);
+    const body = restoreRequestSchema.parse(req.body ?? {});
+    await deps.identity.reauthenticate(req.session!, body.password, req.ip);
+    if (body.overwrite && (body.confirmName ?? '').trim() !== req.session!.organization.name.trim())
+      throw new HttpError(400, 'Type the organization’s name exactly as shown.', undefined, {
+        confirmName: 'Type the organization’s name exactly as shown.',
+      });
+    const staged = await restores.stage({
+      source: body.source,
+      masterKey: body.masterKey,
+      overwrite: body.overwrite,
+      requestedByName: actor.name,
+    });
+    await event(
+      req,
+      'Backup restore requested',
+      `${staged.mode === 'overwrite' ? 'Overwrite' : 'Add back'}: backup of ${staged.backupCreatedAt}`,
+    );
+    // Only once the answer has reached the browser.
+    reply.raw.once('finish', deps.restart);
+    return reply.status(202).send({ ...staged, restarting: true });
   });
 }

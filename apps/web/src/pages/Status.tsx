@@ -16,20 +16,9 @@ import {
 import type { BackupRunView, StatusCheck, SystemStatus } from '@atlas/shared';
 import { Badge, Button, Card, CardHeader, PageHeader, Skeleton, useToast } from '@/components/ui';
 import { api, download, type ApiError } from '@/lib/api';
-import { formatDateTime, relativeTime } from '@/lib/format';
+import { formatBytes, formatDateTime, relativeTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
-
-export const formatBytes = (bytes: number | null | undefined) => {
-  if (bytes === null || bytes === undefined) return 'Unknown';
-  const units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${unit ? value.toFixed(value < 10 ? 1 : 0) : value} ${units[unit]}`;
-};
+import { RestoreBackup } from '@/components/RestoreBackup';
 
 const CHECK_STYLE: Record<StatusCheck['level'], { icon: typeof CheckCircle2; tone: string; label: string }> = {
   ok: { icon: CheckCircle2, tone: 'bg-success-soft text-success', label: 'OK' },
@@ -61,6 +50,7 @@ export function Status() {
         <div className="space-y-6">
           <Checks checks={s.checks} />
           <Backups status={s} />
+          <RestoreBackup />
           <Card>
             <CardHeader title="Installation" />
             <dl className="grid gap-x-8 gap-y-4 p-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
@@ -259,8 +249,8 @@ function Backups({ status }: { status: SystemStatus }) {
       )}
       <p className="border-t border-border px-5 py-3 text-xs text-muted">
         Restoring needs the master key the backup was made with. Keep a copy of the key somewhere other than the
-        backups. To restore, stop Atlas and run <code>npm run restore -w @atlas/server -- &lt;file&gt;</code>; see the
-        deployment guide.
+        backups. Restore from <strong>Restore from a backup</strong> below, or stop Atlas and run{' '}
+        <code>npm run restore -w @atlas/server -- &lt;file&gt;</code>; see the deployment guide.
       </p>
     </Card>
   );
