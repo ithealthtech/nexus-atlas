@@ -3,8 +3,8 @@ title: Data and integrations
 nav: Data and integrations
 out: manual/integrations.html
 group: Running Atlas
-order: 12
-number: 12
+order: 13
+number: 13
 summary: Importing from Hudu and spreadsheets, ConnectWise RMM, Microsoft 365 and Bitdefender syncs, the BitLocker collector, and automatic password rotation.
 ---
 

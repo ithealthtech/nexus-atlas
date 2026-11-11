@@ -70,7 +70,7 @@ You can type everything in, but most teams start by bringing it in:
 - **Microsoft 365** turns each client's tenant into contacts, licences and domains.
 - **Vendors** fill in warranty dates for Dell, Lenovo and HP devices, and domain registries and websites fill in expiry dates for domains and certificates.
 
-Chapter 12, [Data and integrations](integrations.html), explains each one.
+Chapter 13, [Data and integrations](integrations.html), explains each one.
 
 ## Who sees what
 

@@ -10,7 +10,7 @@
     <title>Keeping Atlas healthy · MSP Atlas manual</title>
     <meta
       name="description"
-      content="System status, backups and restores, updates, restarting and repairing services, and the portal's certificate."
+      content="The weekly checks, every System status warning, backups and how to restore one, updates and rolling back, and restarting or repairing services."
     />
     <link rel="icon" href="../images/favicon.svg" type="image/svg+xml" />
     <link rel="preload" href="../assets/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin />
@@ -115,43 +115,75 @@
             <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
           </li>
           <li>
-            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+            <a href="../manual/remote-access.html"><span class="num">10</span>Remote access and HTTPS</a>
           </li>
           <li>
-            <a href="../manual/settings.html"><span class="num">11</span>Settings</a>
+            <a href="../manual/people-and-access.html"><span class="num">11</span>People and access</a>
           </li>
           <li>
-            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+            <a href="../manual/settings.html"><span class="num">12</span>Settings</a>
+          </li>
+          <li>
+            <a href="../manual/integrations.html"><span class="num">13</span>Data and integrations</a>
           </li>
           <li>
             <a href="../manual/looking-after-atlas.html" aria-current="page"
-              ><span class="num">13</span>Keeping Atlas healthy</a
+              ><span class="num">14</span>Keeping Atlas healthy</a
             >
           </li>
           <li>
-            <a href="../manual/upgrading-to-2.html"><span class="num">17</span>Upgrading to 2.0</a>
+            <a href="../manual/upgrading-to-2.html"><span class="num">18</span>Upgrading to 2.0</a>
           </li>
         </ul>
         <p class="sidebar-group">Reference</p>
         <ul>
           <li>
-            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+            <a href="../manual/tasks.html"><span class="num">15</span>Tasks at a glance</a>
           </li>
           <li>
-            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+            <a href="../support.html"><span class="num">16</span>Troubleshooting</a>
           </li>
           <li>
-            <a href="../security.html"><span class="num">16</span>Security model</a>
+            <a href="../security.html"><span class="num">17</span>Security model</a>
           </li>
         </ul>
       </nav>
       <main id="content" class="doc">
-        <p class="eyebrow">Chapter 13</p>
+        <p class="eyebrow">Chapter 14</p>
         <h1>Keeping Atlas healthy</h1>
         <p>
-          A few minutes a week keeps Atlas safe. This chapter covers what to check and what to do when something needs
-          attention.
+          Atlas looks after most things by itself: it backs up every night, renews its certificate, and tells you when
+          something needs a person. This chapter explains what to check, what each warning means and what to do about
+          it, and the procedures for backups, restores, updates and services. Most pages here are for administrators;
+          <strong>Updates</strong> and <strong>Services</strong> act only on servers set up with the Linux installer.
         </p>
+        <p>
+          How people reach Atlas, and its certificate, are in their own chapter:
+          <a href="remote-access.html">Remote access and HTTPS</a>.
+        </p>
+        <h2 id="every-week"><a class="anchor" href="#every-week">Every week</a></h2>
+        <p>Ten minutes a week is enough:</p>
+        <ol class="steps">
+          <li>
+            Open <strong>Admin → System status</strong>. The first card says <strong>Everything looks good</strong>, or
+            <strong>Some things need attention</strong> with a list. Deal with each item using
+            <a href="#what-each-check-means">What each check means</a>.
+          </li>
+          <li>
+            On the same page, check the <strong>Backups</strong> card: the newest backup should be from last night and
+            say it succeeded.
+          </li>
+          <li>
+            Open <strong>Admin → Security log</strong> and choose <strong>Verify now</strong>. This checks that no event
+            has been changed or removed since it was written. Do it at least every two days, or System status reminds
+            you.
+          </li>
+          <li>Open <strong>Admin → Updates</strong> to see whether a new release is out, and read its notes.</li>
+          <li>
+            Once a month, copy a recent backup somewhere other than the server, and once a quarter, test that one
+            restores (see <a href="#testing-a-backup">Testing a backup</a>).
+          </li>
+        </ol>
         <h2 id="system-status"><a class="anchor" href="#system-status">System status</a></h2>
         <figure>
           <a href="../images/manual/status.png"
@@ -159,60 +191,350 @@
           /></a>
           <figcaption>Admin → System status.</figcaption>
         </figure>
-        <p>
-          Open <strong>Admin → System status</strong> every week or so. It lists anything that needs attention, and
-          shows:
-        </p>
+        <p><strong>Admin → System status</strong> has three cards:</p>
         <ul>
           <li>
-            <strong>Backups:</strong> the last good backup, the next one, and the history. A red row means the last
-            backup failed, with the reason.
+            <strong>The checks.</strong> Each line is green (<strong>OK</strong>), amber (<strong
+              >Needs attention</strong
+            >) or red (<strong>Problem</strong>), with what to do.
           </li>
-          <li><strong>Disk space</strong> for the data and backup folders.</li>
           <li>
-            <strong>Email</strong>, and the <strong>master key</strong> in use, including whether an old key is still
-            loaded after a rotation.
+            <strong>Backups.</strong> The last good backup, when the next one runs, <strong>Back up now</strong>, and
+            the history of recent backups, with who started each, its size, and <strong>Download</strong>.
+          </li>
+          <li>
+            <strong>Installation.</strong> The Atlas version and when it started; the database's PostgreSQL version,
+            size, and how many database updates are applied; how many attachments and the free space where they're kept;
+            whether email is on and through which server; which master key is in use and whether older ones are still
+            loaded; how many events the security log holds and when it was last verified; when the background tasks last
+            ran; and the server's platform, Node.js version and address.
           </li>
         </ul>
-        <p>
-          Then open <strong>Security log</strong> and choose <strong>Verify now</strong> to check that no event has been
-          changed or removed.
-        </p>
+        <h3 id="what-each-check-means"><a class="anchor" href="#what-each-check-means">What each check means</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Check</th>
+                <th>Why it matters, and what to do</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Automatic backups are off</strong></td>
+                <td>
+                  <code>ATLAS_BACKUP_ENABLED</code> is <code>false</code>, so nothing is backing Atlas up unless you do
+                  it another way. Set it back to <code>true</code> and restart Atlas, or make sure another backup covers
+                  both the database and the attachments folder.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>No backup yet</strong></td>
+                <td>
+                  A new installation hasn't reached its first nightly backup. Choose <strong>Back up now</strong>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>The last backup is more than two days old</strong></td>
+                <td>
+                  Backups have stopped. Look at the history for a failed row and its reason. The usual causes are a full
+                  disk, or a backup folder Atlas can't write to (a network share that's disconnected, or wrong
+                  permissions).
+                </td>
+              </tr>
+              <tr>
+                <td><strong>The newest backup file is missing</strong></td>
+                <td>
+                  The history lists a backup that isn't in the folder any more. Someone moved or deleted it, or the
+                  share isn't mounted. Reconnect it, then choose <strong>Back up now</strong>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>The last backup failed</strong></td>
+                <td>The reason is shown. Fix it and choose <strong>Back up now</strong> to confirm.</td>
+              </tr>
+              <tr>
+                <td><strong>Backups are on the same disk as Atlas</strong></td>
+                <td>
+                  If that disk fails, you lose Atlas and its backups together. Set <code>ATLAS_BACKUP_DIR</code> to a
+                  network share or another disk (see <a href="#where-backups-go">Where backups go</a>), or copy the
+                  folder off the server on a schedule.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>The data disk is almost full</strong> / <strong>The backup disk is almost full</strong></td>
+                <td>
+                  Less than 10% is free. Free some space or grow the disk before Atlas can't save attachments or
+                  backups. Lowering <code>ATLAS_BACKUP_KEEP</code> keeps fewer backups.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Email is not set up</strong></td>
+                <td>
+                  Password resets, expiry alerts and digests can't be sent. Set it up under
+                  <strong>Admin → Email &amp; alerts</strong>; see
+                  <a href="settings.html#email-and-alerts">Settings</a>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Email uses Microsoft 365 SMTP sign-in</strong></td>
+                <td>
+                  Microsoft is retiring basic authentication for SMTP. Switch to
+                  <strong>Microsoft 365 (app registration)</strong> before it stops working.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>An old master key is still loaded</strong></td>
+                <td>
+                  After a key rotation, the database no longer needs the old key, but backups made before the rotation
+                  still do. Keep a copy of it for as long as you keep those backups, then remove it from the server. See
+                  <a href="../install.html#the-master-key">The master key</a>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>The security log has not been checked recently</strong></td>
+                <td>Nobody has chosen <strong>Verify now</strong> in two days. Open the security log and choose it.</td>
+              </tr>
+              <tr>
+                <td><strong>N accounts haven't been used in 60 days</strong></td>
+                <td>
+                  Access nobody uses is access nobody would notice being misused. Disable the accounts people no longer
+                  need under <strong>Admin → People &amp; access</strong>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>N API keys haven't been used in 60 days</strong></td>
+                <td>Revoke keys nothing uses any more under <strong>Admin → API keys</strong>.</td>
+              </tr>
+              <tr>
+                <td><strong>Node.js … stops getting security fixes on …</strong></td>
+                <td>
+                  The runtime under Atlas is nearing its end of life. Move the server to the version named; see
+                  <a
+                    href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DEPLOYMENT.md#moving-to-nodejs-24"
+                    rel="noopener"
+                    >Moving to Node.js 24</a
+                  >.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>Node.js … is older than Atlas supports</strong> /
+                  <strong>PostgreSQL … is older than Atlas supports</strong>
+                </td>
+                <td>Atlas needs a newer runtime or database. Take a backup, then upgrade it.</td>
+              </tr>
+              <tr>
+                <td><strong>Database updates are pending</strong></td>
+                <td>
+                  Atlas was updated but hasn't applied its database changes. Restart Atlas, from
+                  <strong>Admin → Services</strong> or on the server.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <h2 id="backups"><a class="anchor" href="#backups">Backups</a></h2>
         <p>
-          Atlas backs itself up every night into one encrypted <code>.atlasbak</code> file holding the whole database
-          and every attachment, and keeps the newest 14.
+          Every night, after 02:00 server time, Atlas writes one encrypted file, such as
+          <code>atlas-20261111-020000.atlasbak</code>, holding the whole database and every attachment. It keeps the
+          newest 14 and deletes older ones from the backup folder.
         </p>
         <ul>
           <li>
-            <strong>Back up now</strong> on System status makes one on demand. <strong>Download</strong> saves a copy;
-            Atlas asks for your password first.
+            <strong>What's in it:</strong> every client, asset, document, password, setting, account and the security
+            log, plus every attached file. It's taken from one consistent snapshot, so people can keep working while it
+            runs.
           </li>
-          <li>Backups are encrypted with a key derived from the master key. Without it, a backup can't be read.</li>
           <li>
-            System status warns while backups sit on the same disk as Atlas. Point <code>ATLAS_BACKUP_DIR</code> at a
-            network share, or copy the folder off the server on a schedule.
+            <strong>What isn't:</strong> sign-in sessions (everyone signs in again after a restore), and the server's
+            own settings files: <code>atlas.env</code>, the master key, the Caddyfile and <code>access.conf</code>. Keep
+            a copy of those yourself; you'll need the master key above all.
+          </li>
+          <li>
+            <strong>How it's protected:</strong> AES-256-GCM, with a key derived from the master key. Without the master
+            key it was made with, a backup can't be read, and a file that has been changed or cut short is detected and
+            refused.
           </li>
         </ul>
-        <h3 id="restore-a-backup"><a class="anchor" href="#restore-a-backup">Restore a backup</a></h3>
+        <h3 id="making-and-downloading-a-backup">
+          <a class="anchor" href="#making-and-downloading-a-backup">Making and downloading a backup</a>
+        </h3>
         <ol class="steps">
-          <li>Stop Atlas.</li>
-          <li>Make sure the master key the backup was made with is loaded.</li>
           <li>
-            Run the restore against a new, empty database, or add <code>--replace</code> to overwrite the current one:
+            Open <strong>Admin → System status</strong> and choose <strong>Back up now</strong>. The button shows
+            <strong>Backing up…</strong>, and the new backup appears at the top of the history when it's done. This is
+            written to the security log as <em>Backup started</em>.
+          </li>
+          <li>
+            To save a copy, choose <strong>Download</strong> on its row. Atlas asks for your password again, because the
+            file holds everything, and writes <em>Backup downloaded</em> to the security log.
+          </li>
+        </ol>
+        <p>
+          Store downloaded copies somewhere safe and separate from the master key. Anyone with both can read every
+          password in Atlas.
+        </p>
+        <p>Atlas also takes a backup by itself before every update, and before <strong>Erase all data</strong>.</p>
+        <h3 id="where-backups-go"><a class="anchor" href="#where-backups-go">Where backups go</a></h3>
+        <p>
+          Backups go in <code>ATLAS_BACKUP_DIR</code>. By default that's a <code>backups</code> folder inside the data
+          folder, on the same disk as Atlas, which System status warns about.
+        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Default</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>ATLAS_BACKUP_ENABLED</code></td>
+                <td><code>true</code></td>
+                <td>Turns the nightly backup on or off.</td>
+              </tr>
+              <tr>
+                <td><code>ATLAS_BACKUP_DIR</code></td>
+                <td><code>&lt;data folder&gt;/backups</code></td>
+                <td>Where backup files are written. Ideally a network share or another disk.</td>
+              </tr>
+              <tr>
+                <td><code>ATLAS_BACKUP_HOUR</code></td>
+                <td><code>2</code></td>
+                <td>The hour (server time, 0 to 23) after which the nightly backup runs.</td>
+              </tr>
+              <tr>
+                <td><code>ATLAS_BACKUP_KEEP</code></td>
+                <td><code>14</code></td>
+                <td>How many backup files to keep. Older ones are deleted.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          To change one on a Linux server, edit <code>/etc/msp-atlas/atlas.env</code> as root, then restart Atlas with
+          <code>sudo systemctl restart msp-atlas</code>. A network share must be mounted at startup (for example in
+          <code>/etc/fstab</code>) and writable by the <code>atlas</code> user. On Windows, rerun the installer with
+          <code>-BackupDir \\nas\atlas-backups</code>; the service account (LocalSystem, which uses the computer's
+          account on the network) needs write access to the share. In Docker, set them in <code>.env</code> and mount
+          the folder into the container.
+        </p>
+        <h3 id="restore-a-backup"><a class="anchor" href="#restore-a-backup">Restore a backup</a></h3>
+        <p>
+          Restoring replaces what's in Atlas with what was in the backup. Anything changed since the backup was made is
+          lost, so use it to recover from a disaster or to move Atlas to a new server, not to undo one mistake (most
+          items have their own history and <strong>Restore</strong> for that).
+        </p>
+        <aside class="callout callout-note">
+          <p class="callout-title">Restoring from Atlas itself</p>
+          <p>
+            Restoring a backup from a page in Atlas is being added. Until then, restore from the server's command line
+            as below.
+          </p>
+        </aside>
+        <p>You need:</p>
+        <ul>
+          <li>the <code>.atlasbak</code> file, copied onto the server;</li>
+          <li>
+            the master key it was made with. If the key was rotated since, both the old and the new key must be loaded:
+            in <code>/etc/msp-atlas/master.key</code>, one key per line, newest first;
+          </li>
+          <li>shell access to the server as an administrator (root on Linux).</li>
+        </ul>
+        <p>On a server set up with the Linux installer:</p>
+        <ol class="steps">
+          <li>
+            <strong>Check the file first.</strong> This reads the whole file and lists what's in it, without changing
+            anything:
           </li>
         </ol>
         <div class="code">
-          <pre><code data-lang="bash">npm run backup -w @atlas/server -- verify &lt;file.atlasbak&gt;
-npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
+          <pre><code data-lang="bash">cd /opt/msp-atlas
+sudo runuser -u atlas -- node --env-file=/etc/msp-atlas/atlas.env apps/server/dist/cli/backup.js verify /path/to/atlas-20261111-020000.atlasbak</code></pre>
+          <button class="copy" type="button" aria-label="Copy">Copy</button>
+        </div>
+        <ol class="steps" start="2">
+          <li><strong>Stop Atlas</strong>, so nobody changes anything during the restore:</li>
+        </ol>
+        <div class="code">
+          <pre><code data-lang="bash">sudo systemctl stop msp-atlas</code></pre>
+          <button class="copy" type="button" aria-label="Copy">Copy</button>
+        </div>
+        <ol class="steps" start="3">
+          <li>
+            <strong>Restore.</strong> <code>--replace</code> erases the current database and attachments before loading
+            the backup. Without it, the restore refuses to run into a database that already has data in it, which
+            protects you from overwriting the wrong server:
+          </li>
+        </ol>
+        <div class="code">
+          <pre><code data-lang="bash">sudo runuser -u atlas -- node --env-file=/etc/msp-atlas/atlas.env apps/server/dist/cli/restore.js /path/to/atlas-20261111-020000.atlasbak --replace</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
         <ol class="steps" start="4">
-          <li>Start Atlas. Everyone signs in again.</li>
+          <li><strong>Start Atlas</strong> and sign in again:</li>
+        </ol>
+        <div class="code">
+          <pre><code data-lang="bash">sudo systemctl start msp-atlas</code></pre>
+          <button class="copy" type="button" aria-label="Copy">Copy</button>
+        </div>
+        <ol class="steps" start="5">
+          <li>
+            <strong>Check it.</strong> Open a few clients and passwords, open <strong>Admin → Security log</strong> and
+            choose <strong>Verify now</strong> (it still passes after a restore), and look at
+            <strong>System status</strong>.
+          </li>
         </ol>
         <p>
-          The restore checks the whole file before it changes anything. A backup from an older version is upgraded as it
-          loads, and <strong>Verify now</strong> still passes afterwards.
+          The restore checks the whole file before it erases anything, so a damaged file, or the wrong master key, stops
+          it with nothing changed. It prints how many rows, tables and files it restored, and whether any attachment was
+          already missing when the backup was made. A backup from an older version of Atlas is loaded as it was, then
+          upgraded to the running version.
+        </p>
+        <p><strong>Docker:</strong></p>
+        <div class="code">
+          <pre><code data-lang="bash">docker compose -f deploy/docker-compose.yml stop app
+docker compose -f deploy/docker-compose.yml run --rm app npm run restore -w @atlas/server -- /data/backups/&lt;file&gt; --replace
+docker compose -f deploy/docker-compose.yml start app</code></pre>
+          <button class="copy" type="button" aria-label="Copy">Copy</button>
+        </div>
+        <p>
+          <strong>Windows:</strong> stop the <strong>MSPAtlas</strong> service, then in the Atlas folder run
+          <code
+            >node --env-file=&quot;C:\ProgramData\MSP Atlas\atlas.env&quot; apps\server\dist\cli\restore.js &lt;file&gt;
+            --replace</code
+          >
+          from an elevated prompt, and start the service again.
+        </p>
+        <h3 id="moving-atlas-to-a-new-server">
+          <a class="anchor" href="#moving-atlas-to-a-new-server">Moving Atlas to a new server</a>
+        </h3>
+        <ol class="steps">
+          <li>
+            On the old server, choose <strong>Back up now</strong> and download the backup. Copy
+            <code>master.key</code> (and <code>atlas.env</code>, for reference) somewhere safe.
+          </li>
+          <li>
+            Install Atlas on the new server with the installer, using the same address. Don't create an owner account.
+          </li>
+          <li>
+            Put the old master key into the new server's <code>/etc/msp-atlas/master.key</code> (replacing the one the
+            installer made), then restore the backup with <code>--replace</code> as above.
+          </li>
+          <li>
+            Point the address's DNS record, tunnel or proxy at the new server, and check
+            <a href="remote-access.html">Remote access and HTTPS</a>.
+          </li>
+        </ol>
+        <h3 id="testing-a-backup"><a class="anchor" href="#testing-a-backup">Testing a backup</a></h3>
+        <p>
+          A backup you've never restored is a hope, not a plan. Every few months, install Atlas on a spare virtual
+          machine, restore a recent backup into it with its master key, and check you can sign in and open passwords.
+          Then delete the machine. On the copy, use a different address, and don't turn on email, so it doesn't send
+          alerts.
         </p>
         <h2 id="updates"><a class="anchor" href="#updates">Updates</a></h2>
         <figure>
@@ -222,17 +544,43 @@ npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
           <figcaption>Admin → Updates.</figcaption>
         </figure>
         <p>
-          <strong>Admin → Updates</strong> lists the published releases newer than yours, with their release notes. On
-          servers set up with the Linux installer, an administrator can install one from the page: Atlas asks for your
-          password, takes a backup, installs the release, and checks it starts. If it doesn't, Atlas goes back to the
-          previous version by itself. If the new version had already updated the database, Atlas also restores the
-          backup it took just before the update, so the previous version gets the database it knows. The Updates page
-          says what happened. Anything changed in Atlas while the update was being prepared (a few minutes) is lost in
-          that case.
+          <strong>Admin → Updates</strong> lists the published releases newer than the one you're running, with their
+          release notes, from the repository Atlas updates from (<code>ATLAS_UPDATE_REPO</code>, normally
+          <code>ithealthtech/nexus-atlas</code>). Every administrator can see it.
+        </p>
+        <h3 id="installing-an-update"><a class="anchor" href="#installing-an-update">Installing an update</a></h3>
+        <p>On servers set up with the Linux installer:</p>
+        <ol class="steps">
+          <li>Read the release notes. Anything you need to do before or after is there.</li>
+          <li>Choose <strong>Install</strong> on the release. Atlas asks for your password again.</li>
+          <li>
+            The page follows the update. Atlas takes a backup, installs the release, rebuilds, restarts, and checks that
+            the new version answers. This takes a few minutes, during which Atlas is unavailable for a moment while it
+            restarts.
+          </li>
+          <li>When it's done, reload the page. <strong>What's new</strong> shows the changes.</li>
+        </ol>
+        <p>
+          If the new version doesn't start, Atlas goes back to the previous version by itself. If the new version had
+          already updated the database, it also restores the backup taken just before the update, so the previous
+          version gets the database it knows. The Updates page says which of these happened. Anything changed in Atlas
+          while the update was being prepared (a few minutes) is lost in that case.
         </p>
         <p>
-          Docker and Windows installs see the page read-only, and update the way they were installed. See
-          <a href="../install.html">Installing Atlas</a>.
+          Every update is written to the security log. The update's full log is in
+          <code>/var/lib/msp-atlas-updater/last-update.log</code> on the server.
+        </p>
+        <p>
+          <strong>From the server instead:</strong> <code>sudo atlas-install</code> installs the newest release, or
+          <code>sudo atlas-install --version v2.4.1</code> a particular one. It keeps your settings, master key,
+          database and remote access choice.
+        </p>
+        <p>
+          <strong>Docker:</strong> pull the new image (or change its tag in the Compose file) and run
+          <code>docker compose -f deploy/docker-compose.yml --env-file .env up -d</code>.
+          <strong>Windows:</strong> extract the new package over the old folder and run
+          <code>Install-Atlas.ps1</code> again with no arguments. Both see the Updates page read-only. Take a backup
+          first.
         </p>
         <h2 id="services"><a class="anchor" href="#services">Services</a></h2>
         <figure>
@@ -242,92 +590,170 @@ npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
           <figcaption>Admin → Services.</figcaption>
         </figure>
         <p>
-          <strong>Admin → Services</strong> shows Atlas, the web proxy, the database and the updater, whether each is
-          running, and since when. It works on servers set up with the Linux installer.
+          <strong>Admin → Services</strong> shows the four parts Atlas runs on, whether each is
+          <strong>Running</strong>, <strong>Starting</strong>, <strong>Stopped</strong>, <strong>Failed</strong> or
+          <strong>Not installed</strong>, and since when. It works on servers set up with the Linux installer; Docker
+          and Windows installs see how to restart their own way.
+        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>What it is</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Atlas</strong></td>
+                <td>The Atlas application itself (<code>msp-atlas</code>).</td>
+              </tr>
+              <tr>
+                <td><strong>Web proxy</strong></td>
+                <td>Caddy, which serves Atlas over HTTPS and holds its certificate.</td>
+              </tr>
+              <tr>
+                <td><strong>Database</strong></td>
+                <td>PostgreSQL, where everything is stored.</td>
+              </tr>
+              <tr>
+                <td><strong>Updater</strong></td>
+                <td>The helper that carries out updates, these actions, and remote access changes.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="restarting-a-service"><a class="anchor" href="#restarting-a-service">Restarting a service</a></h3>
+        <p>
+          Choose <strong>Restart</strong> on a service, read what it will do, and confirm. Atlas asks for your password
+          again.
         </p>
         <ul>
           <li>
-            <strong>Restart</strong> one service. Restarting Atlas takes a few seconds and signs nobody out. Restarting
-            the web proxy drops connections for a moment. Restarting the database restarts Atlas with it.
+            <strong>Restarting Atlas</strong> makes it unavailable for a few seconds. Nobody is signed out, but anything
+            unsaved in an open form may be lost, and an import or sync that is running stops.
           </li>
           <li>
-            <strong>Repair</strong> is for when something won't start, or can't read or write its files. It puts the
-            owners and permissions of Atlas's settings, master key, program and data folders back as the installer set
-            them, turns the services back on at startup, restarts them, and checks that Atlas answers. It doesn't change
-            your settings, data or version.
+            <strong>Restarting the web proxy</strong> drops everyone's connection for a moment. The page reconnects by
+            itself. This also makes it fetch a fresh certificate if one is stale.
+          </li>
+          <li>
+            <strong>Restarting the database</strong> restarts Atlas with it. Atlas is unavailable for up to a minute.
           </li>
         </ul>
+        <h3 id="repair"><a class="anchor" href="#repair">Repair</a></h3>
         <p>
-          Every action asks for your password and is written to the security log. If Atlas itself is down, run
-          <code>sudo systemctl restart msp-atlas</code> on the server, and
-          <code>sudo journalctl -u msp-atlas -n 50</code> to see why it stopped.
+          <strong>Repair</strong> is for when something won't start, or Atlas says it can't read or write a file. It
+          puts the owners and permissions of Atlas's settings, master key, program and data folders back as the
+          installer set them, hands files in the data folder that were created by root back to Atlas, turns the services
+          back on at startup, restarts all of them, and checks that Atlas answers. Atlas is unavailable for up to a
+          minute. It doesn't change your settings, data, address or version. If it doesn't help, run
+          <code>sudo atlas-install</code> on the server, which also rewrites the service files.
         </p>
-        <h2 id="remote-access"><a class="anchor" href="#remote-access">Remote access</a></h2>
         <p>
-          <strong>Admin → Remote access</strong> chooses how people reach Atlas: from this server directly, through a
-          <strong>Cloudflare Tunnel</strong>, through <strong>Tailscale</strong> (your tailnet, or the internet with
-          Funnel), or behind <strong>your own reverse proxy</strong>. The page lists what to set up first for each, such
-          as the tunnel's public hostname or turning on HTTPS certificates in Tailscale.
+          Every action is written to the security log as <em>Service action requested</em>. The helper does one thing at
+          a time, so an action waits for an update to finish and the reverse.
         </p>
-        <ol class="steps">
-          <li>Choose the way, and fill in the address and the token, auth key or proxy addresses it asks for.</li>
-          <li>Choose <strong>Review the change</strong>. The dialog lists what moves with the address.</li>
-          <li>Choose <strong>Change it</strong>. Atlas restarts on the new address; open it there.</li>
-        </ol>
+        <h3 id="when-atlas-itself-is-down">
+          <a class="anchor" href="#when-atlas-itself-is-down">When Atlas itself is down</a>
+        </h3>
+        <p>If you can't reach Atlas at all, use the server's console:</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>To</th>
+                <th>Run</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>See whether Atlas is running, and why it stopped</td>
+                <td>
+                  <code>sudo systemctl status msp-atlas</code> and <code>sudo journalctl -u msp-atlas -n 50</code>
+                </td>
+              </tr>
+              <tr>
+                <td>Restart Atlas</td>
+                <td><code>sudo systemctl restart msp-atlas</code></td>
+              </tr>
+              <tr>
+                <td>Restart the web proxy</td>
+                <td><code>sudo systemctl restart caddy</code></td>
+              </tr>
+              <tr>
+                <td>Restart the database</td>
+                <td><code>sudo systemctl restart postgresql</code></td>
+              </tr>
+              <tr>
+                <td>Bring the helper back, if actions stay waiting</td>
+                <td><code>sudo systemctl restart msp-atlas-updater.path</code></td>
+              </tr>
+              <tr>
+                <td>Reinstall the current version, keeping everything</td>
+                <td><code>sudo atlas-install</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p>
-          Only the owner can change it, after confirming their password. If Atlas doesn't answer at the new address, the
-          server puts the previous settings back.
+          <code>/healthz</code> answers when Atlas is running, and <code>/readyz</code> when it can also reach its
+          database: <code>curl http://127.0.0.1:4318/readyz</code> on the server.
         </p>
-        <aside class="callout callout-warning">
-          <p class="callout-title">What moves with the address</p>
-          <p>
-            Everyone signs in again. Passkeys only work at the address they were added on, so people add them again.
-            Microsoft and SAML sign-in, the browser extension and Atlas for Windows need the new address.
-          </p>
-        </aside>
-        <h2 id="the-certificate"><a class="anchor" href="#the-certificate">The certificate</a></h2>
-        <figure>
-          <a href="../images/manual/certificate.png"
-            ><img src="../images/manual/certificate.png" alt="Certificate" loading="lazy"
-          /></a>
-          <figcaption>Admin → Certificate.</figcaption>
-        </figure>
-        <p>
-          <strong>Admin → Certificate</strong> shows the certificate Atlas is served with, checked the way a visitor's
-          computer sees it.
-        </p>
-        <ul>
-          <li>
-            <strong>Trusted everywhere:</strong> a public authority issued it, because Atlas has a public DNS name.
-            Nothing to do.
-          </li>
-          <li>
-            <strong>Not trusted until installed:</strong> Atlas was installed at an IP address or a one-word name, so
-            the web proxy is its own certificate authority. The connection is encrypted, but browsers warn and Atlas for
-            Windows refuses to connect until that authority is installed on the computer.
-          </li>
-        </ul>
-        <p>To install the authority:</p>
-        <ol class="steps">
-          <li>Choose <strong>Download</strong>. It's a public certificate, not a key.</li>
-          <li>Check its thumbprint against the one on the page, with the PowerShell command the page gives.</li>
-          <li>
-            Install it for the whole computer (as an administrator) or for yourself, with the commands on the page, or
-            push it with Group Policy.
-          </li>
-          <li>
-            Open Atlas at the address on the certificate. A certificate for an IP address doesn't cover a name that
-            points to the same server.
-          </li>
-        </ol>
-        <aside class="callout callout-warning">
-          <p class="callout-title">Only on computers you manage</p>
-          <p>
-            A computer that trusts this authority accepts any certificate it issues. Its key is on your Atlas server and
-            only used for Atlas, but install it only on computers you manage. A public DNS name with a public
-            certificate avoids the question.
-          </p>
-        </aside>
+        <h2 id="if-something-goes-wrong">
+          <a class="anchor" href="#if-something-goes-wrong">If something goes wrong</a>
+        </h2>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Problem</th>
+                <th>What to do</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Someone is locked out after too many attempts</td>
+                <td>Wait 15 minutes, or use <strong>Reset sign-in</strong> on their account.</td>
+              </tr>
+              <tr>
+                <td>The owner lost their phone and recovery codes</td>
+                <td>
+                  Another owner or administrator can reset their sign-in. If there is none, contact whoever runs the
+                  server.
+                </td>
+              </tr>
+              <tr>
+                <td>Atlas can't read or write a file, or a service is stopped</td>
+                <td><strong>Admin → Services</strong>: restart it, or <strong>Repair</strong>.</td>
+              </tr>
+              <tr>
+                <td>Browsers warn about the certificate</td>
+                <td>See <a href="remote-access.html#the-certificate">The certificate</a>.</td>
+              </tr>
+              <tr>
+                <td>Atlas doesn't open after changing how it's reached</td>
+                <td>
+                  See <a href="remote-access.html#getting-back-in-from-the-server">Getting back in from the server</a>.
+                </td>
+              </tr>
+              <tr>
+                <td>Backups are failing</td>
+                <td>
+                  Read the reason in the backup history, then the matching row in
+                  <a href="#what-each-check-means">What each check means</a>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Verify now</strong> reports a break</td>
+                <td>
+                  Someone changed the database directly. Keep the server as it is, export the security log, and
+                  investigate before restoring anything.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <nav class="pager" aria-label="Chapters">
           <a class="prev" href="../manual/integrations.html"><span>Previous</span>Data and integrations</a
           ><a class="next" href="../manual/tasks.html"><span>Next</span>Tasks at a glance</a>
@@ -336,12 +762,12 @@ npm run restore -w @atlas/server -- &lt;file.atlasbak&gt;</code></pre>
       <nav class="toc" aria-label="On this page">
         <p>On this page</p>
         <ul>
+          <li><a href="#every-week">Every week</a></li>
           <li><a href="#system-status">System status</a></li>
           <li><a href="#backups">Backups</a></li>
           <li><a href="#updates">Updates</a></li>
           <li><a href="#services">Services</a></li>
-          <li><a href="#remote-access">Remote access</a></li>
-          <li><a href="#the-certificate">The certificate</a></li>
+          <li><a href="#if-something-goes-wrong">If something goes wrong</a></li>
         </ul>
       </nav>
     </div>

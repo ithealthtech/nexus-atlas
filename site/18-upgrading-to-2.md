@@ -3,8 +3,8 @@ title: Upgrading to Atlas 2.0
 nav: Upgrading to 2.0
 out: manual/upgrading-to-2.html
 group: Running Atlas
-order: 17
-number: 17
+order: 18
+number: 18
 summary: What changes in 2.0, the few things to do after upgrading, and how to go back if you need to.
 ---
 

@@ -115,31 +115,34 @@
             <a href="install.html" aria-current="page"><span class="num">9</span>Installing Atlas</a>
           </li>
           <li>
-            <a href="manual/people-and-access.html"><span class="num">10</span>People and access</a>
+            <a href="manual/remote-access.html"><span class="num">10</span>Remote access and HTTPS</a>
           </li>
           <li>
-            <a href="manual/settings.html"><span class="num">11</span>Settings</a>
+            <a href="manual/people-and-access.html"><span class="num">11</span>People and access</a>
           </li>
           <li>
-            <a href="manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+            <a href="manual/settings.html"><span class="num">12</span>Settings</a>
           </li>
           <li>
-            <a href="manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+            <a href="manual/integrations.html"><span class="num">13</span>Data and integrations</a>
           </li>
           <li>
-            <a href="manual/upgrading-to-2.html"><span class="num">17</span>Upgrading to 2.0</a>
+            <a href="manual/looking-after-atlas.html"><span class="num">14</span>Keeping Atlas healthy</a>
+          </li>
+          <li>
+            <a href="manual/upgrading-to-2.html"><span class="num">18</span>Upgrading to 2.0</a>
           </li>
         </ul>
         <p class="sidebar-group">Reference</p>
         <ul>
           <li>
-            <a href="manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+            <a href="manual/tasks.html"><span class="num">15</span>Tasks at a glance</a>
           </li>
           <li>
-            <a href="support.html"><span class="num">15</span>Troubleshooting</a>
+            <a href="support.html"><span class="num">16</span>Troubleshooting</a>
           </li>
           <li>
-            <a href="security.html"><span class="num">16</span>Security model</a>
+            <a href="security.html"><span class="num">17</span>Security model</a>
           </li>
         </ul>
       </nav>
@@ -147,9 +150,15 @@
         <p class="eyebrow">Chapter 9</p>
         <h1>Installing Atlas</h1>
         <p>
-          Atlas runs as one Node.js service in front of PostgreSQL 16, behind HTTPS. There is no default administrator:
-          you create the owner account with a one-time setup code. Pick the way that suits your server.
+          Atlas runs as one Node.js service, with its data in PostgreSQL, behind something that serves HTTPS. There is
+          no default administrator or password: you create the owner account yourself, with a one-time setup code the
+          server prints. This chapter takes you from an empty server to a working Atlas, then through the first day.
         </p>
+        <h2 id="before-you-start"><a class="anchor" href="#before-you-start">Before you start</a></h2>
+        <p>Decide three things first. Each is hard to change later.</p>
+        <ol class="steps">
+          <li><strong>Where it runs.</strong> Pick one of the three ways below.</li>
+        </ol>
         <div class="table">
           <table>
             <thead>
@@ -162,8 +171,11 @@
             <tbody>
               <tr>
                 <td><strong>Ubuntu or Debian installer</strong></td>
-                <td>Most MSPs. One command installs everything.</td>
-                <td>From the <strong>Updates</strong> page in Atlas, with one click.</td>
+                <td>
+                  Most MSPs. One command installs everything, and only this way can be updated, restarted, repaired and
+                  moved between remote access options from inside Atlas.
+                </td>
+                <td>From <strong>Admin → Updates</strong>, with one click, or <code>sudo atlas-install</code>.</td>
               </tr>
               <tr>
                 <td><strong>Docker Compose</strong></td>
@@ -178,55 +190,212 @@
             </tbody>
           </table>
         </div>
+        <ol class="steps" start="2">
+          <li>
+            <strong>The address people will use</strong>, such as <code>https://atlas.example.com</code>, and how
+            they'll reach it: from the internet directly, through Cloudflare Tunnel or Tailscale, or through your own
+            reverse proxy. Read <a href="manual/remote-access.html">Remote access and HTTPS</a> before installing. A
+            public DNS name gives you a certificate every computer trusts; an IP address works, but every computer then
+            has to install the server's certificate authority.
+          </li>
+          <li>
+            <strong>Where backups and the master key will live</strong>, off the server. See
+            <a href="#the-master-key">The master key</a>.
+          </li>
+        </ol>
+        <p>
+          <strong>A server for it.</strong> A virtual machine with 2 processor cores, 4 GB of memory and 40 GB of disk
+          is a comfortable start; Atlas is built on the server during installs and updates, which needs the memory. Add
+          disk for your attachments, and room for 14 backups of the whole database and attachments, unless backups go to
+          another disk or share. The server needs to reach GitHub and the package repositories over HTTPS to install and
+          update.
+        </p>
         <h2 id="ubuntu-or-debian"><a class="anchor" href="#ubuntu-or-debian">Ubuntu or Debian</a></h2>
         <p>
-          The installer sets up Node.js 22, PostgreSQL 16 and Caddy on Ubuntu 22.04 or 24.04, or Debian 12, builds
-          Atlas, and runs it as a systemd service. It installs the newest published release, so these commands never
+          The installer works on Ubuntu 22.04 or 24.04, or Debian 12, on a fresh server or one with nothing else on
+          ports 80 and 443. It installs Node.js 24 and PostgreSQL 16 from their own repositories, and Caddy as the web
+          proxy, creates the database with a password it generates, downloads and builds Atlas, and runs it as the
+          <code>msp-atlas</code> systemd service as an <code>atlas</code> system user. It also sets up the nightly
+          backup and the helper that installs updates. It installs the newest published release, so these commands never
           need a version number.
         </p>
+        <ol class="steps">
+          <li>Sign in to the server as a user who can use <code>sudo</code>.</li>
+          <li>
+            If people will reach Atlas at a DNS name directly, create its DNS record pointing at the server, and open
+            ports 80 and 443 to it first, so the certificate can be issued during the install. See
+            <a href="manual/remote-access.html#this-server">This server</a>.
+          </li>
+          <li>Download and run the installer, with your address:</li>
+        </ol>
         <div class="code">
           <pre><code data-lang="bash">curl -fsSL https://raw.githubusercontent.com/ithealthtech/nexus-atlas/main/deploy/linux/install-atlas.sh -o install-atlas.sh
 sudo bash install-atlas.sh --public-url https://atlas.example.com</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
-        <p>The script prints the setup code when it finishes. It is also in <code>journalctl -u msp-atlas</code>.</p>
-        <ul>
+        <ol class="steps" start="4">
+          <li>Wait. A first install takes about five to fifteen minutes, most of it building Atlas.</li>
           <li>
-            <strong>Choosing a version:</strong> <code>--version v1.0.2</code> installs that release.
-            <code>sudo bash install-atlas.sh --help</code> lists every option.
+            When it finishes, it prints <strong>First-run setup code:</strong> followed by the code. Copy it. It's also
+            in <code>sudo journalctl -u msp-atlas | grep &quot;setup code&quot;</code>.
           </li>
-          <li>
-            <strong>HTTPS:</strong> for a public DNS name, Caddy gets and renews a certificate by itself. For an IP
-            address or a one-word name, it acts as its own certificate authority, which browsers don't trust until you
-            install it. <strong>Admin → Certificate</strong> gives you the file. See
-            <a href="manual/looking-after-atlas.html#the-certificate">The certificate</a>.
-          </li>
-          <li>
-            <strong>Where things go:</strong> the program in <code>/opt/msp-atlas</code>, data and backups in
-            <code>/var/lib/msp-atlas</code>, settings (<code>atlas.env</code>) and the master key in
-            <code>/etc/msp-atlas</code>.
-          </li>
-          <li>
-            <strong>Upgrading:</strong> from <strong>Admin → Updates</strong> in Atlas, or run
-            <code>sudo atlas-install</code> on the server. Settings, key and database are kept.
-          </li>
-        </ul>
+          <li>Open the address, and go on to <a href="#creating-the-owner-account">Creating the owner account</a>.</li>
+        </ol>
+        <h3 id="installer-options"><a class="anchor" href="#installer-options">Installer options</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>--public-url URL</code></td>
+                <td>
+                  The address people use. Must start with <code>https://</code>. On a later run, leave it out to keep
+                  the current one. With no address at all, the installer uses <code>https://</code> and the server's
+                  first IP address.
+                </td>
+              </tr>
+              <tr>
+                <td><code>--version VERSION</code></td>
+                <td>
+                  <code>latest</code> (the default) is the newest published release; pre-releases are never picked
+                  automatically. Or a release tag such as <code>v2.4.1</code>. A branch name such as
+                  <code>main</code> is for testing only.
+                </td>
+              </tr>
+              <tr>
+                <td><code>--access MODE</code></td>
+                <td>
+                  How people reach Atlas: <code>direct</code> (the default), <code>cloudflare</code>,
+                  <code>tailscale</code> or <code>proxy</code>. The same choices as
+                  <strong>Admin → Remote access</strong>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>--tunnel-token-file FILE</code></td>
+                <td>With <code>cloudflare</code>: a file holding the Cloudflare Tunnel's token.</td>
+              </tr>
+              <tr>
+                <td><code>--tailscale-key-file FILE</code></td>
+                <td>With <code>tailscale</code>: a file holding a Tailscale auth key, the first time.</td>
+              </tr>
+              <tr>
+                <td><code>--funnel</code></td>
+                <td>With <code>tailscale</code>: serve Atlas on the internet with Funnel.</td>
+              </tr>
+              <tr>
+                <td><code>--trusted-proxy LIST</code></td>
+                <td>With <code>proxy</code>: your reverse proxy's addresses or ranges, separated by commas.</td>
+              </tr>
+              <tr>
+                <td><code>--repo URL</code></td>
+                <td>Install from another Git repository. Only for your own fork.</td>
+              </tr>
+              <tr>
+                <td><code>--help</code></td>
+                <td>Lists every option.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Running the installer again is safe: it keeps your settings, master key, database password, data and remote
+          access choice. Run it with no options to update to the newest release, or to put back the service files and
+          web proxy settings if they've been changed by hand. The installed copy is <code>sudo atlas-install</code>.
+        </p>
+        <h3 id="where-things-are"><a class="anchor" href="#where-things-are">Where things are</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>What's there</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>/opt/msp-atlas</code></td>
+                <td>The program. Read-only to Atlas. Replaced by every update.</td>
+              </tr>
+              <tr>
+                <td><code>/etc/msp-atlas/atlas.env</code></td>
+                <td>Atlas's settings, including the database password. Readable by root and Atlas only.</td>
+              </tr>
+              <tr>
+                <td><code>/etc/msp-atlas/master.key</code></td>
+                <td>The master key. Copy it somewhere safe now.</td>
+              </tr>
+              <tr>
+                <td><code>/etc/msp-atlas/access.conf</code></td>
+                <td>How Atlas is reached, as chosen on <strong>Admin → Remote access</strong>.</td>
+              </tr>
+              <tr>
+                <td><code>/var/lib/msp-atlas</code></td>
+                <td>Attachments, and backups in <code>backups/</code>.</td>
+              </tr>
+              <tr>
+                <td><code>/var/lib/msp-atlas-updater</code></td>
+                <td>The updater's status and logs.</td>
+              </tr>
+              <tr>
+                <td><code>/etc/caddy/Caddyfile</code></td>
+                <td>The web proxy's settings. Written by Atlas; changes by hand are replaced.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          To change a setting in <code>atlas.env</code> (see the
+          <a
+            href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/DEPLOYMENT.md#configuration"
+            rel="noopener"
+            >deployment guide</a
+          >
+          for all of them), edit it as root and run <code>sudo systemctl restart msp-atlas</code>. Change the address
+          and proxies on <strong>Admin → Remote access</strong> instead, so the web proxy changes with them.
+        </p>
         <h2 id="docker-linux"><a class="anchor" href="#docker-linux">Docker (Linux)</a></h2>
+        <p>
+          The Compose file runs three containers: Atlas, PostgreSQL 16, and Caddy, which gets a public certificate for
+          your DNS name.
+        </p>
         <ol class="steps">
+          <li>Install Docker Engine with the Compose plugin.</li>
           <li>
             Point a DNS name at the server, and open ports 80 and 443. Caddy uses them to get and renew the certificate.
           </li>
           <li>
-            Copy <code>.env.example</code> to <code>.env</code> and set <code>PUBLIC_URL</code>,
-            <code>ATLAS_DOMAIN</code>, <code>POSTGRES_PASSWORD</code> and <code>ATLAS_MASTER_KEY</code>. Generate the
-            key with:
+            Get the files: clone the repository, or download it from the
+            <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">latest release</a>.
+          </li>
+          <li>
+            Copy <code>.env.example</code> to <code>.env</code> and set:
+            <ul>
+              <li><code>PUBLIC_URL</code>: the address, such as <code>https://atlas.example.com</code>;</li>
+              <li>
+                <code>ATLAS_DOMAIN</code>: the same name without <code>https://</code>, such as
+                <code>atlas.example.com</code>. Caddy requests the certificate for it;
+              </li>
+              <li><code>POSTGRES_PASSWORD</code>: a long random value;</li>
+              <li>
+                <code>ATLAS_MASTER_KEY</code>: a new master key, made with the command below. Copy it somewhere safe
+                now.
+              </li>
+            </ul>
           </li>
         </ol>
         <div class="code">
           <pre><code data-lang="bash">node -e &quot;console.log(require('crypto').randomBytes(32).toString('base64url'))&quot;</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
-        <ol class="steps" start="3">
+        <p>
+          Without Node.js, <code>openssl rand -base64 32 | tr '+/' '-_' | tr -d '='</code> makes the same kind of key.
+        </p>
+        <ol class="steps" start="5">
           <li>Start Atlas and read the setup code from the log:</li>
         </ol>
         <div class="code">
@@ -234,97 +403,214 @@ sudo bash install-atlas.sh --public-url https://atlas.example.com</code></pre>
 docker compose -f deploy/docker-compose.yml logs app | grep &quot;setup code&quot;</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
-        <p>A ready-built image is published for each release: <code>ghcr.io/ithealthtech/nexus-atlas:2.4.1</code>.</p>
+        <ol class="steps" start="6">
+          <li>Open the address, and go on to <a href="#creating-the-owner-account">Creating the owner account</a>.</li>
+        </ol>
+        <p>
+          A ready-built image is published for each release, <code>ghcr.io/ithealthtech/nexus-atlas:2.4.1</code>. The
+          database is kept in the <code>db</code> volume, and attachments and backups in the <code>data</code> volume.
+          Keep both, and <code>.env</code>, when you update.
+        </p>
         <h2 id="windows-server"><a class="anchor" href="#windows-server">Windows Server</a></h2>
         <ol class="steps">
           <li>
-            Install Node.js 22 or 24 LTS and PostgreSQL 16 or 17, and create an empty database and user for Atlas.
+            Install Node.js 24 LTS and PostgreSQL 16 or 17. In PostgreSQL, create an empty database and a user that owns
+            it, for example with pgAdmin, or with
+            <code>CREATE USER atlas WITH PASSWORD '…'; CREATE DATABASE atlas OWNER atlas;</code> in <code>psql</code>.
           </li>
           <li>
             Download <code>msp-atlas-2.4.1-windows.zip</code> from the
-            <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">latest release</a>,
-            check it against the <code>.sha256</code> file beside it, and extract it to a folder such as
-            <code>C:\Program Files\MSP Atlas</code>.
+            <a href="https://github.com/ithealthtech/nexus-atlas/releases/latest" rel="noopener">latest release</a>.
+            Check it with <code>Get-FileHash</code> against the <code>.sha256</code> file beside it; the two must match.
+            Extract it to a folder such as <code>C:\Program Files\MSP Atlas</code>.
           </li>
-          <li>From an elevated PowerShell prompt, run:</li>
+          <li>From an elevated PowerShell prompt in that folder, run:</li>
         </ol>
         <div class="code">
           <pre><code data-lang="powershell">.\deploy\windows\Install-Atlas.ps1 -PublicUrl https://atlas.example.com -DatabaseUrl &quot;postgres://atlas:&lt;password&gt;@localhost:5432/atlas&quot;</code></pre>
           <button class="copy" type="button" aria-label="Copy">Copy</button>
         </div>
-        <p>
-          The script creates <code>C:\ProgramData\MSP Atlas</code> (readable only by Administrators and SYSTEM), creates
-          the master key file on first install, and registers the <code>MSPAtlas</code> service to start automatically.
-          The setup code is in <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>.
-        </p>
+        <p>The script:</p>
+        <ul>
+          <li>creates <code>C:\ProgramData\MSP Atlas</code>, readable only by Administrators and SYSTEM;</li>
+          <li>
+            creates the master key file there on first install, and never overwrites it. Copy it somewhere safe now;
+          </li>
+          <li>writes <code>atlas.env</code> there with your settings;</li>
+          <li>
+            downloads the WinSW service wrapper, checks it against a known SHA-256, and registers the
+            <strong>MSPAtlas</strong> service, which starts automatically and restarts if it stops;
+          </li>
+          <li>starts it and waits until Atlas answers.</li>
+        </ul>
+        <p>The setup code is in <code>C:\ProgramData\MSP Atlas\logs\MSPAtlas.out.log</code>.</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>-PublicUrl</code></td>
+                <td>The address people use. Needed the first time.</td>
+              </tr>
+              <tr>
+                <td><code>-DatabaseUrl</code></td>
+                <td>The PostgreSQL connection. Needed the first time.</td>
+              </tr>
+              <tr>
+                <td><code>-BackupDir</code></td>
+                <td>
+                  Where backups go, such as <code>\\nas\atlas-backups</code>. The computer's account needs write access
+                  to the share.
+                </td>
+              </tr>
+              <tr>
+                <td><code>-DataDir</code></td>
+                <td>Where data, settings and the key live. Default <code>C:\ProgramData\MSP Atlas</code>.</td>
+              </tr>
+              <tr>
+                <td><code>-Port</code></td>
+                <td>The local port Atlas listens on. Default <code>4318</code>.</td>
+              </tr>
+              <tr>
+                <td><code>-Uninstall</code></td>
+                <td>Removes the service, but leaves data, key and backups in place.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <aside class="callout callout-note">
           <p class="callout-title">HTTPS on Windows</p>
           <p>
-            Atlas listens on <code>127.0.0.1:4318</code>. Publish it over HTTPS with IIS (URL Rewrite and Application
-            Request Routing) or Caddy for Windows. Add <code>-BackupDir \\nas\atlas-backups</code> to keep backups on
-            another machine.
+            Atlas listens only on <code>127.0.0.1:4318</code>, so it can't be reached from other computers until
+            something serves it over HTTPS: IIS with URL Rewrite and Application Request Routing, Caddy for Windows,
+            <code>cloudflared</code> or Tailscale, pointed at <code>http://127.0.0.1:4318</code>. See
+            <a href="manual/remote-access.html#docker-and-windows">Remote access and HTTPS</a>.
           </p>
         </aside>
         <p>
           To upgrade, extract the new package over the old folder and run the script again with no arguments. It keeps
           your settings and key.
         </p>
+        <h2 id="creating-the-owner-account">
+          <a class="anchor" href="#creating-the-owner-account">Creating the owner account</a>
+        </h2>
+        <p>
+          The first account is the owner: the one account that can do everything, including change how Atlas is reached
+          and erase all data.
+        </p>
+        <ol class="steps">
+          <li>Open Atlas at its address. It shows <strong>Create the owner account</strong>.</li>
+          <li>
+            Enter the <strong>Setup code</strong>. It works only until the first account exists, and Atlas never shows
+            it in the browser.
+          </li>
+          <li>
+            Enter the <strong>Company name</strong> (your MSP's name, shown throughout Atlas),
+            <strong>Your name</strong>, your <strong>Email</strong> and a <strong>Password</strong> of at least 12
+            characters. A long passphrase is best.
+          </li>
+          <li>Choose <strong>Create owner account</strong>.</li>
+          <li>
+            Set up two-step sign-in when asked: scan the code with an authenticator app and enter the 6-digit code it
+            shows. Staff accounts must use one.
+          </li>
+          <li>
+            Save the recovery codes Atlas shows somewhere other than Atlas, such as a sealed envelope or another
+            password manager. They're how you get in if you lose your phone.
+          </li>
+        </ol>
         <h2 id="the-master-key"><a class="anchor" href="#the-master-key">The master key</a></h2>
         <p>
-          The master key protects every encrypted value: vault passwords, one-time code keys, MFA secrets, and the
-          email, Hudu, ConnectWise and SIEM credentials. It also encrypts backups.
+          The master key protects every encrypted value in Atlas: vault passwords, one-time code keys, MFA secrets, and
+          the stored email, Hudu, ConnectWise, Microsoft and SIEM credentials. Backups are encrypted with a key made
+          from it too.
         </p>
         <aside class="callout callout-warning">
           <p class="callout-title">Keep a copy of the master key offline</p>
           <p>
-            If you lose the key, encrypted data and backups can't be recovered. Keep a copy in your existing password
-            manager and a sealed printout, never next to database backups.
+            If you lose the key, encrypted data and backups can't be recovered, by you or anyone else. Keep a copy in
+            your existing password manager and a sealed printout, never next to database backups. Someone with a backup
+            but no key can't read it; someone with both can.
           </p>
         </aside>
         <p>
-          To rotate it, list the new key first and the old one after it, restart, run
-          <code>npm run rewrap-keys -w @atlas/server</code>, then remove the old key. Keep the old key for as long as
-          you keep backups made with it.
+          Where it is: <code>/etc/msp-atlas/master.key</code> on Linux, <code>C:\ProgramData\MSP Atlas</code> on
+          Windows, or <code>ATLAS_MASTER_KEY</code> in Docker's <code>.env</code>.
         </p>
-        <h2 id="your-first-day"><a class="anchor" href="#your-first-day">Your first day</a></h2>
+        <h3 id="rotating-the-master-key">
+          <a class="anchor" href="#rotating-the-master-key">Rotating the master key</a>
+        </h3>
+        <p>Rotate it if a copy may have been exposed, or as your policy requires.</p>
         <ol class="steps">
+          <li>Take a backup on <strong>System status</strong>.</li>
           <li>
-            <strong>Create the owner account.</strong> Open Atlas, enter the setup code, and fill in your company and
-            your own account.
+            Make a new key (as for Docker above). Put it first, and keep the old one after it: one per line in the key
+            file, or separated by a comma in <code>ATLAS_MASTER_KEY</code>.
+          </li>
+          <li>Restart Atlas. It now encrypts with the new key and can still read the old.</li>
+          <li>
+            Re-encrypt everything with the new key. On Linux:
+            <code
+              >cd /opt/msp-atlas &amp;&amp; sudo runuser -u atlas -- node --env-file=/etc/msp-atlas/atlas.env
+              apps/server/dist/cli/rewrap-keys.js</code
+            >. In Docker:
+            <code>docker compose -f deploy/docker-compose.yml exec app npm run rewrap-keys -w @atlas/server</code>. It
+            prints how many values it changed.
           </li>
           <li>
-            <strong>Turn on two-step verification</strong> when asked, and save the recovery codes somewhere other than
-            Atlas.
+            Remove the old key and restart. Keep a copy of the old key for as long as you keep backups made with it.
+            System status warns while an old key is still loaded.
           </li>
-          <li><strong>Back up the master key</strong> as described above.</li>
-          <li>
-            <strong>Set up email</strong> under <strong>Admin → Email &amp; alerts</strong>, and choose
-            <strong>Send test</strong>. Email is needed for password resets, expiry alerts and the weekly digest.
-          </li>
-          <li>
-            <strong>Bring your data in</strong> from Hudu or spreadsheets under
-            <strong>Admin → Import &amp; export</strong>, or connect ConnectWise RMM. See
-            <a href="manual/integrations.html">Data and integrations</a>.
-          </li>
-          <li>
-            <strong>Invite your team</strong> and set their client access under
-            <strong>Admin → People &amp; access</strong>. See
-            <a href="manual/people-and-access.html">People and access</a>.
-          </li>
-          <li><strong>Check System status</strong> and make sure every check is green.</li>
         </ol>
+        <h2 id="your-first-day"><a class="anchor" href="#your-first-day">Your first day</a></h2>
         <p>
           <strong>Admin → Set up Atlas</strong> keeps track of these steps for you. Each one ticks itself off when it's
           really done (an email server saved, a client added, a backup taken), however you did it, and links straight to
           where it's done. Until the essential steps are finished, your dashboard shows a
           <strong>Set up Atlas</strong> card with the next ones.
         </p>
+        <ol class="steps">
+          <li><strong>Turn on two-step sign-in for yourself,</strong> if you skipped it.</li>
+          <li><strong>Back up the master key</strong>, as above.</li>
+          <li>
+            <strong>Make it yours</strong> under <strong>Admin → Theme</strong>. See
+            <a href="manual/settings.html#theme">Settings</a>.
+          </li>
+          <li>
+            <strong>Connect email</strong> under <strong>Admin → Email &amp; alerts</strong>, and choose
+            <strong>Send test</strong>. Email is needed for password resets, expiry alerts and the weekly digest. See
+            <a href="manual/settings.html#email-and-alerts">Settings</a>.
+          </li>
+          <li>
+            <strong>Bring your documentation across</strong> from Hudu or spreadsheets under
+            <strong>Admin → Import &amp; export</strong>, or <strong>add your first client</strong>. See
+            <a href="manual/integrations.html">Data and integrations</a>.
+          </li>
+          <li><strong>Connect ConnectWise RMM</strong> and <strong>Microsoft 365</strong>, if you use them.</li>
+          <li>
+            <strong>Invite your team</strong> and set their client access under
+            <strong>Admin → People &amp; access</strong>. See
+            <a href="manual/people-and-access.html">People and access</a>.
+          </li>
+          <li>
+            <strong>Take a first backup</strong> on <strong>Admin → System status</strong>, and check every check there
+            is green.
+          </li>
+        </ol>
         <h2 id="where-to-go-next"><a class="anchor" href="#where-to-go-next">Where to go next</a></h2>
         <ul>
+          <li>
+            <a href="manual/remote-access.html">Remote access and HTTPS</a> to change how people reach Atlas, and for
+            its certificate.
+          </li>
           <li><a href="manual/people-and-access.html">People and access</a> for roles, groups and single sign-on.</li>
           <li>
-            <a href="manual/looking-after-atlas.html">Keeping Atlas healthy</a> for backups, updates, services and the
-            certificate.
+            <a href="manual/looking-after-atlas.html">Keeping Atlas healthy</a> for backups, updates and services.
           </li>
           <li>
             The
@@ -336,15 +622,17 @@ docker compose -f deploy/docker-compose.yml logs app | grep &quot;setup code&quo
         </ul>
         <nav class="pager" aria-label="Chapters">
           <a class="prev" href="manual/client-portal.html"><span>Previous</span>For your clients</a
-          ><a class="next" href="manual/people-and-access.html"><span>Next</span>People and access</a>
+          ><a class="next" href="manual/remote-access.html"><span>Next</span>Remote access and HTTPS</a>
         </nav>
       </main>
       <nav class="toc" aria-label="On this page">
         <p>On this page</p>
         <ul>
+          <li><a href="#before-you-start">Before you start</a></li>
           <li><a href="#ubuntu-or-debian">Ubuntu or Debian</a></li>
           <li><a href="#docker-linux">Docker (Linux)</a></li>
           <li><a href="#windows-server">Windows Server</a></li>
+          <li><a href="#creating-the-owner-account">Creating the owner account</a></li>
           <li><a href="#the-master-key">The master key</a></li>
           <li><a href="#your-first-day">Your first day</a></li>
           <li><a href="#where-to-go-next">Where to go next</a></li>

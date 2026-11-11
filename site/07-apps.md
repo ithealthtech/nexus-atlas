@@ -67,7 +67,7 @@ A small app in the notification area, for looking things up without opening a br
 It installs for you only and doesn't need an administrator. The `.sha256` file beside each download in the GitHub release lets you check the file.
 
 > [!note] The certificate must be trusted
-> Atlas for Windows refuses a certificate Windows doesn't trust, and has no way to override that. If your Atlas was installed at an IP address, install its certificate authority first. See [Keeping Atlas healthy](looking-after-atlas.html#the-certificate).
+> Atlas for Windows refuses a certificate Windows doesn't trust, and has no way to override that. If your Atlas was installed at an IP address, install its certificate authority first. See [Keeping Atlas healthy](remote-access.html#the-certificate).
 
 ### Sign in
 

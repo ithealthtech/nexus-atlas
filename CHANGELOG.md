@@ -4,6 +4,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Changed
+
+- **The manual explains every setting step by step.** A new chapter, **Remote access and HTTPS**, walks through each way of reaching Atlas (this server, Cloudflare Tunnel, Tailscale and Funnel, and your own reverse proxy): what to set up first, what to enter in each field, how to check it worked, what to do when it doesn't, what moves with the address, and how to get back in from the server. **Installing Atlas**, **Settings** and **Keeping Atlas healthy** now cover every installer option, each mail service from the Entra app registration onwards, every **Theme** setting, what each **System status** check means, restoring a backup on each kind of server, moving Atlas to a new server, and running services from the console. Chapters after **Installing Atlas** move up one number.
+
 ## [2.4.1] - 2026-11-11
 
 ### Added

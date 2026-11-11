@@ -3,8 +3,8 @@ title: Everyday tasks at a glance
 nav: Tasks at a glance
 out: manual/tasks.html
 group: Reference
-order: 14
-number: 14
+order: 15
+number: 15
 summary: The common jobs in one table, with where to go for each.
 ---
 

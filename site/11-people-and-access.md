@@ -3,8 +3,8 @@ title: People and access
 nav: People and access
 out: manual/people-and-access.html
 group: Running Atlas
-order: 10
-number: 10
+order: 11
+number: 11
 summary: Adding people, roles and client access, groups, single sign-on, vault policies, emergency access, and the security log.
 ---
 

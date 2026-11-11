@@ -4,8 +4,8 @@ nav: Troubleshooting
 out: support.html
 active: support
 group: Reference
-order: 15
-number: 15
+order: 16
+number: 16
 summary: Symptoms and fixes, from sign-in problems to failed backups, syncs and rotations, and how to ask for help.
 ---
 

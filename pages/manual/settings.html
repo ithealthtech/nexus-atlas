@@ -115,38 +115,44 @@
             <a href="../install.html"><span class="num">9</span>Installing Atlas</a>
           </li>
           <li>
-            <a href="../manual/people-and-access.html"><span class="num">10</span>People and access</a>
+            <a href="../manual/remote-access.html"><span class="num">10</span>Remote access and HTTPS</a>
           </li>
           <li>
-            <a href="../manual/settings.html" aria-current="page"><span class="num">11</span>Settings</a>
+            <a href="../manual/people-and-access.html"><span class="num">11</span>People and access</a>
           </li>
           <li>
-            <a href="../manual/integrations.html"><span class="num">12</span>Data and integrations</a>
+            <a href="../manual/settings.html" aria-current="page"><span class="num">12</span>Settings</a>
           </li>
           <li>
-            <a href="../manual/looking-after-atlas.html"><span class="num">13</span>Keeping Atlas healthy</a>
+            <a href="../manual/integrations.html"><span class="num">13</span>Data and integrations</a>
           </li>
           <li>
-            <a href="../manual/upgrading-to-2.html"><span class="num">17</span>Upgrading to 2.0</a>
+            <a href="../manual/looking-after-atlas.html"><span class="num">14</span>Keeping Atlas healthy</a>
+          </li>
+          <li>
+            <a href="../manual/upgrading-to-2.html"><span class="num">18</span>Upgrading to 2.0</a>
           </li>
         </ul>
         <p class="sidebar-group">Reference</p>
         <ul>
           <li>
-            <a href="../manual/tasks.html"><span class="num">14</span>Tasks at a glance</a>
+            <a href="../manual/tasks.html"><span class="num">15</span>Tasks at a glance</a>
           </li>
           <li>
-            <a href="../support.html"><span class="num">15</span>Troubleshooting</a>
+            <a href="../support.html"><span class="num">16</span>Troubleshooting</a>
           </li>
           <li>
-            <a href="../security.html"><span class="num">16</span>Security model</a>
+            <a href="../security.html"><span class="num">17</span>Security model</a>
           </li>
         </ul>
       </nav>
       <main id="content" class="doc">
-        <p class="eyebrow">Chapter 11</p>
+        <p class="eyebrow">Chapter 12</p>
         <h1>Settings</h1>
-        <p>Settings has its own group in the Admin menu, one page per job. This chapter goes through each one.</p>
+        <p>
+          Settings has its own group in the Admin menu, one page per job. Only administrators and the owner see it. Each
+          section below explains what a setting does, why you'd change it, the exact steps, and how to check it worked.
+        </p>
         <div class="table">
           <table>
             <thead>
@@ -158,11 +164,17 @@
             <tbody>
               <tr>
                 <td><strong>Email &amp; alerts</strong></td>
-                <td>How Atlas sends email, when expiry alerts go out, and how long logs are kept.</td>
+                <td>
+                  How Atlas sends email, when expiry alerts go out, the weekly digest, and how long logs are kept. Also
+                  the way into the <strong>Alerting center</strong>.
+                </td>
               </tr>
               <tr>
                 <td><strong>Monitoring</strong></td>
-                <td>What counts as healthy: RMM health, warranties, asset statistics, domain and SSL trackers.</td>
+                <td>
+                  What counts as healthy: RMM agent check-ins, warranties, asset statistics, and the domain and SSL
+                  trackers.
+                </td>
               </tr>
               <tr>
                 <td><strong>Sign-in</strong></td>
@@ -170,16 +182,20 @@
               </tr>
               <tr>
                 <td><strong>API keys</strong></td>
-                <td>Keys for your RMM and scripts.</td>
+                <td>Keys for your RMM, PSA and scripts.</td>
               </tr>
               <tr>
                 <td><strong>Theme</strong></td>
-                <td>Your logo, colours and the welcome message for client accounts.</td>
+                <td>Your brand, logos, colours, layout, the sign-in page and the client portal's welcome.</td>
               </tr>
             </tbody>
           </table>
         </div>
         <p><strong>Webhooks</strong> is in the System group, and is covered at the end of this chapter.</p>
+        <p>
+          Changes on these pages apply for everyone as soon as you save. Changes that affect security, such as email
+          credentials or API keys, are written to the security log.
+        </p>
         <h2 id="email-alerts"><a class="anchor" href="#email-alerts">Email &amp; alerts</a></h2>
         <figure>
           <a href="../images/manual/email.png"
@@ -187,9 +203,43 @@
           /></a>
           <figcaption>Admin → Email &amp; alerts.</figcaption>
         </figure>
+        <p>Atlas sends email for:</p>
+        <ul>
+          <li>
+            <strong>password reset links</strong>, so people can reset a forgotten password from the sign-in page.
+            Without email, an administrator has to reset each one;
+          </li>
+          <li>
+            <strong>expiry alerts</strong>, when something is about to run out (a password, domain, certificate,
+            warranty, licence or anything else with a due date), and on the day itself;
+          </li>
+          <li><strong>the weekly digest</strong> on Monday mornings;</li>
+          <li>invitations, emergency access, scheduled reports and other messages people ask for.</li>
+        </ul>
+        <p>Until email is set up, System status shows <strong>Email is not set up</strong>.</p>
+        <h3 id="turning-email-on"><a class="anchor" href="#turning-email-on">Turning email on</a></h3>
+        <ol class="steps">
+          <li>Open <strong>Admin → Email &amp; alerts</strong>.</li>
+          <li>Tick <strong>Send email from Atlas</strong>.</li>
+          <li>Under <strong>Mail service</strong>, choose one of the three services below, and fill in its fields.</li>
+          <li>
+            Fill in <strong>From address</strong> (the address messages come from) and <strong>From name</strong> (the
+            name people see, by default <code>MSP Atlas</code>; your company's name is usually better).
+          </li>
+          <li>Choose <strong>Save email settings</strong>.</li>
+          <li>
+            Under <strong>Send a test email</strong>, enter an address (yours by default) and choose
+            <strong>Send test</strong>. It uses the saved settings, so save first.
+          </li>
+          <li>
+            Check the message arrives, and isn't in junk mail. If the send fails, Atlas shows the mail server's or
+            Microsoft's own error.
+          </li>
+        </ol>
         <p>
-          Atlas sends password reset links, expiry alerts and a Monday digest. Tick
-          <strong>Send email from Atlas</strong>, then choose a mail service.
+          Passwords and client secrets are encrypted with the master key as soon as you save. They're never shown again:
+          the field says <strong>Saved and encrypted. Leave empty to keep it.</strong>, and leaving it empty keeps the
+          saved one.
         </p>
         <h3 id="microsoft-365-app-registration-recommended">
           <a class="anchor" href="#microsoft-365-app-registration-recommended"
@@ -197,62 +247,183 @@
           >
         </h3>
         <p>
-          Atlas signs in as an app registration and sends through Microsoft Graph. No mailbox password or SMTP sign-in
-          is involved.
+          Atlas signs in to your Microsoft 365 tenant as an app, with OAuth2, and sends through Microsoft Graph. No
+          mailbox password or SMTP sign-in is involved, and it isn't affected by Microsoft retiring basic
+          authentication. Use it if your mail is in Microsoft 365.
+        </p>
+        <p>
+          You need a Microsoft Entra account that can register apps and grant admin consent (Global Administrator,
+          Application Administrator or Cloud Application Administrator), and a licensed or shared mailbox to send as,
+          such as <code>atlas@yourmsp.com</code>.
         </p>
         <ol class="steps">
           <li>
-            In the Microsoft Entra admin center, open <strong>App registrations → New registration</strong> (single
-            tenant, no redirect address).
+            In the Microsoft Entra admin center, open <strong>Identity → Applications → App registrations</strong> and
+            choose <strong>New registration</strong>.
           </li>
           <li>
-            Under <strong>API permissions</strong>, add
-            <strong>Microsoft Graph → Application permissions → Mail.Send</strong>, then
-            <strong>Grant admin consent</strong>.
+            Name it, for example <code>MSP Atlas email</code>. Under <strong>Supported account types</strong>, choose
+            <strong>Accounts in this organizational directory only</strong> (single tenant). Leave
+            <strong>Redirect URI</strong> empty. Choose <strong>Register</strong>.
           </li>
           <li>
-            Under <strong>Certificates &amp; secrets</strong>, create a client secret and copy its value. Note when it
-            expires.
+            On the app's <strong>Overview</strong>, copy the <strong>Application (client) ID</strong> and the
+            <strong>Directory (tenant) ID</strong>.
           </li>
           <li>
-            In Atlas, enter the <strong>Directory (tenant) ID</strong>, <strong>Application (client) ID</strong> and
-            <strong>Client secret</strong>, then the <strong>From address</strong> and <strong>From name</strong>.
+            Open <strong>API permissions → Add a permission → Microsoft Graph → Application permissions</strong>, find
+            <strong>Mail.Send</strong>, tick it and choose <strong>Add permissions</strong>. It must be an
+            <em>application</em> permission: a delegated one doesn't work, because Atlas sends without anyone signed in.
           </li>
-          <li>Choose <strong>Save</strong>, then <strong>Send test</strong>.</li>
+          <li>
+            Choose <strong>Grant admin consent for</strong> your organization, and confirm. The status column must show
+            a green tick.
+          </li>
+          <li>
+            Open <strong>Certificates &amp; secrets → Client secrets → New client secret</strong>. Give it a description
+            and an expiry (up to 24 months), and choose <strong>Add</strong>. Copy the <strong>Value</strong> straight
+            away: it's shown only once. (The <strong>Secret ID</strong> is not what Atlas needs.) Put a reminder in your
+            calendar for before it expires.
+          </li>
+          <li>
+            In Atlas, choose <strong>Microsoft 365 (app registration)</strong>, and enter the
+            <strong>Directory (tenant) ID</strong>, <strong>Application (client) ID</strong> and
+            <strong>Client secret</strong> (the value).
+          </li>
+          <li>
+            Enter the <strong>From address</strong>: a mailbox in that tenant. Messages are sent as, and saved in the
+            Sent Items of, that mailbox.
+          </li>
+          <li>
+            Choose <strong>Save email settings</strong>, then <strong>Check permissions</strong>. It signs in to
+            Microsoft 365 and says whether the app has the Mail.Send application permission. Then choose
+            <strong>Send test</strong>.
+          </li>
         </ol>
         <aside class="callout callout-tip">
           <p class="callout-title">Limit what the app can send as</p>
           <p>
-            An Exchange Online application access policy, or RBAC for Applications, can limit the app to the From
-            mailbox so it can't send as anyone else.
+            Mail.Send on its own lets the app send as <em>any</em> mailbox in your tenant. Limit it to the From mailbox
+            with an Exchange Online
+            <a href="https://learn.microsoft.com/graph/auth-limit-mailbox-access" rel="noopener"
+              >application access policy</a
+            >, or with RBAC for Applications. Atlas works the same either way.
           </p>
         </aside>
-        <h3 id="other-mail-services"><a class="anchor" href="#other-mail-services">Other mail services</a></h3>
-        <ul>
+        <p>
+          <strong>When the secret expires,</strong> sending stops and the test shows Microsoft's error. Create a new
+          secret (step 6), paste its value into <strong>Client secret</strong>, and save.
+        </p>
+        <h3 id="microsoft-365-smtp-legacy">
+          <a class="anchor" href="#microsoft-365-smtp-legacy">Microsoft 365 SMTP (legacy)</a>
+        </h3>
+        <p>
+          Atlas signs in to <code>smtp.office365.com</code> on port 587 with STARTTLS, as a mailbox, with its password.
+          Choosing it fills in the server, port and encryption. Microsoft is retiring basic authentication for SMTP in
+          Exchange Online, so System status warns while it's in use. Use it only until you can set up the app
+          registration.
+        </p>
+        <ol class="steps">
           <li>
-            <strong>Microsoft 365 SMTP (legacy)</strong> fills in Office 365's server and port. Microsoft is retiring
-            basic authentication for SMTP, so prefer the app registration.
+            Use a licensed mailbox, and turn on <strong>Authenticated SMTP</strong> for it in the Microsoft 365 admin
+            center (<strong>Users → Active users →</strong> the user <strong>→ Mail → Manage email apps</strong>).
           </li>
           <li>
-            <strong>Other SMTP server</strong> takes an <strong>SMTP server</strong>, <strong>Port</strong>,
-            <strong>Encryption</strong>, <strong>Username</strong> and <strong>Password</strong>.
+            Enter the mailbox's address as <strong>Username</strong>, and its password as <strong>Password</strong>. If
+            the mailbox has MFA, use an app password instead.
           </li>
-        </ul>
-        <p><strong>Send test</strong> shows the mail server's own error if something is wrong.</p>
+          <li>
+            Use the same address as the <strong>From address</strong>. Microsoft refuses mail from any other address.
+          </li>
+        </ol>
+        <h3 id="other-smtp-server"><a class="anchor" href="#other-smtp-server">Other SMTP server</a></h3>
+        <p>For any other provider (Google Workspace, SendGrid, Mailgun, Amazon SES and so on) or an internal relay:</p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>What to enter</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>SMTP server</strong></td>
+                <td>
+                  The provider's SMTP host name, such as <code>smtp.gmail.com</code> or <code>smtp.sendgrid.net</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Port</strong></td>
+                <td>
+                  Usually <code>587</code> for STARTTLS, <code>465</code> for TLS from the start, or <code>25</code> for
+                  an internal relay.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Encryption</strong></td>
+                <td>
+                  <strong>STARTTLS (usually port 587)</strong>, <strong>TLS from the start (usually port 465)</strong>,
+                  or <strong>None (trusted internal relay only)</strong>. Match what the provider says for the port.
+                  Only choose None for a relay on your own network: without encryption, the password and messages cross
+                  the network in the clear.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Username</strong> and <strong>Password</strong></td>
+                <td>
+                  The account's credentials, or an API key, as the provider says. Leave both empty for a relay that
+                  doesn't need sign-in.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>From address</strong></td>
+                <td>An address the provider lets that account send from. Many refuse anything else.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Your mail domain's SPF and DKIM records should allow the provider, or messages land in junk mail.</p>
         <h3 id="alerts-and-logs"><a class="anchor" href="#alerts-and-logs">Alerts and logs</a></h3>
+        <p>
+          The <strong>Alerts and logs</strong> card sets when expiry emails go out and how long logs are kept. Choose
+          <strong>Save</strong> after changing anything.
+        </p>
         <ul>
           <li>
-            <strong>Email an alert this many days before something is due.</strong> For example, 30, 14 and 7 days.
+            <strong>Email an alert this many days before something is due.</strong> Tick any of
+            <strong>60 days</strong>, <strong>30 days</strong>, <strong>14 days</strong>, <strong>7 days</strong>,
+            <strong>3 days</strong> and <strong>1 day</strong>. The default is 30, 14 and 7. An alert also goes out on
+            the due day itself. More days give more warning but more email; for things that take time to renew (domains,
+            certificates, contracts), keep 60 or 30.
           </li>
           <li>
-            <strong>Send a weekly digest on Monday mornings,</strong> listing everything overdue or due in the coming
-            weeks.
+            <strong>Send a weekly digest on Monday mornings.</strong> One email listing everything overdue, or due in
+            the coming weeks, that the person can see. On by default. Useful as a safety net for alerts that were
+            missed.
           </li>
-          <li><strong>Keep security and password logs for</strong> a number of years, or forever (the default).</li>
+          <li>
+            <strong>Keep security and password logs for</strong> <strong>1 year</strong>, <strong>2 years</strong>,
+            <strong>3 years</strong>, <strong>7 years</strong>, or <strong>Keep forever</strong> (the default). Older
+            security log entries and password access history are deleted automatically. Many compliance frameworks ask
+            for at least a year.
+          </li>
         </ul>
         <p>
-          People choose whether they receive alerts with <strong>Email me about expirations</strong> on their own
-          account page.
+          <strong>Who gets alerts.</strong> Each alert goes to the staff who can see the item and haven't turned off
+          <strong>Email me about expirations</strong> on their own account page. Client accounts don't get them. Each
+          person gets at most one alert email a day, and one digest a week, even with several Atlas servers. Alerts and
+          the digest go out after 07:00 server time; <code>ATLAS_DIGEST_HOUR</code> changes the hour.
+        </p>
+        <p>
+          <strong>The alerting center.</strong> The <strong>Open alerting center</strong> link leads to custom email and
+          Microsoft Teams templates, rules, client rules, pauses, escalation and delivery history. The alert days above
+          drive Atlas's classic alerts. Once you choose <strong>Go live</strong> in the alerting center, its published
+          rules send the expiry alerts instead, so nothing is sent twice; the Monday digest keeps coming either way, and
+          <strong>Switch back to classic alerts</strong> returns to the settings above. See the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ALERTING.md" rel="noopener"
+            >alerting guide</a
+          >.
         </p>
         <h2 id="monitoring"><a class="anchor" href="#monitoring">Monitoring</a></h2>
         <figure>
@@ -261,46 +432,116 @@
           /></a>
           <figcaption>Admin → Monitoring.</figcaption>
         </figure>
+        <p>
+          <strong>Admin → Monitoring</strong> decides what counts as healthy on the client pages and the dashboard. Each
+          card has its own <strong>Save</strong>.
+        </p>
+        <h3 id="rmm-health"><a class="anchor" href="#rmm-health">RMM health</a></h3>
+        <p>How long an RMM agent can go without checking in before the RMM health charts count it as stale.</p>
         <div class="table">
           <table>
             <thead>
               <tr>
-                <th>Section</th>
-                <th>Settings</th>
+                <th>Setting</th>
+                <th>Default</th>
+                <th>What it does</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td><strong>RMM health</strong></td>
-                <td>
-                  <strong>Stale after (days)</strong> and <strong>Very stale after (days)</strong>: when an agent that
-                  hasn't checked in counts as stale.
-                </td>
+                <td><strong>Stale after (days)</strong></td>
+                <td>7</td>
+                <td>A device that hasn't checked in for this many days counts as stale (amber). Between 1 and 365.</td>
               </tr>
               <tr>
-                <td><strong>Asset warranty</strong></td>
+                <td><strong>Very stale after (days)</strong></td>
+                <td>30</td>
                 <td>
-                  <strong>Expiring soon within (days)</strong>, and
-                  <strong>Look up warranties automatically</strong> for Dell, Lenovo and HP.
-                </td>
-              </tr>
-              <tr>
-                <td><strong>Asset statistics</strong></td>
-                <td>Which asset layouts count as servers, workstations and other devices.</td>
-              </tr>
-              <tr>
-                <td><strong>Domain and SSL trackers</strong></td>
-                <td>
-                  <strong>Check on a schedule</strong> (domains weekly, daily within 60 days of expiry; certificates
-                  daily), and <strong>Add SSL certificates for domains</strong>.
+                  Counts as very stale (red), which usually means the device is gone or its agent is broken. Must be
+                  more than <strong>Stale after</strong>, up to 730.
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+        <p>
+          Set <strong>Stale after</strong> to a little longer than your quietest devices go offline normally, such as
+          laptops over a two-week holiday, so the chart shows real problems.
+        </p>
+        <h3 id="asset-warranty"><a class="anchor" href="#asset-warranty">Asset warranty</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Default</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Expiring soon within (days)</strong></td>
+                <td>90</td>
+                <td>
+                  A warranty that ends within this many days counts as expiring soon on the warranty chart. Between 1
+                  and 365. Long enough to quote a replacement or an extension.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Look up warranties automatically</strong></td>
+                <td></td>
+                <td>
+                  When a Dell, Lenovo or HP device is saved, or synced from the RMM, with a serial number and no
+                  warranty date, Atlas gets the date from the vendor's own warranty check. No API keys are needed.
+                  <strong>Check warranty</strong> on an asset works either way.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="asset-statistics"><a class="anchor" href="#asset-statistics">Asset statistics</a></h3>
+        <p>
+          The asset statistics card counts servers, workstations and other devices. For each asset layout, choose what
+          it counts as: <strong>Automatic</strong> (Atlas decides from the layout and the device's details), one of the
+          kinds, or <strong>Not counted</strong> for layouts that aren't devices, such as licences.
+        </p>
+        <h3 id="domain-and-ssl-trackers">
+          <a class="anchor" href="#domain-and-ssl-trackers">Domain and SSL trackers</a>
+        </h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Check on a schedule</strong></td>
+                <td>
+                  Re-checks each domain with its registry (weekly, and daily once it expires within 60 days), and reads
+                  each website's certificate daily, so expiry dates stay current. Off, dates only change when someone
+                  chooses <strong>Check now</strong>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Add SSL certificates for domains</strong></td>
+                <td>
+                  When a domain's website serves a certificate and the client has no SSL certificate asset for it, Atlas
+                  adds one, so its expiry is tracked too.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Alerts for domains and certificates go out on the alert days set under <strong>Email &amp; alerts</strong>.
+        </p>
         <h2 id="sign-in"><a class="anchor" href="#sign-in">Sign-in</a></h2>
         <p>
-          Single sign-on with Microsoft Entra ID and SAML is described in
+          <strong>Admin → Sign-in</strong> lets staff sign in with Microsoft Entra ID or a SAML identity provider,
+          instead of, or as well as, a password. It is described step by step in
           <a href="people-and-access.html#single-sign-on">People and access</a>.
         </p>
         <h2 id="api-keys"><a class="anchor" href="#api-keys">API keys</a></h2>
@@ -310,27 +551,67 @@
           /></a>
           <figcaption>Admin → API keys.</figcaption>
         </figure>
-        <p>API keys let your RMM, PSA or scripts read and update Atlas through its REST API.</p>
+        <p>
+          API keys let your RMM, PSA, automations or scripts read and update Atlas through its REST API, without signing
+          in as a person.
+        </p>
+        <h3 id="creating-a-key"><a class="anchor" href="#creating-a-key">Creating a key</a></h3>
         <ol class="steps">
-          <li>Choose <strong>New key</strong>. Atlas asks for your password again.</li>
           <li>
-            Give it a <strong>Name</strong>, choose its scopes (<code>read</code>, <code>write</code>, and optionally
-            <code>passwords</code>), and when it <strong>Expires</strong> (a year unless you choose otherwise).
+            Open <strong>Admin → API keys</strong> and choose <strong>New key</strong>. Atlas asks for your password
+            again.
           </li>
-          <li>Copy the key. It's shown once; Atlas keeps only a hash of it.</li>
+          <li>
+            Enter a <strong>Name</strong> that says what will use it, such as <code>ConnectWise sync</code>. You'll see
+            it in the security log every time the key is used.
+          </li>
+          <li>
+            Tick only the scopes it needs:
+            <ul>
+              <li><strong>Read documentation</strong>: read clients, assets, documents and the rest.</li>
+              <li><strong>Create and change documentation</strong>: create and update them too.</li>
+              <li>
+                <strong>Use the password vault</strong>: read passwords. Only tick this if the tool really needs
+                passwords, since anyone with the key can then read them.
+              </li>
+            </ul>
+          </li>
+          <li>
+            Choose when it <strong>Expires</strong>: <strong>In 90 days</strong>, <strong>In 1 year</strong> (the
+            default) or <strong>Never</strong>. Shorter is safer; a key that never expires should be stored as carefully
+            as an administrator's password.
+          </li>
+          <li>
+            Create it and copy the key. It's shown once: Atlas keeps only a hash of it, so it can't show it again. If
+            you lose it, revoke it and make a new one.
+          </li>
         </ol>
+        <h3 id="what-a-key-can-do"><a class="anchor" href="#what-a-key-can-do">What a key can do</a></h3>
         <ul>
-          <li><strong>The key acts as you,</strong> with your access, limited to its scopes.</li>
+          <li>
+            <strong>The key acts as you,</strong> with your access to clients, limited further by its scopes. If your
+            access changes, or your account is disabled, the key changes with it.
+          </li>
           <li>
             Keys can only reach documentation and vault endpoints, never accounts, people, settings, backups or logs.
           </li>
-          <li>Every use is in the security log. <strong>Revoke</strong> keys you no longer use.</li>
           <li>
-            The API is at <code>/api/v1</code> on your Atlas, described at <code>/api/v1/openapi.json</code>. Within v1,
-            updates only add to it, so your scripts keep working. The other <code>/api</code> addresses are the web
-            app's own and can change in any release.
+            Every use is written to the security log under the key's name. The list shows when each was last used, and
+            when it expires.
+          </li>
+          <li>
+            <strong>Revoke</strong> stops a key working at once. Do it for keys you no longer use; System status lists
+            keys unused for 60 days.
           </li>
         </ul>
+        <h3 id="using-the-api"><a class="anchor" href="#using-the-api">Using the API</a></h3>
+        <p>
+          The API is at <code>/api/v1</code> on your Atlas, described in OpenAPI at <code>/api/v1/openapi.json</code>,
+          which most tools can import. Send the key in the <code>Authorization</code> header as
+          <code>Bearer atlas_…</code>. Each key can make up to 600 requests a minute. Within v1, updates only add to it,
+          so your scripts keep working. The other <code>/api</code> addresses are the web app's own and can change in
+          any release.
+        </p>
         <h2 id="theme"><a class="anchor" href="#theme">Theme</a></h2>
         <figure>
           <a href="../images/manual/theme.png"
@@ -339,13 +620,148 @@
           <figcaption>Admin → Theme. Changes preview as you make them, and apply for everyone once saved.</figcaption>
         </figure>
         <p>
-          <strong>Admin → Theme</strong> sets the <strong>Brand name</strong>, <strong>Tagline</strong>,
-          <strong>Browser tab title</strong>, <strong>Favicon</strong>, a <strong>Logo</strong> (and one for dark mode),
-          the <strong>Accent</strong> colour (and one for dark mode), and the <strong>Welcome message</strong> client
-          accounts see on their dashboard. Text on the accent switches between light and dark to stay readable. Changes
-          preview as you make them, and apply for everyone once you save. Atlas for Windows uses the favicon as its icon
-          too, in its window, the taskbar, the tray, and the Start menu, and picks up a new one within six hours (or
-          when it next starts).
+          <strong>Admin → Theme</strong> makes Atlas look like your company, for your team, the client portal and the
+          sign-in page. Changes show across Atlas as you make them, but only for you: the bar at the bottom says
+          <strong>Unsaved changes. You see them everywhere; nobody else does yet.</strong> Choose
+          <strong>Save theme</strong> to apply them for everyone, <strong>Discard</strong> to throw them away, or
+          <strong>Atlas defaults</strong> to put every setting back to Atlas's own (then save).
+        </p>
+        <h3 id="brand"><a class="anchor" href="#brand">Brand</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Brand name</strong></td>
+                <td>Shown in the sidebar, the sign-in page and the browser tab.</td>
+              </tr>
+              <tr>
+                <td><strong>Tagline</strong></td>
+                <td>A short line under the name, when there's no logo.</td>
+              </tr>
+              <tr>
+                <td><strong>Browser tab title</strong></td>
+                <td>The text on browser tabs. Defaults to the brand name.</td>
+              </tr>
+              <tr>
+                <td><strong>Favicon</strong></td>
+                <td>
+                  The icon on browser tabs: a square PNG, SVG or ICO under 50 KB. Atlas for Windows uses it as its icon
+                  too, in its window, the taskbar, the tray and the Start menu, and picks up a new one within six hours
+                  or when it next starts.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Logo</strong></td>
+                <td>
+                  Replaces the name in the sidebar and on the sign-in page. PNG, JPEG or SVG under 150 KB. Wide logos
+                  work best.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Logo for dark mode</strong></td>
+                <td>Optional. Used in dark mode instead of the logo above, such as a white version.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="colours"><a class="anchor" href="#colours">Colours</a></h3>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Accent</strong></td>
+                <td>Buttons, links and highlights.</td>
+              </tr>
+              <tr>
+                <td><strong>Accent in dark mode</strong></td>
+                <td>Optional. Otherwise the accent is lightened for dark mode.</td>
+              </tr>
+              <tr>
+                <td><strong>Sidebar</strong></td>
+                <td>The navigation panel, and the sign-in page's brand panel.</td>
+              </tr>
+              <tr>
+                <td><strong>Sidebar in dark mode</strong></td>
+                <td>Optional. Otherwise the sidebar colour above is used.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Text on each colour switches between light and dark by itself to stay readable.
+          <strong>Readability checks</strong> under the colours list each combination as <strong>Passes</strong> or
+          <strong>Hard to read</strong>. Fix anything hard to read before saving: some people can't read low-contrast
+          text at all.
+        </p>
+        <h3 id="layout"><a class="anchor" href="#layout">Layout</a></h3>
+        <p>
+          These apply to everyone, on every screen. Each person's own menu style is separate, on their account page.
+        </p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Choices</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Text size</strong></td>
+                <td><strong>Small</strong>, <strong>Default</strong>, <strong>Large</strong>.</td>
+              </tr>
+              <tr>
+                <td><strong>Density</strong></td>
+                <td><strong>Comfortable</strong>, or <strong>Compact</strong> to fit more rows on the screen.</td>
+              </tr>
+              <tr>
+                <td><strong>Corners</strong></td>
+                <td><strong>Square</strong>, <strong>Soft (default)</strong>, <strong>Round</strong>.</td>
+              </tr>
+              <tr>
+                <td><strong>Sidebar width</strong></td>
+                <td><strong>Narrow</strong>, <strong>Default</strong>, <strong>Wide</strong>.</td>
+              </tr>
+              <tr>
+                <td><strong>Current page in navigation</strong></td>
+                <td>
+                  How the page you're on is marked: <strong>Filled highlight</strong>, <strong>Accent bar</strong> or
+                  <strong>Coloured text</strong>.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Animations</strong></td>
+                <td>Dialogs and notifications slide in. People who ask their system for less motion never see it.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="sign-in-page"><a class="anchor" href="#sign-in-page">Sign-in page</a></h3>
+        <p>The brand panel beside the sign-in form, on wider screens.</p>
+        <ul>
+          <li><strong>Headline</strong>, which replaces “A clearer picture. For every client.”</li>
+          <li><strong>Text</strong> under it, such as who to call for help.</li>
+          <li>
+            <strong>Background image</strong>: JPEG, PNG or WebP under 400 KB. It's darkened with the sidebar colour so
+            the text stays readable.
+          </li>
+        </ul>
+        <h3 id="client-portal"><a class="anchor" href="#client-portal">Client portal</a></h3>
+        <p>
+          <strong>Welcome message</strong> is shown to client contacts at the top of their dashboard, up to 500
+          characters. Use it to say what's there and how to reach your help desk.
         </p>
         <h2 id="webhooks"><a class="anchor" href="#webhooks">Webhooks</a></h2>
         <figure>
@@ -356,30 +772,51 @@
         </figure>
         <p>
           <strong>Admin → Webhooks</strong> makes Atlas post a short message to an address of yours whenever something
-          changes, so a chat channel, an automation or another tool can react.
+          changes, so a chat channel, an automation (Power Automate, Zapier, n8n) or another tool can react.
         </p>
+        <h3 id="adding-a-webhook"><a class="anchor" href="#adding-a-webhook">Adding a webhook</a></h3>
         <ol class="steps">
+          <li>Choose <strong>New webhook</strong>.</li>
           <li>
-            Choose <strong>New webhook</strong>, give it a name and an <code>https://</code> address, and tick the kinds
-            of item it should hear about: clients, assets, documents, passwords, contacts, locations, checklists.
+            Give it a name, and the <code>https://</code> address to post to. It must be HTTPS, and redirects aren't
+            followed.
           </li>
           <li>
-            Copy the <strong>signing secret</strong>, shown once. The receiver uses it to check a message came from
-            Atlas.
+            Tick the kinds of item it should hear about: clients, assets, documents, passwords, contacts, locations,
+            checklists.
           </li>
-          <li>Choose <strong>Send test</strong> to post a <code>ping</code>.</li>
+          <li>
+            Save, and copy the <strong>signing secret</strong>. It's shown once. The receiver uses it to check a message
+            really came from Atlas.
+          </li>
+          <li>Choose <strong>Send test</strong> to post a <code>ping</code>, and check the receiver got it.</li>
         </ol>
+        <h3 id="what-a-message-holds"><a class="anchor" href="#what-a-message-holds">What a message holds</a></h3>
         <p>
-          A message names the event (such as <code>asset.updated</code> or <code>password.rotated</code>), who did it,
-          the client, and the item's name and address. It never carries the item's contents, and a password message
-          gives only the entry's name.
+          A message names the event (such as <code>asset.updated</code> or <code>password.rotated</code>), when it
+          happened, who did it, the client, and the item's type, name and address in Atlas. It never carries the item's
+          contents, and a password message gives only the entry's name. A receiver that needs more uses the API with a
+          key.
         </p>
         <p>
-          <strong>Delivery.</strong> Anything other than a 2xx answer within 10 seconds is a failure, tried again after
-          1 minute, 5 minutes, 30 minutes, 2 hours and 6 hours. After ten messages in a row have been given up on, the
-          webhook is paused; fix the receiver and choose <strong>Resume</strong>. <strong>Deliveries</strong> shows the
-          latest 50 and why any failed.
+          The signature, headers and message format are in the
+          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md#webhooks" rel="noopener"
+            >administrator guide</a
+          >.
         </p>
+        <h3 id="delivery"><a class="anchor" href="#delivery">Delivery</a></h3>
+        <ul>
+          <li>A message is queued together with the change it describes, so it isn't lost if the receiver is down.</li>
+          <li>
+            Anything other than a 2xx answer within 10 seconds is a failure. It's tried again after 1 minute, 5 minutes,
+            30 minutes, 2 hours and 6 hours, with the same id each time, so the receiver can ignore repeats.
+          </li>
+          <li>
+            After ten messages in a row have been given up on, the webhook is <strong>paused</strong>. Fix the receiver
+            and choose <strong>Resume</strong>.
+          </li>
+          <li><strong>Deliveries</strong> shows the latest 50 and why any failed.</li>
+        </ul>
         <aside class="callout callout-tip">
           <p class="callout-title">Keep chat channels quiet</p>
           <p>
@@ -387,12 +824,6 @@
             <strong>Assets</strong> unticked on a webhook that posts to a chat channel.
           </p>
         </aside>
-        <p>
-          The signature format and headers are in the
-          <a href="https://github.com/ithealthtech/nexus-atlas/blob/main/docs/ADMIN-GUIDE.md#webhooks" rel="noopener"
-            >administrator guide</a
-          >.
-        </p>
         <nav class="pager" aria-label="Chapters">
           <a class="prev" href="../manual/people-and-access.html"><span>Previous</span>People and access</a
           ><a class="next" href="../manual/integrations.html"><span>Next</span>Data and integrations</a>
