@@ -36,11 +36,10 @@ import {
   Button,
   Card,
   Checkbox,
+  ConfirmNameField,
   Dialog,
   EmptyState,
-  Field,
   FormError,
-  Input,
   Skeleton,
   useToast,
   Drawer,
@@ -397,17 +396,12 @@ function DeleteClientDialog({ id, name, onClose }: { id: string; name: string; o
       }
     >
       <form id="delete-client" onSubmit={submit} className="space-y-4" noValidate>
-        <Field label={`Type the client name: ${name}`} error={error?.fields?.confirmName}>
-          {(p) => (
-            <Input
-              {...p}
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          )}
-        </Field>
+        <ConfirmNameField
+          label={`Type the client name: ${name}`}
+          value={typed}
+          onChange={setTyped}
+          error={error?.fields?.confirmName}
+        />
         <FormError message={error && !error.fields ? error.message : null} />
       </form>
     </Dialog>

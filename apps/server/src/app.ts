@@ -71,6 +71,7 @@ import { ApiKeyService } from './services/api-keys.js';
 import { NativeAppService, isAppToken } from './identity/native.js';
 import { BackupService } from './backup/service.js';
 import { registerOpsRoutes } from './routes/ops.js';
+import { RestoreService } from './backup/staged.js';
 import { StatusService } from './services/status.js';
 import { registerUpdateRoutes } from './routes/updates.js';
 import { registerSystemRoutes } from './routes/system.js';
@@ -155,6 +156,11 @@ export interface AppOptions {
   updateFetch?: typeof fetch;
   /** Replaces SIEM delivery (tests capture events instead of sending them). */
   siemSender?: SiemSender;
+  /**
+   * Called once a backup restore has been left for the next start: stops Atlas so its service manager starts it
+   * again (see index.ts). Without it, Atlas logs that it needs restarting.
+   */
+  restart?: () => void;
 }
 
 // Paths an account may use before it finishes MFA, a required password change, or MFA enrollment.
@@ -222,6 +228,7 @@ export async function buildApp({
   portalProbe,
   portalAuthorities,
   siemSender,
+  restart,
 }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     // The versioned REST API (/api/v1/…) serves the same routes as the app, authenticated by API key.
@@ -868,7 +875,10 @@ export async function buildApp({
     db,
     authed,
     recent,
+    identity,
     backups,
+    restores: new RestoreService(keys, backups, resolve(config.ATLAS_DATA_DIR)),
+    restart: restart ?? (() => app.log.warn('A backup restore is waiting. Restart Atlas to install it.')),
     status: new StatusService(database, { config, keys, backups, settings, notifier, version: APP_VERSION }),
   });
   registerPasswordHealthRoutes(app, { db, authed, recent, settings, health });

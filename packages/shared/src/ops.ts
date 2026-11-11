@@ -61,6 +61,82 @@ export interface SystemStatus {
   background: { lastRunAt: string | null };
 }
 
+// ---------- restoring a backup (owner only) ----------
+
+/** A backup Atlas can restore: one in the backup folder, or one uploaded from another computer. */
+export const restoreSourceSchema = z.union([
+  z.object({ file: z.string().regex(/^atlas-\d{8}-\d{6}(-\d+)?\.atlasbak$/, 'Choose a backup from the list.') }),
+  z.object({ upload: z.string().uuid() }),
+]);
+export type RestoreSource = z.infer<typeof restoreSourceSchema>;
+
+/** A master key as Atlas stores it: 32 random bytes written as base64url (43 characters). */
+export const masterKeySchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_-]{43}$/, 'Paste the whole key: 43 letters, digits, dashes, and underscores.');
+
+export const restoreCheckSchema = z.object({
+  source: restoreSourceSchema,
+  /** Only needed when the backup was made with a key this installation hasn't loaded. */
+  masterKey: masterKeySchema.optional(),
+});
+
+export const restoreRequestSchema = restoreCheckSchema
+  .extend({
+    /** Replace the whole database and attachments, instead of only adding back what's missing. */
+    overwrite: z.boolean(),
+    password: z.string().min(1, 'Enter your password.').max(1024),
+    /** With overwrite: the organization's name, typed exactly. */
+    confirmName: z.string().max(200).optional(),
+  })
+  .strict();
+export type RestoreRequest = z.infer<typeof restoreRequestSchema>;
+
+export interface RestoreFileView {
+  name: string;
+  size: number;
+  modifiedAt: string;
+}
+
+/** What a backup holds, read and checked from end to end before anything is restored. */
+export interface RestoreCheck {
+  createdAt: string;
+  appVersion: string;
+  tables: number;
+  rows: number;
+  files: number;
+  /** The master key's fingerprint. */
+  keyId: string;
+  /** False when the key had to be entered: Atlas re-encrypts the restored secrets under its own key. */
+  keyLoaded: boolean;
+  /** Adding back only what's missing needs a backup from this same Atlas version (same database layout). */
+  canMerge: boolean;
+  /** Why adding back isn't possible, when it isn't. */
+  mergeBlocked: string | null;
+}
+
+export interface RestoreOutcome {
+  state: 'running' | 'done' | 'failed' | 'rolled-back';
+  mode: 'overwrite' | 'merge';
+  requestedByName: string;
+  requestedAt: string;
+  finishedAt: string | null;
+  backupCreatedAt: string;
+  /** The safety backup of the database as it was, taken before an overwrite. */
+  safetyBackup: string | null;
+  /** Rows written, and (when adding back) rows skipped because they were already there. */
+  rows: number;
+  skipped: number;
+  files: number;
+  message: string;
+}
+
+export interface RestoreStatus {
+  files: RestoreFileView[];
+  last: RestoreOutcome | null;
+}
+
 // Updates: newer Atlas releases from GitHub, and the server-side updater that installs them.
 
 export interface ReleaseView {

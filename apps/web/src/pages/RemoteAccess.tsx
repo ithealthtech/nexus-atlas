@@ -311,7 +311,10 @@ export function RemoteAccess() {
             <strong className="font-mono text-[13px] break-all text-text">
               {draft?.mode === 'tailscale' ? 'this server’s .ts.net name' : draft?.publicUrl}
             </strong>
-            . If it doesn’t answer there, the server puts the current settings back.
+            . If Atlas doesn’t answer there through this server’s web proxy, the server puts the current settings back
+            and says why.
+            {draft?.mode === 'proxy' &&
+              ' It can’t check your reverse proxy or your DNS from here, so set those up first.'}
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>Everyone signs in again at the new address. This page stops updating; open Atlas there.</li>
@@ -362,14 +365,23 @@ function Steps({ mode }: { mode: AccessMode }) {
     ],
     proxy: [
       <>
-        Point your reverse proxy at <code className={code}>http://&lt;this server&gt;:80</code>. Atlas listens there
-        only for the addresses you list below.
+        Point your reverse proxy at <code className={code}>http://&lt;this server&gt;:80</code>, or at{' '}
+        <code className={code}>https://&lt;this server’s IP address&gt;:443</code> if it must use HTTPS. Atlas answers
+        on both only for the addresses you list below.
+      </>,
+      <>
+        Over HTTPS, this server’s certificate comes from its own authority, so tell the proxy not to check it (in
+        Traefik, <code className={code}>insecureSkipVerify</code>) or to trust that authority. nginx and Nginx Proxy
+        Manager don’t check it by default.
       </>,
       <>
         Keep the original <code className={code}>Host</code> header, and send{' '}
         <code className={code}>X-Forwarded-For</code>. Most proxies do both by default.
       </>,
-      <>Serve HTTPS from the proxy, with a certificate for the address below.</>,
+      <>
+        Serve HTTPS from the proxy, with a certificate for the address below, and point that address’s DNS at the proxy,
+        not at this server.
+      </>,
     ],
   };
   return (

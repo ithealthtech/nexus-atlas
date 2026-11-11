@@ -61,6 +61,20 @@ export class AuditService {
     });
   }
 
+  /**
+   * Signs the saved checkpoint again under the current master key, if a loaded key vouches for it, so it still
+   * checks out once an older key (a rotated one, or another installation's after a restore) is no longer loaded.
+   */
+  async resignCheckpoint(orgId: string) {
+    const saved = await this.settings.auditCheckpoint(orgId);
+    if (!saved || !this.macMatches(orgId, saved.id, saved.hash, saved.mac)) return false;
+    await this.settings.saveAuditCheckpoint(orgId, {
+      ...saved,
+      mac: this.mac(this.keys.keyId, orgId, saved.id, saved.hash),
+    });
+    return true;
+  }
+
   async verify(actor: Actor): Promise<AuditVerification> {
     requireAdmin(actor);
     const orgId = actor.orgId;
