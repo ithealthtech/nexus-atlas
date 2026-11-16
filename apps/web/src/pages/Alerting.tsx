@@ -62,6 +62,20 @@ export function AlertingPage() {
         <>
           <PageHeader title="Alerting center" />
           {query.isLoading && <Skeleton className="h-80" />}
+          {query.isError && (
+            <div className="space-y-3 rounded-lg border border-border-strong bg-surface p-4">
+              <p className="text-sm text-text-2">
+                Drafts could not be loaded. Delivery controls and history are still available below.
+              </p>
+              <Button variant="secondary" loading={query.isFetching} onClick={() => void query.refetch()}>
+                Retry loading drafts
+              </Button>
+            </div>
+          )}
+          <div className="grid items-start gap-5 xl:grid-cols-2">
+            <DeliveryPanel />
+            <DeliveryHistory />
+          </div>
         </>
       )}
     </div>

@@ -88,3 +88,51 @@ test('alert drafts persist and a stale editor cannot overwrite another administr
     await t.close();
   }
 });
+
+test('delivery controls remain usable when the independent drafts request fails', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const base = 'http://localhost:4436';
+  const t = await startApp({ PUBLIC_URL: base, WEB_DIST: resolve('apps/web/dist') });
+  const context = await browser.newContext();
+  try {
+    await t.app.listen({ host: 'localhost', port: 4436 });
+    const owner = (await setupOwner(t.app)).b;
+    const drafts = (await owner.call('GET', '/api/settings/alerting')).data as AlertWorkspace;
+    expect((await owner.call('PUT', '/api/settings/alerting', drafts)).status).toBe(200);
+    expect(
+      (
+        await owner.call('POST', '/api/settings/alerting/publish', {
+          revision: 1,
+          lastVersion: 0,
+          note: 'Recovery test',
+        })
+      ).status,
+    ).toBe(200);
+    expect((await owner.call('PUT', '/api/settings/alerting/delivery', { mode: 'center', confirm: true })).status).toBe(
+      200,
+    );
+    await context.addCookies([...owner.jar].map(([name, value]) => ({ name, value, url: base })));
+    const page = await context.newPage();
+    await page.route('**/api/settings/alerting', (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Draft storage unavailable.' }),
+      }),
+    );
+    await page.goto(base + '/admin/alerting');
+    await expect(page.getByRole('button', { name: 'Switch back to classic alerts', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Delivery history', exact: true })).toBeVisible();
+    await expect(page.getByRole('alert')).toContainText('Draft storage unavailable.', { timeout: 15_000 });
+    await page.getByRole('button', { name: 'Switch back to classic alerts', exact: true }).click();
+    await expect(page.getByText('Classic alerts', { exact: true })).toBeVisible();
+    expect((await owner.call('GET', '/api/settings/alerting/delivery')).data.mode).toBe('classic');
+    await page.unroute('**/api/settings/alerting');
+    await page.getByRole('button', { name: 'Retry loading drafts', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Your template library', exact: true })).toBeVisible();
+    expect(t.outbox).toEqual([]);
+  } finally {
+    await context.close();
+    await t.close();
+  }
+});
