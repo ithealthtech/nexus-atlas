@@ -41,19 +41,26 @@ test('email and Teams templates and rule previews work without sending', async (
   await expect(page.getByRole('region', { name: 'Email preview' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Run preview', exact: true }).click();
   await expect(page.getByText('Conditions do not match', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish & delivery', exact: true }).click();
   await page.getByLabel('Version note', { exact: true }).fill('Approve certificate reminders');
   await page.getByRole('button', { name: 'Publish saved drafts', exact: true }).click();
   await page.getByRole('button', { name: 'View version 1', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Published version 1', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Templates', exact: true }).click();
+  await page.getByLabel('Template library', { exact: true }).selectOption({ label: 'Certificate reminder' });
   await page.getByLabel('Email message', { exact: true }).fill('A newer draft');
+  await page.getByRole('button', { name: 'Publish & delivery', exact: true }).click();
+
   await expect(page.getByRole('button', { name: 'Publish saved drafts', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save drafts', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'View version 1', exact: true }).click();
   page.once('dialog', (dialog) => void dialog.accept());
   await page.getByRole('button', { name: 'Restore version 1 to drafts', exact: true }).click();
   await expect(
     page.getByText('Version restored to drafts. Review selections before publishing again.', { exact: true }),
   ).toBeVisible();
+  await page.getByRole('button', { name: 'Templates', exact: true }).click();
   await page.getByLabel('Template library', { exact: true }).selectOption({ label: 'Certificate reminder' });
   await expect(page.getByLabel('Email message', { exact: true })).toHaveValue(
     'Please review {{itemName}}. Due in {{daysRemaining}} days.',
@@ -79,11 +86,13 @@ test('email and Teams templates and rule previews work without sending', async (
   await expect(page.getByRole('alert')).toContainText('Unknown field: secret');
   await open(page, '/admin/email');
   await page.getByRole('link', { name: 'Open alerting center', exact: true }).click();
+  await page.getByRole('button', { name: 'Templates', exact: true }).click();
   await page.getByLabel('Template library', { exact: true }).selectOption({ label: 'Certificate reminder' });
   await expect(page.getByLabel('Email message', { exact: true })).toHaveValue(
     'Please review {{itemName}}. Due in {{daysRemaining}} days.',
   );
-  await page.getByLabel('Draft rule', { exact: true }).selectOption({ label: 'Certificate reminders' });
+  await page.getByRole('button', { name: 'Rules', exact: true }).click();
+  await page.getByLabel('Draft rule', { exact: true }).selectOption({ index: 1 });
   await expect(page.getByRole('button', { name: 'Save drafts', exact: true })).toBeDisabled();
   expect(errors).toEqual([]);
 });
@@ -91,6 +100,7 @@ test('email and Teams templates and rule previews work without sending', async (
 test('ready-made Teams templates create editable copies with formatted previews', async ({ page }) => {
   await signIn(page);
   await open(page, '/admin/alerting');
+  await page.getByText('Browse ready-made Teams templates', { exact: true }).click();
   await page.getByLabel('Ready-made Teams template', { exact: true }).selectOption('breach-detailed');
   await page.getByRole('button', { name: 'Use template', exact: true }).click();
   await expect(page.getByLabel('Teams formatting', { exact: true })).toHaveValue('formatted');
@@ -129,13 +139,16 @@ test('goes live from a published version after a preview, with a delivery histor
   page.on('pageerror', (e) => errors.push(e.message));
   await signIn(page);
   await open(page, '/admin/alerting');
+  await page.getByRole('button', { name: 'Publish & delivery', exact: true }).click();
   await expect(page.getByText('Classic alerts', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Go live', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Templates', exact: true }).click();
   await page.getByRole('button', { name: 'New rule from template', exact: true }).click();
   await page.getByLabel('Rule name', { exact: true }).fill('Renewal reminders');
   await page.getByRole('checkbox', { name: /^Microsoft Teams client channel/ }).check();
   await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
   await expect(page.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish & delivery', exact: true }).click();
   await page.getByLabel('Version note', { exact: true }).fill('First live rules');
   await page.getByRole('button', { name: 'Publish saved drafts', exact: true }).click();
 
@@ -152,8 +165,10 @@ test('goes live from a published version after a preview, with a delivery histor
   await expect(page.getByText('Live', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Switch back to classic alerts', exact: true })).toBeVisible();
 
+  await page.getByRole('button', { name: 'Templates', exact: true }).click();
   await page.getByRole('button', { name: 'Send test', exact: true }).click();
   await expect(page.getByText('Test sent to your email.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Delivery history', exact: true }).click();
   await expect(page.getByText('Test', { exact: true }).first()).toBeVisible();
 
   for (const colorScheme of ['light', 'dark'] as const) {
@@ -170,7 +185,108 @@ test('goes live from a published version after a preview, with a delivery histor
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
   }
+  await page.getByRole('button', { name: 'Publish & delivery', exact: true }).click();
   await page.getByRole('button', { name: 'Switch back to classic alerts', exact: true }).click();
   await expect(page.getByText('Classic alerts', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('saved templates stay visible and can be reused, with clear sections on desktop and phone', async ({ page }) => {
+  test.setTimeout(120_000);
+  await signIn(page);
+  await open(page, '/admin/alerting');
+  await page.getByRole('button', { name: 'New template', exact: true }).click();
+  await page.getByLabel('Template name', { exact: true }).fill('My custom email and Teams template');
+  await page.getByLabel('Email message', { exact: true }).fill('Email for {{clientName}}');
+  await page.getByLabel('Teams message', { exact: true }).fill('Teams for {{clientName}}');
+  await page.getByRole('button', { name: 'Timing & pauses', exact: true }).click();
+  await page.getByLabel('Time zone', { exact: true }).selectOption('America/New_York');
+  await page.getByRole('button', { name: 'Templates', exact: true }).click();
+  await expect(page.getByLabel('Email message', { exact: true })).toHaveValue('Email for {{clientName}}');
+  await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save drafts', exact: true })).toBeDisabled();
+  await open(page, '/admin/email');
+  await page.getByRole('link', { name: 'Open alerting center', exact: true }).click();
+  const library = page.getByRole('region', { name: 'Saved template library', exact: true });
+  const custom = library
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: 'My custom email and Teams template', exact: true }) });
+  await expect(custom).toContainText('Saved');
+  await page.getByLabel('Find a template', { exact: true }).fill('My custom');
+  await expect(library.getByRole('listitem')).toHaveCount(1);
+  await custom.getByRole('button', { name: 'Edit template', exact: true }).click();
+  await expect(page.getByLabel('Teams message', { exact: true })).toHaveValue('Teams for {{clientName}}');
+  await page.getByLabel('Template library', { exact: true }).selectOption({ index: 1 });
+  await custom.getByRole('button', { name: 'Use in new rule', exact: true }).click();
+  await expect(page.getByLabel('Message template', { exact: true }).locator('option:checked')).toHaveText(
+    'My custom email and Teams template',
+  );
+  await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save drafts', exact: true })).toBeDisabled();
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      while (await page.getByRole('button', { name: 'Dismiss', exact: true }).count())
+        await page.getByRole('button', { name: 'Dismiss', exact: true }).first().click();
+      for (const section of ['Templates', 'Rules', 'Timing & pauses', 'Publish & delivery', 'Delivery history']) {
+        await page.getByRole('button', { name: section, exact: true }).click();
+        await expect(page.getByRole('button', { name: section, exact: true })).toHaveAttribute('aria-current', 'page');
+        const { violations } = await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+          .exclude('[data-demo-badge]')
+          .analyze();
+        expect(violations, `${section} ${colorScheme} ${width}`).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.screenshot({
+          path: `test-results/alerting-center-${section.split(' ')[0].toLowerCase()}-${colorScheme}-${width}.png`,
+        });
+        if (section === 'Templates')
+          await page
+            .getByLabel('Selected template editor', { exact: true })
+            .screenshot({ path: `test-results/alerting-editor-${colorScheme}-${width}.png` });
+      }
+    }
+  }
+});
+
+test('the alerting center is prominent in all three menu styles and email settings', async ({ page }) => {
+  await signIn(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: 'test-results/alerting-main.png' });
+  for (const [label, style] of [
+    ['Sidebar', 'sidebar'],
+    ['Top bar', 'top'],
+    ['Rail and panel', 'rail'],
+  ] as const) {
+    await open(page, '/account');
+    await page
+      .getByRole('radiogroup', { name: 'Menu style' })
+      .getByRole('radio', { name: new RegExp(`^${label}`) })
+      .click();
+    await expect(page.locator('[data-menu]')).toHaveAttribute('data-menu', style);
+    await page
+      .getByRole('navigation', { name: 'Main', exact: true })
+      .getByRole('link', { name: /^(Alerts|Alert studio|Alerting center)$/ })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Alerting center', exact: true })).toBeVisible();
+  }
+  await page.screenshot({ path: 'test-results/alerting-center-templates-light-1440.png' });
+  await open(page, '/admin/email');
+  const entry = page.getByRole('link', { name: 'Open alerting center', exact: true });
+  await expect(entry).toBeVisible();
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+        .exclude('[data-demo-badge]')
+        .analyze();
+      expect(violations).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: `test-results/alerting-entry-${colorScheme}-${width}.png` });
+    }
+  }
 });

@@ -23,7 +23,16 @@ test('alert drafts persist and a stale editor cannot overwrite another administr
     await expect(page.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
     await page.reload();
     await page.getByLabel('Template library', { exact: true }).selectOption({ label: 'Admin certificate message' });
-    await page.getByRole('button', { name: 'New rule from template', exact: true }).click();
+    const savedTemplate = page
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('heading', { name: 'Admin certificate message', exact: true }) });
+    await expect(savedTemplate).toContainText('Saved');
+    await savedTemplate.getByRole('button', { name: 'Use in new rule', exact: true }).click();
+    await expect(page.getByLabel('Message template', { exact: true })).toHaveValue(
+      (await owner.call('GET', '/api/settings/alerting')).data.templates.find(
+        (t: { name: string }) => t.name === 'Admin certificate message',
+      ).id,
+    );
     await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
     await expect(page.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Run preview', exact: true }).click();
@@ -34,6 +43,7 @@ test('alert drafts persist and a stale editor cannot overwrite another administr
     await other.getByLabel('Template name', { exact: true }).fill('Saved elsewhere');
     await other.getByRole('button', { name: 'Save drafts', exact: true }).click();
     await expect(other.getByText('Alert drafts saved.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Templates', exact: true }).click();
     await page.getByLabel('Template name', { exact: true }).fill('Stale edit');
     await page.getByRole('button', { name: 'Save drafts', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Another administrator saved these drafts');
@@ -57,6 +67,7 @@ test('alert drafts persist and a stale editor cannot overwrite another administr
     await t.handle.db.delete(schema.clients).where(eq(schema.clients.id, client.id));
     await t.handle.db.update(schema.users).set({ disabled: true }).where(eq(schema.users.id, user.id));
     await page.reload();
+    await page.getByRole('button', { name: 'Rules', exact: true }).click();
     await page.getByLabel('Draft rule', { exact: true }).selectOption(draft.rules[0]!.id);
     const unavailableClient = page.getByRole('checkbox', {
       name: 'Unavailable client 1 — remove selection',

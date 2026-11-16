@@ -254,3 +254,13 @@ Headless Edge is available; do not take over the owner's desktop. .NET 10 Window
 
 Read this note and inspect the branch diff before continuing. Continue the current branch; don't reapply old Teams
 patches in the parent workspace. Release 2.1.1 and PR #288 are already merged and published.
+
+## Alerting workspace usability — 2026-11-16
+
+The current continuation is on `fix/alert-template-saving`, based on main after v2.5.1. The owner reported that saved custom templates could not be found for reuse, then requested a more readable, prominent alerting workspace.
+
+Alerts now has a main navigation entry in every menu style and an Administration entry. Email & alerts has an operational entry card with an explicit Open alerting center button. The studio has Templates, Rules, Timing & pauses, Publish & delivery, and Delivery history sections. Templates uses a searchable library beside the editor on desktop; every template has Edit template and Use in new rule actions. Rule creation resolves the clicked template's ID rather than relying on the previous selection. Template cards distinguish saved content, unsaved edits and new unsaved templates. Test sends require saved drafts.
+
+All existing routes, access checks, publication/activation separation, classic alert controls, schedules, pauses, recipients, escalation and history remain. No delivery was activated, no live message sent, and no production database changed. No merge or release is authorized.
+
+Validation: 647 tests passed, one existing skip; 22 focused alert API/delivery tests passed; real-database browser persistence/concurrency and protected-feature scenarios passed. Five demo browser scenarios cover the workflows, template reuse, all three menu styles, and WCAG 2.2 AA in light/dark at desktop/phone widths. Build, demo build, lint, typecheck, formatting, site verification, extension packaging and duplication check passed. Dependency audit passed the high threshold with three existing moderate production dependency findings. Screenshots, including the main page, are in `docs/screenshots/alerting-center/workspace-2026-11-16/`.

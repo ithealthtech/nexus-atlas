@@ -4,6 +4,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Improved
+
+- **An alerting center you can find and scan.** Alerts has its own main navigation entry, and Email & alerts has a prominent studio card. Templates, Rules, Timing & pauses, Publish & delivery, and Delivery history now have separate sections with clearer borders, readable status indicators and compact counts. Saved templates appear as searchable cards with direct edit and use-in-rule actions; email and Teams messages have separate editing panels. Draft edits stay intact while switching sections, and test sends require saved drafts.
+
 ## [2.5.1] - 2026-11-11
 
 ### Fixed

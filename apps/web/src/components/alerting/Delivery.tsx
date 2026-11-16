@@ -408,7 +408,7 @@ export function TestSend({ template, saved }: { template: AlertTemplate; saved: 
         <Button
           variant="secondary"
           loading={busy === 'test'}
-          disabled={channel === 'teams' && !clientId}
+          disabled={!saved || (channel === 'teams' && !clientId)}
           onClick={() => void send()}
         >
           <Send /> Send test
