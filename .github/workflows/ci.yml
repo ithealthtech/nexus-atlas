@@ -99,7 +99,8 @@ jobs:
   # Runs beside the checks above instead of after them: the browser tests are the slow part.
   e2e:
     name: End-to-end (Linux)
-    runs-on: ubuntu-latest
+    # Playwright 1.56 supports Ubuntu 24.04; ubuntu-latest now includes unsupported 26.04 runners.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -148,7 +149,7 @@ jobs:
   # The clickable demo needs no server or database, so every page is checked in both themes and at phone width.
   demo:
     name: Accessibility and screenshots (demo)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

@@ -98,7 +98,7 @@ export type MenuStyle = (typeof MENU_STYLES)[number];
 export const MENU_STYLE_INFO: Record<MenuStyle, { label: string; description: string }> = {
   rail: {
     label: 'Rail and panel',
-    description: 'Five areas down the left edge, with the pages of the one you’re in beside them.',
+    description: 'Workspace areas down the left edge, with the pages of the one you’re in beside them.',
   },
   sidebar: {
     label: 'Sidebar',

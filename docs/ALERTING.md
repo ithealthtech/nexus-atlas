@@ -1,7 +1,16 @@
 # Alerting center
 
-Open **Administration → Email & alerts → Open alerting center**. Administrators can prepare custom email and
-Microsoft Teams messages and test rules together.
+Open **Alerts** in the main navigation, **Administration → Alerting center**, or the **Open alerting center** button on **Email & alerts**. Administrators can prepare custom email and Microsoft Teams messages and test rules together.
+
+The studio is organized by task:
+
+- **Templates**: search your library, reopen a saved message with **Edit template**, or choose **Use in new rule**. Email and Teams have separate editors. Built-in presets are under **Browse ready-made Teams templates**.
+- **Rules**: choose a saved draft rule and set clients, recipients, conditions and escalation.
+- **Timing & pauses**: quiet hours, daily summary timing and paused clients.
+- **Publish & delivery**: publish saved drafts, restore versions, preview upcoming deliveries and switch between classic and center delivery.
+- **Delivery history**: outcomes, test sends and retries.
+
+**Save drafts** keeps templates, rules and timing together, even when you switch studio sections. Saving a template does not publish it or activate delivery. New templates appear in your library immediately and show **Not saved yet** until saved. Search by name or alert type to find a template again.
 
 You work in four steps: **draft** templates and rules, **test** them, **publish** a version, then **go live**.
 Until you go live, Atlas keeps sending its classic alerts and nothing here sends. Saving drafts never sends. The

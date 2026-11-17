@@ -1168,7 +1168,7 @@ async function signInFully(page: Page, email: string, password: string, given: s
   await expect(page.getByRole('heading', { name: 'Overview', exact: true, level: 1 })).toBeVisible();
 }
 
-// The default menu is the rail: five areas down the edge, and the pages of the one you're in beside them.
+// The default menu is the rail: workspace areas down the edge, and the pages of the one you're in beside them.
 const AREA: Record<string, string> = {
   Dashboard: 'Overview',
   Expirations: 'Overview',

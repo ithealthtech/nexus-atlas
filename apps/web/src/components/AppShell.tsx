@@ -3,6 +3,7 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
   Activity,
+  BellRing,
   ArrowLeft,
   ArrowLeftRight,
   BadgeCheck,
@@ -198,7 +199,7 @@ function UserMenu({
 type NavItem = { to: string; label: string; exact?: boolean; icon?: LucideIcon };
 type NavGroup = { title?: string; items: NavItem[] };
 type Area = {
-  id: 'home' | 'clients' | 'docs' | 'vault' | 'admin';
+  id: 'home' | 'clients' | 'docs' | 'vault' | 'alerts' | 'admin';
   /** The word under the icon on the rail. */
   label: string;
   /** The heading of its panel and its name everywhere else. */
@@ -211,7 +212,7 @@ type Area = {
   groups: NavGroup[];
 };
 
-// Five areas group the routes. Each menu style shows them its own way (see MenuStyle).
+// Workspace areas group the routes. Each menu style shows them its own way (see MenuStyle).
 function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: boolean): Area[] {
   const list: Area[] = [
     {
@@ -301,6 +302,25 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
     });
   if (actor.isAdmin)
     list.push({
+      id: 'alerts',
+      label: 'Alerts',
+      title: 'Alerting center',
+      icon: BellRing,
+      to: '/admin/alerting',
+      paths: ['/admin/alerting'],
+      groups: [
+        { title: 'Alerting', items: [{ to: '/admin/alerting', label: 'Alert studio', icon: BellRing }] },
+        {
+          title: 'Connections',
+          items: [
+            { to: '/admin/email', label: 'Email & alerts', icon: Mail },
+            { to: '/admin/teams', label: 'Microsoft Teams', icon: Mail },
+          ],
+        },
+      ],
+    });
+  if (actor.isAdmin)
+    list.push({
       id: 'admin',
       label: 'Admin',
       title: 'Administration',
@@ -308,6 +328,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
       to: '/admin/users',
       paths: ['/admin'],
       groups: [
+        { title: 'Alerting', items: [{ to: '/admin/alerting', label: 'Alerting center', icon: BellRing }] },
         {
           title: 'People and security',
           items: [
@@ -357,7 +378,7 @@ function areas(actor: { isStaff: boolean; isAdmin: boolean }, personalVaults: bo
 /** The area an address belongs to. The vault claims its two administration pages before Admin does. */
 function areaOf(list: Area[], pathname: string): Area {
   const within = (a: Area) => a.paths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  const order = ['vault', 'admin', 'clients', 'docs', 'home'];
+  const order = ['vault', 'alerts', 'admin', 'clients', 'docs', 'home'];
   return (
     order.map((id) => list.find((a) => a.id === id)).find((a) => a && within(a)) ?? list.find((a) => a.id === 'home')!
   );
@@ -504,6 +525,7 @@ function SidebarMenu({ list, pathname, clients, favorites, collapsed }: MenuData
             ...pages('home').slice(0, 1),
             { to: '/clients', label: 'Clients', exact: true, icon: Building2 },
             ...pages('home').slice(1),
+            ...pages('alerts'),
             ...pages('docs'),
             ...pages('vault'),
           ],

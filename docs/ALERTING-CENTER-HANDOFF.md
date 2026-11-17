@@ -254,3 +254,17 @@ Headless Edge is available; do not take over the owner's desktop. .NET 10 Window
 
 Read this note and inspect the branch diff before continuing. Continue the current branch; don't reapply old Teams
 patches in the parent workspace. Release 2.1.1 and PR #288 are already merged and published.
+
+## Alerting workspace usability — 2026-11-16
+
+The current continuation is on `fix/alert-template-saving`, based on main after v2.5.1. The owner reported that saved custom templates could not be found for reuse, then requested a more readable, prominent alerting workspace.
+
+Alerts now has a main navigation entry in every menu style and an Administration entry. Email & alerts has an operational entry card with an explicit Open alerting center button. The studio has Templates, Rules, Timing & pauses, Publish & delivery, and Delivery history sections. Templates uses a searchable library beside the editor on desktop; every template has Edit template and Use in new rule actions. Rule creation resolves the clicked template's ID rather than relying on the previous selection. Template cards distinguish saved content, unsaved edits and new unsaved templates. Test sends require saved drafts.
+
+All existing routes, access checks, publication/activation separation, classic alert controls, schedules, pauses, recipients, escalation and history remain. No delivery was activated, no live message sent, and no production database changed. No merge or release is authorized.
+
+Validation: 647 tests passed, one existing skip; 22 focused alert API/delivery tests passed; real-database browser persistence/concurrency and protected-feature scenarios passed. Five demo browser scenarios cover the workflows, template reuse, all three menu styles, and WCAG 2.2 AA in light/dark at desktop/phone widths. Build, demo build, lint, typecheck, formatting, site verification, extension packaging and duplication check passed. Dependency audit passed the high threshold with three existing moderate production dependency findings. Screenshots, including the main page, are in `docs/screenshots/alerting-center/workspace-2026-11-16/`.
+
+## Release continuation — 2026-11-16
+
+The owner has now explicitly authorized checking/fixing PR #345, merging it when all checks pass, and publishing the release. This supersedes the earlier note that merging and release were not authorized. Commit `5eba705` also keeps delivery controls/history accessible when drafts fail to load, with a regression proving an administrator can switch back to classic alerts and recover the editor. Release preparation targets 2.6.0 and updates all workspace versions, internal references, lockfile, browser extension, changelog and generated site together. Keep every required check and review safeguard in place.

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Info, Mail, Send, ShieldCheck } from 'lucide-react';
+import { ArrowRight, BellRing, Info, Mail, Send, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
   ASSET_KINDS,
@@ -757,12 +757,41 @@ export function EmailAlertsPage() {
         description="How Atlas sends email, who hears about expiring items, and how long logs are kept."
       />
       <PageSections>
-        <Card className="space-y-2 p-5">
-          <h2 className="text-[15px] font-semibold text-text">Alerting center</h2>
-          <p className="text-sm text-muted">Create custom email and Teams templates and test draft rules.</p>
-          <Link to="/admin/alerting" className="text-sm font-semibold text-primary hover:underline">
-            Open alerting center
-          </Link>
+        <Card className="alert-studio space-y-5 border-border-strong p-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-2">
+                <BellRing className="size-4" aria-hidden /> Alert workspace
+              </p>
+              <h2 className="text-xl font-semibold text-text">Alerting center</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-text-2">
+                Manage email and Teams templates, alert rules and delivery in one workspace.
+              </p>
+            </div>
+            <Link
+              to="/admin/alerting"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-fg hover:bg-primary-hover"
+            >
+              Open alerting center <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {[
+              {
+                title: 'Templates & rules',
+                description: 'Find a saved message, then choose the clients and people who receive it.',
+              },
+              {
+                title: 'Publishing & delivery',
+                description: 'Preview what would send, publish when ready and review every delivery.',
+              },
+            ].map(({ title, description }) => (
+              <div key={title} className="rounded-lg border border-border-strong bg-surface-2 p-4">
+                <h3 className="text-sm font-semibold text-text">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-text-2">{description}</p>
+              </div>
+            ))}
+          </div>
         </Card>
         {email.data ? (
           <EmailSettings key={JSON.stringify(email.data)} current={email.data} />

@@ -44,7 +44,8 @@ test('premium shell and report snapshots, filters, templates and exports work on
     await page.goto(base);
     await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
     const main = page.getByRole('navigation', { name: 'Main', exact: true });
-    await expect(main.getByRole('link')).toHaveCount(5);
+    await expect(main.getByRole('link')).toHaveText(['Overview', 'Clients', 'Docs', 'Vault', 'Alerts', 'Admin']);
+    await expect(main.getByRole('link', { name: 'Alerts', exact: true })).toHaveAttribute('href', '/admin/alerting');
     await expect(main).not.toContainText('Harbor Dental');
     await page.screenshot({ path: resolve(screenshots, 'atlas-main-page.png') });
     await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();

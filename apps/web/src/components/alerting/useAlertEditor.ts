@@ -45,7 +45,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
   const actor = useActor();
   const toast = useToast();
   const [workspace, setWorkspace] = useState(initial);
-  const [saved, setSaved] = useState(JSON.stringify(initial));
+  const [saved, setSaved] = useState(initial);
   const [templateId, setTemplateId] = useState(initial.templates[0]?.id ?? '');
   const [ruleId, setRuleId] = useState('');
   const [kind, setKind] = useState<AlertKind>('expiration');
@@ -62,10 +62,10 @@ export function useAlertEditor(initial: AlertWorkspace) {
   const template = workspace.templates.find((t) => t.id === (rule?.templateId ?? templateId));
   const previewBody = template ? { template, ...(rule ? { rule } : {}), sample } : null;
   const previewKey = JSON.stringify(previewBody);
-  const dirty = JSON.stringify(workspace) !== saved;
+  const dirty = JSON.stringify(workspace) !== JSON.stringify(saved);
   const replaceWorkspace = (next: AlertWorkspace) => {
     setWorkspace(next);
-    setSaved(JSON.stringify(next));
+    setSaved(next);
     queries.setQueryData(['alerting'], next);
     setTemplateId(next.templates[0]?.id ?? '');
     setRuleId('');
@@ -109,12 +109,13 @@ export function useAlertEditor(initial: AlertWorkspace) {
       severity: ['breach', 'infection'].includes(next.kind) ? 'critical' : 'warning',
     }));
   };
-  const addRule = () => {
-    if (!template) return;
-    const next = newRule(template, actor.id);
+  const addRule = (id = template?.id) => {
+    const source = workspace.templates.find((t) => t.id === id);
+    if (!source || workspace.rules.length >= 200) return;
+    const next = newRule(source, actor.id);
     setWorkspace((w) => ({ ...w, rules: [...w.rules, next] }));
     setRuleId(next.id);
-    setSample((s) => ({ ...s, kind: template.kind }));
+    setSample((s) => ({ ...s, kind: source.kind }));
   };
   const removeRule = () => {
     if (!rule) return;
@@ -140,7 +141,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
       const result = await api<AlertWorkspace>(ALERTING_BASE, { method: 'PUT', body: parsed.data });
       setWorkspace(result);
       queries.setQueryData(['alerting'], result);
-      setSaved(JSON.stringify(result));
+      setSaved(result);
       toast('Alert drafts saved.');
     });
   const run = () =>
@@ -151,6 +152,7 @@ export function useAlertEditor(initial: AlertWorkspace) {
     });
   return {
     workspace,
+    savedTemplates: saved.templates,
     replaceWorkspace,
     template,
     rule,

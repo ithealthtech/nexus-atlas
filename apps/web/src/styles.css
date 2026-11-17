@@ -490,3 +490,21 @@ html[data-nav='subtle'] .top-nav-link[aria-current='page'] {
     display: block;
   }
 }
+
+/* The alert workspace uses the suite's surfaces and spacing, with tabular metrics for scanning. */
+.alert-studio {
+  --alert-library-width: calc(var(--spacing) * 88);
+  --alert-library-height: calc(var(--spacing) * 112);
+  --alert-ui-font: 'Aptos', 'Segoe UI Variable Text', var(--font-sans);
+  --alert-metric-font: 'Cascadia Mono', 'SFMono-Regular', 'Consolas', monospace;
+  font-family: var(--alert-ui-font);
+}
+.alert-metric {
+  font-family: var(--alert-metric-font);
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 80rem) {
+  .alert-template-layout {
+    grid-template-columns: minmax(0, var(--alert-library-width)) minmax(0, 1fr);
+  }
+}
