@@ -50,8 +50,100 @@ The certificate is used only for the install step and is not stored in the image
 | `ATLAS_BACKUP_HOUR` | `2` | Local hour after which the nightly backup runs |
 | `ATLAS_BACKUP_KEEP` | `14` | How many backup files to keep |
 | `LOG_LEVEL` | `info` | Logs are JSON; cookies and CSRF tokens are removed from them |
+| `ATLAS_EDITION` | `selfhosted` | `cloud` only on instances hosted by the Atlas publisher. Leave it unset on your own server. See [Hosted (cloud) edition](#hosted-cloud-edition). |
+| `ATLAS_THEME_PACK` | — | Cloud edition only: folder with a `theme.css` layered over the built-in look. Rejected on a self-hosted install. |
 
 In development, with no key configured, Atlas creates `data/atlas-master.key` on first run.
+
+## Hosted (cloud) edition
+
+This section is for the Atlas publisher running hosted instances. **A self-hosted install needs none of it:** leave
+`ATLAS_EDITION` and `ATLAS_THEME_PACK` unset and Atlas behaves exactly as before.
+
+### What it does
+
+`ATLAS_EDITION=cloud` marks an instance as hosted by the publisher. On its own it changes nothing visible. With it,
+`ATLAS_THEME_PACK` can name a folder whose `theme.css` is added to every page after Atlas's own styles, so the hosted
+instances can carry the publisher's brand without a separate build. The same release files serve both editions.
+
+The pack only restyles. Every page, menu style (Rail and panel, Sidebar, Top bar), setting and **Administration →
+Theme** option keeps working, and an organisation's own Theme choices still apply on top of the pack's defaults.
+
+### Why it is a setting, not a separate build
+
+A second build or a fork would fall behind every release. With a setting, hosted and self-hosted instances run the
+same tested code, and a self-hosted server can't pick up the hosted look by accident: Atlas refuses to start if
+`ATLAS_THEME_PACK` is set without `ATLAS_EDITION=cloud`.
+
+### Prerequisites
+
+- An Atlas release that includes this setting (see the changelog), installed with the web app (`WEB_DIST`), as every package does.
+- A theme pack folder readable by the account Atlas runs as (`atlas` on Linux), containing at least `theme.css`.
+  Fonts and images it uses go in the same folder and are referenced relatively, for example
+  `url("fonts/sora-700.woff2")`.
+- Fonts must be in the folder. Atlas's content security policy only allows styles and fonts from the Atlas server
+  itself, so links to Google Fonts or another site are blocked.
+
+### Writing a theme pack
+
+`theme.css` overrides the CSS variables defined in `apps/web/src/styles.css`, for example:
+
+```css
+:root {
+  --bg: #f1f5f9;
+  --text: #172538;
+  --primary: #145e9c;
+  --primary-hover: #123d61;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) { --bg: #0e1723; --text: #e5edf5; }
+}
+:root[data-theme='dark'] { --bg: #0e1723; --text: #e5edf5; }
+```
+
+Keep every text colour at **4.5:1 contrast** or better against its background (WCAG 2.2 AA). Atlas's accessibility
+tests hold the built-in look to that standard; a pack must not lower it.
+
+### Turning it on
+
+1. Copy the pack to the server, for example `/etc/msp-atlas/theme-pack/` on Linux, owned by root and readable by
+   `atlas`.
+2. Add to `/etc/msp-atlas/atlas.env` (or the Compose `.env`):
+
+   ```
+   ATLAS_EDITION=cloud
+   ATLAS_THEME_PACK=/etc/msp-atlas/theme-pack
+   ```
+
+   In Docker, mount the folder into the container read-only and point `ATLAS_THEME_PACK` at the mounted path.
+3. Restart Atlas: `sudo systemctl restart msp-atlas`, or `docker compose up -d` in Docker.
+
+### Checking it worked
+
+1. Open Atlas and view the page source (Ctrl U). Just before `</head>` there is a line
+   `<link rel="stylesheet" href="/theme-pack/theme.css?v=…">`.
+2. Open `/theme-pack/theme.css` in the browser. It shows your stylesheet.
+3. Check the sign-in page, a client workspace and **Administration → Theme** in light and dark mode, and switch
+   between the three menu styles under **Your account → Menu**.
+
+### Updating or removing a pack
+
+- **Update:** replace the files and restart Atlas. The `?v=` number is worked out from `theme.css` at startup, so
+  browsers fetch the new file straight away. Fonts and images are cached for up to an hour; give a changed image a
+  new file name to show it immediately.
+- **Remove:** delete the `ATLAS_THEME_PACK` line and restart. `ATLAS_EDITION=cloud` can stay.
+
+### Troubleshooting
+
+| What you see | Cause and fix |
+| --- | --- |
+| Atlas won't start: **ATLAS_THEME_PACK is only used when ATLAS_EDITION=cloud** | The pack was set on an instance not marked as hosted. Add `ATLAS_EDITION=cloud`, or remove `ATLAS_THEME_PACK` on a self-hosted server. |
+| Atlas won't start: **there is no theme.css in that folder** | The path is wrong or the file is missing. Check the path in the message and that `theme.css` is directly inside it. |
+| Atlas won't start: **ATLAS_EDITION** is invalid | Only `selfhosted` and `cloud` are accepted. |
+| The page source has no `/theme-pack/` line | The setting isn't loaded (check the env file and restart), or the web app isn't installed. |
+| `/theme-pack/theme.css` returns an error | Atlas can't read the folder. On Linux run `sudo -u atlas cat <folder>/theme.css` to test access. |
+| Fonts don't change | They are linked from another site, which the content security policy blocks (the browser console says so). Put the font files in the pack. |
+| An image in the pack looks old | It is cached for up to an hour. Rename the file and update the reference. |
 
 ## Email
 

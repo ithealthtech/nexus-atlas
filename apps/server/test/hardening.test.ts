@@ -100,4 +100,39 @@ describe('web app routes', () => {
       await t.close();
     }
   });
+
+  it('serves the cloud theme pack only when the hosted edition is configured', async () => {
+    const dist = mkdtempSync(join(tmpdir(), 'atlas-web-'));
+    writeFileSync(
+      join(dist, 'index.html'),
+      '<!doctype html><html><head><title>Atlas</title></head><body></body></html>',
+    );
+    const pack = mkdtempSync(join(tmpdir(), 'atlas-pack-'));
+    writeFileSync(join(pack, 'theme.css'), ':root { --primary: #145e9c; }');
+
+    const selfHosted = await startApp({ WEB_DIST: dist });
+    try {
+      const page = await selfHosted.app.inject({ url: '/' });
+      expect(page.body).toBe('<!doctype html><html><head><title>Atlas</title></head><body></body></html>');
+      // Without the hosted edition the path is just another client-side route: the app page, not the pack.
+      expect((await selfHosted.app.inject({ url: '/theme-pack/theme.css' })).body).not.toContain('--primary');
+    } finally {
+      await selfHosted.close();
+    }
+
+    const cloud = await startApp({ WEB_DIST: dist, ATLAS_EDITION: 'cloud', ATLAS_THEME_PACK: pack });
+    try {
+      const page = await cloud.app.inject({ url: '/clients/x' });
+      expect(page.statusCode).toBe(200);
+      expect(page.headers['content-type']).toMatch(/^text\/html/);
+      expect(page.headers['cache-control']).toBe('no-cache');
+      expect(page.body).toMatch(/<link rel="stylesheet" href="\/theme-pack\/theme\.css\?v=[0-9a-f]{12}"><\/head>/);
+      const css = await cloud.app.inject({ url: '/theme-pack/theme.css' });
+      expect(css.statusCode).toBe(200);
+      expect(css.body).toContain('--primary: #145e9c');
+      expect((await cloud.app.inject({ url: '/theme-pack/missing.css' })).statusCode).toBe(404);
+    } finally {
+      await cloud.close();
+    }
+  });
 });
