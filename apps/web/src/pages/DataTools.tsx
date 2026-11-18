@@ -23,6 +23,7 @@ import { parseCsv } from '@/lib/csv';
 import { useLayouts } from '@/lib/queries';
 import { formatDateTime } from '@/lib/format';
 import { CwRmmSync } from './CwRmm';
+import { CwPsaSync } from './CwPsa';
 import { BitdefenderSync } from './Bitdefender';
 import { M365Sync } from './M365';
 import { ScreenConnectSettingsCard } from './ScreenConnect';
@@ -36,6 +37,7 @@ const SOURCE_LABELS: Record<ImportJobView['source'], string> = {
   'cw-rmm': 'ConnectWise RMM',
   m365: 'Microsoft 365',
   bitdefender: 'Bitdefender GravityZone',
+  'cw-psa': 'ConnectWise PSA',
 };
 const KIND_LABELS: Record<string, string> = {
   clients: 'Clients',
@@ -65,7 +67,7 @@ export function JobSummary({ job }: { job: ImportJobView }) {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge tone={job.status === 'done' ? 'success' : job.status === 'failed' ? 'danger' : 'info'}>
           {job.status === 'running'
-            ? job.source === 'cw-rmm' || job.source === 'm365'
+            ? job.source === 'cw-rmm' || job.source === 'cw-psa' || job.source === 'm365'
               ? 'Syncing…'
               : 'Importing…'
             : job.status === 'done'
@@ -616,6 +618,7 @@ export function DataTools() {
       />
       <PageSections>
         <CwRmmSync />
+        <CwPsaSync />
         <M365Sync />
         <BitdefenderSync />
         <ScreenConnectSettingsCard />

@@ -8,6 +8,11 @@ import {
   type BitdefenderView,
   brandingSchema,
   cwRmmConnectionSchema,
+  cwPsaConnectionSchema,
+  cwPsaOptionsSchema,
+  psaSiteUrl,
+  type CwPsaOptions,
+  type CwPsaView,
   m365ConnectionSchema,
   m365SyncOptionsSchema,
   type M365SyncOptions,
@@ -84,6 +89,7 @@ interface StoredSettings {
   notifications?: NotificationSettings;
   auditCheckpoint?: AuditCheckpoint;
   cwRmm?: StoredCwRmm;
+  cwPsa?: StoredCwPsa;
   bitdefender?: StoredBitdefender;
   /** A pending "erase all data" request, during its waiting period. */
   erase?: EraseRequest;
@@ -190,6 +196,21 @@ export interface StoredCwRmm {
   /** ConnectWise company id → what to do with it. */
   map: Record<string, { action: 'link'; clientId: string } | { action: 'skip' }>;
 }
+/** ConnectWise PSA as stored: the API member's private key is sealed with the master key. */
+export interface StoredCwPsa {
+  site: string;
+  companyId: string;
+  publicKey: string;
+  privateKeySealed: string;
+  clientId: string;
+  autoSync: boolean;
+  /** The administrator who connected it; scheduled syncs run as them. */
+  connectedBy: string;
+  lastSyncAt: string | null;
+  options?: CwPsaOptions;
+  /** PSA company record ID → what to do with it, as for ConnectWise RMM companies. */
+  map: Record<string, { action: 'link'; clientId: string } | { action: 'skip' }>;
+}
 /** Bitdefender GravityZone as stored: the API key is sealed with the master key. */
 export interface StoredBitdefender {
   accessUrl: string;
@@ -215,6 +236,7 @@ export interface SmtpConfig extends Omit<StoredSmtp, 'passwordSealed' | 'clientS
 
 const entraAad = (orgId: string) => `org|${orgId}|entra`;
 const cwAad = (orgId: string) => `org|${orgId}|cw-rmm`;
+const psaAad = (orgId: string) => `org|${orgId}|cw-psa`;
 const bitdefenderAad = (orgId: string) => `org|${orgId}|bitdefender`;
 const m365Aad = (orgId: string) => `org|${orgId}|m365`;
 const gdapAad = (orgId: string) => `org|${orgId}|m365|gdap`;
@@ -304,6 +326,11 @@ export class SettingsService {
         });
       if (stored.cwRmm)
         await this.put(id, 'cwRmm', { ...stored.cwRmm, secretSealed: reseal(stored.cwRmm.secretSealed, cwAad(id))! });
+      if (stored.cwPsa)
+        await this.put(id, 'cwPsa', {
+          ...stored.cwPsa,
+          privateKeySealed: reseal(stored.cwPsa.privateKeySealed, psaAad(id))!,
+        });
       if (stored.bitdefender)
         await this.put(id, 'bitdefender', {
           ...stored.bitdefender,
@@ -553,6 +580,73 @@ export class SettingsService {
     await this.db
       .update(schema.orgs)
       .set({ settings: sql`${schema.orgs.settings} - 'cwRmm'` })
+      .where(eq(schema.orgs.id, orgId));
+  }
+
+  /** ConnectWise PSA connection with the private key decrypted, or null when not connected. */
+  async cwPsa(orgId: string): Promise<(StoredCwPsa & { privateKey: string }) | null> {
+    const saved = (await this.load(orgId)).cwPsa;
+    return saved
+      ? { ...saved, map: saved.map ?? {}, privateKey: open(this.keys, saved.privateKeySealed, psaAad(orgId)) }
+      : null;
+  }
+
+  /** The company links and options, without the key, for reading synced data. */
+  async cwPsaLinks(orgId: string): Promise<Pick<StoredCwPsa, 'map' | 'options'> | null> {
+    const saved = (await this.load(orgId)).cwPsa;
+    return saved ? { map: saved.map ?? {}, options: saved.options } : null;
+  }
+
+  async cwPsaView(orgId: string): Promise<CwPsaView | null> {
+    const saved = (await this.load(orgId)).cwPsa;
+    return saved
+      ? {
+          site: saved.site,
+          companyId: saved.companyId,
+          publicKey: saved.publicKey,
+          clientId: saved.clientId,
+          hasPrivateKey: true,
+          autoSync: saved.autoSync,
+          lastSyncAt: saved.lastSyncAt,
+          options: cwPsaOptionsSchema.parse(saved.options ?? {}),
+        }
+      : null;
+  }
+
+  /** Saves the connection, keeping the saved private key when none is given. Returns it ready to test. */
+  async saveCwPsa(orgId: string, userId: string, input: unknown) {
+    const body = cwPsaConnectionSchema.parse(input);
+    const current = await this.cwPsa(orgId);
+    const privateKey = body.privateKey ?? current?.privateKey;
+    if (!privateKey)
+      throw new HttpError(400, 'Enter the private key.', undefined, { privateKey: 'Enter the private key.' });
+    const stored: StoredCwPsa = {
+      site: psaSiteUrl(body.site)!,
+      companyId: body.companyId,
+      publicKey: body.publicKey,
+      privateKeySealed: seal(this.keys, privateKey, psaAad(orgId)),
+      clientId: body.clientId,
+      autoSync: body.autoSync,
+      connectedBy: userId,
+      lastSyncAt: current?.lastSyncAt ?? null,
+      options: current?.options,
+      map: current?.map ?? {},
+    };
+    await this.put(orgId, 'cwPsa', stored);
+    return { ...stored, privateKey };
+  }
+
+  /** Updates the company map, options or last-sync time without touching the key. */
+  async patchCwPsa(orgId: string, patch: Partial<Pick<StoredCwPsa, 'map' | 'lastSyncAt' | 'options'>>) {
+    const saved = (await this.load(orgId)).cwPsa;
+    if (!saved) throw new HttpError(400, 'Connect ConnectWise PSA first.');
+    await this.put(orgId, 'cwPsa', { ...saved, ...patch });
+  }
+
+  async forgetCwPsa(orgId: string) {
+    await this.db
+      .update(schema.orgs)
+      .set({ settings: sql`${schema.orgs.settings} - 'cwPsa'` })
       .where(eq(schema.orgs.id, orgId));
   }
 

@@ -299,6 +299,64 @@ export function ticketNumberIn(reason: string): string | null {
   return /(?:#|\bticket\s*(?:no\.?|number)?\s*#?\s*|\bT)(\d{1,18})\b/i.exec(reason)?.[1] ?? null;
 }
 
+/** Saves one linked company's tickets from `source`: new ones are added, known ones updated in place. */
+export async function upsertTickets(
+  db: Database,
+  orgId: string,
+  source: string,
+  clientId: string,
+  companyId: string,
+  list: CwTicket[],
+  now = Date.now(),
+) {
+  const t = schema.tickets;
+  for (let i = 0; i < list.length; i += 500) {
+    const rows = list.slice(i, i + 500).map((k) => ({
+      orgId,
+      source,
+      externalId: k.id,
+      clientId,
+      companyId,
+      number: k.number,
+      summary: k.summary,
+      status: k.status,
+      closed: k.closed,
+      priority: k.priority,
+      openedAt: k.openedAt,
+      closedAt: k.closedAt,
+      remoteUpdatedAt: k.updatedAt,
+      url: k.url,
+      board: k.board,
+      origin: k.origin,
+      kind: k.kind,
+      syncedAt: new Date(now),
+    }));
+    await db
+      .insert(t)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [t.orgId, t.source, t.externalId],
+        set: {
+          clientId,
+          companyId,
+          number: sql`excluded.number`,
+          summary: sql`excluded.summary`,
+          status: sql`excluded.status`,
+          closed: sql`excluded.closed`,
+          priority: sql`excluded.priority`,
+          openedAt: sql`excluded.opened_at`,
+          closedAt: sql`excluded.closed_at`,
+          remoteUpdatedAt: sql`excluded.remote_updated_at`,
+          url: sql`excluded.url`,
+          board: sql`excluded.board`,
+          origin: sql`excluded.origin`,
+          kind: sql`excluded.kind`,
+          syncedAt: sql`excluded.synced_at`,
+        },
+      });
+  }
+}
+
 /** Deletes an organization's synced tickets, when ticket syncing is switched off or ConnectWise disconnected. */
 export async function clearTickets(db: Database, orgId: string) {
   await db.delete(schema.tickets).where(and(eq(schema.tickets.orgId, orgId), eq(schema.tickets.source, TICKET_SOURCE)));
@@ -347,51 +405,7 @@ export async function runTicketSync(
       continue;
     }
     try {
-      for (let i = 0; i < list.length; i += 500) {
-        const rows = list.slice(i, i + 500).map((k) => ({
-          orgId,
-          source: TICKET_SOURCE,
-          externalId: k.id,
-          clientId,
-          companyId,
-          number: k.number,
-          summary: k.summary,
-          status: k.status,
-          closed: k.closed,
-          priority: k.priority,
-          openedAt: k.openedAt,
-          closedAt: k.closedAt,
-          remoteUpdatedAt: k.updatedAt,
-          url: k.url,
-          board: k.board,
-          origin: k.origin,
-          kind: k.kind,
-          syncedAt: new Date(now),
-        }));
-        await db
-          .insert(t)
-          .values(rows)
-          .onConflictDoUpdate({
-            target: [t.orgId, t.source, t.externalId],
-            set: {
-              clientId,
-              companyId,
-              number: sql`excluded.number`,
-              summary: sql`excluded.summary`,
-              status: sql`excluded.status`,
-              closed: sql`excluded.closed`,
-              priority: sql`excluded.priority`,
-              openedAt: sql`excluded.opened_at`,
-              closedAt: sql`excluded.closed_at`,
-              remoteUpdatedAt: sql`excluded.remote_updated_at`,
-              url: sql`excluded.url`,
-              board: sql`excluded.board`,
-              origin: sql`excluded.origin`,
-              kind: sql`excluded.kind`,
-              syncedAt: sql`excluded.synced_at`,
-            },
-          });
-      }
+      await upsertTickets(db, orgId, TICKET_SOURCE, clientId, companyId, list, now);
     } catch {
       run.count('tickets', 'failed');
       run.note(`Tickets for company ${companyId} could not be saved. Check the Atlas client it is linked to.`);

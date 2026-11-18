@@ -222,11 +222,6 @@ export function CwRmmSync() {
                         'Expiry tickets',
                         'Opens one ticket for each domain, certificate, license, or warranty of a linked client coming due, on every sync. Needs the tickets create permission.',
                       ],
-                      [
-                        'portalTickets',
-                        'Client portal tickets',
-                        'Lets client portal users open tickets for their linked client, and read and answer the replies marked visible to all. Internal notes stay hidden. Needs tickets sync and the tickets create permission.',
-                      ],
                     ] as const
                   ).map(([key, label, help]) => (
                     <Checkbox
@@ -288,35 +283,6 @@ export function CwRmmSync() {
                               await api('/integrations/cw-rmm/options', {
                                 method: 'PUT',
                                 body: { ...data.options, expiryTicketBoard: board },
-                              });
-                              await connection.refetch();
-                            });
-                          }}
-                        />
-                      )}
-                    </Field>
-                  </div>
-                )}
-                {data.options.portalTickets && (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Field
-                      label="Portal ticket board"
-                      help="The service board's name in ConnectWise for tickets opened from Atlas. Empty uses the first board."
-                    >
-                      {(p) => (
-                        <Input
-                          {...p}
-                          key={`portal-board-${data.options.portalTicketBoard}`}
-                          defaultValue={data.options.portalTicketBoard}
-                          maxLength={100}
-                          disabled={busy === 'options'}
-                          onBlur={(e) => {
-                            const board = e.target.value.trim();
-                            if (board === data.options.portalTicketBoard) return;
-                            void act('options', async () => {
-                              await api('/integrations/cw-rmm/options', {
-                                method: 'PUT',
-                                body: { ...data.options, portalTicketBoard: board },
                               });
                               await connection.refetch();
                             });

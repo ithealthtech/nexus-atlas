@@ -1,35 +1,26 @@
 import { and, eq } from 'drizzle-orm';
 import { schema, type Database } from '@atlas/db';
 import {
-  cwRmmSyncOptionsSchema,
+  cwPsaOptionsSchema,
   type Actor,
-  type CwRmmRegion,
   type PortalTicketInput,
   type TicketNoteView,
   type TicketView,
 } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
-import type { StoredCwRmm } from '../settings.js';
-import { pickSource, placeFor } from './cw-expiry-tickets.js';
-import { ACCESS_DENIED, listOf, pick, text, UPSTREAM, type CwRmmClient } from './cw-rmm.js';
-import {
-  clean,
-  CW_WEB,
-  mapNote,
-  mapTicket,
-  notesPath,
-  TICKET_SOURCE,
-  ticketLink,
-  VISIBLE_TO_ALL,
-} from './cw-tickets.js';
+import type { StoredCwPsa } from '../settings.js';
+import { pickSource } from './cw-expiry-tickets.js';
+import type { CwPsaClient } from './cw-psa-client.js';
+import { mapPsaTicket, psaDate, psaString, PSA_TICKET_SOURCE } from './cw-psa-tickets.js';
+import { listOf, pick, text, UPSTREAM } from './cw-rmm.js';
+import { clean, ticketTime, upsertTickets } from './cw-tickets.js';
 
 type Json = Record<string, unknown>;
 type Named = { id: string; name: string };
 
-const TICKETS = '/api/platform/v2/service/ticketing/tickets';
-const SOURCES = '/api/platform/v1/service/ticketing/sources';
-/** Replies shown per ticket, oldest first so the conversation reads down. */
+/** Notes shown per ticket, oldest first so the conversation reads down. */
 const MAX_REPLIES = 100;
+const SETUP = 'Ask your IT provider to check the setup.';
 
 const named = (list: unknown): Named[] =>
   listOf(list)
@@ -43,141 +34,168 @@ export function pickPortalSource(sources: Named[]): Named | null {
   );
 }
 
-/** The ConnectWise company a client is linked to, or null when it isn't linked. */
-export function companyFor(map: StoredCwRmm['map'], clientId: string): string | null {
+/** The PSA company a client is linked to, or null when it isn't linked. */
+export function companyFor(map: StoredCwPsa['map'], clientId: string): string | null {
   return Object.entries(map).find(([, m]) => m.action === 'link' && m.clientId === clientId)?.[0] ?? null;
 }
 
-/**
- * Whether portal tickets can be opened for this client: they and the ticket sync are on (without the sync, an opened
- * ticket would never show), and the client is linked.
- */
-export function portalTicketsOpen(saved: Pick<StoredCwRmm, 'map' | 'options'> | null, clientId: string) {
+/** Whether PSA tickets can be opened for this client: the option is on, a board is named, and the client linked. */
+export function portalTicketsOpen(saved: Pick<StoredCwPsa, 'map' | 'options'> | null, clientId: string) {
   if (!saved) return false;
-  const options = cwRmmSyncOptionsSchema.parse(saved.options ?? {});
-  return options.tickets && options.portalTickets && !!companyFor(saved.map, clientId);
+  const options = cwPsaOptionsSchema.parse(saved.options ?? {});
+  return options.portalTickets && !!options.portalTicketBoard && !!companyFor(saved.map, clientId);
 }
 
-/** Who asked, written into the ticket: the platform ticket has no contact field, so the requester goes in the text. */
+/** Who asked, written into the ticket, so it's there even when the person isn't a PSA contact. */
 export function requesterLine(actor: Pick<Actor, 'name' | 'email'>) {
   return `Submitted by ${clean(actor.name, 200)} (${clean(actor.email, 320)}) through Nexus Atlas.`;
 }
 
+/** The active board with this name (any case), or a clear error. */
+async function boardFor(client: CwPsaClient, name: string): Promise<Named> {
+  const { items } = await client.list('/service/boards', {
+    conditions: `inactiveFlag=false and name=${psaString(name)}`,
+    fields: 'id,name',
+  });
+  const board = named(items)[0];
+  if (!board) throw new HttpError(UPSTREAM, `ConnectWise PSA has no active service board named "${name}". ${SETUP}`);
+  return board;
+}
+
+/** The person's PSA contact at that company, found by email address, or null when PSA has none. */
+async function contactFor(client: CwPsaClient, companyId: string, email: string): Promise<string | null> {
+  const { items } = await client.list(
+    '/company/contacts',
+    {
+      conditions: `company/id=${companyId} and inactiveFlag=false`,
+      childConditions: `communicationItems/value=${psaString(email)} AND communicationItems/communicationType="Email"`,
+      fields: 'id',
+    },
+    1,
+  );
+  return items.map((c) => text(c, 'id')).find((id) => /^\d+$/.test(id)) ?? null;
+}
+
 /**
- * Opens a ConnectWise ticket for a linked client, on the chosen board, and saves it with the synced tickets so it
- * shows straight away. The ticket's text says who asked; the next sync refreshes everything else.
+ * Opens a ConnectWise PSA service ticket for a linked client, on the chosen board, and saves it with the synced
+ * tickets so it shows straight away. The person is the ticket's contact when PSA knows their email address; the
+ * ticket's text says who asked either way.
  */
 export async function openPortalTicket(
   db: Database,
-  client: CwRmmClient,
-  saved: Pick<StoredCwRmm, 'map' | 'options'> & { region: CwRmmRegion },
+  client: CwPsaClient,
+  saved: Pick<StoredCwPsa, 'map' | 'options' | 'site' | 'companyId'>,
   actor: Actor,
   clientId: string,
   input: PortalTicketInput,
 ): Promise<TicketView> {
   const companyId = companyFor(saved.map, clientId);
-  if (!companyId) throw new HttpError(400, 'This client is not linked to a ConnectWise company.');
-  const options = cwRmmSyncOptionsSchema.parse(saved.options ?? {});
-  let source: Named | null;
-  let place: Awaited<ReturnType<typeof placeFor>>;
-  try {
-    source = pickPortalSource(named(await client.get(SOURCES)));
-    place = await placeFor(client, companyId, options.portalTicketBoard);
-  } catch (error) {
-    if (error instanceof HttpError && error.code === ACCESS_DENIED)
-      throw new HttpError(UPSTREAM, 'ConnectWise refused to list service boards or sites. Ask your IT provider to check the setup.');
-    throw error;
-  }
-  if ('missing' in place) throw new HttpError(UPSTREAM, `${place.missing} Ask your IT provider to check the setup.`);
-  if (!source) throw new HttpError(UPSTREAM, 'ConnectWise listed no ticket sources. Ask your IT provider to check the setup.');
-  const { site, board } = place;
+  if (!companyId) throw new HttpError(400, 'This client is not linked to a ConnectWise PSA company.');
+  const options = cwPsaOptionsSchema.parse(saved.options ?? {});
+  const board = await boardFor(client, options.portalTicketBoard);
+  const source = pickPortalSource(named(await client.get('/service/sources?fields=id,name&pageSize=1000')));
+  const contact = await contactFor(client, companyId, actor.email);
+  const summary = clean(input.summary, 100);
   const body = {
-    summary: clean(input.summary, 200),
-    description: [clean(input.details, 8000), requesterLine(actor)].join('\n\n'),
-    company: { id: companyId },
-    site: { id: site.id },
-    serviceBoard: { id: board.id },
-    source: { id: source.id },
+    summary,
+    company: { id: Number(companyId) },
+    board: { id: Number(board.id) },
+    ...(source ? { source: { id: Number(source.id) } } : {}),
+    ...(contact
+      ? { contact: { id: Number(contact) } }
+      : { contactName: clean(actor.name, 62), contactEmailAddress: clean(actor.email, 250) }),
+    initialDescription: [clean(input.details, 8000), requesterLine(actor)].join('\n\n'),
   };
+  const startedAt = Date.now();
   let created: unknown;
   try {
-    created = await client.post(TICKETS, body);
+    created = await client.post('/service/tickets', body);
   } catch (error) {
-    if (error instanceof HttpError && error.code === ACCESS_DENIED)
-      throw new HttpError(UPSTREAM, 'ConnectWise refused to open the ticket. Ask your IT provider to check the setup.');
-    throw error;
+    if (!(error instanceof HttpError && error.code === 'cw_psa_timeout')) throw error;
+    // No answer doesn't mean no ticket: PSA may still have opened it. Look before reporting a failure, so trying
+    // again can't open a second one.
+    const { items } = await client.list(
+      '/service/tickets',
+      {
+        conditions: `company/id=${companyId} and board/id=${board.id} and summary=${psaString(summary)} and dateEntered>=${psaDate(startedAt - 2 * 60_000)}`,
+        orderBy: 'id desc',
+      },
+      1,
+    );
+    if (!items[0])
+      throw new HttpError(
+        UPSTREAM,
+        "ConnectWise PSA didn't confirm the ticket in time, and it wasn't found afterwards. Check with your IT provider before trying again.",
+      );
+    created = items[0];
   }
   const now = Date.now();
-  const web = CW_WEB[saved.region];
-  const ticket = mapTicket(
-    { status: 'New', createdAt: new Date(now).toISOString(), ...((created ?? {}) as Json), summary: body.summary },
-    now,
-    (number) => ticketLink(web, number, companyId),
-  );
-  // ConnectWise answered without an ID: the ticket is there, and the next sync brings it in.
-  if (!ticket) throw new HttpError(UPSTREAM, 'ConnectWise opened the ticket but did not say its number. It shows after the next sync.');
-  const row = {
-    orgId: actor.orgId,
-    source: TICKET_SOURCE,
-    externalId: ticket.id,
-    clientId,
-    companyId,
-    number: ticket.number,
-    summary: ticket.summary,
-    status: ticket.status,
-    closed: ticket.closed,
-    priority: ticket.priority,
-    openedAt: ticket.openedAt ?? new Date(now),
-    closedAt: ticket.closedAt,
-    remoteUpdatedAt: ticket.updatedAt ?? new Date(now),
-    url: ticket.url,
-    board: ticket.board || board.name,
-    origin: ticket.origin || source.name,
-    kind: ticket.kind,
-    syncedAt: new Date(now),
-  };
-  await db.insert(schema.tickets).values(row).onConflictDoNothing();
+  const ticket = mapPsaTicket((created ?? {}) as Json, saved.site, saved.companyId, now);
+  if (!ticket) throw new HttpError(UPSTREAM, 'ConnectWise PSA opened the ticket but did not say its number. It shows after the next sync.');
+  ticket.board ||= board.name;
+  ticket.origin ||= source?.name ?? '';
+  ticket.openedAt ??= new Date(now);
+  ticket.updatedAt ??= new Date(now);
+  await upsertTickets(db, actor.orgId, PSA_TICKET_SOURCE, clientId, companyId, [ticket], now);
   const [owner] = await db
     .select({ name: schema.clients.name })
     .from(schema.clients)
     .where(and(eq(schema.clients.orgId, actor.orgId), eq(schema.clients.id, clientId)));
   return {
-    id: row.externalId,
-    number: row.number,
-    summary: row.summary,
-    status: row.status,
-    closed: row.closed,
-    priority: row.priority,
+    id: ticket.id,
+    number: ticket.number,
+    summary: ticket.summary,
+    status: ticket.status,
+    closed: ticket.closed,
+    priority: ticket.priority,
     clientId,
     clientName: owner?.name ?? '',
-    openedAt: row.openedAt.toISOString(),
-    closedAt: row.closedAt?.toISOString() ?? null,
-    updatedAt: row.remoteUpdatedAt.toISOString(),
-    url: row.url,
-    board: row.board,
-    origin: row.origin,
-    kind: row.kind,
+    openedAt: ticket.openedAt.toISOString(),
+    closedAt: ticket.closedAt?.toISOString() ?? null,
+    updatedAt: ticket.updatedAt.toISOString(),
+    url: ticket.url,
+    board: ticket.board,
+    origin: ticket.origin,
+    kind: ticket.kind,
   };
 }
 
+/** Who wrote a note, as the client sees it: the contact or the technician by name. */
+const authorOf = (n: Json) => clean(text(n, 'contact.name', 'member.name', 'createdBy'), 200);
+
 /**
- * The ticket's replies visible to all, oldest first. Internal notes (any other visibility, or none given) are
+ * The ticket's notes the customer can see in PSA (Discussion and Resolution), oldest first. Internal notes are
  * never returned: these go to client portal users.
  */
-export async function ticketReplies(client: CwRmmClient, ticketId: string, now = Date.now()) {
-  const replies = listOf(await client.get(notesPath(ticketId)))
-    .filter((n) => Number(pick(n, 'visibility')) === VISIBLE_TO_ALL)
-    .map((n) => mapNote(n, now))
+export async function ticketReplies(client: CwPsaClient, ticketId: string, now = Date.now()) {
+  if (!/^\d+$/.test(ticketId)) throw new HttpError(404, 'Ticket not found.');
+  const { items } = await client.list(`/service/tickets/${ticketId}/notes`, { orderBy: 'id asc' }, 1);
+  const replies = items
+    .filter((n) => pick(n, 'internalAnalysisFlag') !== true)
+    .filter((n) => pick(n, 'detailDescriptionFlag') === true || pick(n, 'resolutionFlag') === true)
+    .map((n): TicketNoteView | null => {
+      const body = clean(text(n, 'text'), 12_000);
+      return body
+        ? {
+            id: text(n, 'id') || body.slice(0, 40),
+            text: body,
+            createdAt: ticketTime(pick(n, 'dateCreated', '_info.dateCreated'), now)?.toISOString() ?? null,
+            createdBy: authorOf(n),
+          }
+        : null;
+    })
     .filter((n): n is TicketNoteView => !!n);
-  return replies.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')).slice(-MAX_REPLIES);
+  return replies.slice(-MAX_REPLIES);
 }
 
-/** Adds a reply visible to all to a ConnectWise ticket, saying who wrote it. */
-export async function addTicketReply(client: CwRmmClient, ticketId: string, actor: Actor, reply: string) {
+/** Adds a Discussion note (one the customer sees) to a PSA ticket, saying who wrote it. */
+export async function addTicketReply(client: CwPsaClient, ticketId: string, actor: Actor, reply: string) {
   const detail = clean(reply, 4000);
   if (!detail) throw new HttpError(400, 'Write the reply first.');
-  await client.post(notesPath(ticketId), {
-    detail: `${detail}\n\n(Reply from ${clean(actor.name, 200)} through Nexus Atlas)`,
-    visibility: VISIBLE_TO_ALL,
+  await client.post(`/service/tickets/${ticketId}/notes`, {
+    text: `${detail}\n\n(Reply from ${clean(actor.name, 200)} through Nexus Atlas)`,
+    detailDescriptionFlag: true,
+    internalAnalysisFlag: false,
+    resolutionFlag: false,
   });
 }

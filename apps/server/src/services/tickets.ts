@@ -18,7 +18,7 @@ const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 /** The period for the statistics: 7, 30, or 90 days, 30 when the request names none of them. */
 export const ticketDays = (value: unknown): TicketDays => TICKET_DAYS.find((d) => d === Number(value)) ?? 30;
 
-/** Tickets synced from ConnectWise, for the clients the actor can read. Read-only. */
+/** Tickets synced from ConnectWise RMM and PSA, for the clients the actor can read. Read-only. */
 export class TicketService {
   constructor(private readonly settings: SettingsService) {}
 
@@ -29,16 +29,17 @@ export class TicketService {
   }
 
   /**
-   * Whether a ConnectWise company is linked to one of these clients, with tickets switched on, and whether tickets
-   * can be opened for the one client asked for.
+   * Whether a ConnectWise RMM company (with tickets switched on) or PSA company is linked to one of these clients,
+   * and whether PSA tickets can be opened for the one client asked for.
    */
   private async linked(orgId: string, ids: string[], clientId?: string) {
-    const links = await this.settings.cwRmmLinks(orgId);
-    if (!links || links.options?.tickets === false) return { linked: false, canOpen: false };
+    const [rmm, psa] = await Promise.all([this.settings.cwRmmLinks(orgId), this.settings.cwPsaLinks(orgId)]);
     const inView = new Set(ids);
+    const linkedIn = (map: Record<string, { action: string; clientId?: string }>) =>
+      Object.values(map).some((m) => m.action === 'link' && !!m.clientId && inView.has(m.clientId));
     return {
-      linked: Object.values(links.map).some((m) => m.action === 'link' && inView.has(m.clientId)),
-      canOpen: !!clientId && inView.has(clientId) && portalTicketsOpen(links, clientId),
+      linked: (!!rmm && rmm.options?.tickets !== false && linkedIn(rmm.map)) || (!!psa && linkedIn(psa.map)),
+      canOpen: !!clientId && inView.has(clientId) && portalTicketsOpen(psa, clientId),
     };
   }
 
