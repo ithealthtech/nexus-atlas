@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn';
 import { initials } from '@/lib/format';
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('rounded-lg border border-border bg-surface', className)} {...props} />;
+  return <div className={cn('rounded-card border border-border bg-surface', className)} {...props} />;
 }
 export function CardHeader({
   title,
@@ -136,7 +136,7 @@ export function Stat({
   icon?: LucideIcon;
 }) {
   return (
-    <div className="h-full rounded-md border border-border bg-surface px-4 py-4">
+    <div className="h-full rounded-card border border-border bg-surface px-4 py-4">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted">{label}</span>
         {Icon && <Icon className="size-4 text-muted" aria-hidden />}

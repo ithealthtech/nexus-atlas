@@ -172,7 +172,7 @@ export function Dashboard() {
           icon={BookOpen}
         />
         {actor.isStaff && (
-          <AppLink to="/password-health" className="block">
+          <AppLink to="/password-health" className="block rounded-card">
             <Stat
               label="Password health"
               value={
