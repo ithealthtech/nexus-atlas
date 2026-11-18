@@ -382,9 +382,9 @@
           <li>
             In ConnectWise RMM, open <strong>Integrations → API Access</strong> and create an API client. Give it the
             read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them,
-            devices write (for Atlas links), tickets create (for ticket notes and expiry tickets), and
-            <strong>Automation read</strong> and <strong>Automation create</strong> (for password rotation). Copy the
-            client ID and secret.
+            devices write (for Atlas links), tickets create (for ticket notes, expiry tickets and client portal
+            tickets), and <strong>Automation read</strong> and <strong>Automation create</strong> (for password
+            rotation). Copy the client ID and secret.
           </li>
           <li>In Atlas, open <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
           <li>
@@ -489,10 +489,207 @@
                   <strong>Service board</strong> the board's name (empty uses the first board). Needs tickets create.
                 </td>
               </tr>
+              <tr>
+                <td><strong>Client portal tickets</strong></td>
+                <td>
+                  Lets client accounts open tickets for their own organization from Atlas, and read and answer the
+                  replies marked visible to all. <strong>Portal ticket board</strong> sets the board's name (empty uses
+                  the first board). Needs <strong>Tickets</strong> sync and tickets create. See
+                  <a href="#client-portal-tickets">Client portal tickets</a>.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
         <p><strong>Disconnect</strong> deletes the secret from Atlas. Synced devices stay.</p>
+        <h3 id="client-portal-tickets"><a class="anchor" href="#client-portal-tickets">Client portal tickets</a></h3>
+        <p>
+          <strong>What it does.</strong> Your clients' own staff, signed in to Atlas with a client account, get a
+          <strong>New ticket</strong> button on their organization's overview. The ticket they write is opened in
+          ConnectWise straight away, for the ConnectWise company their Atlas client is linked to, on the service board
+          you choose. It shows in their <strong>Ticket details</strong> list at once, and the hourly sync keeps its
+          status up to date. On each ticket, <strong>Conversation</strong> shows the replies your technicians mark
+          <strong>Visible to all</strong> in ConnectWise, and lets the client answer. Their answer is added to the
+          ticket as a note visible to all, so your technicians see it in ConnectWise with everything else. Technicians
+          can open tickets from the same button.
+        </p>
+        <p>
+          <strong>Why use it.</strong> Clients can ask for help from the place they already look up their documentation,
+          without an email that someone has to copy into ConnectWise. Every request lands on the right company and
+          board, says who asked, and keeps its whole conversation in ConnectWise, where your team already works.
+        </p>
+        <p>
+          <strong>What clients never see.</strong> Internal notes (any note that isn't <strong>Visible to all</strong>,
+          including the notes technicians add from Atlas with <strong>Ticket notes</strong>) are never sent to a client
+          account. Clients see only tickets of the clients they have access to.
+        </p>
+        <p><strong>Prerequisites</strong></p>
+        <ul>
+          <li>A working ConnectWise RMM connection (see <a href="#connecting">Connecting</a>).</li>
+          <li>
+            The client is linked to its ConnectWise company under
+            <strong>Import &amp; export → ConnectWise RMM</strong>.
+          </li>
+          <li>
+            <strong>Tickets</strong> is ticked under <strong>What to sync</strong>. Without the ticket sync, an opened
+            ticket would never show its progress, so the <strong>New ticket</strong> button stays hidden.
+          </li>
+          <li>
+            The ConnectWise API client has the <strong>tickets read</strong> and
+            <strong>tickets create</strong> permissions. Opening a ticket and sending a reply both create records in
+            ConnectWise.
+          </li>
+          <li>
+            The client's staff have client accounts (see <a href="client-portal.html">For your clients</a>). Both
+            <strong>Client viewer</strong> and <strong>Client editor</strong> accounts can open tickets: asking for help
+            doesn't change their documentation.
+          </li>
+        </ul>
+        <p><strong>Turn it on</strong></p>
+        <ol class="steps">
+          <li>
+            In ConnectWise, open <strong>Integrations → API Access</strong>, open the API client Atlas uses, and make
+            sure <strong>Tickets → Create</strong> is allowed as well as <strong>Read</strong>. Save.
+          </li>
+          <li>In Atlas, open <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
+          <li>Under <strong>What to sync</strong>, make sure <strong>Tickets</strong> is ticked.</li>
+          <li>
+            Under <strong>Write back to ConnectWise</strong>, tick <strong>Client portal tickets</strong>. The setting
+            saves at once.
+          </li>
+          <li>
+            In <strong>Portal ticket board</strong>, type the name of the service board client tickets should go on,
+            exactly as ConnectWise shows it (capitals don't matter), such as <code>Help Desk</code>. Leave it empty to
+            use the first board ConnectWise lists. The board saves when you leave the box.
+          </li>
+          <li>
+            Choose <strong>Sync now</strong> once, so every linked client's existing tickets are in Atlas before clients
+            start using it.
+          </li>
+        </ol>
+        <p>
+          Atlas picks the ticket's <strong>Source</strong> for you: a source whose name contains
+          <strong>Portal</strong> if you have one, otherwise one named <strong>Web</strong>, otherwise one that sounds
+          like Atlas or a system (<strong>Internal</strong>, <strong>System</strong>, <strong>Automation</strong>,
+          <strong>Other</strong>), otherwise the first source. To control it, add a source called
+          <strong>Client Portal</strong> in ConnectWise.
+        </p>
+        <p>
+          <strong>What goes into ConnectWise.</strong> The ticket's summary is the client's <strong>Summary</strong> (up
+          to 200 characters). Its description is the client's <strong>Details</strong> followed by a line saying who
+          asked, such as <em>Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.</em> The ConnectWise
+          platform ticket has no contact field, so this line is how your technicians know who to call back. Replies
+          arrive as notes visible to all, ending <em>(Reply from Dana Lee through Nexus Atlas)</em>.
+        </p>
+        <p>
+          <strong>Limits.</strong> Each person can open up to 20 tickets an hour from Atlas; after that Atlas asks them
+          to wait. Atlas never writes passwords or attachments into tickets. The security log records each ticket opened
+          and each reply sent, with the ticket number and who did it, but not what they wrote.
+        </p>
+        <p><strong>Check that it works</strong></p>
+        <ol class="steps">
+          <li>
+            Sign in as a client account (or ask a client contact to), open their organization, and find
+            <strong>Ticket details</strong>.
+          </li>
+          <li>
+            Choose <strong>New ticket</strong>, fill in <strong>Summary</strong> and <strong>Details</strong>, and
+            choose <strong>Open ticket</strong>. A message says <em>Ticket #1234 opened</em>.
+          </li>
+          <li>
+            In ConnectWise, find the ticket under the linked company on the board you chose. Its description ends with
+            the <em>Submitted by</em> line.
+          </li>
+          <li>
+            Add a note marked <strong>Visible to all</strong> in ConnectWise, then in Atlas open the ticket's
+            <strong>Conversation</strong>. The note is there. An internal note added at the same time isn't.
+          </li>
+          <li>
+            Write a reply in <strong>Conversation</strong> and choose <strong>Send reply</strong>. It appears in
+            ConnectWise as a note visible to all.
+          </li>
+          <li>
+            In Atlas, open <strong>Admin → Security log</strong>. It lists
+            <em>ConnectWise ticket opened from Atlas</em> and <em>ConnectWise ticket reply added from Atlas</em> with
+            the ticket number.
+          </li>
+        </ol>
+        <p><strong>Troubleshooting</strong></p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>What you see</th>
+                <th>Why, and what to do</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>No <strong>New ticket</strong> button</td>
+                <td>
+                  <strong>Client portal tickets</strong> or <strong>Tickets</strong> is off, or this client isn't linked
+                  to a ConnectWise company. Check all three under
+                  <strong>Import &amp; export → ConnectWise RMM</strong>. Client accounts also need access to the
+                  client.
+                </td>
+              </tr>
+              <tr>
+                <td><em>Opening tickets from Atlas is off for this client</em></td>
+                <td>
+                  The same: the option was turned off or the company unlinked after the page opened. Reload the page
+                  after fixing it.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise has no service board named &quot;…&quot;</em></td>
+                <td>
+                  <strong>Portal ticket board</strong> doesn't match any board. Copy the name from ConnectWise, or empty
+                  the box to use the first board.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise refused to list service boards</em> or <em>refused to open the ticket</em></td>
+                <td>
+                  The API client lacks the tickets read or create permission. Add them in <strong>API Access</strong>,
+                  then try again. Nothing was opened.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise opened the ticket but did not say its number</em></td>
+                <td>
+                  ConnectWise created the ticket but answered without its ID. It appears after the next sync; don't open
+                  it again.
+                </td>
+              </tr>
+              <tr>
+                <td><em>Too many attempts. Wait a few minutes and try again.</em></td>
+                <td>
+                  The person opened 20 tickets within the hour. Wait, or open further tickets in ConnectWise directly.
+                </td>
+              </tr>
+              <tr>
+                <td>A client can't see a technician's reply</td>
+                <td>
+                  Only notes marked <strong>Visible to all</strong> reach clients. Change the note's visibility in
+                  ConnectWise.
+                </td>
+              </tr>
+              <tr>
+                <td>The ticket's status doesn't change in Atlas</td>
+                <td>
+                  Status comes from the hourly sync. Choose <strong>Sync now</strong>, or check
+                  <strong>Sync every hour</strong> is ticked.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Conversation</strong> shows replies but no reply box</td>
+                <td>
+                  <strong>Client portal tickets</strong> is off. Clients can still read replies on existing tickets.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <h2 id="microsoft-365"><a class="anchor" href="#microsoft-365">Microsoft 365</a></h2>
         <p>
           <strong>Import &amp; export → Microsoft 365</strong> documents each client's tenant from one multi-tenant app

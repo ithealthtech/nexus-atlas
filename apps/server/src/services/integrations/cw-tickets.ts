@@ -20,7 +20,7 @@ const MAX_PAGES = 200;
 const TICKETS = '/api/platform/v2/service/ticketing/tickets';
 
 /** The web app for each API region. Only North America's is known, so other regions get no ticket links. */
-const CW_WEB: Partial<Record<CwRmmRegion, string>> = { na: 'https://control.itsupport247.net' };
+export const CW_WEB: Partial<Record<CwRmmRegion, string>> = { na: 'https://control.itsupport247.net' };
 
 export interface CwTicket {
   id: string;
@@ -50,7 +50,7 @@ export function ticketTime(value: unknown, now = Date.now()): Date | null {
 }
 
 /** Ticket text is someone else's: control characters are dropped and the length capped. */
-const clean = (s: string, max: number) =>
+export const clean = (s: string, max: number) =>
   s
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
@@ -256,10 +256,13 @@ export function portalIdIn(note: string, asioNumber: string): string | null {
   return m && m[2] === asioNumber ? (m[1] ?? null) : null;
 }
 
-const notesPath = (ticketId: string) =>
+export const notesPath = (ticketId: string) =>
   `/api/platform/v1/service/ticketing/tickets/${encodeURIComponent(ticketId)}/notes`;
 /** Notes shown per ticket, newest first. */
 const MAX_NOTES = 100;
+
+/** ConnectWise's note visibility for "visible to all": the only notes a client sees, and how client replies go. */
+export const VISIBLE_TO_ALL = 1;
 
 /** A ticket note as Atlas shows it; null without text. */
 export function mapNote(n: Json, now = Date.now()): TicketNoteView | null {

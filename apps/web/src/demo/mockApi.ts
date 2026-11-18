@@ -356,6 +356,8 @@ function ticketReport(client: string | null, days: number): TicketReport {
   }
   return {
     linked: !client || list.length > 0,
+    // The demo treats portal tickets as on for every linked client.
+    canOpen: !!client && list.length > 0,
     updatedAt: list.length ? ago(12) : null,
     days: period,
     open: list.filter((t) => !t.closed).length,
@@ -2905,6 +2907,48 @@ on('POST', '/tickets/:id/notes', (m, b) => {
   demoNotes.set(m[1]!, notes);
   return { notes, canAdd: true };
 });
+on('POST', '/clients/:id/tickets', (m, b) => {
+  const client = db.clients.find((c) => c.id === m[1]);
+  if (!client || !ticketsIn(client.id).length)
+    throw new MockError(403, 'Opening tickets from Atlas is off for this client.');
+  const summary = String(b.summary ?? '').trim();
+  if (!summary || !String(b.details ?? '').trim()) throw new MockError(400, 'Say what you need help with.');
+  const now = new Date().toISOString();
+  const ticket: TicketView = {
+    id: uuid(),
+    number: String(49000 + TICKET_SAMPLE.length),
+    summary: summary.slice(0, 200),
+    status: 'New',
+    closed: false,
+    priority: '',
+    clientId: client.id,
+    clientName: client.name,
+    openedAt: now,
+    closedAt: null,
+    updatedAt: now,
+    url: null,
+    board: 'Help Desk',
+    origin: 'Portal',
+    kind: '',
+  };
+  TICKET_SAMPLE.push(ticket);
+  return ticket;
+});
+const demoReplies = new Map<string, { id: string; text: string; createdAt: string; createdBy: string }[]>();
+on('GET', '/tickets/:id/replies', (m) => ({ replies: demoReplies.get(m[1]!) ?? [], canReply: true }));
+on('POST', '/tickets/:id/replies', (m, b) => {
+  const replies = [
+    ...(demoReplies.get(m[1]!) ?? []),
+    {
+      id: uuid(),
+      text: `${String(b.text)}\n\n(Reply from Demo User through Nexus Atlas)`,
+      createdAt: new Date().toISOString(),
+      createdBy: 'API',
+    },
+  ];
+  demoReplies.set(m[1]!, replies);
+  return { replies, canReply: true };
+});
 on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
 on('GET', '/warranty/assets', (_m, _b, q) =>
   warrantyAssets(q.get('client'))
@@ -3078,6 +3122,8 @@ let cwRmm: {
     expiryTickets: boolean;
     expiryTicketDays: number;
     expiryTicketBoard: string;
+    portalTickets: boolean;
+    portalTicketBoard: string;
     layoutId: string | null;
   };
 } | null = null;
@@ -3121,6 +3167,8 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
       expiryTickets: false,
       expiryTicketDays: 30,
       expiryTicketBoard: '',
+      portalTickets: false,
+      portalTicketBoard: '',
       layoutId: null,
     },
   };
@@ -3141,6 +3189,8 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
     expiryTickets: b.expiryTickets === true,
     expiryTicketDays: typeof b.expiryTicketDays === 'number' ? b.expiryTicketDays : 30,
     expiryTicketBoard: typeof b.expiryTicketBoard === 'string' ? b.expiryTicketBoard : '',
+    portalTickets: b.portalTickets === true,
+    portalTicketBoard: typeof b.portalTicketBoard === 'string' ? b.portalTicketBoard : '',
     layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,
   };
   return cwRmm;

@@ -7,6 +7,7 @@ import {
   type TicketStatusCount,
   type TicketView,
 } from '@atlas/shared';
+import { portalTicketsOpen } from './integrations/cw-portal-tickets.js';
 import type { Scope } from './scope.js';
 import type { SettingsService } from './settings.js';
 
@@ -27,12 +28,18 @@ export class TicketService {
     return clientId ? readable.filter((id) => id === clientId) : readable;
   }
 
-  /** Whether a ConnectWise company is linked to one of these clients, with tickets switched on. */
-  private async linked(orgId: string, ids: string[]) {
+  /**
+   * Whether a ConnectWise company is linked to one of these clients, with tickets switched on, and whether tickets
+   * can be opened for the one client asked for.
+   */
+  private async linked(orgId: string, ids: string[], clientId?: string) {
     const links = await this.settings.cwRmmLinks(orgId);
-    if (!links || links.options?.tickets === false) return false;
+    if (!links || links.options?.tickets === false) return { linked: false, canOpen: false };
     const inView = new Set(ids);
-    return Object.values(links.map).some((m) => m.action === 'link' && inView.has(m.clientId));
+    return {
+      linked: Object.values(links.map).some((m) => m.action === 'link' && inView.has(m.clientId)),
+      canOpen: !!clientId && inView.has(clientId) && portalTicketsOpen(links, clientId),
+    };
   }
 
   async report(scope: Scope, opts: { clientId?: string; days?: unknown } = {}): Promise<TicketReport> {
@@ -85,7 +92,7 @@ export class TicketService {
       if (!r.closed) s.closed = false;
     }
     return {
-      linked: await this.linked(scope.actor.orgId, ids),
+      ...(await this.linked(scope.actor.orgId, ids, opts.clientId)),
       updatedAt: updatedAt?.toISOString() ?? null,
       days,
       open,

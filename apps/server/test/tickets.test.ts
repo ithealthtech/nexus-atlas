@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { mapNote, mapTicket, portalIdIn, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
 import { CwLinkWriter } from '../src/services/integrations/cw-writeback.js';
+import { pickPortalSource } from '../src/services/integrations/cw-portal-tickets.js';
 import type { CwRmmClient } from '../src/services/integrations/cw-rmm.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -198,6 +199,16 @@ describe('ticket values', () => {
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Waiting', category: 'Closed' } }),
     ).toMatchObject({ id: 'u-1', number: '7', status: 'Waiting', closed: true });
+  });
+});
+
+describe('portal tickets', () => {
+  it('prefers a portal or web source, then a system one', () => {
+    const phone = { id: '1', name: 'Phone' };
+    expect(pickPortalSource([phone, { id: '2', name: 'Internal' }, { id: '3', name: 'Client Portal' }])?.id).toBe('3');
+    expect(pickPortalSource([phone, { id: '4', name: 'Web' }])?.id).toBe('4');
+    expect(pickPortalSource([phone, { id: '2', name: 'Internal' }])?.id).toBe('2');
+    expect(pickPortalSource([])).toBeNull();
   });
 });
 
@@ -551,6 +562,83 @@ describe('ticket sync and dashboard', () => {
     const none = await sync();
     expect(platform.opened).toHaveLength(2);
     expect(none.messages.join(' ')).toContain('no service board named "Nope"');
+  });
+
+  it('lets a client portal user open a ticket and answer replies visible to all, only when switched on', async () => {
+    await connect(tickets);
+    await link();
+    await sync();
+    const created = await owner.call('POST', '/api/users', {
+      email: 'editor@harbor.test',
+      name: 'Harbor Editor',
+      role: 'client_editor',
+      password: TEMP,
+      grants: [{ clientId: harbor, level: 'edit' }],
+    });
+    expect(created.status).toBe(201);
+    const { b } = await signIn(t.app, 'editor@harbor.test', TEMP);
+    const changed = await b.call('POST', '/api/account/password', {
+      current: TEMP,
+      next: 'harbor lights portal desk 9',
+    });
+    expect(changed.data.stage, JSON.stringify(changed.data)).toBe('active');
+    const ask = { summary: 'Printer offline', details: 'The reception printer shows offline since this morning.' };
+
+    // Off by default: nothing is opened.
+    expect((await b.call('GET', `/api/tickets?client=${harbor}`)).data.canOpen).toBe(false);
+    expect((await b.call('POST', `/api/clients/${harbor}/tickets`, ask)).status).toBe(403);
+    expect(platform.opened).toEqual([]);
+
+    await allOptions({ portalTickets: true, portalTicketBoard: 'help desk' });
+    expect((await b.call('GET', `/api/tickets?client=${harbor}`)).data.canOpen).toBe(true);
+    // Only for clients the person can read, and only with a summary and details.
+    expect((await b.call('POST', `/api/clients/${northline}/tickets`, ask)).status).toBe(404);
+    expect((await b.call('POST', `/api/clients/${harbor}/tickets`, { summary: 'x', details: ' ' })).status).toBe(400);
+    expect(platform.opened).toEqual([]);
+
+    const opened = await b.call('POST', `/api/clients/${harbor}/tickets`, ask);
+    expect(opened.status, JSON.stringify(opened.data)).toBe(201);
+    expect(opened.data).toMatchObject({ id: 'new-1', number: '9001', summary: 'Printer offline', clientId: harbor });
+    expect(platform.opened[0]).toMatchObject({
+      summary: 'Printer offline',
+      company: { id: 'c1' },
+      serviceBoard: { id: 'b-help' },
+      source: { id: 'src-int' },
+    });
+    expect(platform.opened[0]!.description).toBe(
+      `${ask.details}\n\nSubmitted by Harbor Editor (editor@harbor.test) through Nexus Atlas.`,
+    );
+    // It shows straight away, before the next sync.
+    const list = (await b.call('GET', `/api/tickets/list?client=${harbor}`)).data;
+    expect(list.map((k: { id: string }) => k.id)).toContain('new-1');
+
+    // Only replies visible to all reach the client; internal notes, and notes with no visibility, never do.
+    platform.notes.set('new-1', [
+      { id: 'n-1', detail: 'Internal: check the toner', visibility: 2, createdAt: ago(0.03) },
+      { id: 'n-2', detail: 'We are on our way', visibility: 1, createdBy: 'Sam', createdAt: ago(0.02) },
+      { id: 'n-3', detail: 'No visibility given', createdAt: ago(0.01) },
+    ]);
+    const replies = (await b.call('GET', '/api/tickets/new-1/replies')).data;
+    expect(replies).toEqual({
+      canReply: true,
+      replies: [expect.objectContaining({ text: 'We are on our way', createdBy: 'Sam' })],
+    });
+    expect((await b.call('GET', '/api/tickets/new-1/notes')).status).toBe(404);
+    expect((await b.call('GET', '/api/tickets/t-201/replies')).status).toBe(404);
+
+    const answered = await b.call('POST', '/api/tickets/new-1/replies', { text: 'Thanks, it is still offline' });
+    expect(answered.status).toBe(200);
+    expect(platform.notes.get('new-1')!.at(-1)).toMatchObject({
+      detail: 'Thanks, it is still offline\n\n(Reply from Harbor Editor through Nexus Atlas)',
+      visibility: 1,
+    });
+    expect(answered.data.replies.map((r: { id: string }) => r.id)).toEqual(['n-2', 'n-4']);
+
+    // Switched off again: replies can be read but not sent.
+    await allOptions({ portalTickets: false });
+    expect((await b.call('POST', '/api/tickets/new-1/replies', { text: 'Hello?' })).status).toBe(403);
+    expect((await b.call('GET', '/api/tickets/new-1/replies')).data.canReply).toBe(false);
+    expect(platform.notes.get('new-1')).toHaveLength(4);
   });
 });
 

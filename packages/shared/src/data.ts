@@ -114,6 +114,13 @@ export const cwRmmSyncOptionsSchema = z.object({
   /** The service board those tickets go on, by name; empty picks the first board ConnectWise lists. */
   expiryTicketBoard: z.string().trim().max(100).default(''),
   /**
+   * Lets client portal users (and staff) open tickets for a linked client from Atlas, and read and answer the
+   * replies ConnectWise marks visible to all. Changes the ConnectWise tenant, so off by default.
+   */
+  portalTickets: z.boolean().default(false),
+  /** The service board portal tickets go on, by name; empty picks the first board ConnectWise lists. */
+  portalTicketBoard: z.string().trim().max(100).default(''),
+  /**
    * The asset layout new devices are saved in. Null picks the Endpoints layout (one named "Endpoints", "Devices"
    * or "Computer Assets", renamed to Endpoints) when there is one, otherwise Configurations.
    */
@@ -173,6 +180,8 @@ export interface TicketStatusCount {
 export interface TicketReport {
   /** Whether a ConnectWise company is linked (to this client, when one is asked for). */
   linked: boolean;
+  /** Whether the viewer can open tickets for the client asked for: portal tickets are on and it is linked. */
+  canOpen: boolean;
   /** When tickets were last synced, or null before any sync. */
   updatedAt: string | null;
   days: TicketDays;
@@ -216,6 +225,18 @@ export interface TicketNotes {
   canAdd: boolean;
 }
 export const ticketNoteSchema = z.object({ text: z.string().trim().min(1).max(4000) });
+/** A ticket opened from Atlas, usually by a client portal user. */
+export const portalTicketSchema = z.object({
+  summary: z.string().trim().min(1, 'Say what you need help with.').max(200),
+  details: z.string().trim().min(1, 'Describe the problem.').max(8000),
+});
+export type PortalTicketInput = z.infer<typeof portalTicketSchema>;
+/** A reply on a ticket that everyone can see: the conversation between the client and the MSP. */
+export interface TicketReplies {
+  replies: TicketNoteView[];
+  /** Whether the viewer can answer from Atlas (portal tickets are on). */
+  canReply: boolean;
+}
 
 // ---------- security and compliance (ConnectWise platform, read live) ----------
 /**

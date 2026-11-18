@@ -58,6 +58,7 @@ import { SamlService } from './services/saml.js';
 import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
+import { registerPortalTicketRoutes } from './routes/portal-tickets.js';
 import { BitdefenderScheduler, registerBitdefenderRoutes } from './routes/bitdefender.js';
 import { M365Scheduler, registerM365Routes } from './routes/m365.js';
 import { RotationScheduler, registerRotationRoutes } from './routes/rotation.js';
@@ -1038,6 +1039,7 @@ export async function buildApp({
     publicUrl: config.PUBLIC_URL,
     vault,
   });
+  registerPortalTicketRoutes(app, { db, authed, settings, cwRmmFetch, limiter: failureLimiter(20, 60 * 60_000) });
   registerBitdefenderRoutes(app, { db, authed, recent, settings, bitdefenderFetch });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
   const webhooks = new WebhookService(db, vaultKeys, config.publicOrigin, logged(webhookFetch));
