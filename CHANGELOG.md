@@ -4,6 +4,14 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Added
+
+- **Clients can open ConnectWise PSA tickets from Atlas.** Connect ConnectWise PSA (Manage) under the new **Import & export → ConnectWise PSA** with an API member's keys, link PSA companies to clients, name a **Portal ticket board** and tick **Client portal tickets**. Client accounts then get a **New ticket** button under **Ticket details** on their organization's overview. The ticket opens in PSA with a real PSA ticket number, on that board, with the person as its contact when PSA knows their email address, and shows in Atlas at once. Each ticket's **Conversation** shows the Discussion and Resolution notes (never internal notes) and lets the client answer; their answers go to PSA as Discussion notes. Each linked company's PSA tickets also sync hourly to the ticket cards and dashboard. Off by default.
+
+### Fixed
+
+- **Expiry tickets open again in ConnectWise.** ConnectWise now refuses a ticket without a site, so expiry tickets go on the linked company's main site (or its first). A company with no site gets a note in the sync results instead of a failed ticket. Tickets also go only on an active board ConnectWise allows for that company and site, so it no longer refuses them with "serviceBoard is not valid". The API client needs the sites read permission alongside tickets create.
+
 ## [2.6.0] - 2026-11-16
 
 ### Improved

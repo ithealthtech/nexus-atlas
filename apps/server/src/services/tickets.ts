@@ -7,6 +7,7 @@ import {
   type TicketStatusCount,
   type TicketView,
 } from '@atlas/shared';
+import { portalTicketsOpen } from './integrations/cw-portal-tickets.js';
 import type { Scope } from './scope.js';
 import type { SettingsService } from './settings.js';
 
@@ -17,7 +18,7 @@ const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 /** The period for the statistics: 7, 30, or 90 days, 30 when the request names none of them. */
 export const ticketDays = (value: unknown): TicketDays => TICKET_DAYS.find((d) => d === Number(value)) ?? 30;
 
-/** Tickets synced from ConnectWise, for the clients the actor can read. Read-only. */
+/** Tickets synced from ConnectWise RMM and PSA, for the clients the actor can read. Read-only. */
 export class TicketService {
   constructor(private readonly settings: SettingsService) {}
 
@@ -27,12 +28,19 @@ export class TicketService {
     return clientId ? readable.filter((id) => id === clientId) : readable;
   }
 
-  /** Whether a ConnectWise company is linked to one of these clients, with tickets switched on. */
-  private async linked(orgId: string, ids: string[]) {
-    const links = await this.settings.cwRmmLinks(orgId);
-    if (!links || links.options?.tickets === false) return false;
+  /**
+   * Whether a ConnectWise RMM company (with tickets switched on) or PSA company is linked to one of these clients,
+   * and whether PSA tickets can be opened for the one client asked for.
+   */
+  private async linked(orgId: string, ids: string[], clientId?: string) {
+    const [rmm, psa] = await Promise.all([this.settings.cwRmmLinks(orgId), this.settings.cwPsaLinks(orgId)]);
     const inView = new Set(ids);
-    return Object.values(links.map).some((m) => m.action === 'link' && inView.has(m.clientId));
+    const linkedIn = (map: Record<string, { action: string; clientId?: string }>) =>
+      Object.values(map).some((m) => m.action === 'link' && !!m.clientId && inView.has(m.clientId));
+    return {
+      linked: (!!rmm && rmm.options?.tickets !== false && linkedIn(rmm.map)) || (!!psa && linkedIn(psa.map)),
+      canOpen: !!clientId && inView.has(clientId) && portalTicketsOpen(psa, clientId),
+    };
   }
 
   async report(scope: Scope, opts: { clientId?: string; days?: unknown } = {}): Promise<TicketReport> {
@@ -85,7 +93,7 @@ export class TicketService {
       if (!r.closed) s.closed = false;
     }
     return {
-      linked: await this.linked(scope.actor.orgId, ids),
+      ...(await this.linked(scope.actor.orgId, ids, opts.clientId)),
       updatedAt: updatedAt?.toISOString() ?? null,
       days,
       open,
@@ -108,6 +116,7 @@ export class TicketService {
     const rows = await scope.db
       .select({
         id: t.externalId,
+        source: t.source,
         number: t.number,
         summary: t.summary,
         status: t.status,
@@ -141,6 +150,7 @@ export class TicketService {
       .limit(MAX_TICKETS);
     return rows.map((r) => ({
       ...r,
+      source: r.source === 'cw-psa' ? ('cw-psa' as const) : ('cw-rmm' as const),
       openedAt: r.openedAt?.toISOString() ?? null,
       closedAt: r.closedAt?.toISOString() ?? null,
       updatedAt: r.updatedAt?.toISOString() ?? null,

@@ -1,12 +1,13 @@
 import { Fragment, useState, type FormEvent, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Ticket } from 'lucide-react';
+import { ExternalLink, Plus, Ticket } from 'lucide-react';
 import { TICKET_DAYS, type TicketDays, type TicketNotes, type TicketReport, type TicketView } from '@atlas/shared';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, relativeTime } from '@/lib/format';
 import { useActor } from '@/lib/session';
 import { AppLink } from './AppLink';
+import { NewTicketDrawer, TicketConversation } from './TicketPortal';
 import { Button, Card, CardHeader, EmptyState, FormError, Skeleton, Textarea, Drawer } from './ui';
 
 const query = (params: Record<string, string | undefined>) => {
@@ -245,9 +246,12 @@ function TicketNotesPanel({ ticketId }: { ticketId: string }) {
 /** Tickets as a table: number (linked to ConnectWise), summary, status, age, and last update. Text is escaped. */
 function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClient: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
-  // Notes are internal to the MSP: client portal users don't get them.
+  // A PSA ticket shows its conversation (the notes the customer sees) to everyone. An RMM ticket's notes are
+  // internal to the MSP, so client portal users get no panel for it.
   const staff = useActor().isStaff;
-  const cols = showClient ? 7 : 6;
+  const panelOf = (t: TicketView) => (t.source === 'cw-psa' ? 'Conversation' : staff ? 'Notes' : null);
+  const panels = tickets.some((t) => panelOf(t));
+  const cols = (showClient ? 6 : 5) + (panels ? 1 : 0);
   return (
     // Positioned, so the hidden "Notes" header stays inside the scroll area instead of widening the page.
     <div className="relative overflow-x-auto">
@@ -274,9 +278,9 @@ function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClien
             <th scope="col" className="py-2 pr-3 font-medium">
               Last updated
             </th>
-            {staff && (
+            {panels && (
               <th scope="col" className="py-2 font-medium">
-                <span className="sr-only">Notes</span>
+                <span className="sr-only">Notes and conversation</span>
               </th>
             )}
           </tr>
@@ -318,21 +322,29 @@ function TicketTable({ tickets, showClient }: { tickets: TicketView[]; showClien
                 <td className="py-2 pr-3 whitespace-nowrap text-text-2">
                   {t.updatedAt ? relativeTime(t.updatedAt) : 'Not reported'}
                 </td>
-                <td className="py-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-expanded={open === t.id}
-                    onClick={() => setOpen(open === t.id ? null : t.id)}
-                  >
-                    Notes
-                  </Button>
-                </td>
+                {panels && (
+                  <td className="py-1">
+                    {panelOf(t) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-expanded={open === t.id}
+                        onClick={() => setOpen(open === t.id ? null : t.id)}
+                      >
+                        {panelOf(t)}
+                      </Button>
+                    )}
+                  </td>
+                )}
               </tr>
-              {open === t.id && (
+              {open === t.id && panelOf(t) && (
                 <tr>
                   <td colSpan={cols} className="pb-3">
-                    <TicketNotesPanel ticketId={t.id} />
+                    {t.source === 'cw-psa' ? (
+                      <TicketConversation ticketId={t.id} />
+                    ) : (
+                      <TicketNotesPanel ticketId={t.id} />
+                    )}
                   </td>
                 </tr>
               )}
@@ -487,6 +499,7 @@ export function TicketsCard({ clientId }: { clientId?: string }) {
 /** A client's open tickets, the longest since an update first, linking to each in ConnectWise. */
 export function TicketDetails({ clientId }: { clientId: string }) {
   const [all, setAll] = useState(false);
+  const [creating, setCreating] = useState(false);
   const report = useTickets(clientId, 30).data;
   const list = useTicketList(clientId, undefined, 30, !!report?.linked);
   if (!report?.linked) return null;
@@ -494,7 +507,17 @@ export function TicketDetails({ clientId }: { clientId: string }) {
   const shown = all ? tickets : tickets.slice(0, 10);
   return (
     <Card>
-      <CardHeader title="Ticket details" description="Open tickets, the longest since an update first." />
+      <CardHeader
+        title="Ticket details"
+        description="Open tickets, the longest since an update first."
+        actions={
+          report.canOpen && (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus aria-hidden /> New ticket
+            </Button>
+          )
+        }
+      />
       {list.isLoading ? (
         <div className="p-5">
           <Skeleton className="h-24" />
@@ -515,6 +538,7 @@ export function TicketDetails({ clientId }: { clientId: string }) {
       ) : (
         <p className="px-5 py-4 text-sm text-muted">No open tickets.</p>
       )}
+      {report.canOpen && <NewTicketDrawer clientId={clientId} open={creating} onClose={() => setCreating(false)} />}
     </Card>
   );
 }

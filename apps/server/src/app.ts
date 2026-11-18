@@ -58,6 +58,8 @@ import { SamlService } from './services/saml.js';
 import { registerPasswordHealthRoutes } from './routes/password-health.js';
 import { PasswordHealthService } from './services/password-health.js';
 import { CwRmmScheduler, registerIntegrationRoutes } from './routes/integrations.js';
+import { CwPsaScheduler, registerCwPsaRoutes } from './routes/cw-psa.js';
+import { registerPortalTicketRoutes } from './routes/portal-tickets.js';
 import { BitdefenderScheduler, registerBitdefenderRoutes } from './routes/bitdefender.js';
 import { M365Scheduler, registerM365Routes } from './routes/m365.js';
 import { RotationScheduler, registerRotationRoutes } from './routes/rotation.js';
@@ -133,6 +135,8 @@ export interface AppOptions {
   warrantyFetch?: typeof fetch;
   /** Replaces fetch for ConnectWise RMM (tests use a fake Asio API). */
   cwRmmFetch?: typeof fetch;
+  /** Replaces fetch for ConnectWise PSA (tests use a fake PSA REST API). */
+  cwPsaFetch?: typeof fetch;
   /** Replaces fetch for Bitdefender GravityZone (tests use a fake GravityZone API). */
   bitdefenderFetch?: typeof fetch;
   /** Replaces fetch for webhook deliveries (tests use a fake receiver). */
@@ -213,6 +217,7 @@ export async function buildApp({
   mailTransport = defaultTransport,
   huduFetch,
   cwRmmFetch,
+  cwPsaFetch,
   bitdefenderFetch,
   warrantyFetch,
   m365Fetch,
@@ -266,6 +271,7 @@ export async function buildApp({
   const logged = (f?: typeof fetch) => f && requestLog.wrap(f);
   huduFetch = logged(huduFetch);
   cwRmmFetch = logged(cwRmmFetch);
+  cwPsaFetch = logged(cwPsaFetch);
   bitdefenderFetch = logged(bitdefenderFetch);
   warrantyFetch = logged(warrantyFetch);
   m365Fetch = logged(m365Fetch);
@@ -957,6 +963,8 @@ export async function buildApp({
       vault,
     );
     cwRmm.start();
+    const cwPsa = new CwPsaScheduler(db, settings, failuresOf('ConnectWise PSA sync'), cwPsaFetch);
+    cwPsa.start();
     const bitdefender = new BitdefenderScheduler(
       db,
       settings,
@@ -978,6 +986,7 @@ export async function buildApp({
       backups.stop();
       sends.stop();
       cwRmm.stop();
+      cwPsa.stop();
       bitdefender.stop();
       m365.stop();
       rotations.stop();
@@ -1038,6 +1047,8 @@ export async function buildApp({
     publicUrl: config.PUBLIC_URL,
     vault,
   });
+  registerCwPsaRoutes(app, { db, authed, recent, settings, cwPsaFetch });
+  registerPortalTicketRoutes(app, { db, authed, settings, cwPsaFetch, limiter: failureLimiter(20, 60 * 60_000) });
   registerBitdefenderRoutes(app, { db, authed, recent, settings, bitdefenderFetch });
   registerRotationRoutes(app, { authed, recent, rotation, agentLimiter: failureLimiter(20, 15 * 60_000) });
   const webhooks = new WebhookService(db, vaultKeys, config.publicOrigin, logged(webhookFetch));

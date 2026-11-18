@@ -20,7 +20,7 @@ const MAX_PAGES = 200;
 const TICKETS = '/api/platform/v2/service/ticketing/tickets';
 
 /** The web app for each API region. Only North America's is known, so other regions get no ticket links. */
-const CW_WEB: Partial<Record<CwRmmRegion, string>> = { na: 'https://control.itsupport247.net' };
+export const CW_WEB: Partial<Record<CwRmmRegion, string>> = { na: 'https://control.itsupport247.net' };
 
 export interface CwTicket {
   id: string;
@@ -50,7 +50,7 @@ export function ticketTime(value: unknown, now = Date.now()): Date | null {
 }
 
 /** Ticket text is someone else's: control characters are dropped and the length capped. */
-const clean = (s: string, max: number) =>
+export const clean = (s: string, max: number) =>
   s
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
@@ -256,10 +256,13 @@ export function portalIdIn(note: string, asioNumber: string): string | null {
   return m && m[2] === asioNumber ? (m[1] ?? null) : null;
 }
 
-const notesPath = (ticketId: string) =>
+export const notesPath = (ticketId: string) =>
   `/api/platform/v1/service/ticketing/tickets/${encodeURIComponent(ticketId)}/notes`;
 /** Notes shown per ticket, newest first. */
 const MAX_NOTES = 100;
+
+/** ConnectWise's note visibility for "visible to all": the only notes a client sees, and how client replies go. */
+export const VISIBLE_TO_ALL = 1;
 
 /** A ticket note as Atlas shows it; null without text. */
 export function mapNote(n: Json, now = Date.now()): TicketNoteView | null {
@@ -294,6 +297,64 @@ export async function addTicketNote(client: CwRmmClient, ticketId: string, detai
 /** The ticket number a reveal reason names ("#1234", "ticket 1234", "T1234"), if any. */
 export function ticketNumberIn(reason: string): string | null {
   return /(?:#|\bticket\s*(?:no\.?|number)?\s*#?\s*|\bT)(\d{1,18})\b/i.exec(reason)?.[1] ?? null;
+}
+
+/** Saves one linked company's tickets from `source`: new ones are added, known ones updated in place. */
+export async function upsertTickets(
+  db: Database,
+  orgId: string,
+  source: string,
+  clientId: string,
+  companyId: string,
+  list: CwTicket[],
+  now = Date.now(),
+) {
+  const t = schema.tickets;
+  for (let i = 0; i < list.length; i += 500) {
+    const rows = list.slice(i, i + 500).map((k) => ({
+      orgId,
+      source,
+      externalId: k.id,
+      clientId,
+      companyId,
+      number: k.number,
+      summary: k.summary,
+      status: k.status,
+      closed: k.closed,
+      priority: k.priority,
+      openedAt: k.openedAt,
+      closedAt: k.closedAt,
+      remoteUpdatedAt: k.updatedAt,
+      url: k.url,
+      board: k.board,
+      origin: k.origin,
+      kind: k.kind,
+      syncedAt: new Date(now),
+    }));
+    await db
+      .insert(t)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [t.orgId, t.source, t.externalId],
+        set: {
+          clientId,
+          companyId,
+          number: sql`excluded.number`,
+          summary: sql`excluded.summary`,
+          status: sql`excluded.status`,
+          closed: sql`excluded.closed`,
+          priority: sql`excluded.priority`,
+          openedAt: sql`excluded.opened_at`,
+          closedAt: sql`excluded.closed_at`,
+          remoteUpdatedAt: sql`excluded.remote_updated_at`,
+          url: sql`excluded.url`,
+          board: sql`excluded.board`,
+          origin: sql`excluded.origin`,
+          kind: sql`excluded.kind`,
+          syncedAt: sql`excluded.synced_at`,
+        },
+      });
+  }
 }
 
 /** Deletes an organization's synced tickets, when ticket syncing is switched off or ConnectWise disconnected. */
@@ -344,51 +405,7 @@ export async function runTicketSync(
       continue;
     }
     try {
-      for (let i = 0; i < list.length; i += 500) {
-        const rows = list.slice(i, i + 500).map((k) => ({
-          orgId,
-          source: TICKET_SOURCE,
-          externalId: k.id,
-          clientId,
-          companyId,
-          number: k.number,
-          summary: k.summary,
-          status: k.status,
-          closed: k.closed,
-          priority: k.priority,
-          openedAt: k.openedAt,
-          closedAt: k.closedAt,
-          remoteUpdatedAt: k.updatedAt,
-          url: k.url,
-          board: k.board,
-          origin: k.origin,
-          kind: k.kind,
-          syncedAt: new Date(now),
-        }));
-        await db
-          .insert(t)
-          .values(rows)
-          .onConflictDoUpdate({
-            target: [t.orgId, t.source, t.externalId],
-            set: {
-              clientId,
-              companyId,
-              number: sql`excluded.number`,
-              summary: sql`excluded.summary`,
-              status: sql`excluded.status`,
-              closed: sql`excluded.closed`,
-              priority: sql`excluded.priority`,
-              openedAt: sql`excluded.opened_at`,
-              closedAt: sql`excluded.closed_at`,
-              remoteUpdatedAt: sql`excluded.remote_updated_at`,
-              url: sql`excluded.url`,
-              board: sql`excluded.board`,
-              origin: sql`excluded.origin`,
-              kind: sql`excluded.kind`,
-              syncedAt: sql`excluded.synced_at`,
-            },
-          });
-      }
+      await upsertTickets(db, orgId, TICKET_SOURCE, clientId, companyId, list, now);
     } catch {
       run.count('tickets', 'failed');
       run.note(`Tickets for company ${companyId} could not be saved. Check the Atlas client it is linked to.`);

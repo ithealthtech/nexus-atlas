@@ -6,7 +6,7 @@ import { ExpirationService } from '../expirations.js';
 import type { ImportRun } from '../importers/common.js';
 import { Scope } from '../scope.js';
 import type { StoredCwRmm } from '../settings.js';
-import { ACCESS_DENIED, listOf, text, type CwRmmClient } from './cw-rmm.js';
+import { ACCESS_DENIED, listOf, pick, text, type CwRmmClient } from './cw-rmm.js';
 import { atlasUrl } from './cw-writeback.js';
 
 /** External refs of this source record which expiry already has a ticket, so each gets one. */
@@ -20,6 +20,26 @@ const MAX_PER_SYNC = 50;
 type Named = { id: string; name: string };
 const named = (list: unknown): Named[] =>
   listOf(list)
+    .map((x) => ({ id: text(x, 'id'), name: text(x, 'name') }))
+    .filter((x) => x.id);
+
+/** Whether ConnectWise marks a board inactive, in any of the shapes it has been seen to: it refuses tickets on one. */
+function inactive(board: Record<string, unknown>) {
+  const flag = (key: string) => pick(board, key);
+  return (
+    flag('inactive') === true ||
+    flag('inactiveFlag') === true ||
+    flag('isInactive') === true ||
+    flag('isActive') === false ||
+    flag('active') === false ||
+    /inactive|disabled/i.test(String(flag('status') ?? ''))
+  );
+}
+
+/** The service boards a ticket can go on, in the order listed: inactive ones are left out. */
+export const activeBoards = (list: unknown): Named[] =>
+  listOf(list)
+    .filter((b) => !inactive(b))
     .map((x) => ({ id: text(x, 'id'), name: text(x, 'name') }))
     .filter((x) => x.id);
 
@@ -37,6 +57,42 @@ export function pickSource(sources: Named[]): Named | null {
     sources[0] ??
     null
   );
+}
+
+/** A site named main, head office, primary or HQ, else the first one listed. */
+export function pickSite(sites: Named[]): Named | null {
+  return sites.find((s) => /\b(main|head|primary|hq)\b/i.test(s.name)) ?? sites[0] ?? null;
+}
+
+/** The company's site a ticket goes to: ConnectWise refuses a ticket without one ("site is a required field"). */
+export async function siteFor(client: CwRmmClient, companyId: string): Promise<Named | null> {
+  return pickSite((await client.sites(companyId)).map((s) => ({ id: s.id, name: s.name })));
+}
+
+/**
+ * The active boards ConnectWise takes a ticket on for this company and site. The full list can include boards the
+ * company isn't entitled to, which ConnectWise then refuses ("serviceBoard is not valid"), so both are asked for.
+ */
+export async function boardsFor(client: CwRmmClient, companyId: string, siteId: string): Promise<Named[]> {
+  const query = new URLSearchParams({ companyId, siteId });
+  return activeBoards(await client.get(`${BOARDS}?${query}`));
+}
+
+/** Where a ticket for this company goes: its site and a board ConnectWise accepts there, or why there is none. */
+export async function placeFor(
+  client: CwRmmClient,
+  companyId: string,
+  wantedBoard: string,
+): Promise<{ site: Named; board: Named } | { missing: string }> {
+  const site = await siteFor(client, companyId);
+  if (!site) return { missing: 'ConnectWise has no site for this company, and a ticket needs one.' };
+  const board = pickBoard(await boardsFor(client, companyId, site.id), wantedBoard);
+  if (board) return { site, board };
+  return {
+    missing: wantedBoard.trim()
+      ? `ConnectWise has no active service board named "${wantedBoard.trim()}" for this company.`
+      : 'ConnectWise lists no active service board for this company.',
+  };
 }
 
 /**
@@ -76,28 +132,44 @@ export async function runExpiryTickets(
   const todo = due.filter((e) => !opened.has(key(e)));
   if (!todo.length) return;
 
-  let board: Named | null;
   let source: Named | null;
   try {
-    board = pickBoard(named(await client.get(BOARDS)), options.expiryTicketBoard);
     source = pickSource(named(await client.get(SOURCES)));
   } catch (error) {
     run.count('expiryTickets', 'failed');
     run.note(
-      `Expiry tickets: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list service boards. Check the key has the Tickets read and create permissions.' : "ConnectWise's service boards couldn't be read."}`,
+      `Expiry tickets: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list ticket sources. Check the key has the Tickets read and create permissions.' : "ConnectWise's ticket sources couldn't be read."}`,
     );
     return;
   }
-  if (!board || !source) {
-    run.note(
-      options.expiryTicketBoard && !board
-        ? `Expiry tickets: ConnectWise has no service board named "${options.expiryTicketBoard}".`
-        : 'Expiry tickets: ConnectWise listed no service boards or sources.',
-    );
+  if (!source) {
+    run.note('Expiry tickets: ConnectWise listed no ticket sources.');
     return;
   }
 
+  const placeOf = new Map<string, Awaited<ReturnType<typeof placeFor>>>();
+  const usedBoards = new Set<string>();
   for (const e of todo.slice(0, MAX_PER_SYNC)) {
+    const companyId = companyOf.get(e.clientId!)!;
+    const company = e.clientName ?? 'its company';
+    if (!placeOf.has(companyId)) {
+      try {
+        placeOf.set(companyId, await placeFor(client, companyId, options.expiryTicketBoard));
+      } catch (error) {
+        run.count('expiryTickets', 'failed');
+        run.note(
+          `Expiry ticket for ${e.title}: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list sites or service boards. Check the key has the Sites read and Tickets read permissions.' : `ConnectWise's sites or service boards for ${company} couldn't be read.`}`,
+        );
+        continue;
+      }
+    }
+    const place = placeOf.get(companyId)!;
+    if ('missing' in place) {
+      run.count('expiryTickets', 'failed');
+      run.note(`Expiry ticket for ${e.title} (${company}): ${place.missing}`);
+      continue;
+    }
+    const { site, board } = place;
     const when = e.daysLeft < 0 ? `expired on ${e.date}` : e.daysLeft === 0 ? 'expires today' : `expires on ${e.date}`;
     const link = publicUrl ? atlasUrl(publicUrl, 'endpoint', e.id) : '';
     const body = {
@@ -109,7 +181,8 @@ export async function runExpiryTickets(
       ]
         .filter(Boolean)
         .join('\n\n'),
-      company: { id: companyOf.get(e.clientId!) },
+      company: { id: companyId },
+      site: { id: site.id },
       serviceBoard: { id: board.id },
       source: { id: source.id },
       dueDate: `${e.date}T00:00:00Z`,
@@ -128,8 +201,10 @@ export async function runExpiryTickets(
       .values({ orgId: actor.orgId, source: EXPIRY_TICKET_SOURCE, kind: 'asset', externalId: key(e), entityId: e.id })
       .onConflictDoNothing();
     run.count('expiryTickets', 'created');
+    usedBoards.add(board.name);
   }
   if (todo.length > MAX_PER_SYNC)
     run.note(`Expiry tickets: ${todo.length - MAX_PER_SYNC} more are left for the next sync.`);
-  run.note(`Expiry tickets go on the "${board.name}" board with source "${source.name}".`);
+  if (usedBoards.size)
+    run.note(`Expiry tickets go on the ${[...usedBoards].map((b) => `"${b}"`).join(', ')} board with source "${source.name}".`);
 }

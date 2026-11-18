@@ -28,7 +28,7 @@ export interface ApiKeyView {
 }
 
 // ---------- imports ----------
-export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy', 'cw-rmm', 'm365', 'bitdefender'] as const;
+export const IMPORT_SOURCES = ['hudu', 'csv', 'legacy', 'cw-rmm', 'm365', 'bitdefender', 'cw-psa'] as const;
 export type ImportSource = (typeof IMPORT_SOURCES)[number];
 export interface ImportCounts {
   created: number;
@@ -173,6 +173,11 @@ export interface TicketStatusCount {
 export interface TicketReport {
   /** Whether a ConnectWise company is linked (to this client, when one is asked for). */
   linked: boolean;
+  /**
+   * Whether the viewer can open tickets for the client asked for: ConnectWise PSA is connected, portal tickets are
+   * on, and the client is linked to a PSA company.
+   */
+  canOpen: boolean;
   /** When tickets were last synced, or null before any sync. */
   updatedAt: string | null;
   days: TicketDays;
@@ -184,6 +189,8 @@ export interface TicketReport {
 }
 export interface TicketView {
   id: string;
+  /** Where the ticket lives: the RMM's own ticketing, or a ConnectWise PSA service ticket. */
+  source: 'cw-rmm' | 'cw-psa';
   /** The ticket number ConnectWise shows. */
   number: string;
   summary: string;
@@ -216,6 +223,18 @@ export interface TicketNotes {
   canAdd: boolean;
 }
 export const ticketNoteSchema = z.object({ text: z.string().trim().min(1).max(4000) });
+/** A ConnectWise PSA ticket opened from Atlas, usually by a client portal user. */
+export const portalTicketSchema = z.object({
+  summary: z.string().trim().min(1, 'Say what you need help with.').max(200),
+  details: z.string().trim().min(1, 'Describe the problem.').max(8000),
+});
+export type PortalTicketInput = z.infer<typeof portalTicketSchema>;
+/** A note on a PSA ticket that the customer can see: the conversation between the client and the MSP. */
+export interface TicketReplies {
+  replies: TicketNoteView[];
+  /** Whether the viewer can answer from Atlas (a PSA ticket, with portal tickets on). */
+  canReply: boolean;
+}
 
 // ---------- security and compliance (ConnectWise platform, read live) ----------
 /**

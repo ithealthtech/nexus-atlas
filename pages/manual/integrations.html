@@ -382,9 +382,9 @@
           <li>
             In ConnectWise RMM, open <strong>Integrations → API Access</strong> and create an API client. Give it the
             read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them,
-            devices write (for Atlas links), tickets create (for ticket notes and expiry tickets), and
-            <strong>Automation read</strong> and <strong>Automation create</strong> (for password rotation). Copy the
-            client ID and secret.
+            devices write (for Atlas links), tickets create and sites read (for ticket notes and expiry tickets; a new
+            ticket goes on a site), and <strong>Automation read</strong> and <strong>Automation create</strong> (for
+            password rotation). Copy the client ID and secret.
           </li>
           <li>In Atlas, open <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
           <li>
@@ -486,13 +486,333 @@
                 <td>
                   Opens one ticket for each domain, certificate, licence or warranty of a linked client coming due, on
                   every sync. <strong>Days before it expires</strong> (1 to 180) sets how far ahead, and
-                  <strong>Service board</strong> the board's name (empty uses the first board). Needs tickets create.
+                  <strong>Service board</strong> the board's name (empty uses the first active board the company's site
+                  can take). Needs tickets create.
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <p><strong>Disconnect</strong> deletes the secret from Atlas. Synced devices stay.</p>
+        <p>Client portal tickets go to ConnectWise PSA, not RMM: see <a href="#connectwise-psa">ConnectWise PSA</a>.</p>
+        <h2 id="connectwise-psa"><a class="anchor" href="#connectwise-psa">ConnectWise PSA</a></h2>
+        <p>
+          ConnectWise PSA (also called ConnectWise Manage) is where your service desk works tickets. Atlas connects to
+          it with an API member's keys, so your clients can open real PSA service tickets from Atlas, with PSA ticket
+          numbers, and so each linked client's PSA tickets show on the ticket cards and the ticket dashboard. This is
+          separate from <a href="#connectwise-rmm">ConnectWise RMM</a>: RMM tickets (the ones numbered like
+          <code>133023.1670</code>) never become PSA tickets, so client tickets go to PSA through this connection only.
+        </p>
+        <p>
+          Atlas writes to PSA only when a client opens a ticket or answers one, and only with
+          <strong>Client portal tickets</strong> on.
+        </p>
+        <h3 id="setting-up-psa-for-atlas">
+          <a class="anchor" href="#setting-up-psa-for-atlas">Setting up PSA for Atlas</a>
+        </h3>
+        <p>You need a PSA administrator to set up three things once.</p>
+        <ol class="steps">
+          <li>
+            <strong>A security role for Atlas.</strong> In PSA, open <strong>System → Security Roles</strong> and add a
+            role, such as <code>Atlas API</code>. Give it:
+            <ul>
+              <li>
+                <strong>Companies → Company Maintenance</strong>: Inquire level <strong>All</strong>, so Atlas can list
+                companies to link.
+              </li>
+              <li>
+                <strong>Companies → Contacts</strong>: Inquire level <strong>All</strong>, so Atlas can make the person
+                who asks the ticket's contact.
+              </li>
+              <li>
+                <strong>Service Desk → Service Tickets</strong>: Add and Inquire level <strong>All</strong>, so Atlas
+                can open and read tickets.
+              </li>
+              <li>
+                <strong>Service Desk → Service Ticket Notes</strong> (in some versions <strong>Notes</strong> under
+                Service Tickets): Add and Inquire level <strong>All</strong>, so Atlas can read and add Discussion
+                notes.
+              </li>
+              <li>
+                <strong>System → Table Setup</strong>: Inquire level <strong>All</strong>, so Atlas can read service
+                boards and ticket sources.
+              </li>
+            </ul>
+          </li>
+          <li>
+            <strong>An API member.</strong> Open <strong>System → Members → API Members</strong>, add a member (for
+            example <code>Nexus Atlas</code>) with the role above and a location and department, and save. On the
+            member's <strong>API Keys</strong> tab, add a key. Copy the <strong>Public key</strong> and
+            <strong>Private key</strong>. PSA shows the private key once only.
+          </li>
+          <li>
+            <strong>A client ID.</strong> Sign in at <code>developer.connectwise.com</code>, open
+            <strong>Client IDs</strong>, and create one for Atlas. Every PSA API request carries it. It's free.
+          </li>
+        </ol>
+        <p>You also need:</p>
+        <ul>
+          <li>
+            <strong>The site address</strong> of your PSA API, such as <code>api-na.myconnectwise.net</code> (North
+            America), <code>api-eu.myconnectwise.net</code> (Europe) or
+            <code>api-au.myconnectwise.net</code> (Australia). If you host PSA yourself, use your own server's address.
+            Atlas uses HTTPS only.
+          </li>
+          <li><strong>The company ID</strong> you type when you sign in to PSA.</li>
+          <li>
+            <strong>The service board</strong> client tickets should go on, such as <code>Help Desk</code>. It must be
+            active.
+          </li>
+        </ul>
+        <h3 id="connecting-to-psa"><a class="anchor" href="#connecting-to-psa">Connecting to PSA</a></h3>
+        <ol class="steps">
+          <li>In Atlas, open <strong>Import &amp; export → ConnectWise PSA</strong>.</li>
+          <li>
+            Enter <strong>Site</strong>, <strong>Company ID</strong>, <strong>Public key</strong>,
+            <strong>Private key</strong> and <strong>Client ID</strong>. The private key is encrypted with the master
+            key; afterwards the field says <strong>Saved and encrypted. Leave empty to keep it.</strong>
+          </li>
+          <li>Leave <strong>Sync every hour</strong> ticked unless you only want to sync by hand.</li>
+          <li>
+            Choose <strong>Connect</strong>. Atlas signs in and lists your PSA companies before saving anything, so a
+            wrong key never replaces a working connection. Later, the button is <strong>Save and test</strong>.
+          </li>
+          <li>
+            Link each PSA company to its Atlas client in the list that appears (Atlas suggests matches by name), or
+            choose to skip it. Save the links.
+          </li>
+          <li>
+            Choose <strong>Sync now</strong> for the first sync, and watch its progress. It brings in each linked
+            company's open tickets and those closed in the last 90 days.
+          </li>
+        </ol>
+        <p>
+          Only administrators can see and change this page, and changes to the connection need a recent sign-in. Saving
+          the connection, changing links, changing options, starting a sync and disconnecting each write an entry to the
+          security log.
+        </p>
+        <p>
+          <strong>Disconnect</strong> deletes the keys from Atlas and removes the copies of PSA tickets from Atlas.
+          Nothing changes in PSA.
+        </p>
+        <h3 id="client-portal-tickets"><a class="anchor" href="#client-portal-tickets">Client portal tickets</a></h3>
+        <p>
+          <strong>What it does.</strong> Your clients' own staff, signed in to Atlas with a client account, get a
+          <strong>New ticket</strong> button under <strong>Ticket details</strong> on their organization's overview. The
+          ticket they write is opened in ConnectWise PSA straight away, for the PSA company their Atlas client is linked
+          to, on the service board you name, and gets a normal PSA ticket number. It shows in their ticket list at once,
+          and the hourly sync keeps its status up to date. On each PSA ticket, <strong>Conversation</strong> shows the
+          notes your technicians add to the ticket's <strong>Discussion</strong> (and its <strong>Resolution</strong>),
+          and lets the client answer. Their answer is added to the ticket as a Discussion note, so your technicians see
+          it in PSA with everything else. Technicians can open tickets from the same button.
+        </p>
+        <p>
+          <strong>Why use it.</strong> Clients can ask for help from the place they already look up their documentation,
+          without an email that someone has to copy into PSA. Every request lands on the right company and board as a
+          real PSA ticket, with the person who asked as its contact, and keeps its whole conversation in PSA, where your
+          team already works.
+        </p>
+        <p>
+          <strong>What clients never see.</strong> <strong>Internal</strong> notes are never sent to a client account,
+          and nor is anything else that isn't Discussion or Resolution. Clients see only tickets of the clients they
+          have access to.
+        </p>
+        <p><strong>Prerequisites</strong></p>
+        <ul>
+          <li>
+            A working ConnectWise PSA connection (see <a href="#connecting-to-psa">Connecting</a>), with the security
+            role above.
+          </li>
+          <li>The client is linked to its PSA company under <strong>Import &amp; export → ConnectWise PSA</strong>.</li>
+          <li>An active service board in PSA for client tickets.</li>
+          <li>
+            The client's staff have client accounts (see <a href="client-portal.html">For your clients</a>). Both
+            <strong>Client viewer</strong> and <strong>Client editor</strong> accounts can open tickets: asking for help
+            doesn't change their documentation.
+          </li>
+        </ul>
+        <p><strong>Turn it on</strong></p>
+        <ol class="steps">
+          <li>In Atlas, open <strong>Import &amp; export → ConnectWise PSA</strong>.</li>
+          <li>
+            In <strong>Portal ticket board</strong>, type the name of the service board, exactly as PSA shows it
+            (capitals don't matter), such as <code>Help Desk</code>. It saves when you leave the box. Until a board is
+            named, <strong>Client portal tickets</strong> can't be ticked; emptying the box later turns portal tickets
+            off.
+          </li>
+          <li>Tick <strong>Client portal tickets</strong>. It saves at once.</li>
+          <li>
+            Choose <strong>Sync now</strong> once, so every linked client's existing PSA tickets are in Atlas before
+            clients start using it.
+          </li>
+        </ol>
+        <p>
+          Atlas picks the ticket's <strong>Source</strong> for you: a source whose name contains
+          <strong>Portal</strong> if you have one, otherwise one named <strong>Web</strong>, otherwise one that sounds
+          like Atlas or a system (<strong>Internal</strong>, <strong>System</strong>, <strong>Automation</strong>,
+          <strong>Other</strong>), otherwise the first source. To control it, add a source called
+          <strong>Client Portal</strong> in PSA under <strong>System → Setup Tables → Service Source</strong>.
+        </p>
+        <p>
+          <strong>What goes into PSA.</strong> The ticket goes on the linked company and the board you named. Its
+          summary is the client's <strong>Summary</strong> (up to 100 characters, PSA's limit). Its contact is the PSA
+          contact at that company whose email address matches the person's Atlas account. If PSA has no such contact,
+          the ticket carries their name and email address instead, so your technicians can still reply. Its initial
+          description is the client's <strong>Details</strong> followed by a line saying who asked, such as
+          <em>Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.</em> Replies arrive as Discussion notes
+          ending <em>(Reply from Dana Lee through Nexus Atlas)</em>.
+        </p>
+        <p>
+          <strong>If PSA is slow.</strong> If PSA doesn't answer within two minutes, Atlas looks for the ticket it just
+          asked for before reporting a failure, so a ticket PSA did open is shown rather than opened twice.
+        </p>
+        <p>
+          <strong>Limits.</strong> Each person can try to open up to 20 tickets an hour from Atlas (a try PSA refuses
+          counts too); after that Atlas asks them to wait. Atlas never writes passwords or attachments into tickets. The
+          security log records each ticket opened and each reply sent, with the ticket number and who did it, but not
+          what they wrote.
+        </p>
+        <p><strong>Check that it works</strong></p>
+        <ol class="steps">
+          <li>
+            Sign in as a client account (or ask a client contact to), open their organization, and find
+            <strong>Ticket details</strong>.
+          </li>
+          <li>
+            Choose <strong>New ticket</strong>, fill in <strong>Summary</strong> and <strong>Details</strong>, and
+            choose <strong>Open ticket</strong>. A message gives the ticket number, which is a plain PSA number such as
+            <code>6209</code>, with no dot.
+          </li>
+          <li>
+            In PSA, open <strong>Service Desk → Service Board</strong>, choose the board, and find the ticket under the
+            linked company. Its contact is the person, and its description ends with the <em>Submitted by</em> line.
+          </li>
+          <li>
+            In PSA, add a note to the ticket's <strong>Discussion</strong>, and an <strong>Internal</strong> note. In
+            Atlas, open the ticket's <strong>Conversation</strong>. The Discussion note is there; the internal one
+            isn't.
+          </li>
+          <li>
+            Write a reply in <strong>Conversation</strong> and choose <strong>Send reply</strong>. It appears in PSA as
+            a Discussion note.
+          </li>
+          <li>
+            In Atlas, open <strong>Admin → Security log</strong>. It lists
+            <em>ConnectWise PSA ticket opened from Atlas</em> and
+            <em>ConnectWise PSA ticket reply added from Atlas</em> with the ticket number.
+          </li>
+        </ol>
+        <p><strong>Troubleshooting</strong></p>
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>What you see</th>
+                <th>Why, and what to do</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Connect</strong> says <em>ConnectWise PSA refused the sign-in</em></td>
+                <td>
+                  The company ID, public key, private key or client ID is wrong, or the API member is inactive. Copy
+                  them again; a new private key needs a new key on the <strong>API Keys</strong> tab.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise PSA refused /…: the API member's security role doesn't allow it</em></td>
+                <td>
+                  The security role is missing the permission for that path (for example
+                  <code>/service/tickets</code> or <code>/company/contacts</code>). Add it as listed in
+                  <a href="#setting-up-psa-for-atlas">Before you start</a>, then try again.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise PSA could not be reached</em></td>
+                <td>
+                  The <strong>Site</strong> is wrong, or this server can't reach it. Check the address, and that the
+                  server can open HTTPS connections to it.
+                </td>
+              </tr>
+              <tr>
+                <td>No <strong>New ticket</strong> button</td>
+                <td>
+                  <strong>Client portal tickets</strong> is off, no board is named, or this client isn't linked to a PSA
+                  company. Check all three under <strong>Import &amp; export → ConnectWise PSA</strong>. Client accounts
+                  also need access to the client.
+                </td>
+              </tr>
+              <tr>
+                <td><em>Opening tickets from Atlas is off for this client</em></td>
+                <td>
+                  The same: the option was turned off or the company unlinked after the page opened. Reload the page
+                  after fixing it.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise PSA has no active service board named &quot;…&quot;</em></td>
+                <td>
+                  <strong>Portal ticket board</strong> doesn't match an active board. In PSA, check the board under
+                  <strong>System → Setup Tables → Service Board</strong>, copy its exact name, and type it again.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise PSA returned 400 for /service/tickets</em></td>
+                <td>
+                  PSA refused the ticket and says why after it, often a required field on that board (such as a type or
+                  a priority) or a company that is inactive. Fix it in PSA's board setup, then try again. Nothing was
+                  opened.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise PSA didn't confirm the ticket in time, and it wasn't found afterwards</em></td>
+                <td>
+                  PSA didn't answer and Atlas couldn't find the ticket. Check the board in PSA before trying again, in
+                  case it appears late.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise PSA opened the ticket but did not say its number</em></td>
+                <td>
+                  PSA created the ticket but answered without its ID. It appears after the next sync; don't open it
+                  again.
+                </td>
+              </tr>
+              <tr>
+                <td><em>Too many attempts. Wait a few minutes and try again.</em></td>
+                <td>
+                  The person tried to open 20 tickets within the hour. Wait, or open further tickets in PSA directly.
+                </td>
+              </tr>
+              <tr>
+                <td>The ticket has no contact in PSA, only a name and email</td>
+                <td>
+                  PSA has no contact with that email address at the linked company. Add the email to the person's
+                  contact in PSA, and later tickets use it.
+                </td>
+              </tr>
+              <tr>
+                <td>A client can't see a technician's note</td>
+                <td>
+                  Only Discussion and Resolution notes reach clients. Move the text into a Discussion note in PSA.
+                </td>
+              </tr>
+              <tr>
+                <td>The ticket's status doesn't change in Atlas</td>
+                <td>
+                  Status comes from the hourly sync. Choose <strong>Sync now</strong>, or check
+                  <strong>Sync every hour</strong> is ticked.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Conversation</strong> shows replies but no reply box</td>
+                <td>
+                  <strong>Client portal tickets</strong> is off. Clients can still read replies on existing tickets.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <h2 id="microsoft-365"><a class="anchor" href="#microsoft-365">Microsoft 365</a></h2>
         <p>
           <strong>Import &amp; export → Microsoft 365</strong> documents each client's tenant from one multi-tenant app
@@ -658,6 +978,7 @@
           <li><a href="#import-from-hudu">Import from Hudu</a></li>
           <li><a href="#import-a-spreadsheet-csv">Import a spreadsheet (CSV)</a></li>
           <li><a href="#connectwise-rmm">ConnectWise RMM</a></li>
+          <li><a href="#connectwise-psa">ConnectWise PSA</a></li>
           <li><a href="#microsoft-365">Microsoft 365</a></li>
           <li><a href="#bitdefender-gravityzone">Bitdefender GravityZone</a></li>
           <li><a href="#export">Export</a></li>

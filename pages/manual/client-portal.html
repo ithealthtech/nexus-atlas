@@ -161,6 +161,11 @@
         <ul>
           <li>The documentation you've shared: assets, documents, contacts and locations.</li>
           <li>The passwords you've marked <strong>Share with the client's own accounts</strong>, read-only.</li>
+          <li>
+            Their ConnectWise tickets, when the client is linked to a ConnectWise RMM or PSA company. With
+            <strong>Client portal tickets</strong> on, they can also open tickets and answer replies (see
+            <a href="#tickets-from-the-portal">Tickets from the portal</a>).
+          </li>
           <li>Your logo, colour and welcome message.</li>
         </ul>
         <p>
@@ -202,6 +207,22 @@
           If you'd rather client viewers could see which passwords exist but not reveal them, the owner can tick
           <strong>Don't let read-only accounts reveal passwords</strong> in Vault policies.
         </p>
+        <h2 id="tickets-from-the-portal">
+          <a class="anchor" href="#tickets-from-the-portal">Tickets from the portal</a>
+        </h2>
+        <p>
+          With ConnectWise PSA connected, a client account can ask you for help from Atlas. On their organization's
+          overview, <strong>Ticket details</strong> has a <strong>New ticket</strong> button. The ticket opens straight
+          away in ConnectWise PSA, with a normal PSA ticket number, for the PSA company the client is linked to, on the
+          board you chose, with the person as its contact. Each ticket's <strong>Conversation</strong> shows your
+          Discussion and Resolution notes from PSA, never internal notes, and lets the client answer.
+        </p>
+        <p>
+          An administrator turns this on under
+          <strong>Import &amp; export → ConnectWise PSA → Client portal tickets</strong>. The prerequisites,
+          step-by-step setup, how to check it and troubleshooting are in
+          <a href="integrations.html#client-portal-tickets">Client portal tickets</a>.
+        </p>
         <h2 id="the-welcome-message-and-branding">
           <a class="anchor" href="#the-welcome-message-and-branding">The welcome message and branding</a>
         </h2>
@@ -229,6 +250,19 @@
           <li>
             <strong>To change something</strong>, you need to be a <em>Client editor</em>. Otherwise, ask your provider.
           </li>
+          <li>
+            <strong>To ask for help</strong>, open your organization, go to <strong>Ticket details</strong> and choose
+            <strong>New ticket</strong>. Write a one-line <strong>Summary</strong> and the
+            <strong>Details</strong> (what happened, who it affects, what you tried; never a password), then choose
+            <strong>Open ticket</strong>. You'll see the ticket number, and the ticket in the list.
+          </li>
+          <li>
+            <strong>To follow a ticket</strong>, choose <strong>Conversation</strong> on it. You see your provider's
+            replies, and can write back with <strong>Send reply</strong>. The status updates about once an hour.
+          </li>
+          <li>
+            If you don't see <strong>New ticket</strong>, your provider hasn't turned it on for your organization.
+          </li>
         </ul>
         <nav class="pager" aria-label="Chapters">
           <a class="prev" href="../manual/apps.html"><span>Previous</span>Extension and Windows app</a
@@ -241,6 +275,7 @@
           <li><a href="#what-a-client-account-sees">What a client account sees</a></li>
           <li><a href="#give-a-client-s-staff-access">Give a client's staff access</a></li>
           <li><a href="#share-passwords-with-the-client">Share passwords with the client</a></li>
+          <li><a href="#tickets-from-the-portal">Tickets from the portal</a></li>
           <li><a href="#the-welcome-message-and-branding">The welcome message and branding</a></li>
           <li><a href="#for-client-contacts-using-atlas">For client contacts: using Atlas</a></li>
         </ul>

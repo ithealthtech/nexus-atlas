@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { mapNote, mapTicket, portalIdIn, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
 import { CwLinkWriter } from '../src/services/integrations/cw-writeback.js';
+import { pickPortalSource } from '../src/services/integrations/cw-portal-tickets.js';
+import { activeBoards, pickSite } from '../src/services/integrations/cw-expiry-tickets.js';
 import type { CwRmmClient } from '../src/services/integrations/cw-rmm.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -60,11 +62,17 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     if (url.pathname.includes('/ticketing/') && auth !== 'Bearer ticket-tok')
       return json({ message: 'missing scope' }, 403);
     if (url.pathname === '/api/platform/v1/service/ticketing/statuses') return json(STATUSES);
-    if (url.pathname === '/api/platform/v1/service/ticketing/service-boards')
+    if (url.pathname === '/api/platform/v1/service/ticketing/service-boards') {
+      // As a real tenant: the full list starts with boards a ticket can't go on (inactive, or not entitled for the
+      // company and site); asking with both returns only the entitled ones, inactive included.
+      const entitled = url.searchParams.get('companyId') && url.searchParams.get('siteId');
       return json([
+        ...(entitled ? [] : [{ id: 'b-msp', name: 'MSP Internal' }]),
+        { id: 'b-old', name: 'Old Help Desk', inactiveFlag: true },
         { id: 'b-help', name: 'Help Desk' },
         { id: 'b-renew', name: 'Renewals' },
       ]);
+    }
     if (url.pathname === '/api/platform/v1/service/ticketing/sources')
       return json([
         { id: 'src-phone', name: 'Phone' },
@@ -94,7 +102,12 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
       return new Response(null, { status: 204 });
     }
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets' && init?.method === 'POST') {
-      opened.push(JSON.parse(String(init.body)));
+      const body = JSON.parse(String(init.body));
+      // As a real tenant does.
+      if (!body.site?.id) return json({ message: 'site is a required field' }, 400);
+      if (!['b-help', 'b-renew'].includes(body.serviceBoard?.id))
+        return json({ message: 'serviceBoard is not valid. Please select a valid active Service Board' }, 400);
+      opened.push(body);
       return json({ id: `new-${opened.length}`, number: String(9000 + opened.length) }, 201);
     }
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets') {
@@ -198,6 +211,34 @@ describe('ticket values', () => {
     expect(
       mapTicket({ id: 'u-1', number: '7', status: { id: 's-x', name: 'Waiting', category: 'Closed' } }),
     ).toMatchObject({ id: 'u-1', number: '7', status: 'Waiting', closed: true });
+  });
+});
+
+describe('portal tickets', () => {
+  it('prefers a portal or web source, then a system one', () => {
+    const phone = { id: '1', name: 'Phone' };
+    expect(pickPortalSource([phone, { id: '2', name: 'Internal' }, { id: '3', name: 'Client Portal' }])?.id).toBe('3');
+    expect(pickPortalSource([phone, { id: '4', name: 'Web' }])?.id).toBe('4');
+    expect(pickPortalSource([phone, { id: '2', name: 'Internal' }])?.id).toBe('2');
+    expect(pickPortalSource([])).toBeNull();
+  });
+
+  it('leaves out inactive service boards', () => {
+    const listed = [
+      { id: 'b1', name: 'Old', inactiveFlag: true },
+      { id: 'b2', name: 'Closed', isActive: false },
+      { id: 'b3', name: 'Retired', status: 'Inactive' },
+      { id: 'b4', name: 'Help Desk' },
+    ];
+    expect(activeBoards(listed)).toEqual([{ id: 'b4', name: 'Help Desk' }]);
+  });
+
+  it('puts a ticket on the main site, else the first', () => {
+    const branch = { id: '1', name: 'Branch' };
+    expect(pickSite([branch, { id: '2', name: 'Main Office' }])?.id).toBe('2');
+    expect(pickSite([branch, { id: '3', name: 'HQ' }])?.id).toBe('3');
+    expect(pickSite([branch, { id: '4', name: 'Warehouse' }])?.id).toBe('1');
+    expect(pickSite([])).toBeNull();
   });
 });
 
@@ -521,13 +562,23 @@ describe('ticket sync and dashboard', () => {
     await sync();
     expect(platform.opened).toEqual([]);
 
+    // A company without a site gets no ticket, since ConnectWise needs one, and the sync says why.
     await allOptions({ expiryTickets: true, expiryTicketBoard: 'renewals' });
+    const noSite = await sync();
+    expect(platform.opened).toEqual([]);
+    expect(noSite.messages.join(' ')).toContain('ConnectWise has no site for this company');
+
+    platform.sites.set('c1', [
+      { id: 'site-branch', name: 'Branch' },
+      { id: 'site-main', name: 'Main Office' },
+    ]);
     const job = await sync();
     expect(job.counts.expiryTickets, JSON.stringify(job.messages)).toMatchObject({ created: 1 });
     expect(platform.opened).toHaveLength(1);
     expect(platform.opened[0]).toMatchObject({
       summary: `Domains: harbordental.test expires on ${soon}`,
       company: { id: 'c1' },
+      site: { id: 'site-main' },
       serviceBoard: { id: 'b-renew' },
       source: { id: 'src-int' },
     });
@@ -547,10 +598,11 @@ describe('ticket sync and dashboard', () => {
     expect(platform.opened).toHaveLength(2);
 
     // A board that doesn't exist opens nothing and says so.
+    platform.sites.set('c2', [{ id: 'site-north', name: 'Northline' }]);
     await allOptions({ expiryTickets: true, expiryTicketBoard: 'Nope', expiryTicketDays: 180 });
     const none = await sync();
     expect(platform.opened).toHaveLength(2);
-    expect(none.messages.join(' ')).toContain('no service board named "Nope"');
+    expect(none.messages.join(' ')).toContain('no active service board named "Nope"');
   });
 });
 
