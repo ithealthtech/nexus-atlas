@@ -88,7 +88,7 @@ Atlas reads companies, sites, contacts, devices and tickets from ConnectWise RMM
 
 ### Connecting
 
-1. In ConnectWise RMM, open **Integrations → API Access** and create an API client. Give it the read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them, devices write (for Atlas links), tickets create (for ticket notes, expiry tickets and client portal tickets), and **Automation read** and **Automation create** (for password rotation). Copy the client ID and secret.
+1. In ConnectWise RMM, open **Integrations → API Access** and create an API client. Give it the read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them, devices write (for Atlas links), tickets create and sites read (for ticket notes, expiry tickets and client portal tickets; a new ticket goes on a site), and **Automation read** and **Automation create** (for password rotation). Copy the client ID and secret.
 2. In Atlas, open **Import & export → ConnectWise RMM**.
 3. Choose the **Region** your ConnectWise tenant is in: **North America**, **Europe** or **Australia**.
 4. Enter the **Client ID** and **Client secret**. The secret is encrypted with the master key; afterwards the field says **Saved and encrypted. Leave empty to keep it.**
@@ -136,12 +136,13 @@ These change data in your ConnectWise tenant, so they're off until you turn them
 - A working ConnectWise RMM connection (see [Connecting](#connecting)).
 - The client is linked to its ConnectWise company under **Import & export → ConnectWise RMM**.
 - **Tickets** is ticked under **What to sync**. Without the ticket sync, an opened ticket would never show its progress, so the **New ticket** button stays hidden.
-- The ConnectWise API client has the **tickets read** and **tickets create** permissions. Opening a ticket and sending a reply both create records in ConnectWise.
+- The ConnectWise API client has the **tickets read**, **tickets create** and **sites read** permissions. Opening a ticket and sending a reply both create records in ConnectWise.
+- The linked ConnectWise company has at least one site. ConnectWise won't accept a ticket without one.
 - The client's staff have client accounts (see [For your clients](client-portal.html)). Both **Client viewer** and **Client editor** accounts can open tickets: asking for help doesn't change their documentation.
 
 **Turn it on**
 
-1. In ConnectWise, open **Integrations → API Access**, open the API client Atlas uses, and make sure **Tickets → Create** is allowed as well as **Read**. Save.
+1. In ConnectWise, open **Integrations → API Access**, open the API client Atlas uses, and make sure **Tickets → Create** is allowed as well as **Read**, and **Sites → Read** is allowed. Save.
 2. In Atlas, open **Import & export → ConnectWise RMM**.
 3. Under **What to sync**, make sure **Tickets** is ticked.
 4. Under **Write back to ConnectWise**, tick **Client portal tickets**. The setting saves at once.
@@ -150,7 +151,7 @@ These change data in your ConnectWise tenant, so they're off until you turn them
 
 Atlas picks the ticket's **Source** for you: a source whose name contains **Portal** if you have one, otherwise one named **Web**, otherwise one that sounds like Atlas or a system (**Internal**, **System**, **Automation**, **Other**), otherwise the first source. To control it, add a source called **Client Portal** in ConnectWise.
 
-**What goes into ConnectWise.** The ticket's summary is the client's **Summary** (up to 200 characters). Its description is the client's **Details** followed by a line saying who asked, such as *Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.* The ConnectWise platform ticket has no contact field, so this line is how your technicians know who to call back. Replies arrive as notes visible to all, ending *(Reply from Dana Lee through Nexus Atlas)*.
+**What goes into ConnectWise.** The ticket goes on the linked company and on its main site: a site whose name contains **Main**, **Head**, **Primary** or **HQ**, otherwise the first site ConnectWise lists. The ticket's summary is the client's **Summary** (up to 200 characters). Its description is the client's **Details** followed by a line saying who asked, such as *Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.* The ConnectWise platform ticket has no contact field, so this line is how your technicians know who to call back. Replies arrive as notes visible to all, ending *(Reply from Dana Lee through Nexus Atlas)*.
 
 **Limits.** Each person can try to open up to 20 tickets an hour from Atlas (a try ConnectWise refuses counts too); after that Atlas asks them to wait. Atlas never writes passwords or attachments into tickets. The security log records each ticket opened and each reply sent, with the ticket number and who did it, but not what they wrote.
 
@@ -170,7 +171,8 @@ Atlas picks the ticket's **Source** for you: a source whose name contains **Port
 | No **New ticket** button | **Client portal tickets** or **Tickets** is off, or this client isn't linked to a ConnectWise company. Check all three under **Import & export → ConnectWise RMM**. Client accounts also need access to the client. |
 | *Opening tickets from Atlas is off for this client* | The same: the option was turned off or the company unlinked after the page opened. Reload the page after fixing it. |
 | *ConnectWise has no service board named "…"* | **Portal ticket board** doesn't match any board. Copy the name from ConnectWise, or empty the box to use the first board. |
-| *ConnectWise refused to list service boards* or *refused to open the ticket* | The API client lacks the tickets read or create permission. Add them in **API Access**, then try again. Nothing was opened. |
+| *ConnectWise refused to list service boards or sites* or *refused to open the ticket* | The API client lacks the tickets read, tickets create or sites read permission. Add them in **API Access**, then try again. Nothing was opened. |
+| *ConnectWise has no site for this company* | The linked company has no site in ConnectWise, and ConnectWise needs one on every ticket. Add a site to the company in ConnectWise, then try again. |
 | *ConnectWise opened the ticket but did not say its number* | ConnectWise created the ticket but answered without its ID. It appears after the next sync; don't open it again. |
 | *Too many attempts. Wait a few minutes and try again.* | The person tried to open 20 tickets within the hour. Wait, or open further tickets in ConnectWise directly. |
 | A client can't see a technician's reply | Only notes marked **Visible to all** reach clients. Change the note's visibility in ConnectWise. |

@@ -382,9 +382,9 @@
           <li>
             In ConnectWise RMM, open <strong>Integrations → API Access</strong> and create an API client. Give it the
             read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them,
-            devices write (for Atlas links), tickets create (for ticket notes, expiry tickets and client portal
-            tickets), and <strong>Automation read</strong> and <strong>Automation create</strong> (for password
-            rotation). Copy the client ID and secret.
+            devices write (for Atlas links), tickets create and sites read (for ticket notes, expiry tickets and client
+            portal tickets; a new ticket goes on a site), and <strong>Automation read</strong> and
+            <strong>Automation create</strong> (for password rotation). Copy the client ID and secret.
           </li>
           <li>In Atlas, open <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
           <li>
@@ -535,10 +535,11 @@
             ticket would never show its progress, so the <strong>New ticket</strong> button stays hidden.
           </li>
           <li>
-            The ConnectWise API client has the <strong>tickets read</strong> and
-            <strong>tickets create</strong> permissions. Opening a ticket and sending a reply both create records in
+            The ConnectWise API client has the <strong>tickets read</strong>, <strong>tickets create</strong> and
+            <strong>sites read</strong> permissions. Opening a ticket and sending a reply both create records in
             ConnectWise.
           </li>
+          <li>The linked ConnectWise company has at least one site. ConnectWise won't accept a ticket without one.</li>
           <li>
             The client's staff have client accounts (see <a href="client-portal.html">For your clients</a>). Both
             <strong>Client viewer</strong> and <strong>Client editor</strong> accounts can open tickets: asking for help
@@ -549,7 +550,8 @@
         <ol class="steps">
           <li>
             In ConnectWise, open <strong>Integrations → API Access</strong>, open the API client Atlas uses, and make
-            sure <strong>Tickets → Create</strong> is allowed as well as <strong>Read</strong>. Save.
+            sure <strong>Tickets → Create</strong> is allowed as well as <strong>Read</strong>, and
+            <strong>Sites → Read</strong> is allowed. Save.
           </li>
           <li>In Atlas, open <strong>Import &amp; export → ConnectWise RMM</strong>.</li>
           <li>Under <strong>What to sync</strong>, make sure <strong>Tickets</strong> is ticked.</li>
@@ -575,11 +577,14 @@
           <strong>Client Portal</strong> in ConnectWise.
         </p>
         <p>
-          <strong>What goes into ConnectWise.</strong> The ticket's summary is the client's <strong>Summary</strong> (up
-          to 200 characters). Its description is the client's <strong>Details</strong> followed by a line saying who
-          asked, such as <em>Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.</em> The ConnectWise
-          platform ticket has no contact field, so this line is how your technicians know who to call back. Replies
-          arrive as notes visible to all, ending <em>(Reply from Dana Lee through Nexus Atlas)</em>.
+          <strong>What goes into ConnectWise.</strong> The ticket goes on the linked company and on its main site: a
+          site whose name contains <strong>Main</strong>, <strong>Head</strong>, <strong>Primary</strong> or
+          <strong>HQ</strong>, otherwise the first site ConnectWise lists. The ticket's summary is the client's
+          <strong>Summary</strong> (up to 200 characters). Its description is the client's
+          <strong>Details</strong> followed by a line saying who asked, such as
+          <em>Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.</em> The ConnectWise platform ticket
+          has no contact field, so this line is how your technicians know who to call back. Replies arrive as notes
+          visible to all, ending <em>(Reply from Dana Lee through Nexus Atlas)</em>.
         </p>
         <p>
           <strong>Limits.</strong> Each person can try to open up to 20 tickets an hour from Atlas (a try ConnectWise
@@ -649,10 +654,19 @@
                 </td>
               </tr>
               <tr>
-                <td><em>ConnectWise refused to list service boards</em> or <em>refused to open the ticket</em></td>
                 <td>
-                  The API client lacks the tickets read or create permission. Add them in <strong>API Access</strong>,
-                  then try again. Nothing was opened.
+                  <em>ConnectWise refused to list service boards or sites</em> or <em>refused to open the ticket</em>
+                </td>
+                <td>
+                  The API client lacks the tickets read, tickets create or sites read permission. Add them in
+                  <strong>API Access</strong>, then try again. Nothing was opened.
+                </td>
+              </tr>
+              <tr>
+                <td><em>ConnectWise has no site for this company</em></td>
+                <td>
+                  The linked company has no site in ConnectWise, and ConnectWise needs one on every ticket. Add a site
+                  to the company in ConnectWise, then try again.
                 </td>
               </tr>
               <tr>

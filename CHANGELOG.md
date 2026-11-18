@@ -6,7 +6,11 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **Clients can open ConnectWise tickets from Atlas.** With **Client portal tickets** on under **Import & export → ConnectWise RMM**, client accounts get a **New ticket** button under **Ticket details** on their organization's overview. The ticket opens in ConnectWise for the linked company, on the **Portal ticket board** you choose, says who asked, and shows in Atlas at once. Each ticket's **Conversation** shows the replies marked visible to all (never internal notes) and lets the client answer; their answers go to ConnectWise as notes visible to all. Technicians can open tickets from the same button. Off by default; needs the tickets create permission.
+- **Clients can open ConnectWise tickets from Atlas.** With **Client portal tickets** on under **Import & export → ConnectWise RMM**, client accounts get a **New ticket** button under **Ticket details** on their organization's overview. The ticket opens in ConnectWise for the linked company, on the **Portal ticket board** you choose, says who asked, and shows in Atlas at once. Each ticket's **Conversation** shows the replies marked visible to all (never internal notes) and lets the client answer; their answers go to ConnectWise as notes visible to all. Technicians can open tickets from the same button. Off by default; needs the tickets create and sites read permissions.
+
+### Fixed
+
+- **Expiry tickets open again in ConnectWise.** ConnectWise now refuses a ticket without a site, so expiry tickets go on the linked company's main site (or its first). A company with no site gets a note in the sync results instead of a failed ticket. The API client needs the sites read permission alongside tickets create.
 
 ## [2.6.0] - 2026-11-16
 

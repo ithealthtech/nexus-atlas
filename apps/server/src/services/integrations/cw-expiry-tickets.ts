@@ -110,7 +110,17 @@ export async function runExpiryTickets(
   const siteOf = new Map<string, Named | null>();
   for (const e of todo.slice(0, MAX_PER_SYNC)) {
     const companyId = companyOf.get(e.clientId!)!;
-    if (!siteOf.has(companyId)) siteOf.set(companyId, await siteFor(client, companyId).catch(() => null));
+    if (!siteOf.has(companyId)) {
+      try {
+        siteOf.set(companyId, await siteFor(client, companyId));
+      } catch (error) {
+        run.count('expiryTickets', 'failed');
+        run.note(
+          `Expiry ticket for ${e.title}: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list sites. Check the key has the Sites read permission.' : `ConnectWise's sites for ${e.clientName ?? 'its company'} couldn't be read.`}`,
+        );
+        continue;
+      }
+    }
     const site = siteOf.get(companyId);
     if (!site) {
       run.count('expiryTickets', 'failed');

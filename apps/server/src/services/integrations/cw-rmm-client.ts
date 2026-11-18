@@ -40,8 +40,11 @@ const SCOPES = 'platform.companies.read platform.sites.read platform.devices.rea
 export const ROTATION_SCOPES = `${SCOPES} platform.automation.read platform.automation.create`;
 /** Tickets get their own token, so a key without ticket access still syncs devices. */
 export const TICKET_SCOPES = 'platform.companies.read platform.tickets.read';
-/** Adding ticket notes (the scope names CallBridge uses against the same API). Asked for only when notes are on. */
-export const TICKET_NOTE_SCOPES = `${TICKET_SCOPES} platform.tickets.create`;
+/**
+ * Adding ticket notes and opening tickets (the scope names CallBridge uses against the same API). A new ticket needs
+ * the company's site, so reading sites comes too. Asked for only when a write option is on.
+ */
+export const TICKET_NOTE_SCOPES = `${TICKET_SCOPES} platform.sites.read platform.tickets.create`;
 /** Writing the "Atlas link" custom fields on devices. Asked for only when that option is on. */
 export const LINK_SCOPES = `${SCOPES} platform.devices.write`;
 const RETRY_MS = 2000;

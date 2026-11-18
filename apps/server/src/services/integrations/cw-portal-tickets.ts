@@ -88,7 +88,7 @@ export async function openPortalTicket(
     site = await siteFor(client, companyId);
   } catch (error) {
     if (error instanceof HttpError && error.code === ACCESS_DENIED)
-      throw new HttpError(502, 'ConnectWise refused to list service boards. Ask your IT provider to check the setup.');
+      throw new HttpError(502, 'ConnectWise refused to list service boards or sites. Ask your IT provider to check the setup.');
     throw error;
   }
   if (!board || !source)
