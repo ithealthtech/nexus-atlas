@@ -620,7 +620,7 @@ describe('ticket sync and dashboard', () => {
 
     // ConnectWise needs a site on the ticket: a company without one gets a clear answer, and nothing is opened.
     const noSite = await b.call('POST', `/api/clients/${harbor}/tickets`, ask);
-    expect(noSite.status).toBe(502);
+    expect(noSite.status).toBe(424);
     expect(noSite.data.error ?? noSite.data.message).toContain('no site for this company');
     expect(platform.opened).toEqual([]);
 

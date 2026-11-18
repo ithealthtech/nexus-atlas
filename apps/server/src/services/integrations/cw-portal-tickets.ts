@@ -11,7 +11,7 @@ import {
 import { HttpError } from '../../errors.js';
 import type { StoredCwRmm } from '../settings.js';
 import { pickBoard, pickSource, siteFor } from './cw-expiry-tickets.js';
-import { ACCESS_DENIED, listOf, pick, text, type CwRmmClient } from './cw-rmm.js';
+import { ACCESS_DENIED, listOf, pick, text, UPSTREAM, type CwRmmClient } from './cw-rmm.js';
 import {
   clean,
   CW_WEB,
@@ -88,7 +88,7 @@ export async function openPortalTicket(
     site = await siteFor(client, companyId);
   } catch (error) {
     if (error instanceof HttpError && error.code === ACCESS_DENIED)
-      throw new HttpError(502, 'ConnectWise refused to list service boards or sites. Ask your IT provider to check the setup.');
+      throw new HttpError(UPSTREAM, 'ConnectWise refused to list service boards or sites. Ask your IT provider to check the setup.');
     throw error;
   }
   if (!board || !source)
@@ -100,7 +100,7 @@ export async function openPortalTicket(
     );
   // ConnectWise refuses a ticket without a site ("site is a required field").
   if (!site)
-    throw new HttpError(502, 'ConnectWise has no site for this company, and a ticket needs one. Ask your IT provider to add one.');
+    throw new HttpError(UPSTREAM, 'ConnectWise has no site for this company, and a ticket needs one. Ask your IT provider to add one.');
   const body = {
     summary: clean(input.summary, 200),
     description: [clean(input.details, 8000), requesterLine(actor)].join('\n\n'),
@@ -114,7 +114,7 @@ export async function openPortalTicket(
     created = await client.post(TICKETS, body);
   } catch (error) {
     if (error instanceof HttpError && error.code === ACCESS_DENIED)
-      throw new HttpError(502, 'ConnectWise refused to open the ticket. Ask your IT provider to check the setup.');
+      throw new HttpError(UPSTREAM, 'ConnectWise refused to open the ticket. Ask your IT provider to check the setup.');
     throw error;
   }
   const now = Date.now();
@@ -125,7 +125,7 @@ export async function openPortalTicket(
     (number) => ticketLink(web, number, companyId),
   );
   // ConnectWise answered without an ID: the ticket is there, and the next sync brings it in.
-  if (!ticket) throw new HttpError(502, 'ConnectWise opened the ticket but did not say its number. It shows after the next sync.');
+  if (!ticket) throw new HttpError(UPSTREAM, 'ConnectWise opened the ticket but did not say its number. It shows after the next sync.');
   const row = {
     orgId: actor.orgId,
     source: TICKET_SOURCE,

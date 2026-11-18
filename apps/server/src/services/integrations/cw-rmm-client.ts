@@ -50,6 +50,11 @@ export const LINK_SCOPES = `${SCOPES} platform.devices.write`;
 const RETRY_MS = 2000;
 /** The code on errors that mean the key can't sign in or lacks a permission: no other request shape will help. */
 export const ACCESS_DENIED = 'cw_access_denied';
+/**
+ * The status for ConnectWise failing or refusing. Not 502: Cloudflare, which many installs sit behind, swaps a 502
+ * body for its own "Bad gateway" page, so the message saying what went wrong never reached the person.
+ */
+export const UPSTREAM = 424;
 // Five attempts at this length, plus the lead-in and the company prefix, fit an import job message (800 characters).
 const ATTEMPT_CHARS = 100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -143,7 +148,7 @@ export class CwRmmClient {
       try {
         res = await request();
       } catch {
-        throw new HttpError(502, 'ConnectWise RMM could not be reached. Check the region and this server’s internet access.');
+        throw new HttpError(UPSTREAM, 'ConnectWise RMM could not be reached. Check the region and this server’s internet access.');
       }
       if (![423, 429, 503].includes(res.status) || attempt >= 3) return res;
       const after = Number(res.headers.get('retry-after'));
@@ -177,10 +182,10 @@ export class CwRmmClient {
         'ConnectWise RMM has temporarily locked this API key after too many sign-ins. Wait a few minutes, then sync again.',
         ACCESS_DENIED,
       );
-    if (!res.ok) throw new HttpError(502, `ConnectWise RMM returned ${res.status} when signing in.${await detail(res)}`);
+    if (!res.ok) throw new HttpError(UPSTREAM, `ConnectWise RMM returned ${res.status} when signing in.${await detail(res)}`);
     const body = (await res.json()) as Json;
     const value = text(body, 'access_token', 'accessToken');
-    if (!value) throw new HttpError(502, 'ConnectWise RMM did not return an access token.');
+    if (!value) throw new HttpError(UPSTREAM, 'ConnectWise RMM did not return an access token.');
     const seconds = Number(pick(body, 'expires_in', 'expiresIn')) || 3600;
     this.token = { value, expires: Date.now() + seconds * 1000 };
     return value;
