@@ -74,7 +74,6 @@ the owner asked for that feature to go.
   servers or VMs unless asked.
 - **Don't drive the owner's desktop.** No UI automation or test windows on his PC, because it takes over his mouse.
   Use CI, which takes screenshots of the Windows app.
-- **No ConnectWise PSA integration.** ConnectWise is phasing PSA out.
 
 ## Checks before opening a pull request
 
