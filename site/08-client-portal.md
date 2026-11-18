@@ -18,7 +18,7 @@ A client account sees only its own organization, and only what you give it:
 
 - The documentation you've shared: assets, documents, contacts and locations.
 - The passwords you've marked **Share with the client's own accounts**, read-only.
-- Their ConnectWise tickets, when the client is linked to a ConnectWise company. With **Client portal tickets** on, they can also open tickets and answer replies (see [Tickets from the portal](#tickets-from-the-portal)).
+- Their ConnectWise tickets, when the client is linked to a ConnectWise RMM or PSA company. With **Client portal tickets** on, they can also open tickets and answer replies (see [Tickets from the portal](#tickets-from-the-portal)).
 - Your logo, colour and welcome message.
 
 They never see the MSP knowledge base, other clients, your checklists, the vault for anything you haven't shared, or any administration page. They can't use the browser extension or Atlas for Windows.
@@ -43,9 +43,9 @@ If you'd rather client viewers could see which passwords exist but not reveal th
 
 ## Tickets from the portal
 
-With ConnectWise connected, a client account can ask you for help from Atlas. On their organization's overview, **Ticket details** has a **New ticket** button. The ticket goes straight to the ConnectWise company the client is linked to, on the board you chose, and says who asked. Each ticket's **Conversation** shows your replies marked **Visible to all** in ConnectWise, never internal notes, and lets the client answer.
+With ConnectWise PSA connected, a client account can ask you for help from Atlas. On their organization's overview, **Ticket details** has a **New ticket** button. The ticket opens straight away in ConnectWise PSA, with a normal PSA ticket number, for the PSA company the client is linked to, on the board you chose, with the person as its contact. Each ticket's **Conversation** shows your Discussion and Resolution notes from PSA, never internal notes, and lets the client answer.
 
-An administrator turns this on under **Import & export → ConnectWise RMM → Client portal tickets**. The prerequisites, step-by-step setup, how to check it and troubleshooting are in [Client portal tickets](integrations.html#client-portal-tickets).
+An administrator turns this on under **Import & export → ConnectWise PSA → Client portal tickets**. The prerequisites, step-by-step setup, how to check it and troubleshooting are in [Client portal tickets](integrations.html#client-portal-tickets).
 
 ## The welcome message and branding
 

@@ -88,7 +88,7 @@ Atlas reads companies, sites, contacts, devices and tickets from ConnectWise RMM
 
 ### Connecting
 
-1. In ConnectWise RMM, open **Integrations → API Access** and create an API client. Give it the read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them, devices write (for Atlas links), tickets create and sites read (for ticket notes, expiry tickets and client portal tickets; a new ticket goes on a site), and **Automation read** and **Automation create** (for password rotation). Copy the client ID and secret.
+1. In ConnectWise RMM, open **Integrations → API Access** and create an API client. Give it the read permissions for companies, sites and devices; tickets read for tickets; and, if you'll use them, devices write (for Atlas links), tickets create and sites read (for ticket notes and expiry tickets; a new ticket goes on a site), and **Automation read** and **Automation create** (for password rotation). Copy the client ID and secret.
 2. In Atlas, open **Import & export → ConnectWise RMM**.
 3. Choose the **Region** your ConnectWise tenant is in: **North America**, **Europe** or **Australia**.
 4. Enter the **Client ID** and **Client secret**. The secret is encrypted with the master key; afterwards the field says **Saved and encrypted. Leave empty to keep it.**
@@ -119,63 +119,104 @@ These change data in your ConnectWise tenant, so they're off until you turn them
 | **Atlas links** | Writes each device's Atlas address into its **Atlas link** custom field on every sync, so technicians can jump from ConnectWise to Atlas. Add that device custom field in ConnectWise first. Needs devices write. |
 | **Ticket notes** | Lets technicians add internal notes to tickets from Atlas, and adds a note to the ticket whose number is in the reason when someone reveals a password (never the password itself). Needs tickets create. |
 | **Expiry tickets** | Opens one ticket for each domain, certificate, licence or warranty of a linked client coming due, on every sync. **Days before it expires** (1 to 180) sets how far ahead, and **Service board** the board's name (empty uses the first active board the company's site can take). Needs tickets create. |
-| **Client portal tickets** | Lets client accounts open tickets for their own organization from Atlas, and read and answer the replies marked visible to all. **Portal ticket board** sets the board's name (empty uses the first active board the company's site can take). Needs **Tickets** sync and tickets create. See [Client portal tickets](#client-portal-tickets). |
 
 **Disconnect** deletes the secret from Atlas. Synced devices stay.
 
+Client portal tickets go to ConnectWise PSA, not RMM: see [ConnectWise PSA](#connectwise-psa).
+
+## ConnectWise PSA
+
+ConnectWise PSA (also called ConnectWise Manage) is where your service desk works tickets. Atlas connects to it with an API member's keys, so your clients can open real PSA service tickets from Atlas, with PSA ticket numbers, and so each linked client's PSA tickets show on the ticket cards and the ticket dashboard. This is separate from [ConnectWise RMM](#connectwise-rmm): RMM tickets (the ones numbered like `133023.1670`) never become PSA tickets, so client tickets go to PSA through this connection only.
+
+Atlas writes to PSA only when a client opens a ticket or answers one, and only with **Client portal tickets** on.
+
+### Setting up PSA for Atlas
+
+You need a PSA administrator to set up three things once.
+
+1. **A security role for Atlas.** In PSA, open **System → Security Roles** and add a role, such as `Atlas API`. Give it:
+   - **Companies → Company Maintenance**: Inquire level **All**, so Atlas can list companies to link.
+   - **Companies → Contacts**: Inquire level **All**, so Atlas can make the person who asks the ticket's contact.
+   - **Service Desk → Service Tickets**: Add and Inquire level **All**, so Atlas can open and read tickets.
+   - **Service Desk → Service Ticket Notes** (in some versions **Notes** under Service Tickets): Add and Inquire level **All**, so Atlas can read and add Discussion notes.
+   - **System → Table Setup**: Inquire level **All**, so Atlas can read service boards and ticket sources.
+2. **An API member.** Open **System → Members → API Members**, add a member (for example `Nexus Atlas`) with the role above and a location and department, and save. On the member's **API Keys** tab, add a key. Copy the **Public key** and **Private key**. PSA shows the private key once only.
+3. **A client ID.** Sign in at `developer.connectwise.com`, open **Client IDs**, and create one for Atlas. Every PSA API request carries it. It's free.
+
+You also need:
+
+- **The site address** of your PSA API, such as `api-na.myconnectwise.net` (North America), `api-eu.myconnectwise.net` (Europe) or `api-au.myconnectwise.net` (Australia). If you host PSA yourself, use your own server's address. Atlas uses HTTPS only.
+- **The company ID** you type when you sign in to PSA.
+- **The service board** client tickets should go on, such as `Help Desk`. It must be active.
+
+### Connecting to PSA
+
+1. In Atlas, open **Import & export → ConnectWise PSA**.
+2. Enter **Site**, **Company ID**, **Public key**, **Private key** and **Client ID**. The private key is encrypted with the master key; afterwards the field says **Saved and encrypted. Leave empty to keep it.**
+3. Leave **Sync every hour** ticked unless you only want to sync by hand.
+4. Choose **Connect**. Atlas signs in and lists your PSA companies before saving anything, so a wrong key never replaces a working connection. Later, the button is **Save and test**.
+5. Link each PSA company to its Atlas client in the list that appears (Atlas suggests matches by name), or choose to skip it. Save the links.
+6. Choose **Sync now** for the first sync, and watch its progress. It brings in each linked company's open tickets and those closed in the last 90 days.
+
+Only administrators can see and change this page, and changes to the connection need a recent sign-in. Saving the connection, changing links, changing options, starting a sync and disconnecting each write an entry to the security log.
+
+**Disconnect** deletes the keys from Atlas and removes the copies of PSA tickets from Atlas. Nothing changes in PSA.
+
 ### Client portal tickets
 
-**What it does.** Your clients' own staff, signed in to Atlas with a client account, get a **New ticket** button on their organization's overview. The ticket they write is opened in ConnectWise straight away, for the ConnectWise company their Atlas client is linked to, on the service board you choose. It shows in their **Ticket details** list at once, and the hourly sync keeps its status up to date. On each ticket, **Conversation** shows the replies your technicians mark **Visible to all** in ConnectWise, and lets the client answer. Their answer is added to the ticket as a note visible to all, so your technicians see it in ConnectWise with everything else. Technicians can open tickets from the same button.
+**What it does.** Your clients' own staff, signed in to Atlas with a client account, get a **New ticket** button under **Ticket details** on their organization's overview. The ticket they write is opened in ConnectWise PSA straight away, for the PSA company their Atlas client is linked to, on the service board you name, and gets a normal PSA ticket number. It shows in their ticket list at once, and the hourly sync keeps its status up to date. On each PSA ticket, **Conversation** shows the notes your technicians add to the ticket's **Discussion** (and its **Resolution**), and lets the client answer. Their answer is added to the ticket as a Discussion note, so your technicians see it in PSA with everything else. Technicians can open tickets from the same button.
 
-**Why use it.** Clients can ask for help from the place they already look up their documentation, without an email that someone has to copy into ConnectWise. Every request lands on the right company and board, says who asked, and keeps its whole conversation in ConnectWise, where your team already works.
+**Why use it.** Clients can ask for help from the place they already look up their documentation, without an email that someone has to copy into PSA. Every request lands on the right company and board as a real PSA ticket, with the person who asked as its contact, and keeps its whole conversation in PSA, where your team already works.
 
-**What clients never see.** Internal notes (any note that isn't **Visible to all**, including the notes technicians add from Atlas with **Ticket notes**) are never sent to a client account. Clients see only tickets of the clients they have access to.
+**What clients never see.** **Internal** notes are never sent to a client account, and nor is anything else that isn't Discussion or Resolution. Clients see only tickets of the clients they have access to.
 
 **Prerequisites**
 
-- A working ConnectWise RMM connection (see [Connecting](#connecting)).
-- The client is linked to its ConnectWise company under **Import & export → ConnectWise RMM**.
-- **Tickets** is ticked under **What to sync**. Without the ticket sync, an opened ticket would never show its progress, so the **New ticket** button stays hidden.
-- The ConnectWise API client has the **tickets read**, **tickets create** and **sites read** permissions. Opening a ticket and sending a reply both create records in ConnectWise.
-- The linked ConnectWise company has at least one site. ConnectWise won't accept a ticket without one.
+- A working ConnectWise PSA connection (see [Connecting](#connecting-to-psa)), with the security role above.
+- The client is linked to its PSA company under **Import & export → ConnectWise PSA**.
+- An active service board in PSA for client tickets.
 - The client's staff have client accounts (see [For your clients](client-portal.html)). Both **Client viewer** and **Client editor** accounts can open tickets: asking for help doesn't change their documentation.
 
 **Turn it on**
 
-1. In ConnectWise, open **Integrations → API Access**, open the API client Atlas uses, and make sure **Tickets → Create** is allowed as well as **Read**, and **Sites → Read** is allowed. Save.
-2. In Atlas, open **Import & export → ConnectWise RMM**.
-3. Under **What to sync**, make sure **Tickets** is ticked.
-4. Under **Write back to ConnectWise**, tick **Client portal tickets**. The setting saves at once.
-5. In **Portal ticket board**, type the name of the service board client tickets should go on, exactly as ConnectWise shows it (capitals don't matter), such as `Help Desk`. Leave it empty to use the first active board ConnectWise offers for the company's site. Atlas asks ConnectWise only for the boards that company and site are entitled to, and skips inactive ones, so ConnectWise doesn't refuse the ticket. The board saves when you leave the box.
-6. Choose **Sync now** once, so every linked client's existing tickets are in Atlas before clients start using it.
+1. In Atlas, open **Import & export → ConnectWise PSA**.
+2. In **Portal ticket board**, type the name of the service board, exactly as PSA shows it (capitals don't matter), such as `Help Desk`. It saves when you leave the box. Until a board is named, **Client portal tickets** can't be ticked; emptying the box later turns portal tickets off.
+3. Tick **Client portal tickets**. It saves at once.
+4. Choose **Sync now** once, so every linked client's existing PSA tickets are in Atlas before clients start using it.
 
-Atlas picks the ticket's **Source** for you: a source whose name contains **Portal** if you have one, otherwise one named **Web**, otherwise one that sounds like Atlas or a system (**Internal**, **System**, **Automation**, **Other**), otherwise the first source. To control it, add a source called **Client Portal** in ConnectWise.
+Atlas picks the ticket's **Source** for you: a source whose name contains **Portal** if you have one, otherwise one named **Web**, otherwise one that sounds like Atlas or a system (**Internal**, **System**, **Automation**, **Other**), otherwise the first source. To control it, add a source called **Client Portal** in PSA under **System → Setup Tables → Service Source**.
 
-**What goes into ConnectWise.** The ticket goes on the linked company and on its main site: a site whose name contains **Main**, **Head**, **Primary** or **HQ**, otherwise the first site ConnectWise lists. The ticket's summary is the client's **Summary** (up to 200 characters). Its description is the client's **Details** followed by a line saying who asked, such as *Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.* The ConnectWise platform ticket has no contact field, so this line is how your technicians know who to call back. Replies arrive as notes visible to all, ending *(Reply from Dana Lee through Nexus Atlas)*.
+**What goes into PSA.** The ticket goes on the linked company and the board you named. Its summary is the client's **Summary** (up to 100 characters, PSA's limit). Its contact is the PSA contact at that company whose email address matches the person's Atlas account. If PSA has no such contact, the ticket carries their name and email address instead, so your technicians can still reply. Its initial description is the client's **Details** followed by a line saying who asked, such as *Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.* Replies arrive as Discussion notes ending *(Reply from Dana Lee through Nexus Atlas)*.
 
-**Limits.** Each person can try to open up to 20 tickets an hour from Atlas (a try ConnectWise refuses counts too); after that Atlas asks them to wait. Atlas never writes passwords or attachments into tickets. The security log records each ticket opened and each reply sent, with the ticket number and who did it, but not what they wrote.
+**If PSA is slow.** If PSA doesn't answer within two minutes, Atlas looks for the ticket it just asked for before reporting a failure, so a ticket PSA did open is shown rather than opened twice.
+
+**Limits.** Each person can try to open up to 20 tickets an hour from Atlas (a try PSA refuses counts too); after that Atlas asks them to wait. Atlas never writes passwords or attachments into tickets. The security log records each ticket opened and each reply sent, with the ticket number and who did it, but not what they wrote.
 
 **Check that it works**
 
 1. Sign in as a client account (or ask a client contact to), open their organization, and find **Ticket details**.
-2. Choose **New ticket**, fill in **Summary** and **Details**, and choose **Open ticket**. A message says *Ticket #1234 opened*.
-3. In ConnectWise, find the ticket under the linked company on the board you chose. Its description ends with the *Submitted by* line.
-4. Add a note marked **Visible to all** in ConnectWise, then in Atlas open the ticket's **Conversation**. The note is there. An internal note added at the same time isn't.
-5. Write a reply in **Conversation** and choose **Send reply**. It appears in ConnectWise as a note visible to all.
-6. In Atlas, open **Admin → Security log**. It lists *ConnectWise ticket opened from Atlas* and *ConnectWise ticket reply added from Atlas* with the ticket number.
+2. Choose **New ticket**, fill in **Summary** and **Details**, and choose **Open ticket**. A message gives the ticket number, which is a plain PSA number such as `6209`, with no dot.
+3. In PSA, open **Service Desk → Service Board**, choose the board, and find the ticket under the linked company. Its contact is the person, and its description ends with the *Submitted by* line.
+4. In PSA, add a note to the ticket's **Discussion**, and an **Internal** note. In Atlas, open the ticket's **Conversation**. The Discussion note is there; the internal one isn't.
+5. Write a reply in **Conversation** and choose **Send reply**. It appears in PSA as a Discussion note.
+6. In Atlas, open **Admin → Security log**. It lists *ConnectWise PSA ticket opened from Atlas* and *ConnectWise PSA ticket reply added from Atlas* with the ticket number.
 
 **Troubleshooting**
 
 | What you see | Why, and what to do |
 |---|---|
-| No **New ticket** button | **Client portal tickets** or **Tickets** is off, or this client isn't linked to a ConnectWise company. Check all three under **Import & export → ConnectWise RMM**. Client accounts also need access to the client. |
+| **Connect** says *ConnectWise PSA refused the sign-in* | The company ID, public key, private key or client ID is wrong, or the API member is inactive. Copy them again; a new private key needs a new key on the **API Keys** tab. |
+| *ConnectWise PSA refused /…: the API member's security role doesn't allow it* | The security role is missing the permission for that path (for example `/service/tickets` or `/company/contacts`). Add it as listed in [Before you start](#setting-up-psa-for-atlas), then try again. |
+| *ConnectWise PSA could not be reached* | The **Site** is wrong, or this server can't reach it. Check the address, and that the server can open HTTPS connections to it. |
+| No **New ticket** button | **Client portal tickets** is off, no board is named, or this client isn't linked to a PSA company. Check all three under **Import & export → ConnectWise PSA**. Client accounts also need access to the client. |
 | *Opening tickets from Atlas is off for this client* | The same: the option was turned off or the company unlinked after the page opened. Reload the page after fixing it. |
-| *ConnectWise has no active service board named "…" for this company* or *lists no active service board* | **Portal ticket board** doesn't match an active board that company's site is entitled to. In ConnectWise, check the board is active and available to that company, copy its exact name, or empty the box to use the first one offered. |
-| *ConnectWise refused to list service boards or sites* or *refused to open the ticket* | The API client lacks the tickets read, tickets create or sites read permission. Add them in **API Access**, then try again. Nothing was opened. |
-| *ConnectWise has no site for this company* | The linked company has no site in ConnectWise, and ConnectWise needs one on every ticket. Add a site to the company in ConnectWise, then try again. |
-| *ConnectWise opened the ticket but did not say its number* | ConnectWise created the ticket but answered without its ID. It appears after the next sync; don't open it again. |
-| *Too many attempts. Wait a few minutes and try again.* | The person tried to open 20 tickets within the hour. Wait, or open further tickets in ConnectWise directly. |
-| A client can't see a technician's reply | Only notes marked **Visible to all** reach clients. Change the note's visibility in ConnectWise. |
+| *ConnectWise PSA has no active service board named "…"* | **Portal ticket board** doesn't match an active board. In PSA, check the board under **System → Setup Tables → Service Board**, copy its exact name, and type it again. |
+| *ConnectWise PSA returned 400 for /service/tickets* | PSA refused the ticket and says why after it, often a required field on that board (such as a type or a priority) or a company that is inactive. Fix it in PSA's board setup, then try again. Nothing was opened. |
+| *ConnectWise PSA didn't confirm the ticket in time, and it wasn't found afterwards* | PSA didn't answer and Atlas couldn't find the ticket. Check the board in PSA before trying again, in case it appears late. |
+| *ConnectWise PSA opened the ticket but did not say its number* | PSA created the ticket but answered without its ID. It appears after the next sync; don't open it again. |
+| *Too many attempts. Wait a few minutes and try again.* | The person tried to open 20 tickets within the hour. Wait, or open further tickets in PSA directly. |
+| The ticket has no contact in PSA, only a name and email | PSA has no contact with that email address at the linked company. Add the email to the person's contact in PSA, and later tickets use it. |
+| A client can't see a technician's note | Only Discussion and Resolution notes reach clients. Move the text into a Discussion note in PSA. |
 | The ticket's status doesn't change in Atlas | Status comes from the hourly sync. Choose **Sync now**, or check **Sync every hour** is ticked. |
 | **Conversation** shows replies but no reply box | **Client portal tickets** is off. Clients can still read replies on existing tickets. |
 

@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **Clients can open ConnectWise tickets from Atlas.** With **Client portal tickets** on under **Import & export → ConnectWise RMM**, client accounts get a **New ticket** button under **Ticket details** on their organization's overview. The ticket opens in ConnectWise for the linked company, on the **Portal ticket board** you choose, says who asked, and shows in Atlas at once. Each ticket's **Conversation** shows the replies marked visible to all (never internal notes) and lets the client answer; their answers go to ConnectWise as notes visible to all. Technicians can open tickets from the same button. Off by default; needs the tickets create and sites read permissions.
+- **Clients can open ConnectWise PSA tickets from Atlas.** Connect ConnectWise PSA (Manage) under the new **Import & export → ConnectWise PSA** with an API member's keys, link PSA companies to clients, name a **Portal ticket board** and tick **Client portal tickets**. Client accounts then get a **New ticket** button under **Ticket details** on their organization's overview. The ticket opens in PSA with a real PSA ticket number, on that board, with the person as its contact when PSA knows their email address, and shows in Atlas at once. Each ticket's **Conversation** shows the Discussion and Resolution notes (never internal notes) and lets the client answer; their answers go to PSA as Discussion notes. Each linked company's PSA tickets also sync hourly to the ticket cards and dashboard. Off by default.
 
 ### Fixed
 
