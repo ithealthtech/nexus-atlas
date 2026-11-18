@@ -93,7 +93,7 @@ export async function openPortalTicket(
   }
   if (!board || !source)
     throw new HttpError(
-      502,
+      UPSTREAM,
       options.portalTicketBoard && !board
         ? `ConnectWise has no service board named "${options.portalTicketBoard}". Ask your IT provider to check the setup.`
         : 'ConnectWise listed no service boards or sources. Ask your IT provider to check the setup.',

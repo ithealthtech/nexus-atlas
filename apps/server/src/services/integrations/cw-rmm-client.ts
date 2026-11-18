@@ -178,7 +178,7 @@ export class CwRmmClient {
       );
     if (res.status === 423)
       throw new HttpError(
-        502,
+        UPSTREAM,
         'ConnectWise RMM has temporarily locked this API key after too many sign-ins. Wait a few minutes, then sync again.',
         ACCESS_DENIED,
       );
@@ -242,7 +242,7 @@ export class CwRmmClient {
       );
     if (!res.ok)
       throw new HttpError(
-        res.status === 400 || res.status === 404 ? res.status : 502,
+        res.status === 400 || res.status === 404 ? res.status : UPSTREAM,
         `ConnectWise RMM returned ${res.status} for ${where}.${await detail(res)}`,
       );
     let parsed: unknown;
