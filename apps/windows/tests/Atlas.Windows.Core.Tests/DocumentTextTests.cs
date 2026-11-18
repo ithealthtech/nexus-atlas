@@ -6,7 +6,7 @@ namespace Atlas.Windows.Core.Tests;
 
 public class DocumentTextTests
 {
-    private static JsonElement Doc(string blocks) => JsonDocument.Parse($$"""{"type":"doc","content":[{{blocks}}]}""").RootElement;
+    private static JsonElement Doc(string blocks) => JsonElement.Parse($$"""{"type":"doc","content":[{{blocks}}]}""");
 
     private static string Paragraph(string text) =>
         """{"type":"paragraph","content":[{"type":"text","text":""" + JsonSerializer.Serialize(text) + "}]}";

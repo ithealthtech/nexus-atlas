@@ -472,7 +472,7 @@ public class RichTextPlainTests
     [Fact]
     public void Reads_a_document_as_plain_text()
     {
-        var doc = JsonDocument.Parse("""
+        var doc = JsonElement.Parse("""
             {"type":"doc","content":[
               {"type":"heading","content":[{"type":"text","text":"Steps"}]},
               {"type":"paragraph","content":[{"type":"text","text":"Reboot after "},{"type":"text","text":"6 PM","marks":[{"type":"bold"}]},{"type":"text","text":"."}]},
@@ -485,7 +485,7 @@ public class RichTextPlainTests
               {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"One"}]}]}]},
               {"type":"mystery","content":[{"type":"text","text":"Kept anyway"}]}
             ]}
-            """).RootElement;
+            """);
         Assert.Equal(
             "Steps\n\nReboot after 6 PM.\n\n1. Sign in\n2. Reboot\n\n☑ Backup checked\n☐ Tell the office\n\n• One\n\nKept anyway",
             RichTextPlain.From(doc));
@@ -494,8 +494,8 @@ public class RichTextPlainTests
     [Fact]
     public void An_empty_or_odd_document_is_empty_text()
     {
-        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("""{"type":"doc"}""").RootElement));
-        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("[1,2]").RootElement));
+        Assert.Equal("", RichTextPlain.From(JsonElement.Parse("""{"type":"doc"}""")));
+        Assert.Equal("", RichTextPlain.From(JsonElement.Parse("[1,2]")));
     }
 }
 

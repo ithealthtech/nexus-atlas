@@ -275,7 +275,7 @@ public sealed class PreviewServer : HttpMessageHandler
         if (request.Method == HttpMethod.Get || !(tail == "documents" || tail.StartsWith("documents/", StringComparison.Ordinal)))
             return null;
         var raw = await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var body = JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        var body = JsonElement.Parse(raw.Length > 0 ? raw : "{}");
         static string Text(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : "";
         if (tail == "documents")
         {
@@ -328,7 +328,7 @@ public sealed class PreviewServer : HttpMessageHandler
         var kind = adding.Success ? adding.Groups[2].Value : one.Groups[1].Value;
         var list = kind == "contacts" ? people : sites;
         var raw = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var body = JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        var body = JsonElement.Parse(raw.Length > 0 ? raw : "{}");
         Dictionary<string, object?> entry;
         if (adding.Success)
         {
@@ -374,7 +374,7 @@ public sealed class PreviewServer : HttpMessageHandler
         if (!adding.Success && !one.Success)
             return null;
         var raw = await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var body = JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        var body = JsonElement.Parse(raw.Length > 0 ? raw : "{}");
         static string Text(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : "";
         object? Fields() => body.TryGetProperty("fields", out var v) ? JsonSerializer.Deserialize<Dictionary<string, object?>>(v.GetRawText()) : null;
         if (adding.Success)
@@ -416,7 +416,7 @@ public sealed class PreviewServer : HttpMessageHandler
     private async Task<HttpResponseMessage?> ChangeVaultAsync(HttpRequestMessage request, string tail, CancellationToken cancellationToken)
     {
         var raw = request.Content is null ? "{}" : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        JsonElement Body() => JsonDocument.Parse(raw.Length > 0 ? raw : "{}").RootElement;
+        JsonElement Body() => JsonElement.Parse(raw.Length > 0 ? raw : "{}");
         static string Text(JsonElement body, string name) => body.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : "";
 
         var adding = System.Text.RegularExpressions.Regex.Match(tail, "^clients/([^/]+)/passwords$");
@@ -641,7 +641,7 @@ public sealed class PreviewServer : HttpMessageHandler
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(Filter([.. sites.Cast<object>()], id)) };
             if (request.Method == HttpMethod.Patch)
             {
-                var edit = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).RootElement;
+                var edit = JsonElement.Parse(await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
                 if (edit.GetProperty("notesVersion").GetInt32() != notes[id].Version)
                     return new HttpResponseMessage(HttpStatusCode.Conflict) { Content = Json(new { error = "Someone else changed the quick note while you were editing it.", code = "conflict" }) };
                 notes[id] = (edit.GetProperty("notes").GetString() ?? "", notes[id].Version + 1);

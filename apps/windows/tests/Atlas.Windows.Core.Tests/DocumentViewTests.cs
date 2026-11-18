@@ -7,7 +7,7 @@ namespace Atlas.Windows.Core.Tests;
 public class DocumentViewTests
 {
     private static IReadOnlyList<DocBlock> Parse(string blocks) =>
-        DocumentView.Parse(JsonDocument.Parse($$"""{"type":"doc","content":[{{blocks}}]}""").RootElement);
+        DocumentView.Parse(JsonElement.Parse($$"""{"type":"doc","content":[{{blocks}}]}"""));
 
     [Fact]
     public void Headings_and_paragraphs_keep_their_formatting()
@@ -164,8 +164,8 @@ public class DocumentViewTests
     public void Empty_and_odd_documents()
     {
         Assert.True(DocumentView.IsEmpty(Parse("""{"type":"paragraph"}""")));
-        Assert.Empty(DocumentView.Parse(JsonDocument.Parse("""{"type":"doc"}""").RootElement));
-        Assert.Empty(DocumentView.Parse(JsonDocument.Parse("[1,2]").RootElement));
+        Assert.Empty(DocumentView.Parse(JsonElement.Parse("""{"type":"doc"}""")));
+        Assert.Empty(DocumentView.Parse(JsonElement.Parse("[1,2]")));
         Assert.False(DocumentView.IsEmpty(Parse("""{"type":"horizontalRule"}""")));
     }
 }
