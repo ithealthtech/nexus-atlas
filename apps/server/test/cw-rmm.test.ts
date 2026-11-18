@@ -259,6 +259,8 @@ describe('ConnectWise RMM sync', () => {
       expiryTickets: false,
       expiryTicketDays: 30,
       expiryTicketBoard: '',
+      portalTickets: false,
+      portalTicketBoard: '',
       layoutId: null,
     });
     const sitesOnly = await waitForJob(owner, (await owner.call('POST', '/api/integrations/cw-rmm/sync', {})).data.id);
