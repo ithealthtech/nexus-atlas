@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { mapNote, mapTicket, portalIdIn, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
 import { CwLinkWriter } from '../src/services/integrations/cw-writeback.js';
 import { pickPortalSource } from '../src/services/integrations/cw-portal-tickets.js';
+import { pickSite } from '../src/services/integrations/cw-expiry-tickets.js';
 import type { CwRmmClient } from '../src/services/integrations/cw-rmm.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -95,7 +96,10 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
       return new Response(null, { status: 204 });
     }
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets' && init?.method === 'POST') {
-      opened.push(JSON.parse(String(init.body)));
+      const body = JSON.parse(String(init.body));
+      // As a real tenant does.
+      if (!body.site?.id) return json({ message: 'site is a required field' }, 400);
+      opened.push(body);
       return json({ id: `new-${opened.length}`, number: String(9000 + opened.length) }, 201);
     }
     if (url.pathname === '/api/platform/v2/service/ticketing/tickets') {
@@ -209,6 +213,14 @@ describe('portal tickets', () => {
     expect(pickPortalSource([phone, { id: '4', name: 'Web' }])?.id).toBe('4');
     expect(pickPortalSource([phone, { id: '2', name: 'Internal' }])?.id).toBe('2');
     expect(pickPortalSource([])).toBeNull();
+  });
+
+  it('puts a ticket on the main site, else the first', () => {
+    const branch = { id: '1', name: 'Branch' };
+    expect(pickSite([branch, { id: '2', name: 'Main Office' }])?.id).toBe('2');
+    expect(pickSite([branch, { id: '3', name: 'HQ' }])?.id).toBe('3');
+    expect(pickSite([branch, { id: '4', name: 'Warehouse' }])?.id).toBe('1');
+    expect(pickSite([])).toBeNull();
   });
 });
 
@@ -532,13 +544,23 @@ describe('ticket sync and dashboard', () => {
     await sync();
     expect(platform.opened).toEqual([]);
 
+    // A company without a site gets no ticket, since ConnectWise needs one, and the sync says why.
     await allOptions({ expiryTickets: true, expiryTicketBoard: 'renewals' });
+    const noSite = await sync();
+    expect(platform.opened).toEqual([]);
+    expect(noSite.messages.join(' ')).toContain('ConnectWise listed no site for');
+
+    platform.sites.set('c1', [
+      { id: 'site-branch', name: 'Branch' },
+      { id: 'site-main', name: 'Main Office' },
+    ]);
     const job = await sync();
     expect(job.counts.expiryTickets, JSON.stringify(job.messages)).toMatchObject({ created: 1 });
     expect(platform.opened).toHaveLength(1);
     expect(platform.opened[0]).toMatchObject({
       summary: `Domains: harbordental.test expires on ${soon}`,
       company: { id: 'c1' },
+      site: { id: 'site-main' },
       serviceBoard: { id: 'b-renew' },
       source: { id: 'src-int' },
     });
@@ -596,12 +618,20 @@ describe('ticket sync and dashboard', () => {
     expect((await b.call('POST', `/api/clients/${harbor}/tickets`, { summary: 'x', details: ' ' })).status).toBe(400);
     expect(platform.opened).toEqual([]);
 
+    // ConnectWise needs a site on the ticket: a company without one gets a clear answer, and nothing is opened.
+    const noSite = await b.call('POST', `/api/clients/${harbor}/tickets`, ask);
+    expect(noSite.status).toBe(502);
+    expect(noSite.data.error ?? noSite.data.message).toContain('no site for this company');
+    expect(platform.opened).toEqual([]);
+
+    platform.sites.set('c1', [{ id: 'site-1', name: 'Harbor Dental' }]);
     const opened = await b.call('POST', `/api/clients/${harbor}/tickets`, ask);
     expect(opened.status, JSON.stringify(opened.data)).toBe(201);
     expect(opened.data).toMatchObject({ id: 'new-1', number: '9001', summary: 'Printer offline', clientId: harbor });
     expect(platform.opened[0]).toMatchObject({
       summary: 'Printer offline',
       company: { id: 'c1' },
+      site: { id: 'site-1' },
       serviceBoard: { id: 'b-help' },
       source: { id: 'src-int' },
     });
@@ -640,9 +670,10 @@ describe('ticket sync and dashboard', () => {
     const burst = await Promise.all(
       Array.from({ length: 21 }, () => b.call('POST', `/api/clients/${harbor}/tickets`, ask)),
     );
-    expect(burst.filter((r) => r.status === 201)).toHaveLength(19);
-    expect(burst.filter((r) => r.status === 429)).toHaveLength(2);
-    expect(platform.opened).toHaveLength(20);
+    // The attempt refused for having no site counted too.
+    expect(burst.filter((r) => r.status === 201)).toHaveLength(18);
+    expect(burst.filter((r) => r.status === 429)).toHaveLength(3);
+    expect(platform.opened).toHaveLength(19);
 
     // Switched off again: replies can be read but not sent.
     await allOptions({ portalTickets: false });

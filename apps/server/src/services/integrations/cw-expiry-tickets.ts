@@ -39,6 +39,16 @@ export function pickSource(sources: Named[]): Named | null {
   );
 }
 
+/** A site named main, head office, primary or HQ, else the first one listed. */
+export function pickSite(sites: Named[]): Named | null {
+  return sites.find((s) => /\b(main|head|primary|hq)\b/i.test(s.name)) ?? sites[0] ?? null;
+}
+
+/** The company's site a ticket goes to: ConnectWise refuses a ticket without one ("site is a required field"). */
+export async function siteFor(client: CwRmmClient, companyId: string): Promise<Named | null> {
+  return pickSite((await client.sites(companyId)).map((s) => ({ id: s.id, name: s.name })));
+}
+
 /**
  * Opens a ConnectWise ticket for each asset date (domain, certificate, license, warranty) of a linked client coming
  * due within the chosen days. Each expiry, by asset, field, and date, gets one ticket: a renewed date gets a new one.
@@ -97,7 +107,16 @@ export async function runExpiryTickets(
     return;
   }
 
+  const siteOf = new Map<string, Named | null>();
   for (const e of todo.slice(0, MAX_PER_SYNC)) {
+    const companyId = companyOf.get(e.clientId!)!;
+    if (!siteOf.has(companyId)) siteOf.set(companyId, await siteFor(client, companyId).catch(() => null));
+    const site = siteOf.get(companyId);
+    if (!site) {
+      run.count('expiryTickets', 'failed');
+      run.note(`Expiry ticket for ${e.title}: ConnectWise listed no site for ${e.clientName ?? 'its company'}, and a ticket needs one.`);
+      continue;
+    }
     const when = e.daysLeft < 0 ? `expired on ${e.date}` : e.daysLeft === 0 ? 'expires today' : `expires on ${e.date}`;
     const link = publicUrl ? atlasUrl(publicUrl, 'endpoint', e.id) : '';
     const body = {
@@ -109,7 +128,8 @@ export async function runExpiryTickets(
       ]
         .filter(Boolean)
         .join('\n\n'),
-      company: { id: companyOf.get(e.clientId!) },
+      company: { id: companyId },
+      site: { id: site.id },
       serviceBoard: { id: board.id },
       source: { id: source.id },
       dueDate: `${e.date}T00:00:00Z`,

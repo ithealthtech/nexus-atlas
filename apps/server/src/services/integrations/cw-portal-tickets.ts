@@ -10,7 +10,7 @@ import {
 } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import type { StoredCwRmm } from '../settings.js';
-import { pickBoard, pickSource } from './cw-expiry-tickets.js';
+import { pickBoard, pickSource, siteFor } from './cw-expiry-tickets.js';
 import { ACCESS_DENIED, listOf, pick, text, type CwRmmClient } from './cw-rmm.js';
 import {
   clean,
@@ -81,9 +81,11 @@ export async function openPortalTicket(
   const options = cwRmmSyncOptionsSchema.parse(saved.options ?? {});
   let board: Named | null;
   let source: Named | null;
+  let site: Named | null;
   try {
     board = pickBoard(named(await client.get(BOARDS)), options.portalTicketBoard);
     source = pickPortalSource(named(await client.get(SOURCES)));
+    site = await siteFor(client, companyId);
   } catch (error) {
     if (error instanceof HttpError && error.code === ACCESS_DENIED)
       throw new HttpError(502, 'ConnectWise refused to list service boards. Ask your IT provider to check the setup.');
@@ -96,10 +98,14 @@ export async function openPortalTicket(
         ? `ConnectWise has no service board named "${options.portalTicketBoard}". Ask your IT provider to check the setup.`
         : 'ConnectWise listed no service boards or sources. Ask your IT provider to check the setup.',
     );
+  // ConnectWise refuses a ticket without a site ("site is a required field").
+  if (!site)
+    throw new HttpError(502, 'ConnectWise has no site for this company, and a ticket needs one. Ask your IT provider to add one.');
   const body = {
     summary: clean(input.summary, 200),
     description: [clean(input.details, 8000), requesterLine(actor)].join('\n\n'),
     company: { id: companyId },
+    site: { id: site.id },
     serviceBoard: { id: board.id },
     source: { id: source.id },
   };
