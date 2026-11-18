@@ -99,8 +99,9 @@
   --radius-lg: 6px;
   --radius-xl: 6px;
   --radius-2xl: 6px;
-  /* Cards and stat tiles are rounder than controls so data containers read as soft panels. */
-  --radius-card: 10px;
+  /* Cards and stat tiles are rounder than controls so data containers read as soft panels. @theme inline copies
+     literal values into utilities, so this points at a runtime variable that Theme > Corners can change. */
+  --radius-card: var(--card-radius);
   --font-sans: 'Inter Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -174,6 +175,9 @@
   html[data-font='large'] {
     font-size: 106.25%;
   }
+  html {
+    --card-radius: 10px;
+  }
   /* Tailwind derives every padding, gap, and margin from --spacing. */
   html[data-density='compact'] {
     --spacing: 0.21rem;
@@ -184,7 +188,7 @@
     --radius-lg: 3px;
     --radius-xl: 4px;
     --radius-2xl: 6px;
-    --radius-card: 4px;
+    --card-radius: 4px;
   }
   /* Rounder, but still the restrained 4-8px family for controls; the default is 4-6px. */
   html[data-radius='round'] {
@@ -193,7 +197,7 @@
     --radius-lg: 7px;
     --radius-xl: 8px;
     --radius-2xl: 8px;
-    --radius-card: 14px;
+    --card-radius: 14px;
   }
   html[data-sidebar='narrow'] {
     --sidebar-width: 250px;
