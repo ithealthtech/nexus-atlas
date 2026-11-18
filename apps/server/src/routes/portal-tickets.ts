@@ -49,10 +49,11 @@ export function registerPortalTicketRoutes(
     const input = portalTicketSchema.parse(req.body);
     const { saved, client } = await connection(actor.orgId, new HttpError(403, OFF));
     if (!portalTicketsOpen(saved, req.params.id)) throw new HttpError(403, OFF);
+    // Checked and counted together, before anything is awaited, so concurrent requests can't all slip past the
+    // limit. An attempt counts even if ConnectWise then refuses it.
     limiter.check(actor.id);
-    const ticket = await openPortalTicket(db, client(TICKET_NOTE_SCOPES), saved, actor, req.params.id, input);
-    // The limiter counts "failures"; here every ticket opened counts.
     limiter.fail(actor.id);
+    const ticket = await openPortalTicket(db, client(TICKET_NOTE_SCOPES), saved, actor, req.params.id, input);
     // The number only: what the client wrote stays in ConnectWise.
     await requestEvent(db, req, 'ConnectWise ticket opened from Atlas', `Ticket ${ticket.number}`);
     reply.status(201);
@@ -77,12 +78,14 @@ export function registerPortalTicketRoutes(
     const { ticket, client, canReply } = await ticketFor(req);
     return { replies: await ticketReplies(client(TICKET_SCOPES), ticket.id), canReply };
   });
-  app.post<{ Params: { id: string } }>('/api/tickets/:id/replies', authed, async (req): Promise<TicketReplies> => {
+  // Answers once ConnectWise has the reply; the conversation is read again separately, so a failed refresh can't
+  // look like a failed send and tempt a second, duplicate reply.
+  app.post<{ Params: { id: string } }>('/api/tickets/:id/replies', authed, async (req) => {
     const { actor, ticket, client, canReply } = await ticketFor(req);
     if (!canReply) throw new HttpError(403, OFF);
     const { text } = ticketNoteSchema.parse(req.body);
     await addTicketReply(client(TICKET_NOTE_SCOPES), ticket.id, actor, text);
     await requestEvent(db, req, 'ConnectWise ticket reply added from Atlas', `Ticket ${ticket.number}`);
-    return { replies: await ticketReplies(client(TICKET_SCOPES), ticket.id), canReply };
+    return { sent: true };
   });
 }

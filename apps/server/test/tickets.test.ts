@@ -632,7 +632,17 @@ describe('ticket sync and dashboard', () => {
       detail: 'Thanks, it is still offline\n\n(Reply from Harbor Editor through Nexus Atlas)',
       visibility: 1,
     });
-    expect(answered.data.replies.map((r: { id: string }) => r.id)).toEqual(['n-2', 'n-4']);
+    expect(answered.data).toEqual({ sent: true });
+    const after = (await b.call('GET', '/api/tickets/new-1/replies')).data;
+    expect(after.replies.map((r: { id: string }) => r.id)).toEqual(['n-2', 'n-4']);
+
+    // Twenty tickets an hour per person, counted before ConnectWise is called, so a burst can't slip past it.
+    const burst = await Promise.all(
+      Array.from({ length: 21 }, () => b.call('POST', `/api/clients/${harbor}/tickets`, ask)),
+    );
+    expect(burst.filter((r) => r.status === 201)).toHaveLength(19);
+    expect(burst.filter((r) => r.status === 429)).toHaveLength(2);
+    expect(platform.opened).toHaveLength(20);
 
     // Switched off again: replies can be read but not sent.
     await allOptions({ portalTickets: false });

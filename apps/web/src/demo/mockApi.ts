@@ -2947,7 +2947,7 @@ on('POST', '/tickets/:id/replies', (m, b) => {
     },
   ];
   demoReplies.set(m[1]!, replies);
-  return { replies, canReply: true };
+  return { sent: true };
 });
 on('GET', '/warranty', (_m, _b, q) => warrantyReport(q.get('client')));
 on('GET', '/warranty/assets', (_m, _b, q) =>

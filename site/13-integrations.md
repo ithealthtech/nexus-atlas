@@ -152,7 +152,7 @@ Atlas picks the ticket's **Source** for you: a source whose name contains **Port
 
 **What goes into ConnectWise.** The ticket's summary is the client's **Summary** (up to 200 characters). Its description is the client's **Details** followed by a line saying who asked, such as *Submitted by Dana Lee (dana@harbordental.com) through Nexus Atlas.* The ConnectWise platform ticket has no contact field, so this line is how your technicians know who to call back. Replies arrive as notes visible to all, ending *(Reply from Dana Lee through Nexus Atlas)*.
 
-**Limits.** Each person can open up to 20 tickets an hour from Atlas; after that Atlas asks them to wait. Atlas never writes passwords or attachments into tickets. The security log records each ticket opened and each reply sent, with the ticket number and who did it, but not what they wrote.
+**Limits.** Each person can try to open up to 20 tickets an hour from Atlas (a try ConnectWise refuses counts too); after that Atlas asks them to wait. Atlas never writes passwords or attachments into tickets. The security log records each ticket opened and each reply sent, with the ticket number and who did it, but not what they wrote.
 
 **Check that it works**
 
@@ -172,7 +172,7 @@ Atlas picks the ticket's **Source** for you: a source whose name contains **Port
 | *ConnectWise has no service board named "…"* | **Portal ticket board** doesn't match any board. Copy the name from ConnectWise, or empty the box to use the first board. |
 | *ConnectWise refused to list service boards* or *refused to open the ticket* | The API client lacks the tickets read or create permission. Add them in **API Access**, then try again. Nothing was opened. |
 | *ConnectWise opened the ticket but did not say its number* | ConnectWise created the ticket but answered without its ID. It appears after the next sync; don't open it again. |
-| *Too many attempts. Wait a few minutes and try again.* | The person opened 20 tickets within the hour. Wait, or open further tickets in ConnectWise directly. |
+| *Too many attempts. Wait a few minutes and try again.* | The person tried to open 20 tickets within the hour. Wait, or open further tickets in ConnectWise directly. |
 | A client can't see a technician's reply | Only notes marked **Visible to all** reach clients. Change the note's visibility in ConnectWise. |
 | The ticket's status doesn't change in Atlas | Status comes from the hourly sync. Choose **Sync now**, or check **Sync every hour** is ticked. |
 | **Conversation** shows replies but no reply box | **Client portal tickets** is off. Clients can still read replies on existing tickets. |

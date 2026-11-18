@@ -91,11 +91,10 @@ export function TicketConversation({ ticketId }: { ticketId: string }) {
   const send = (e: FormEvent) => {
     e.preventDefault();
     void act('reply', async () => {
-      qc.setQueryData(
-        key,
-        await api<TicketReplies>(`/tickets/${ticketId}/replies`, { method: 'POST', body: { text } }),
-      );
+      await api(`/tickets/${ticketId}/replies`, { method: 'POST', body: { text } });
+      // Sent: clear the box before reloading, so a failed reload never invites sending it twice.
       setText('');
+      await qc.invalidateQueries({ queryKey: key });
     });
   };
   if (replies.isPending) return <Skeleton className="h-10" />;
