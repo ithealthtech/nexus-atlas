@@ -494,8 +494,8 @@ public class RichTextPlainTests
     [Fact]
     public void An_empty_or_odd_document_is_empty_text()
     {
-        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("""{"type":"doc"}""").RootElement));
-        Assert.Equal("", RichTextPlain.From(JsonDocument.Parse("[1,2]").RootElement));
+        Assert.Equal("", RichTextPlain.From(JsonElement.Parse("""{"type":"doc"}""")));
+        Assert.Equal("", RichTextPlain.From(JsonElement.Parse("[1,2]")));
     }
 }
 
