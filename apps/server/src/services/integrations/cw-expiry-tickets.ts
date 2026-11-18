@@ -23,6 +23,26 @@ const named = (list: unknown): Named[] =>
     .map((x) => ({ id: text(x, 'id'), name: text(x, 'name') }))
     .filter((x) => x.id);
 
+/** Whether ConnectWise marks a board inactive, in any of the shapes it has been seen to: it refuses tickets on one. */
+function inactive(board: Record<string, unknown>) {
+  const flag = (key: string) => pick(board, key);
+  return (
+    flag('inactive') === true ||
+    flag('inactiveFlag') === true ||
+    flag('isInactive') === true ||
+    flag('isActive') === false ||
+    flag('active') === false ||
+    /inactive|disabled/i.test(String(flag('status') ?? ''))
+  );
+}
+
+/** The service boards a ticket can go on, in the order listed: inactive ones are left out. */
+export const activeBoards = (list: unknown): Named[] =>
+  listOf(list)
+    .filter((b) => !inactive(b))
+    .map((x) => ({ id: text(x, 'id'), name: text(x, 'name') }))
+    .filter((x) => x.id);
+
 /** The board by name (any case), else the first one listed. */
 export function pickBoard(boards: Named[], wanted: string): Named | null {
   const want = wanted.trim().toLowerCase();
@@ -55,7 +75,7 @@ export async function siteFor(client: CwRmmClient, companyId: string): Promise<N
  */
 export async function boardsFor(client: CwRmmClient, companyId: string, siteId: string): Promise<Named[]> {
   const query = new URLSearchParams({ companyId, siteId });
-  return named(listOf(await client.get(`${BOARDS}?${query}`)).filter((b) => pick(b, 'inactiveFlag') !== true));
+  return activeBoards(await client.get(`${BOARDS}?${query}`));
 }
 
 /** Where a ticket for this company goes: its site and a board ConnectWise accepts there, or why there is none. */

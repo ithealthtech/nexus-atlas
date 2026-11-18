@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { mapNote, mapTicket, portalIdIn, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
 import { CwLinkWriter } from '../src/services/integrations/cw-writeback.js';
 import { pickPortalSource } from '../src/services/integrations/cw-portal-tickets.js';
-import { pickSite } from '../src/services/integrations/cw-expiry-tickets.js';
+import { activeBoards, pickSite } from '../src/services/integrations/cw-expiry-tickets.js';
 import type { CwRmmClient } from '../src/services/integrations/cw-rmm.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -221,6 +221,16 @@ describe('portal tickets', () => {
     expect(pickPortalSource([phone, { id: '4', name: 'Web' }])?.id).toBe('4');
     expect(pickPortalSource([phone, { id: '2', name: 'Internal' }])?.id).toBe('2');
     expect(pickPortalSource([])).toBeNull();
+  });
+
+  it('leaves out inactive service boards', () => {
+    const listed = [
+      { id: 'b1', name: 'Old', inactiveFlag: true },
+      { id: 'b2', name: 'Closed', isActive: false },
+      { id: 'b3', name: 'Retired', status: 'Inactive' },
+      { id: 'b4', name: 'Help Desk' },
+    ];
+    expect(activeBoards(listed)).toEqual([{ id: 'b4', name: 'Help Desk' }]);
   });
 
   it('puts a ticket on the main site, else the first', () => {
