@@ -99,6 +99,8 @@
   --radius-lg: 6px;
   --radius-xl: 6px;
   --radius-2xl: 6px;
+  /* Cards and stat tiles are rounder than controls so data containers read as soft panels. */
+  --radius-card: 10px;
   --font-sans: 'Inter Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -182,14 +184,16 @@
     --radius-lg: 3px;
     --radius-xl: 4px;
     --radius-2xl: 6px;
+    --radius-card: 4px;
   }
-  /* Rounder, but still the restrained 4-8px family; the default is 4-6px. */
+  /* Rounder, but still the restrained 4-8px family for controls; the default is 4-6px. */
   html[data-radius='round'] {
     --radius-sm: 5px;
     --radius-md: 6px;
     --radius-lg: 7px;
     --radius-xl: 8px;
     --radius-2xl: 8px;
+    --radius-card: 14px;
   }
   html[data-sidebar='narrow'] {
     --sidebar-width: 250px;

@@ -4,6 +4,10 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ## [Unreleased]
 
+### Improved
+
+- **Rounder cards.** The dashboard stat tiles and the other cards across Atlas have softer, rounder corners. They still follow **Administration → Theme → Corners**: Square keeps them nearly square, and Round makes them rounder still.
+
 ## [2.6.0] - 2026-11-16
 
 ### Improved
