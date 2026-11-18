@@ -86,7 +86,9 @@ same tested code, and a self-hosted server can't pick up the hosted look by acci
 
 ### Writing a theme pack
 
-`theme.css` overrides the CSS variables defined in `apps/web/src/styles.css`, for example:
+`theme.css` overrides the CSS variables defined in `apps/web/src/styles.css`. Dark mode values go under `:root.dark`,
+the class Atlas puts on the page when someone picks dark mode (or the system setting is dark), so the light/dark
+choice under **Your account** keeps working. For example:
 
 ```css
 :root {
@@ -95,10 +97,10 @@ same tested code, and a self-hosted server can't pick up the hosted look by acci
   --primary: #145e9c;
   --primary-hover: #123d61;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) { --bg: #0e1723; --text: #e5edf5; }
+:root.dark {
+  --bg: #0e1723;
+  --text: #e5edf5;
 }
-:root[data-theme='dark'] { --bg: #0e1723; --text: #e5edf5; }
 ```
 
 Keep every text colour at **4.5:1 contrast** or better against its background (WCAG 2.2 AA). Atlas's accessibility

@@ -127,6 +127,9 @@ describe('web app routes', () => {
       expect(page.headers['content-type']).toMatch(/^text\/html/);
       expect(page.headers['cache-control']).toBe('no-cache');
       expect(page.body).toMatch(/<link rel="stylesheet" href="\/theme-pack\/theme\.css\?v=[0-9a-f]{12}"><\/head>/);
+      const direct = await cloud.app.inject({ url: '/index.html' });
+      expect(direct.statusCode).toBe(200);
+      expect(direct.body).toContain('/theme-pack/theme.css?v=');
       const css = await cloud.app.inject({ url: '/theme-pack/theme.css' });
       expect(css.statusCode).toBe(200);
       expect(css.body).toContain('--primary: #145e9c');

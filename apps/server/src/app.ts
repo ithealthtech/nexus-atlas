@@ -1144,6 +1144,8 @@ export async function buildApp({
       index: false,
       maxAge: '1h',
       immutable: false,
+      // With a theme pack, /index.html goes through the not-found handler below so it gets the pack too.
+      ...(themePack ? { allowedPath: (path: string) => path !== '/index.html' } : {}),
     });
     if (themePack)
       await app.register(fastifyStatic, {
