@@ -314,6 +314,7 @@ const TICKET_SAMPLE: TicketView[] = db.clients.slice(0, 3).flatMap((c, ci) =>
     const closedDays = closed ? Math.max(openedDays - 1 - (n % 5), 0) : null;
     return {
       id: `${ci}-${i}`,
+      source: 'cw-rmm',
       number: String(48210 + ci * 100 + i),
       summary: TICKET_SUMMARIES[(i + ci) % TICKET_SUMMARIES.length]!,
       status: closed ? (n % 3 ? 'Closed' : 'Completed') : TICKET_STATUSES[n % TICKET_STATUSES.length]!,
@@ -356,7 +357,7 @@ function ticketReport(client: string | null, days: number): TicketReport {
   }
   return {
     linked: !client || list.length > 0,
-    // The demo treats portal tickets as on for every linked client.
+    // The demo treats ConnectWise PSA portal tickets as on for every client with tickets.
     canOpen: !!client && list.length > 0,
     updatedAt: list.length ? ago(12) : null,
     days: period,
@@ -2915,8 +2916,9 @@ on('POST', '/clients/:id/tickets', (m, b) => {
   if (!summary || !String(b.details ?? '').trim()) throw new MockError(400, 'Say what you need help with.');
   const now = new Date().toISOString();
   const ticket: TicketView = {
-    id: uuid(),
-    number: String(49000 + TICKET_SAMPLE.length),
+    id: String(6300 + TICKET_SAMPLE.length),
+    source: 'cw-psa',
+    number: String(6300 + TICKET_SAMPLE.length),
     summary: summary.slice(0, 200),
     status: 'New',
     closed: false,
@@ -3122,8 +3124,6 @@ let cwRmm: {
     expiryTickets: boolean;
     expiryTicketDays: number;
     expiryTicketBoard: string;
-    portalTickets: boolean;
-    portalTicketBoard: string;
     layoutId: string | null;
   };
 } | null = null;
@@ -3167,8 +3167,6 @@ on('PUT', '/integrations/cw-rmm', (_m, b) => {
       expiryTickets: false,
       expiryTicketDays: 30,
       expiryTicketBoard: '',
-      portalTickets: false,
-      portalTicketBoard: '',
       layoutId: null,
     },
   };
@@ -3189,8 +3187,6 @@ on('PUT', '/integrations/cw-rmm/options', (_m, b) => {
     expiryTickets: b.expiryTickets === true,
     expiryTicketDays: typeof b.expiryTicketDays === 'number' ? b.expiryTicketDays : 30,
     expiryTicketBoard: typeof b.expiryTicketBoard === 'string' ? b.expiryTicketBoard : '',
-    portalTickets: b.portalTickets === true,
-    portalTicketBoard: typeof b.portalTicketBoard === 'string' ? b.portalTicketBoard : '',
     layoutId: typeof b.layoutId === 'string' ? b.layoutId : null,
   };
   return cwRmm;
@@ -3206,6 +3202,48 @@ on('PUT', '/integrations/cw-rmm/companies', (_m, b) => {
   return cwView();
 });
 on('POST', '/integrations/cw-rmm/sync', () => notInDemo('Syncing from a real ConnectWise RMM'));
+
+// ---------- ConnectWise PSA: not connected until the visitor connects it ----------
+let cwPsa: {
+  site: string;
+  companyId: string;
+  publicKey: string;
+  clientId: string;
+  hasPrivateKey: true;
+  autoSync: boolean;
+  lastSyncAt: string | null;
+  options: { portalTickets: boolean; portalTicketBoard: string };
+} | null = null;
+on('GET', '/integrations/cw-psa', () => cwPsa);
+on('PUT', '/integrations/cw-psa', (_m, b) => {
+  if (!String(b.site ?? '').includes('.'))
+    throw new MockError(400, 'Enter the PSA site, such as api-na.myconnectwise.net.');
+  if (!cwPsa && !b.privateKey) throw new MockError(400, 'Enter the private key.');
+  cwPsa = {
+    site: `https://${String(b.site)
+      .replace(/^https?:\/\//, '')
+      .replace(/\/.*$/, '')}`,
+    companyId: String(b.companyId ?? ''),
+    publicKey: String(b.publicKey ?? ''),
+    clientId: String(b.clientId ?? ''),
+    hasPrivateKey: true,
+    autoSync: b.autoSync !== false,
+    lastSyncAt: cwPsa?.lastSyncAt ?? null,
+    options: cwPsa?.options ?? { portalTickets: false, portalTicketBoard: '' },
+  };
+  return { ...cwPsa, companies: cwCompanies().length };
+});
+on('DELETE', '/integrations/cw-psa', () => ((cwPsa = null), { ok: true }));
+on('PUT', '/integrations/cw-psa/options', (_m, b) => {
+  if (!cwPsa) throw new MockError(400, 'Connect ConnectWise PSA first.');
+  const board = typeof b.portalTicketBoard === 'string' ? b.portalTicketBoard.trim() : '';
+  if (b.portalTickets === true && !board) throw new MockError(400, 'Name the service board client tickets go on.');
+  cwPsa.options = { portalTickets: b.portalTickets === true, portalTicketBoard: board };
+  return cwPsa;
+});
+on('GET', '/integrations/cw-psa/companies', () => cwView());
+on('PUT', '/integrations/cw-psa/companies', () => notInDemo('Linking ConnectWise PSA companies'));
+on('POST', '/integrations/cw-psa/sync', () => notInDemo('Syncing from a real ConnectWise PSA'));
 
 // ---------- Bitdefender GravityZone: connected, with sample endpoints for the first client ----------
 let bitdefender: BitdefenderView | null = {

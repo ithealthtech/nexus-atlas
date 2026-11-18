@@ -143,6 +143,7 @@ export async function openPortalTicket(
     .where(and(eq(schema.clients.orgId, actor.orgId), eq(schema.clients.id, clientId)));
   return {
     id: ticket.id,
+    source: 'cw-psa',
     number: ticket.number,
     summary: ticket.summary,
     status: ticket.status,

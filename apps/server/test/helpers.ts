@@ -65,6 +65,7 @@ export async function startApp(
   extra: {
     huduFetch?: typeof fetch;
     cwRmmFetch?: typeof fetch;
+    cwPsaFetch?: typeof fetch;
     bitdefenderFetch?: typeof fetch;
     warrantyFetch?: typeof fetch;
     m365Fetch?: typeof fetch;

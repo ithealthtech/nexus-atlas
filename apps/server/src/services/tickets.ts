@@ -116,6 +116,7 @@ export class TicketService {
     const rows = await scope.db
       .select({
         id: t.externalId,
+        source: t.source,
         number: t.number,
         summary: t.summary,
         status: t.status,
@@ -149,6 +150,7 @@ export class TicketService {
       .limit(MAX_TICKETS);
     return rows.map((r) => ({
       ...r,
+      source: r.source === 'cw-psa' ? ('cw-psa' as const) : ('cw-rmm' as const),
       openedAt: r.openedAt?.toISOString() ?? null,
       closedAt: r.closedAt?.toISOString() ?? null,
       updatedAt: r.updatedAt?.toISOString() ?? null,

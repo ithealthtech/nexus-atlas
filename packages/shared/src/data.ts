@@ -189,6 +189,8 @@ export interface TicketReport {
 }
 export interface TicketView {
   id: string;
+  /** Where the ticket lives: the RMM's own ticketing, or a ConnectWise PSA service ticket. */
+  source: 'cw-rmm' | 'cw-psa';
   /** The ticket number ConnectWise shows. */
   number: string;
   summary: string;
