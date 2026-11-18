@@ -486,7 +486,8 @@
                 <td>
                   Opens one ticket for each domain, certificate, licence or warranty of a linked client coming due, on
                   every sync. <strong>Days before it expires</strong> (1 to 180) sets how far ahead, and
-                  <strong>Service board</strong> the board's name (empty uses the first board). Needs tickets create.
+                  <strong>Service board</strong> the board's name (empty uses the first active board the company's site
+                  can take). Needs tickets create.
                 </td>
               </tr>
               <tr>
@@ -494,8 +495,8 @@
                 <td>
                   Lets client accounts open tickets for their own organization from Atlas, and read and answer the
                   replies marked visible to all. <strong>Portal ticket board</strong> sets the board's name (empty uses
-                  the first board). Needs <strong>Tickets</strong> sync and tickets create. See
-                  <a href="#client-portal-tickets">Client portal tickets</a>.
+                  the first active board the company's site can take). Needs <strong>Tickets</strong> sync and tickets
+                  create. See <a href="#client-portal-tickets">Client portal tickets</a>.
                 </td>
               </tr>
             </tbody>
@@ -562,7 +563,9 @@
           <li>
             In <strong>Portal ticket board</strong>, type the name of the service board client tickets should go on,
             exactly as ConnectWise shows it (capitals don't matter), such as <code>Help Desk</code>. Leave it empty to
-            use the first board ConnectWise lists. The board saves when you leave the box.
+            use the first active board ConnectWise offers for the company's site. Atlas asks ConnectWise only for the
+            boards that company and site are entitled to, and skips inactive ones, so ConnectWise doesn't refuse the
+            ticket. The board saves when you leave the box.
           </li>
           <li>
             Choose <strong>Sync now</strong> once, so every linked client's existing tickets are in Atlas before clients
@@ -647,10 +650,14 @@
                 </td>
               </tr>
               <tr>
-                <td><em>ConnectWise has no service board named &quot;…&quot;</em></td>
                 <td>
-                  <strong>Portal ticket board</strong> doesn't match any board. Copy the name from ConnectWise, or empty
-                  the box to use the first board.
+                  <em>ConnectWise has no active service board named &quot;…&quot; for this company</em> or
+                  <em>lists no active service board</em>
+                </td>
+                <td>
+                  <strong>Portal ticket board</strong> doesn't match an active board that company's site is entitled to.
+                  In ConnectWise, check the board is active and available to that company, copy its exact name, or empty
+                  the box to use the first one offered.
                 </td>
               </tr>
               <tr>

@@ -118,8 +118,8 @@ These change data in your ConnectWise tenant, so they're off until you turn them
 |---|---|
 | **Atlas links** | Writes each device's Atlas address into its **Atlas link** custom field on every sync, so technicians can jump from ConnectWise to Atlas. Add that device custom field in ConnectWise first. Needs devices write. |
 | **Ticket notes** | Lets technicians add internal notes to tickets from Atlas, and adds a note to the ticket whose number is in the reason when someone reveals a password (never the password itself). Needs tickets create. |
-| **Expiry tickets** | Opens one ticket for each domain, certificate, licence or warranty of a linked client coming due, on every sync. **Days before it expires** (1 to 180) sets how far ahead, and **Service board** the board's name (empty uses the first board). Needs tickets create. |
-| **Client portal tickets** | Lets client accounts open tickets for their own organization from Atlas, and read and answer the replies marked visible to all. **Portal ticket board** sets the board's name (empty uses the first board). Needs **Tickets** sync and tickets create. See [Client portal tickets](#client-portal-tickets). |
+| **Expiry tickets** | Opens one ticket for each domain, certificate, licence or warranty of a linked client coming due, on every sync. **Days before it expires** (1 to 180) sets how far ahead, and **Service board** the board's name (empty uses the first active board the company's site can take). Needs tickets create. |
+| **Client portal tickets** | Lets client accounts open tickets for their own organization from Atlas, and read and answer the replies marked visible to all. **Portal ticket board** sets the board's name (empty uses the first active board the company's site can take). Needs **Tickets** sync and tickets create. See [Client portal tickets](#client-portal-tickets). |
 
 **Disconnect** deletes the secret from Atlas. Synced devices stay.
 
@@ -146,7 +146,7 @@ These change data in your ConnectWise tenant, so they're off until you turn them
 2. In Atlas, open **Import & export → ConnectWise RMM**.
 3. Under **What to sync**, make sure **Tickets** is ticked.
 4. Under **Write back to ConnectWise**, tick **Client portal tickets**. The setting saves at once.
-5. In **Portal ticket board**, type the name of the service board client tickets should go on, exactly as ConnectWise shows it (capitals don't matter), such as `Help Desk`. Leave it empty to use the first board ConnectWise lists. The board saves when you leave the box.
+5. In **Portal ticket board**, type the name of the service board client tickets should go on, exactly as ConnectWise shows it (capitals don't matter), such as `Help Desk`. Leave it empty to use the first active board ConnectWise offers for the company's site. Atlas asks ConnectWise only for the boards that company and site are entitled to, and skips inactive ones, so ConnectWise doesn't refuse the ticket. The board saves when you leave the box.
 6. Choose **Sync now** once, so every linked client's existing tickets are in Atlas before clients start using it.
 
 Atlas picks the ticket's **Source** for you: a source whose name contains **Portal** if you have one, otherwise one named **Web**, otherwise one that sounds like Atlas or a system (**Internal**, **System**, **Automation**, **Other**), otherwise the first source. To control it, add a source called **Client Portal** in ConnectWise.
@@ -170,7 +170,7 @@ Atlas picks the ticket's **Source** for you: a source whose name contains **Port
 |---|---|
 | No **New ticket** button | **Client portal tickets** or **Tickets** is off, or this client isn't linked to a ConnectWise company. Check all three under **Import & export → ConnectWise RMM**. Client accounts also need access to the client. |
 | *Opening tickets from Atlas is off for this client* | The same: the option was turned off or the company unlinked after the page opened. Reload the page after fixing it. |
-| *ConnectWise has no service board named "…"* | **Portal ticket board** doesn't match any board. Copy the name from ConnectWise, or empty the box to use the first board. |
+| *ConnectWise has no active service board named "…" for this company* or *lists no active service board* | **Portal ticket board** doesn't match an active board that company's site is entitled to. In ConnectWise, check the board is active and available to that company, copy its exact name, or empty the box to use the first one offered. |
 | *ConnectWise refused to list service boards or sites* or *refused to open the ticket* | The API client lacks the tickets read, tickets create or sites read permission. Add them in **API Access**, then try again. Nothing was opened. |
 | *ConnectWise has no site for this company* | The linked company has no site in ConnectWise, and ConnectWise needs one on every ticket. Add a site to the company in ConnectWise, then try again. |
 | *ConnectWise opened the ticket but did not say its number* | ConnectWise created the ticket but answered without its ID. It appears after the next sync; don't open it again. |

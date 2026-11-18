@@ -10,7 +10,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Fixed
 
-- **Expiry tickets open again in ConnectWise.** ConnectWise now refuses a ticket without a site, so expiry tickets go on the linked company's main site (or its first). A company with no site gets a note in the sync results instead of a failed ticket. The API client needs the sites read permission alongside tickets create.
+- **Expiry tickets open again in ConnectWise.** ConnectWise now refuses a ticket without a site, so expiry tickets go on the linked company's main site (or its first). A company with no site gets a note in the sync results instead of a failed ticket. Tickets also go only on an active board ConnectWise allows for that company and site, so it no longer refuses them with "serviceBoard is not valid". The API client needs the sites read permission alongside tickets create.
 
 ## [2.6.0] - 2026-11-16
 

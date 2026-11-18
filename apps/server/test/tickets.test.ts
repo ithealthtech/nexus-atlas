@@ -62,11 +62,17 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
     if (url.pathname.includes('/ticketing/') && auth !== 'Bearer ticket-tok')
       return json({ message: 'missing scope' }, 403);
     if (url.pathname === '/api/platform/v1/service/ticketing/statuses') return json(STATUSES);
-    if (url.pathname === '/api/platform/v1/service/ticketing/service-boards')
+    if (url.pathname === '/api/platform/v1/service/ticketing/service-boards') {
+      // As a real tenant: the full list starts with boards a ticket can't go on (inactive, or not entitled for the
+      // company and site); asking with both returns only the entitled ones, inactive included.
+      const entitled = url.searchParams.get('companyId') && url.searchParams.get('siteId');
       return json([
+        ...(entitled ? [] : [{ id: 'b-msp', name: 'MSP Internal' }]),
+        { id: 'b-old', name: 'Old Help Desk', inactiveFlag: true },
         { id: 'b-help', name: 'Help Desk' },
         { id: 'b-renew', name: 'Renewals' },
       ]);
+    }
     if (url.pathname === '/api/platform/v1/service/ticketing/sources')
       return json([
         { id: 'src-phone', name: 'Phone' },
@@ -99,6 +105,8 @@ function fakePlatform(tickets: Map<string, Ticket[]>, opts: { ticketScope?: bool
       const body = JSON.parse(String(init.body));
       // As a real tenant does.
       if (!body.site?.id) return json({ message: 'site is a required field' }, 400);
+      if (!['b-help', 'b-renew'].includes(body.serviceBoard?.id))
+        return json({ message: 'serviceBoard is not valid. Please select a valid active Service Board' }, 400);
       opened.push(body);
       return json({ id: `new-${opened.length}`, number: String(9000 + opened.length) }, 201);
     }
@@ -548,7 +556,7 @@ describe('ticket sync and dashboard', () => {
     await allOptions({ expiryTickets: true, expiryTicketBoard: 'renewals' });
     const noSite = await sync();
     expect(platform.opened).toEqual([]);
-    expect(noSite.messages.join(' ')).toContain('ConnectWise listed no site for');
+    expect(noSite.messages.join(' ')).toContain('ConnectWise has no site for this company');
 
     platform.sites.set('c1', [
       { id: 'site-branch', name: 'Branch' },
@@ -580,10 +588,11 @@ describe('ticket sync and dashboard', () => {
     expect(platform.opened).toHaveLength(2);
 
     // A board that doesn't exist opens nothing and says so.
+    platform.sites.set('c2', [{ id: 'site-north', name: 'Northline' }]);
     await allOptions({ expiryTickets: true, expiryTicketBoard: 'Nope', expiryTicketDays: 180 });
     const none = await sync();
     expect(platform.opened).toHaveLength(2);
-    expect(none.messages.join(' ')).toContain('no service board named "Nope"');
+    expect(none.messages.join(' ')).toContain('no active service board named "Nope"');
   });
 
   it('lets a client portal user open a ticket and answer replies visible to all, only when switched on', async () => {
@@ -635,6 +644,10 @@ describe('ticket sync and dashboard', () => {
       serviceBoard: { id: 'b-help' },
       source: { id: 'src-int' },
     });
+    // The boards come from asking for this company and site, which leaves out boards ConnectWise would refuse.
+    expect(platform.calls).toContain(
+      'GET /api/platform/v1/service/ticketing/service-boards?companyId=c1&siteId=site-1',
+    );
     expect(platform.opened[0]!.description).toBe(
       `${ask.details}\n\nSubmitted by Harbor Editor (editor@harbor.test) through Nexus Atlas.`,
     );

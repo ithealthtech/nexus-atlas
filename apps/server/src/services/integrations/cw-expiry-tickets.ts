@@ -6,7 +6,7 @@ import { ExpirationService } from '../expirations.js';
 import type { ImportRun } from '../importers/common.js';
 import { Scope } from '../scope.js';
 import type { StoredCwRmm } from '../settings.js';
-import { ACCESS_DENIED, listOf, text, type CwRmmClient } from './cw-rmm.js';
+import { ACCESS_DENIED, listOf, pick, text, type CwRmmClient } from './cw-rmm.js';
 import { atlasUrl } from './cw-writeback.js';
 
 /** External refs of this source record which expiry already has a ticket, so each gets one. */
@@ -50,6 +50,32 @@ export async function siteFor(client: CwRmmClient, companyId: string): Promise<N
 }
 
 /**
+ * The active boards ConnectWise takes a ticket on for this company and site. The full list can include boards the
+ * company isn't entitled to, which ConnectWise then refuses ("serviceBoard is not valid"), so both are asked for.
+ */
+export async function boardsFor(client: CwRmmClient, companyId: string, siteId: string): Promise<Named[]> {
+  const query = new URLSearchParams({ companyId, siteId });
+  return named(listOf(await client.get(`${BOARDS}?${query}`)).filter((b) => pick(b, 'inactiveFlag') !== true));
+}
+
+/** Where a ticket for this company goes: its site and a board ConnectWise accepts there, or why there is none. */
+export async function placeFor(
+  client: CwRmmClient,
+  companyId: string,
+  wantedBoard: string,
+): Promise<{ site: Named; board: Named } | { missing: string }> {
+  const site = await siteFor(client, companyId);
+  if (!site) return { missing: 'ConnectWise has no site for this company, and a ticket needs one.' };
+  const board = pickBoard(await boardsFor(client, companyId, site.id), wantedBoard);
+  if (board) return { site, board };
+  return {
+    missing: wantedBoard.trim()
+      ? `ConnectWise has no active service board named "${wantedBoard.trim()}" for this company.`
+      : 'ConnectWise lists no active service board for this company.',
+  };
+}
+
+/**
  * Opens a ConnectWise ticket for each asset date (domain, certificate, license, warranty) of a linked client coming
  * due within the chosen days. Each expiry, by asset, field, and date, gets one ticket: a renewed date gets a new one.
  */
@@ -86,47 +112,44 @@ export async function runExpiryTickets(
   const todo = due.filter((e) => !opened.has(key(e)));
   if (!todo.length) return;
 
-  let board: Named | null;
   let source: Named | null;
   try {
-    board = pickBoard(named(await client.get(BOARDS)), options.expiryTicketBoard);
     source = pickSource(named(await client.get(SOURCES)));
   } catch (error) {
     run.count('expiryTickets', 'failed');
     run.note(
-      `Expiry tickets: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list service boards. Check the key has the Tickets read and create permissions.' : "ConnectWise's service boards couldn't be read."}`,
+      `Expiry tickets: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list ticket sources. Check the key has the Tickets read and create permissions.' : "ConnectWise's ticket sources couldn't be read."}`,
     );
     return;
   }
-  if (!board || !source) {
-    run.note(
-      options.expiryTicketBoard && !board
-        ? `Expiry tickets: ConnectWise has no service board named "${options.expiryTicketBoard}".`
-        : 'Expiry tickets: ConnectWise listed no service boards or sources.',
-    );
+  if (!source) {
+    run.note('Expiry tickets: ConnectWise listed no ticket sources.');
     return;
   }
 
-  const siteOf = new Map<string, Named | null>();
+  const placeOf = new Map<string, Awaited<ReturnType<typeof placeFor>>>();
+  const usedBoards = new Set<string>();
   for (const e of todo.slice(0, MAX_PER_SYNC)) {
     const companyId = companyOf.get(e.clientId!)!;
-    if (!siteOf.has(companyId)) {
+    const company = e.clientName ?? 'its company';
+    if (!placeOf.has(companyId)) {
       try {
-        siteOf.set(companyId, await siteFor(client, companyId));
+        placeOf.set(companyId, await placeFor(client, companyId, options.expiryTicketBoard));
       } catch (error) {
         run.count('expiryTickets', 'failed');
         run.note(
-          `Expiry ticket for ${e.title}: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list sites. Check the key has the Sites read permission.' : `ConnectWise's sites for ${e.clientName ?? 'its company'} couldn't be read.`}`,
+          `Expiry ticket for ${e.title}: ${error instanceof HttpError && error.code === ACCESS_DENIED ? 'ConnectWise refused to list sites or service boards. Check the key has the Sites read and Tickets read permissions.' : `ConnectWise's sites or service boards for ${company} couldn't be read.`}`,
         );
         continue;
       }
     }
-    const site = siteOf.get(companyId);
-    if (!site) {
+    const place = placeOf.get(companyId)!;
+    if ('missing' in place) {
       run.count('expiryTickets', 'failed');
-      run.note(`Expiry ticket for ${e.title}: ConnectWise listed no site for ${e.clientName ?? 'its company'}, and a ticket needs one.`);
+      run.note(`Expiry ticket for ${e.title} (${company}): ${place.missing}`);
       continue;
     }
+    const { site, board } = place;
     const when = e.daysLeft < 0 ? `expired on ${e.date}` : e.daysLeft === 0 ? 'expires today' : `expires on ${e.date}`;
     const link = publicUrl ? atlasUrl(publicUrl, 'endpoint', e.id) : '';
     const body = {
@@ -158,8 +181,10 @@ export async function runExpiryTickets(
       .values({ orgId: actor.orgId, source: EXPIRY_TICKET_SOURCE, kind: 'asset', externalId: key(e), entityId: e.id })
       .onConflictDoNothing();
     run.count('expiryTickets', 'created');
+    usedBoards.add(board.name);
   }
   if (todo.length > MAX_PER_SYNC)
     run.note(`Expiry tickets: ${todo.length - MAX_PER_SYNC} more are left for the next sync.`);
-  run.note(`Expiry tickets go on the "${board.name}" board with source "${source.name}".`);
+  if (usedBoards.size)
+    run.note(`Expiry tickets go on the ${[...usedBoards].map((b) => `"${b}"`).join(', ')} board with source "${source.name}".`);
 }

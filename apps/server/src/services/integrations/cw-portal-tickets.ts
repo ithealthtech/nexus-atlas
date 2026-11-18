@@ -10,7 +10,7 @@ import {
 } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import type { StoredCwRmm } from '../settings.js';
-import { pickBoard, pickSource, siteFor } from './cw-expiry-tickets.js';
+import { pickSource, placeFor } from './cw-expiry-tickets.js';
 import { ACCESS_DENIED, listOf, pick, text, UPSTREAM, type CwRmmClient } from './cw-rmm.js';
 import {
   clean,
@@ -27,7 +27,6 @@ type Json = Record<string, unknown>;
 type Named = { id: string; name: string };
 
 const TICKETS = '/api/platform/v2/service/ticketing/tickets';
-const BOARDS = '/api/platform/v1/service/ticketing/service-boards';
 const SOURCES = '/api/platform/v1/service/ticketing/sources';
 /** Replies shown per ticket, oldest first so the conversation reads down. */
 const MAX_REPLIES = 100;
@@ -79,28 +78,19 @@ export async function openPortalTicket(
   const companyId = companyFor(saved.map, clientId);
   if (!companyId) throw new HttpError(400, 'This client is not linked to a ConnectWise company.');
   const options = cwRmmSyncOptionsSchema.parse(saved.options ?? {});
-  let board: Named | null;
   let source: Named | null;
-  let site: Named | null;
+  let place: Awaited<ReturnType<typeof placeFor>>;
   try {
-    board = pickBoard(named(await client.get(BOARDS)), options.portalTicketBoard);
     source = pickPortalSource(named(await client.get(SOURCES)));
-    site = await siteFor(client, companyId);
+    place = await placeFor(client, companyId, options.portalTicketBoard);
   } catch (error) {
     if (error instanceof HttpError && error.code === ACCESS_DENIED)
       throw new HttpError(UPSTREAM, 'ConnectWise refused to list service boards or sites. Ask your IT provider to check the setup.');
     throw error;
   }
-  if (!board || !source)
-    throw new HttpError(
-      UPSTREAM,
-      options.portalTicketBoard && !board
-        ? `ConnectWise has no service board named "${options.portalTicketBoard}". Ask your IT provider to check the setup.`
-        : 'ConnectWise listed no service boards or sources. Ask your IT provider to check the setup.',
-    );
-  // ConnectWise refuses a ticket without a site ("site is a required field").
-  if (!site)
-    throw new HttpError(UPSTREAM, 'ConnectWise has no site for this company, and a ticket needs one. Ask your IT provider to add one.');
+  if ('missing' in place) throw new HttpError(UPSTREAM, `${place.missing} Ask your IT provider to check the setup.`);
+  if (!source) throw new HttpError(UPSTREAM, 'ConnectWise listed no ticket sources. Ask your IT provider to check the setup.');
+  const { site, board } = place;
   const body = {
     summary: clean(input.summary, 200),
     description: [clean(input.details, 8000), requesterLine(actor)].join('\n\n'),
