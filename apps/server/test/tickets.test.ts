@@ -3,7 +3,8 @@ import { sql } from 'drizzle-orm';
 import { mapNote, mapTicket, portalIdIn, ticketLink, ticketNumberIn } from '../src/services/integrations/cw-tickets.js';
 import { CwLinkWriter } from '../src/services/integrations/cw-writeback.js';
 import { pickPortalSource } from '../src/services/integrations/cw-portal-tickets.js';
-import { pickSite } from '../src/services/integrations/cw-expiry-tickets.js';
+import { activeBoards, boardRefused, pickSite } from '../src/services/integrations/cw-expiry-tickets.js';
+import { HttpError } from '../src/errors.js';
 import type { CwRmmClient } from '../src/services/integrations/cw-rmm.js';
 import { setupOwner, signIn, startApp, type Browser, type TestApp } from './helpers.js';
 
@@ -213,6 +214,20 @@ describe('portal tickets', () => {
     expect(pickPortalSource([phone, { id: '4', name: 'Web' }])?.id).toBe('4');
     expect(pickPortalSource([phone, { id: '2', name: 'Internal' }])?.id).toBe('2');
     expect(pickPortalSource([])).toBeNull();
+  });
+
+  it('leaves out inactive service boards, and knows when ConnectWise refused one', () => {
+    const listed = [
+      { id: 'b1', name: 'Old', inactiveFlag: true },
+      { id: 'b2', name: 'Closed', isActive: false },
+      { id: 'b3', name: 'Retired', status: 'Inactive' },
+      { id: 'b4', name: 'Help Desk' },
+    ];
+    expect(activeBoards(listed)).toEqual([{ id: 'b4', name: 'Help Desk' }]);
+    const said = 'ConnectWise RMM returned 400 for /api/platform/v2/service/ticketing/tickets. ConnectWise said: ';
+    expect(boardRefused(new HttpError(400, `${said}serviceBoard is not valid. Please select a valid active Service Board`))).toBe(true);
+    expect(boardRefused(new HttpError(400, `${said}site is a required field`))).toBe(false);
+    expect(boardRefused(new Error('serviceBoard is not valid'))).toBe(false);
   });
 
   it('puts a ticket on the main site, else the first', () => {

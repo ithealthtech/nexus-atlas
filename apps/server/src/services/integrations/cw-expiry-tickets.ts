@@ -6,7 +6,7 @@ import { ExpirationService } from '../expirations.js';
 import type { ImportRun } from '../importers/common.js';
 import { Scope } from '../scope.js';
 import type { StoredCwRmm } from '../settings.js';
-import { ACCESS_DENIED, listOf, text, type CwRmmClient } from './cw-rmm.js';
+import { ACCESS_DENIED, listOf, pick, text, type CwRmmClient } from './cw-rmm.js';
 import { atlasUrl } from './cw-writeback.js';
 
 /** External refs of this source record which expiry already has a ticket, so each gets one. */
@@ -22,6 +22,30 @@ const named = (list: unknown): Named[] =>
   listOf(list)
     .map((x) => ({ id: text(x, 'id'), name: text(x, 'name') }))
     .filter((x) => x.id);
+
+/** Whether ConnectWise marks a board inactive, in any of the shapes it has been seen to: it refuses tickets on one. */
+function inactive(board: Record<string, unknown>) {
+  const flag = (key: string) => pick(board, key);
+  return (
+    flag('inactive') === true ||
+    flag('inactiveFlag') === true ||
+    flag('isInactive') === true ||
+    flag('isActive') === false ||
+    flag('active') === false ||
+    /inactive|disabled/i.test(String(flag('status') ?? ''))
+  );
+}
+
+/** The service boards a ticket can go on, in the order listed: inactive ones are left out. */
+export const activeBoards = (list: unknown): Named[] =>
+  listOf(list)
+    .filter((b) => !inactive(b))
+    .map((x) => ({ id: text(x, 'id'), name: text(x, 'name') }))
+    .filter((x) => x.id);
+
+/** Whether ConnectWise refused a ticket for its board ("serviceBoard is not valid"), so another may be tried. */
+export const boardRefused = (error: unknown) =>
+  error instanceof HttpError && /serviceBoard is not valid|valid active service board/i.test(error.message);
 
 /** The board by name (any case), else the first one listed. */
 export function pickBoard(boards: Named[], wanted: string): Named | null {
@@ -89,7 +113,7 @@ export async function runExpiryTickets(
   let board: Named | null;
   let source: Named | null;
   try {
-    board = pickBoard(named(await client.get(BOARDS)), options.expiryTicketBoard);
+    board = pickBoard(activeBoards(await client.get(BOARDS)), options.expiryTicketBoard);
     source = pickSource(named(await client.get(SOURCES)));
   } catch (error) {
     run.count('expiryTickets', 'failed');
@@ -149,6 +173,11 @@ export async function runExpiryTickets(
     } catch (error) {
       run.count('expiryTickets', 'failed');
       run.note(`Expiry ticket for ${e.title}: ${error instanceof HttpError ? error.message : 'could not be opened.'}`);
+      // The same board fails every one: say how to fix it once and stop.
+      if (boardRefused(error)) {
+        run.note(`Expiry tickets: ConnectWise won't take tickets on the "${board.name}" board. Name an active board under Expiry tickets.`);
+        return;
+      }
       // A key without the create permission fails every one the same way.
       if (error instanceof HttpError && error.code === ACCESS_DENIED) return;
       continue;

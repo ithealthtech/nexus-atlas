@@ -10,7 +10,7 @@ import {
 } from '@atlas/shared';
 import { HttpError } from '../../errors.js';
 import type { StoredCwRmm } from '../settings.js';
-import { pickBoard, pickSource, siteFor } from './cw-expiry-tickets.js';
+import { activeBoards, boardRefused, pickBoard, pickSource, siteFor } from './cw-expiry-tickets.js';
 import { ACCESS_DENIED, listOf, pick, text, UPSTREAM, type CwRmmClient } from './cw-rmm.js';
 import {
   clean,
@@ -29,6 +29,8 @@ type Named = { id: string; name: string };
 const TICKETS = '/api/platform/v2/service/ticketing/tickets';
 const BOARDS = '/api/platform/v1/service/ticketing/service-boards';
 const SOURCES = '/api/platform/v1/service/ticketing/sources';
+/** Boards tried at most when ConnectWise refuses the first ones and none is named. */
+const MAX_BOARD_TRIES = 5;
 /** Replies shown per ticket, oldest first so the conversation reads down. */
 const MAX_REPLIES = 100;
 
@@ -79,11 +81,13 @@ export async function openPortalTicket(
   const companyId = companyFor(saved.map, clientId);
   if (!companyId) throw new HttpError(400, 'This client is not linked to a ConnectWise company.');
   const options = cwRmmSyncOptionsSchema.parse(saved.options ?? {});
+  let boards: Named[];
   let board: Named | null;
   let source: Named | null;
   let site: Named | null;
   try {
-    board = pickBoard(named(await client.get(BOARDS)), options.portalTicketBoard);
+    boards = activeBoards(await client.get(BOARDS));
+    board = pickBoard(boards, options.portalTicketBoard);
     source = pickPortalSource(named(await client.get(SOURCES)));
     site = await siteFor(client, companyId);
   } catch (error) {
@@ -109,13 +113,29 @@ export async function openPortalTicket(
     serviceBoard: { id: board.id },
     source: { id: source.id },
   };
+  // With no board named, the next ones listed are tried when ConnectWise won't take tickets on one: it lists boards
+  // it then refuses ("Please select a valid active Service Board"). A refused ticket isn't created, so this can't
+  // open two.
+  const candidates = options.portalTicketBoard ? [board] : boards.slice(0, MAX_BOARD_TRIES);
   let created: unknown;
-  try {
-    created = await client.post(TICKETS, body);
-  } catch (error) {
-    if (error instanceof HttpError && error.code === ACCESS_DENIED)
-      throw new HttpError(UPSTREAM, 'ConnectWise refused to open the ticket. Ask your IT provider to check the setup.');
-    throw error;
+  for (const [i, next] of candidates.entries()) {
+    board = next;
+    body.serviceBoard = { id: next.id };
+    try {
+      created = await client.post(TICKETS, body);
+      break;
+    } catch (error) {
+      if (error instanceof HttpError && error.code === ACCESS_DENIED)
+        throw new HttpError(UPSTREAM, 'ConnectWise refused to open the ticket. Ask your IT provider to check the setup.');
+      if (!boardRefused(error)) throw error;
+      if (options.portalTicketBoard || i === candidates.length - 1)
+        throw new HttpError(
+          UPSTREAM,
+          options.portalTicketBoard
+            ? `ConnectWise won't take tickets on the "${options.portalTicketBoard}" board. Ask your IT provider to name an active board for portal tickets.`
+            : 'ConnectWise took tickets on none of its first service boards. Ask your IT provider to name an active board for portal tickets.',
+        );
+    }
   }
   const now = Date.now();
   const web = CW_WEB[saved.region];
