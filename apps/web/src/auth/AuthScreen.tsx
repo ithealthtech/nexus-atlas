@@ -123,7 +123,11 @@ export function AuthScreen({
             })}
           </ul>
         </div>
-        <p className="relative text-xs text-sidebar-muted">Self-hosted. Your data stays on your servers.</p>
+        <p className="relative text-xs text-sidebar-muted">
+          {theme?.hosted
+            ? 'Hosted Atlas. Passwords and secrets are encrypted before they are stored.'
+            : 'Self-hosted. Your data stays on your servers.'}
+        </p>
         <div
           className="pointer-events-none absolute -right-32 -bottom-32 size-96 rounded-full bg-accent/5"
           aria-hidden

@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_BRANDING, type Branding } from '@atlas/shared';
 import { api } from './api';
 
-export type BrandingView = Branding & { name: string };
+// hosted: the instance runs as the hosted (cloud) edition, so self-hosting wording doesn't apply.
+export type BrandingView = Branding & { name: string; hosted?: boolean };
 
 export const useBranding = () =>
   useQuery({ queryKey: ['branding'], queryFn: () => api<BrandingView>('/branding'), staleTime: 5 * 60_000 });

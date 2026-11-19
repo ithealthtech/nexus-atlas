@@ -6,7 +6,7 @@ All notable changes to MSP Atlas are documented here. The project follows [Seman
 
 ### Added
 
-- **Hosted edition setting and theme packs.** `ATLAS_EDITION=cloud` marks instances hosted by the Atlas publisher, and `ATLAS_THEME_PACK` adds a branded stylesheet to their pages. Self-hosted installs leave both unset and look and work exactly as before; Atlas refuses to start if a theme pack is set on a self-hosted install. See Hosted (cloud) edition in the deployment guide.
+- **Hosted edition setting and theme packs.** `ATLAS_EDITION=cloud` marks instances hosted by the Atlas publisher, and `ATLAS_THEME_PACK` adds a branded stylesheet to their pages. On hosted instances the sign-in page no longer calls itself self-hosted. Self-hosted installs leave both unset and look and work exactly as before; Atlas refuses to start if a theme pack is set on a self-hosted install. See Hosted (cloud) edition in the deployment guide.
 
 ## [2.6.0] - 2026-11-16
 

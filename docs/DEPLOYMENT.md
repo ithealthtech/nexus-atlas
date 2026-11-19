@@ -62,7 +62,9 @@ This section is for the Atlas publisher running hosted instances. **A self-hoste
 
 ### What it does
 
-`ATLAS_EDITION=cloud` marks an instance as hosted by the publisher. On its own it changes nothing visible. With it,
+`ATLAS_EDITION=cloud` marks an instance as hosted by the publisher. On its own it changes one line: the sign-in
+page's footer reads **Hosted Atlas. Passwords and secrets are encrypted before they are stored.** instead of
+**Self-hosted. Your data stays on your servers.** With it,
 `ATLAS_THEME_PACK` can name a folder whose `theme.css` is added to every page after Atlas's own styles, so the hosted
 instances can carry the publisher's brand without a separate build. The same release files serve both editions.
 

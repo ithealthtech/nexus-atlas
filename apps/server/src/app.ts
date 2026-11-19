@@ -1000,7 +1000,10 @@ export async function buildApp({
   // Public: the sign-in pages are themed too (logo, colours, headline, background).
   app.get('/api/branding', async () => {
     const [org] = await db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs).limit(1);
-    return org ? { name: org.name, ...(await settings.branding(org.id)) } : { name: 'MSP Atlas', ...DEFAULT_BRANDING };
+    const hosted = config.ATLAS_EDITION === 'cloud';
+    return org
+      ? { name: org.name, hosted, ...(await settings.branding(org.id)) }
+      : { name: 'MSP Atlas', hosted, ...DEFAULT_BRANDING };
   });
   // Public too: Atlas for Windows (through /api/v1) takes its window, taskbar, and tray icon from the favicon.
   // If-None-Match with the last ETag answers 304, so its regular check is cheap.
