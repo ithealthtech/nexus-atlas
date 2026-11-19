@@ -62,6 +62,10 @@ const schema = z.object({
   ATLAS_CONF_DIR: z.string().default('/etc/msp-atlas'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WEB_DIST: z.string().optional(),
+  // Hosted (cloud) instances run by the Atlas publisher. Self-hosted installs leave both unset, and nothing changes.
+  ATLAS_EDITION: z.enum(['selfhosted', 'cloud']).default('selfhosted'),
+  // A folder holding theme.css (and the fonts and images it refers to), layered over the built-in styles. Cloud only.
+  ATLAS_THEME_PACK: z.string().optional(),
 });
 
 export type Config = z.infer<typeof schema> & { secureCookies: boolean; publicOrigin: string; publicHost: string };
@@ -73,6 +77,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error(`Atlas configuration is invalid:\n${problems}`);
   }
   const config = parsed.data;
+  if (config.ATLAS_THEME_PACK && config.ATLAS_EDITION !== 'cloud')
+    throw new Error('Atlas configuration is invalid:\n  ATLAS_THEME_PACK is only used when ATLAS_EDITION=cloud.');
   const url = new URL(config.PUBLIC_URL);
   const secureCookies = url.protocol === 'https:';
   if (config.NODE_ENV === 'production') {

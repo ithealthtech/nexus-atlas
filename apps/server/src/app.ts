@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ZodError } from 'zod';
 import { eq, sql } from 'drizzle-orm';
@@ -21,6 +21,7 @@ import {
 import type { Config } from './config.js';
 import { HttpError } from './errors.js';
 import { appIcon } from './services/app-icon.js';
+import { THEME_PACK_PREFIX, loadThemePack, withThemePack } from './services/theme-pack.js';
 import type { KeyProvider } from './crypto/keys.js';
 import { IdentityService, hasMfa, sameSecret, type SessionContext } from './identity/service.js';
 import { requireAdmin } from './authz.js';
@@ -999,7 +1000,10 @@ export async function buildApp({
   // Public: the sign-in pages are themed too (logo, colours, headline, background).
   app.get('/api/branding', async () => {
     const [org] = await db.select({ id: schema.orgs.id, name: schema.orgs.name }).from(schema.orgs).limit(1);
-    return org ? { name: org.name, ...(await settings.branding(org.id)) } : { name: 'MSP Atlas', ...DEFAULT_BRANDING };
+    const hosted = config.ATLAS_EDITION === 'cloud';
+    return org
+      ? { name: org.name, hosted, ...(await settings.branding(org.id)) }
+      : { name: 'MSP Atlas', hosted, ...DEFAULT_BRANDING };
   });
   // Public too: Atlas for Windows (through /api/v1) takes its window, taskbar, and tray icon from the favicon.
   // If-None-Match with the last ETag answers 304, so its regular check is cheap.
@@ -1135,22 +1139,40 @@ export async function buildApp({
 
   // ---- web app ----
   if (config.WEB_DIST && existsSync(config.WEB_DIST)) {
+    const webDist = config.WEB_DIST;
+    const themePack = loadThemePack(config);
     await app.register(fastifyStatic, {
-      root: config.WEB_DIST,
+      root: webDist,
       wildcard: false,
       index: false,
       maxAge: '1h',
       immutable: false,
+      // With a theme pack, /index.html goes through the not-found handler below so it gets the pack too.
+      ...(themePack ? { allowedPath: (path: string) => path !== '/index.html' } : {}),
     });
+    if (themePack)
+      await app.register(fastifyStatic, {
+        root: themePack.root,
+        prefix: THEME_PACK_PREFIX,
+        decorateReply: false,
+        index: false,
+        maxAge: '1h',
+      });
     app.get('/assets/*', async (req, reply) => reply.callNotFound());
     // Client-side routes all load index.html. Under /assets/ only a missing file (a name with an extension) is a
     // 404: /assets/<id> is also the web app's asset page, and has to load when opened from a link or reloaded.
     app.setNotFoundHandler(async (req, reply) => {
       const path = req.url.split('?')[0]!;
-      const missingFile = path.startsWith('/assets/') && /\.[a-z0-9]+$/i.test(path);
+      const missingFile =
+        (path.startsWith('/assets/') || (themePack !== null && path.startsWith(THEME_PACK_PREFIX))) &&
+        /\.[a-z0-9]+$/i.test(path);
       if (req.method !== 'GET' || path.startsWith('/api/') || missingFile)
         return reply.status(404).send({ error: 'Not found.' });
-      return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
+      reply.header('Cache-Control', 'no-cache');
+      if (!themePack) return reply.sendFile('index.html');
+      // Read on each request, like sendFile, so an in-place update serves the new page.
+      const page = readFileSync(join(webDist, 'index.html'), 'utf8');
+      return reply.type('text/html; charset=utf-8').send(withThemePack(page, themePack));
     });
   }
   return app;

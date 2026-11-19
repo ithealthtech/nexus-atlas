@@ -55,6 +55,16 @@ describe('theme', () => {
     expect(events.find((e) => e.action === 'Theme changed')?.detail).toContain('IT Done Right');
   });
 
+  it('tells the sign-in page whether the instance is the hosted edition', async () => {
+    expect((await t.app.inject({ url: '/api/branding' })).json()).toMatchObject({ hosted: false });
+    const cloud = await startApp({ ATLAS_EDITION: 'cloud' });
+    try {
+      expect((await cloud.app.inject({ url: '/api/branding' })).json()).toMatchObject({ hosted: true });
+    } finally {
+      await cloud.close();
+    }
+  });
+
   it('rejects bad values and oversized images', async () => {
     const bad = async (body: object) =>
       (await owner.call('PUT', '/api/branding', { ...DEFAULT_BRANDING, ...body })).status;
